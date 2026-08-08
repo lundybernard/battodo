@@ -32,12 +32,20 @@ after dated. `top`/`top N`/`all` views. Category time windows
 (work/chores blocking rules, Pacific time) filter the default view.
 Completed and future-recurring items are hidden.
 
+> Sort criteria amended by [ADR 0005](0005-computed-rank.md): computed
+> rank desc, then nearest DUE. Output parity with `view_todos.py` no
+> longer applies — the order is intentionally different.
+
 ### R4 — Daily bump
 Once per day, every open item with `DUE <= today` or no `DUE` gets
 `P += 1` and `BUMPED: today`. Must operate on **all discovered lists** —
 fixes the current bug where `bump_priorities.py` / `view_todos.py`
 hard-code five category files and silently skip `backlog.md` and other
 ad-hoc lists.
+
+> Superseded by [ADR 0005](0005-computed-rank.md). Overdue items still
+> climb, but by computation at view time rather than a stored,
+> accumulated `P`. There is no daily mutation and no `bump` command.
 
 ### R5 — Mutations
 `add`, `done`/`complete`, `scratch`, `bump` operations implementing
@@ -69,5 +77,8 @@ unit-test coverage gates the build.
 ## Success criteria
 
 - [ ] `btodo` / `btd` installed and answering `--help`
-- [ ] Output parity with `view_todos.py` on the live `~/todo/` data
-- [ ] Daily bump covers ad-hoc lists (`backlog.md`) — bug fixed
+- [ ] Item *selection* parity with `view_todos.py` on the live `~/todo/`
+      data (ordering diverges by design, per ADR 0005)
+- [ ] Ad-hoc lists (`van-upgrades.md`) are no longer silently skipped,
+      and lists that declare themselves parked (`backlog.md`) stay out
+      of the daily view — both bugs fixed

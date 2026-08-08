@@ -8,6 +8,9 @@ project scope — keep it out of REQUIREMENTS and ADRs.
 Personal per-checkout configuration (commit mechanics, private notes)
 lives in CLAUDE.local.md (gitignored).
 
+- Work happens on feature branches, never directly on main; branches get
+  manual review before merge.
+
 ## Feature-cycle-end evaluation (modified engineering cycle)
 
 When a feature cycle completes, before moving on, evaluate the finished

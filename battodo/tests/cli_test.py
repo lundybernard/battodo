@@ -1,29 +1,29 @@
 from unittest import TestCase
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 from ..cli import (
-    argparser,
     BATCLI,
-    NestedNameSpace,
     Commands,
-    logging,
+    NestedNameSpace,
     argparse,
+    argparser,
+    logging,
 )
-
 
 SRC = 'battodo.cli'
 
 
-class TestArgparser(TestCase):
-
+class ArgparserTests(TestCase):
     def test_argparser(t):
         argparser()
 
 
-class TestBATCLI(TestCase):
-
+class BATCLITests(TestCase):
     def setUp(t):
-        patches = ['exit', 'get_config', ]
+        patches = [
+            'exit',
+            'get_config',
+        ]
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -43,62 +43,52 @@ class TestBATCLI(TestCase):
                         config_file=args.config_file,
                         config_env=args.config_env,
                     )
-                    m_cmd.assert_called_with(
-                        t.get_config.return_value
-                    )
+                    m_cmd.assert_called_with(t.get_config.return_value)
                     t.exit.assert_called_with(0)
 
     @patch(f'{SRC}.Commands.set_log_level', autospec=True)
     def test_set_log_level(t, set_log_level):
-        args = ['--debug', 'hello', ]
+        args = [
+            '--debug',
+            'hello',
+        ]
         BATCLI(args)
         set_log_level.assert_called_with(argparser().parse_args(args))
         t.exit.assert_called_with(0)
 
-    @patch(f'{SRC}.argparser', wraps=argparser)
-    def test_missing_command(t, argparser):
-        '''prints help if no arguments are given
-        '''
-        # first get the actual parsed args
-        ARGS = []
+    def test_missing_command(t):
+        """prints help if no arguments are given"""
+        # A real parser, so `func` defaults to the real help closure.
         parser = argparser()
         parser.print_help = Mock(wraps=parser.print_help)
-        args = parser.parse_args(ARGS)
 
-        # calling return_value makes argparser return a mock
-        m_parser = argparser.return_value
-        # make the return value from the mock the real args object
-        m_parser.parse_args.return_value = args
+        with patch(f'{SRC}.argparser', return_value=parser):
+            BATCLI([])
 
-        BATCLI(ARGS)
         parser.print_help.assert_called_with()
 
     @patch('builtins.print')
-    @patch(f'{SRC}.argparser', wraps=argparser)
-    def test_command_error(t, argparser, print):
-        '''prints the error message, and help if a command throws an error
-        '''
+    def test_command_error(t, print):
+        """prints the error message, and help if a command throws an error"""
         exc = Exception()
 
-        def fail(args):
+        def fail(conf):
             raise exc
 
-        ARGS = []
-        parser = argparser()
-        args = parser.parse_args(ARGS)
+        args = argparser().parse_args([])
         args.func = fail
-        m_parser = argparser.return_value
-        m_parser.parse_args.return_value = args
+        parser = Mock(argparse.ArgumentParser)
+        parser.parse_args.return_value = args
 
-        BATCLI(ARGS)
+        with patch(f'{SRC}.argparser', return_value=parser):
+            BATCLI([])
+
         print.assert_called_with(exc)
-        m_parser.print_help.assert_called_with()
+        parser.print_help.assert_called_with()
 
     def test_commands(t):
         commands = [
             'hello',
-            'run_functional_tests',
-            'run_container_tests',
         ]
 
         t.validate_commands(commands)
@@ -106,11 +96,54 @@ class TestBATCLI(TestCase):
     # TODO: full coverage of CLI arguments that trigger commands
 
 
-class TestNestedNameSpace(TestCase):
+class CommandsViewTests(TestCase):
+    @patch('builtins.print')
+    @patch(f'{SRC}.build_view', autospec=True)
+    def test_view(t, build_view, print):
+        conf = Mock()
+        conf.view.source_dir = '~/todo'
+        conf.show_all = True
 
+        Commands.view(conf)
+
+        args, kwargs = build_view.call_args
+
+        with t.subTest('source dir is expanded'):
+            t.assertFalse(str(args[0]).startswith('~'))
+
+        with t.subTest('show_all is forwarded'):
+            t.assertTrue(kwargs['show_all'])
+
+        with t.subTest('rendered view is printed'):
+            print.assert_called_with(build_view.return_value)
+
+
+class CommandsBackfillTests(TestCase):
+    def setUp(t):
+        t.conf = Mock()
+        t.conf.view.source_dir = '~/todo'
+
+    @patch('builtins.print')
+    @patch(f'{SRC}.backfill_all', autospec=True)
+    def test_backfill(t, backfill_all, print):
+        with t.subTest('reports a count per changed list'):
+            backfill_all.return_value = {'work.md': ['a', 'b']}
+            Commands.backfill(t.conf)
+            print.assert_called_with('work.md: stamped 2')
+
+        with t.subTest('says so when nothing needed stamping'):
+            backfill_all.return_value = {}
+            Commands.backfill(t.conf)
+            print.assert_called_with('nothing to backfill')
+
+        with t.subTest('source dir is expanded'):
+            t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
+
+
+class NestedNameSpaceTests(TestCase):
     def test_nesting(t):
         nns = NestedNameSpace()
-        setattr(nns, 'top', 'level')
+        nns.top = 'level'
         setattr(nns, 'bat.baz', 'baz')
         setattr(nns, 'bat.sub.var', 'sub_var')
 
@@ -119,8 +152,7 @@ class TestNestedNameSpace(TestCase):
         t.assertEqual(nns.bat.sub.var, 'sub_var')
 
 
-class TestCommands(TestCase):
-
+class CommandsTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):

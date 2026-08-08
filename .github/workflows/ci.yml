@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+        with:
+          pixi-version: v0.71.1
+          locked: true
+      - run: pixi run --locked unit
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+        with:
+          pixi-version: v0.71.1
+          locked: true
+      - run: pixi run --locked typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+        with:
+          pixi-version: v0.71.1
+          locked: true
+      - run: pixi run --locked lint
+
+  all-checks:
+    if: always()
+    needs: [test, typecheck, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" || \
+                "${{ needs.typecheck.result }}" != "success" || \
+                "${{ needs.lint.result }}" != "success" ]]; then
+            exit 1
+          fi

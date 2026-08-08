@@ -1,42 +1,131 @@
-# pyproject.toml
+[project]
+name = "battodo"
+description = "Personal todo-list CLI (BAT ecosystem test-bed)"
+authors = [{ name = "Lundy Bernard" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = ["batconf"]
+
+[project.scripts]
+btodo = "battodo.cli:BATCLI"
+btd = "battodo.cli:BATCLI"
 
 [build-system]
-#requires = ["setuptools", "wheel"]
-#build-backend = "setuptools.build_meta"
-requires = ['poetry-core~=1.0']
-build-backend = 'poetry.core.masonry.api'
+build-backend = "hatchling.build"
+requires = ["hatchling"]
 
-[tool.poetry]
-name = 'battodo'
-version = '0.0.1'
-description = 'Personal todo-list CLI (BAT ecosystem test-bed)'
-authors = ['Lundy Bernard']
-license = 'MIT'
+# Single source of version truth. The poetry manifest duplicated it: a
+# literal here plus a setup.py import of battodo/_version.py.
+[tool.hatch.version]
+path = "battodo/_version.py"
 
-[tool.poetry.scripts]
-btodo = 'battodo.cli:BATCLI'
-btd = 'battodo.cli:BATCLI'
+[tool.hatch.build.targets.sdist]
+include = ["battodo/", "LICENSE", "pyproject.toml"]
 
-[tool.poetry.dependencies]
-python = '^3.8'
-batconf = '*'
-flask = '*'
-connexion = '*'
-requests = '*'
-pyyaml = '*'
+[tool.hatch.build.targets.wheel]
+packages = ["battodo"]
 
-[tool.poetry.dev-dependencies]
-setuptools = '*'
-pytest = '*'
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+# Cooldown: re-solves skip packages <3 days old (yank/malware window).
+# Runs unaffected — the lock pins. Currency: periodic `pixi update`.
+exclude-newer = "3d"
 
+# Default feature: interpreter + project only. Tools live on their own
+# features so each env is the minimum install for its job.
+[tool.pixi.dependencies]
+python = ">=3.14.5,<3.15"
 
-[tool.pytest.ini_options]
-addopts = "--cov=battodo --cov-report html --cov-fail-under=100"
+[tool.pixi.pypi-dependencies]
+battodo = { path = ".", editable = true }
+
+# Command-less public aggregators: staging + fail-fast live in these
+# ordered depends-on lists. Env pins are mandatory — an unpinned
+# depends-on resolves globally (ambiguous), not in the caller's env.
+[tool.pixi.tasks]
+tests = { depends-on = [
+    { task = "_unit", environment = "test" },
+    { task = "_typecheck", environment = "typecheck" },
+    { task = "_lint", environment = "lint" },
+] }
+test = { depends-on = [{ task = "_test", environment = "test" }] }
+unit = { depends-on = [{ task = "_unit", environment = "test" }] }
+typecheck = { depends-on = [
+    { task = "_typecheck", environment = "typecheck" },
+] }
+lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
+
+[tool.pixi.feature.test.dependencies]
+coverage = "*"
+
+# Stdlib unittest, no pytest. Coverage gates the unit suite at 100%.
+# Unit tests live beside the code (battodo/**/tests), so discovery walks
+# the package rather than a top-level tests/ directory.
+[tool.pixi.feature.test.tasks]
+# Quick manual run: no coverage, no gate.
+_test = "python -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py'"
+_unit = "coverage run --source=battodo -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py' && coverage report --fail-under=100"
+
+[tool.pixi.feature.lint.dependencies]
+ruff = "*"
+
+[tool.pixi.feature.lint.tasks]
+_lint = "ruff check battodo && ruff format --check battodo"
+
+[tool.pixi.feature.typecheck.dependencies]
+mypy = "*"
+
+[tool.pixi.feature.typecheck.tasks]
+_typecheck = "mypy battodo"
+
+[tool.pixi.environments]
+test = { features = ["test"], solve-group = "default" }
+# ruff is a standalone binary: no interpreter, no project install.
+lint = { features = [
+    "lint",
+], no-default-feature = true, solve-group = "default" }
+# mypy checks the test tree too, so it needs what the tests import.
+typecheck = { features = ["typecheck", "test"], solve-group = "default" }
+dev = { features = ["test", "lint", "typecheck"], solve-group = "default" }
 
 [tool.coverage.run]
+data_file = ".cache/coverage"
 omit = [
-    # ignore coverage for these files
+    # Test files: coverage measures the source, not the suite.
+    "*/tests/*",
+    # Build-time metadata. hatchling reads __version__ from here; nothing
+    # imports it at runtime, so no unit test can legitimately reach it.
     "battodo/_version.py",
-    "battodo/server.py",
-    "battodo/tests/common_api_tests.py",
 ]
+
+# No fail_under here — the 100% gate lives in the `unit` task so partial
+# manual runs are not failures.
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+skip_empty = true
+
+[tool.mypy]
+cache_dir = ".cache/mypy"
+# strict = true is the goal; the imported template code needs a full
+# annotation pass first (74 errors under --strict). Tracked in
+# docs/lessons/project-template.md.
+
+# === Ruff === #
+[tool.ruff]
+cache-dir = ".cache/ruff"
+line-length = 79
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+extend-select = ["S"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+# S101 flags `assert`; the unittest suites use assertion methods and are
+# unaffected. N805 allows the `t` self-argument convention.
+"**/*_test.py" = ["N805", "S101"]

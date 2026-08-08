@@ -1,15 +1,16 @@
 import argparse
 import logging
+from datetime import datetime
 from logging.config import dictConfig
+from pathlib import Path
 from sys import exit
 
 from battodo.conf import get_config
-
-from battodo.server import server_parser
 from battodo.example.cli import example_cli
-from battodo.logconf import logging_config
 from battodo.lib import hello_world
-
+from battodo.logconf import logging_config
+from battodo.mutate import backfill_all
+from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -27,10 +28,11 @@ def BATCLI(ARGS=None):
     )
     Commands.set_log_level(args)
     # execute function set for parsed command
-#    if not hasattr(Commands, args.func.__name__):
     try:
         args.func(conf)
-    except Exception as exp:
+    # Top-level CLI boundary: any command failure becomes a message plus
+    # usage help, never a traceback.
+    except Exception as exp:  # noqa: BLE001
         print(exp)
         p.print_help()
         exit(1)
@@ -56,11 +58,12 @@ def argparser():
     p.set_defaults(func=get_help(p))
 
     p.add_argument(
-        '-v', '--verbose',
+        '-v',
+        '--verbose',
         help='enable INFO output',
         action='store_const',
         dest='loglevel',
-        const=logging.INFO
+        const=logging.INFO,
     )
     p.add_argument(
         '--debug',
@@ -70,14 +73,18 @@ def argparser():
         const=logging.DEBUG,
     )
     p.add_argument(
-        '-c', '--conf', '--config_file',
+        '-c',
+        '--conf',
+        '--config_file',
         dest='config_file',
         default=None,
         help='specify a config file to get environment details from.'
-             ' default=./config.yaml',
+        ' default=./config.yaml',
     )
     p.add_argument(
-        '-e', '--env', '--config_environment',
+        '-e',
+        '--env',
+        '--config_environment',
         dest='config_env',
         default=None,
         help='specify the remote environment to use from the config file',
@@ -88,7 +95,7 @@ def argparser():
         dest='command',
         title='commands',
         description='for additonal details on each command use: '
-                    '"btodo {command name} --help"',
+        '"btodo {command name} --help"',
     )
     # hello args
     hello = commands.add_parser(
@@ -98,12 +105,27 @@ def argparser():
     )
     hello.set_defaults(func=Commands.hello)
 
-    commands.add_parser(
-        'server',
-        help='http server related commands',
-        add_help=False,
-        parents=[server_parser()],
+    view = commands.add_parser(
+        'view',
+        description='show open items for the currently active categories',
+        help='for details use view --help',
     )
+    view.set_defaults(func=Commands.view)
+    view.add_argument(
+        '--all',
+        dest='show_all',
+        action='store_true',
+        help='show every open item, not just the top few per category',
+    )
+
+    backfill = commands.add_parser(
+        'backfill',
+        description='one-time migration: stamp [ADDED:today] on tasks '
+        'that predate the field',
+        help='for details use backfill --help',
+    )
+    backfill.set_defaults(func=Commands.backfill)
+
     # Add a subparser from a module
     commands.add_parser(
         'example',
@@ -112,60 +134,40 @@ def argparser():
         parents=[example_cli()],
     )
 
-    testing_cli(commands)
-
     return p
 
 
 def get_help(parser):
     def help(args):
         parser.print_help()
+
     return help
 
 
-def testing_cli(subparser):
-    # run_functional_tests args
-    run_functional_tests = subparser.add_parser(
-        'run_functional_tests',
-        description='start the server locally and run functional tests',
-        help='for details use test --help'
-    )
-    run_functional_tests.set_defaults(func=Commands.run_functional_tests)
-    run_functional_tests.add_argument(
-        '-H', '--host', dest='host',
-        default='0.0.0.0',
-        help='host ip on which the service will be run',
-    )
-    run_functional_tests.add_argument(
-        '-P', '--port', dest='port',
-        default='5000',
-        help='port on which the service service will be run'
-    )
-
-    # run_functional_tests args
-    run_container_tests = subparser.add_parser(
-        'run_container_tests',
-        description='start docker-compose and run functional tests',
-        help='for details use test --help'
-    )
-    run_container_tests.set_defaults(func=Commands.run_container_tests)
-    run_container_tests.add_argument(
-        '-H', '--host', dest='host',
-        default='0.0.0.0',
-        help='host ip on which the service will be run',
-    )
-    run_container_tests.add_argument(
-        '-P', '--port', dest='port',
-        default='5000',
-        help='port on which the service service will be run'
-    )
-
-
 class Commands:
-
     @staticmethod
     def hello(conf):
         print(hello_world())
+
+    @staticmethod
+    def backfill(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        result = backfill_all(source, datetime.now(TZ).date())
+        for name, titles in sorted(result.items()):
+            print(f'{name}: stamped {len(titles)}')
+        if not result:
+            print('nothing to backfill')
+
+    @staticmethod
+    def view(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        print(
+            build_view(
+                source,
+                datetime.now(TZ),
+                show_all=bool(getattr(conf, 'show_all', False)),
+            )
+        )
 
     @staticmethod
     def set_log_level(conf):
@@ -173,37 +175,3 @@ class Commands:
             log.setLevel(conf.loglevel)
         else:
             log.setLevel(logging.ERROR)
-
-    @staticmethod
-    def run_functional_tests(conf):
-        import subprocess
-        import os
-        import signal
-        from time import sleep
-        a = subprocess.Popen(['btodo', 'start'])
-        sleep(0.5)
-        Commands.test(conf)
-
-        os.kill(a.pid, signal.SIGTERM)
-
-    @staticmethod
-    def run_container_tests(conf):
-        import subprocess
-        import os
-        import signal
-        from time import sleep
-        a = subprocess.Popen(['docker-compose', 'up'])
-        sleep(0.5)
-        Commands.test(conf)
-
-        os.kill(a.pid, signal.SIGTERM)
-        sleep(0.5)
-
-    @staticmethod
-    def test(conf):
-        print('++ run functional tests ++')
-        import unittest
-        loader = unittest.TestLoader()
-        suite = loader.discover('functional_tests', pattern='*_test.py')
-        runner = unittest.TextTestRunner()
-        runner.run(suite)
