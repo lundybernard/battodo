@@ -113,3 +113,15 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   paid for a user that doesn't exist. Apps should prune the matrix to
   their actual targets at bootstrap; same library-vs-app inversion as
   the locking/pin-currency lesson.
+- **CI tests one interpreter while `requires-python` promises a range:**
+  the template's test job runs whatever version the pixi default
+  feature pins, and nothing cross-checks that against the declared
+  range. So the floor is an assertion no run executes — battodo said
+  `>=3.10` and had only ever run 3.14. The gap hides well, because a
+  green check reads as coverage of the supported range rather than of
+  one point in it. The metadata and the matrix should be built
+  together: a feature and env per supported version, CI fanning out
+  over them, or else narrow `requires-python` to the version actually
+  tested. Here the claim survived contact — 3.10–3.14 all pass with no
+  source changes — but until the matrix existed that was a guess that
+  happened to be right, not a tested property.
