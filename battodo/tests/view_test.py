@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from ..parser import parse
 from ..view import (
     TZ,
+    SourceError,
     active_categories,
     build_view,
     discover_lists,
@@ -171,10 +172,6 @@ class TestBuildView(TestCase):
         with t.subTest('header names the day and active set'):
             t.assertIn('active:', build_view(t.dir, t.now, show_all=True))
 
-        with t.subTest('empty directory still renders a header'):
-            empty = build_view(t.dir / 'nope', t.now, show_all=True)
-            t.assertIn('active:', empty)
-
         with t.subTest('list with nothing visible is skipped'):
             (t.dir / 'career.md').write_text('## Open\n\n- [x] Nope [P:5]\n')
             t.assertNotIn('Career', build_view(t.dir, t.now, show_all=True))
@@ -186,6 +183,43 @@ class TestBuildView(TestCase):
             out = build_view(t.dir, t.now, show_all=True)
             t.assertIn('Backlog', out)
             t.assertIn('Someday', out)
+
+
+class TestMissingSource(TestCase):
+    """A source that yields no lists is an error, not a bare header.
+
+    Pointed at a home directory with no `todo/` in it, `btodo view`
+    printed only its header and exited 0 -- the resolved path it had
+    looked in was never shown.
+    """
+
+    def setUp(t) -> None:
+        t.tmp = TemporaryDirectory()
+        t.addCleanup(t.tmp.cleanup)
+        t.dir = Path(t.tmp.name)
+        t.now = at('2026-08-05T10:00')
+
+    def test_build_view(t) -> None:
+        with t.subTest('missing directory names the resolved path'):
+            missing = t.dir / 'nope'
+            with t.assertRaises(SourceError) as caught:
+                build_view(missing, t.now, show_all=True)
+            t.assertIn(str(missing), str(caught.exception))
+
+        with t.subTest('a directory holding no lists is an error too'):
+            (t.dir / 'SCHEMA.md').write_text('# Schema\n\nprose\n')
+            with t.assertRaises(SourceError) as caught:
+                build_view(t.dir, t.now, show_all=True)
+            t.assertIn(str(t.dir), str(caught.exception))
+
+        with t.subTest('a tilde in the path is expanded before reporting'):
+            with t.assertRaises(SourceError) as caught:
+                build_view(Path('~/nope-todo'), t.now, show_all=True)
+            t.assertNotIn('~', str(caught.exception))
+
+        with t.subTest('lists that are merely all-filtered still render'):
+            (t.dir / 'work.md').write_text('## Open\n\n- [x] Done [P:1]\n')
+            t.assertIn('active:', build_view(t.dir, t.now, show_all=True))
 
 
 class TestTimezone(TestCase):

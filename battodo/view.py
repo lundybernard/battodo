@@ -30,6 +30,16 @@ class Config:
     source_dir: str = '~/todo'
 
 
+class SourceError(Exception):
+    """The configured source directory yields no todo lists.
+
+    Raised rather than rendering an empty view: pointed at a home
+    directory with no `todo/` in it, btodo printed a bare header and
+    exited 0, which reads as "nothing to do" instead of "I looked in the
+    wrong place". The message always carries the resolved path.
+    """
+
+
 TZ = ZoneInfo('America/Los_Angeles')
 ALWAYS_ACTIVE = frozenset({'study', 'career', 'events'})
 CATEGORY_ORDER = ['work', 'chores', 'study', 'career', 'events']
@@ -122,6 +132,17 @@ def build_view(
 ) -> str:
     """Render the tables for every active category in `directory`."""
     today = now.date()
+    resolved = directory.expanduser().resolve()
+    if not resolved.is_dir():
+        raise SourceError(f'todo source directory not found: {resolved}')
+
+    paths = discover_lists(resolved)
+    if not paths:
+        raise SourceError(
+            f'no todo lists (no file with a "{OPEN_HEADING}" heading) '
+            f'in: {resolved}'
+        )
+
     active = active_categories(now)
     header = (
         f'**{now.strftime("%A")} {today} {now.strftime("%H:%M")}** '
@@ -129,7 +150,6 @@ def build_view(
     )
     out = [header, '']
 
-    paths = discover_lists(directory)
     ordered = sorted(
         paths,
         key=lambda p: (
