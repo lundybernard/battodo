@@ -21,8 +21,14 @@ Found during the pristine import + package rename (commits 1–2):
   the real file is `bat/server/server.py`. The omit entry has been dead
   since the server module became a package.
 - `MANIFEST.in` says `recursive-include bat/api/*`. The directive syntax
-  is `recursive-include <dir> <pattern...>` (space-separated), so this
-  line is malformed and includes nothing.
+  is `recursive-include <dir> <pattern...>` (space-separated), so the
+  line is malformed and setuptools rejects it with
+  `warning: manifest_maker: ... 'recursive-include' expects <dir>
+  <pattern1> ...`. **Corrected 2026-08-08:** no files are actually lost.
+  poetry-core is the declared backend and ignores MANIFEST.in entirely,
+  and the setup.py fallback ships `bat/api/api.yaml` anyway via
+  `include_package_data`/`package_data`. Fixing the directive silences a
+  warning; it does not restore missing data.
 - Renaming requires a repo-wide sweep, not a `bat/`-scoped one: live
   references also sit in `functional_tests/service_test.py`,
   `bat/api/api.yaml` (`operationId: bat.lib.hello_world`, which connexion

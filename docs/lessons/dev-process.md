@@ -22,3 +22,11 @@
   existed, and pulled in a test fix staged for a later commit. Stage by
   explicit path when building a commit sequence; `-A` is only safe once
   .gitignore is already correct.
+- 2026-08-08: `gh api repos/{owner}/{repo}` reporting
+  `permissions.push: true` does **not** mean the active token can push.
+  That block reflects the authenticated account's role on the repo,
+  while a fine-grained PAT is separately scoped to an allow-list of
+  repositories. Pushing to `project_template` returned 403 ("Permission
+  to lundybernard/project_template.git denied to lundybernard") while
+  the API reported `admin: true`. Verify write access with an actual
+  throwaway-branch push, never from the API permissions block.
