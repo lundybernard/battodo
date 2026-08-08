@@ -39,3 +39,34 @@
   human-authored files, run it against the real corpus (read-only)
   before claiming it works — that single run found what the whole suite
   missed.
+- 2026-08-08: `cp -r ~/todo sandbox/todo` copied a **symlink**, not a
+  tree. `~/todo` points at `/projects/todo`, so the "sandbox" was the
+  live system under another name and a `btodo bump` run mutated real
+  data. The recovery is the interesting part: it was exact rather than
+  best-effort only because the journal had landed the day before. Every
+  event carries the field delta plus a full task snapshot, so the
+  affected lines could be walked back field by field instead of restored
+  wholesale from a backup that did not exist. The audit trail ADR 0004
+  justified as a *migration asset* paid for itself on day one, against a
+  class of bug it was not designed for. Rule: clone with `cp -rL`, and
+  `ls -ld` the target to confirm it is a real directory, before pointing
+  anything that writes at it.
+- 2026-08-08: a silent empty view. Run by the repo owner rather than the
+  agent account, `btodo view` printed its header and exited 0 — that
+  user has no `~/todo`, `discover_lists` returned `[]` for a missing
+  directory, and the view rendered a header over nothing. It reads as
+  "you have no tasks". A read that finds no source is a configuration
+  error, not an empty result: name the resolved path and fail. The suite
+  had the wrong behavior *encoded* ("empty directory still renders a
+  header"), so 100% coverage actively defended the bug. Second real-user
+  run in two days to find something the tests could not.
+- 2026-08-08: widening a discovery predicate is only half a fix. Trading
+  five hard-coded category filenames for "any `.md` with a `## Open`
+  heading" fixed the silent-skip bug and immediately over-corrected: it
+  bumped `backlog.md`, whose header has always read "Not surfaced in
+  daily views, not bumped", and it lists `van-trip-prep-template.md` as
+  though a template were a category. A structural predicate finds every
+  list, including the ones a human knew to leave alone — intent that
+  lives in prose needs a machine-readable form (hence the
+  `<!-- battodo:parked -->` marker in ADR 0005). When a net gets wider,
+  audit what else it caught.

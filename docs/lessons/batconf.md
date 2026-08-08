@@ -27,6 +27,16 @@ a dependency):
   `FileConfig` without loading a YAML file needs no yaml dependency.
   That is good layering — worth keeping when `YamlConfig` replaces it.
 
+Found during the computed-rank cycle:
+
+- `EnvConfig` is a win: `BATTODO_VIEW_SOURCE_DIR` overrides the `view`
+  config section's `source_dir` with no code at all, which is what makes
+  a sandbox dev loop possible while config-file support is still
+  deferred. The gap is discoverability — the variable name is *derived*
+  (package, config path, caps) and never documented or printed, so it
+  has to be reverse-engineered from the source list. A `--show-config`
+  dump, or the naming rule stated in the README, would close it.
+
 Migration to `NamespaceConfig` + `YamlConfig` is deferred: swapping
 `FileConfig` for `YamlConfig` decides the config-file format and would
 make pyyaml a runtime dependency, which belongs with the storage design
