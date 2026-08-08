@@ -118,26 +118,26 @@ class TestCommandsView(TestCase):
             print.assert_called_with(build_view.return_value)
 
 
-class TestCommandsBump(TestCase):
+class TestCommandsBackfill(TestCase):
     def setUp(t):
         t.conf = Mock()
         t.conf.view.source_dir = '~/todo'
 
     @patch('builtins.print')
-    @patch(f'{SRC}.bump_all', autospec=True)
-    def test_bump(t, bump_all, print):
+    @patch(f'{SRC}.backfill_all', autospec=True)
+    def test_backfill(t, backfill_all, print):
         with t.subTest('reports a count per changed list'):
-            bump_all.return_value = {'work.md': ['a', 'b']}
-            Commands.bump(t.conf)
-            print.assert_called_with('work.md: bumped 2')
+            backfill_all.return_value = {'work.md': ['a', 'b']}
+            Commands.backfill(t.conf)
+            print.assert_called_with('work.md: stamped 2')
 
-        with t.subTest('says so when nothing was eligible'):
-            bump_all.return_value = {}
-            Commands.bump(t.conf)
-            print.assert_called_with('nothing to bump')
+        with t.subTest('says so when nothing needed stamping'):
+            backfill_all.return_value = {}
+            Commands.backfill(t.conf)
+            print.assert_called_with('nothing to backfill')
 
         with t.subTest('source dir is expanded'):
-            t.assertFalse(str(bump_all.call_args[0][0]).startswith('~'))
+            t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
 
 
 class TestNestedNameSpace(TestCase):

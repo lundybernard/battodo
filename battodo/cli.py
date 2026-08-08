@@ -9,7 +9,7 @@ from battodo.conf import get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
-from battodo.mutate import bump_all
+from battodo.mutate import backfill_all
 from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
@@ -118,12 +118,13 @@ def argparser():
         help='show every open item, not just the top few per category',
     )
 
-    bump = commands.add_parser(
-        'bump',
-        description='daily priority bump across every discovered list',
-        help='for details use bump --help',
+    backfill = commands.add_parser(
+        'backfill',
+        description='one-time migration: stamp [ADDED:today] on tasks '
+        'that predate the field',
+        help='for details use backfill --help',
     )
-    bump.set_defaults(func=Commands.bump)
+    backfill.set_defaults(func=Commands.backfill)
 
     # Add a subparser from a module
     commands.add_parser(
@@ -149,13 +150,13 @@ class Commands:
         print(hello_world())
 
     @staticmethod
-    def bump(conf):
+    def backfill(conf):
         source = Path(conf.view.source_dir).expanduser()
-        result = bump_all(source, datetime.now(TZ).date())
+        result = backfill_all(source, datetime.now(TZ).date())
         for name, titles in sorted(result.items()):
-            print(f'{name}: bumped {len(titles)}')
+            print(f'{name}: stamped {len(titles)}')
         if not result:
-            print('nothing to bump')
+            print('nothing to backfill')
 
     @staticmethod
     def view(conf):

@@ -45,10 +45,6 @@ class Task:
         return self.fields.get('DUE')
 
     @property
-    def bumped(self) -> str | None:
-        return self.fields.get('BUMPED')
-
-    @property
     def added(self) -> str | None:
         """When the task entered the list, per ADR 0005.
 

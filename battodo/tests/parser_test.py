@@ -48,8 +48,13 @@ class TestParse(TestCase):
             t.assertEqual(alpha.priority, 95)
             t.assertEqual(alpha.loe, 8)
             t.assertIsNone(alpha.due)
-            t.assertEqual(alpha.bumped, '2026-08-08')
             t.assertEqual(alpha.added, '2026-07-01')
+
+        with t.subTest('retired BUMPED still parses, so titles stay clean'):
+            # Nothing reads it since ADR 0005, but the live files are
+            # full of it and it must not leak into the title.
+            t.assertEqual(alpha.fields['BUMPED'], '2026-08-08')
+            t.assertEqual(alpha.title, 'Alpha')
             t.assertEqual(alpha.tags, ['a', 'b'])
             t.assertIsNone(alpha.task_id)
 
