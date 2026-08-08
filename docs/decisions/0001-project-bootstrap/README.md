@@ -12,8 +12,7 @@ Branch: `main`
 | File | Purpose |
 | ---- | ------- |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Testable acceptance criteria |
-
-PLAN.md deferred until the storage architecture (ADR 0004) is decided.
+| [PLAN.md](PLAN.md) | Phased implementation plan for the storage prototype |
 
 ## ADRs
 
@@ -22,7 +21,7 @@ PLAN.md deferred until the storage architecture (ADR 0004) is decided.
 | [0001](0001-bootstrap-from-project-template.md) | Bootstrap from lundybernard/project_template | Accepted |
 | [0002](0002-batconf-for-configuration.md) | batconf for configuration | Accepted |
 | [0003](0003-argparse-bat-cli-pattern.md) | argparse with the BAT CLI pattern | Accepted |
-| [0004](0004-storage-architecture.md) | Storage architecture | Draft — open |
+| [0004](0004-storage-architecture.md) | Storage architecture | Proposed |
 
 ## AI assistance disclosure
 
