@@ -30,3 +30,12 @@
   to lundybernard/project_template.git denied to lundybernard") while
   the API reported `admin: true`. Verify write access with an actual
   throwaway-branch push, never from the API permissions block.
+- 2026-08-08: a 48-test suite at 100% coverage still shipped a crash.
+  `btodo view` raised `ValueError: Invalid isoformat string:
+  'YYYY-MM-DD'` the first time it was pointed at the real `~/todo/`,
+  because a template file carries literal `[DUE:YYYY-MM-DD]`
+  placeholders that no fixture contained. Coverage measures which lines
+  ran, not which *inputs* were tried. For a tool that reads
+  human-authored files, run it against the real corpus (read-only)
+  before claiming it works — that single run found what the whole suite
+  missed.
