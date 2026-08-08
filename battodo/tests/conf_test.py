@@ -1,35 +1,13 @@
+from dataclasses import dataclass
 from unittest import TestCase
 from unittest.mock import patch
 
-from dataclasses import dataclass
-
-import yaml
-
 from ..conf import (
-    get_config,
     Namespace,
+    get_config,
 )
 
-
 SRC = 'battodo.conf'
-
-EXAMPLE_CONFIG_YAML = """
-default: example
-
-example:
-    battodo:
-        key: value
-        remote_host:
-            api_key: example_api_key
-            url: https://api-example.host.io/
-
-alt:
-    battodo:
-        module:
-            key: alt_value
-"""
-
-EXAMPLE_CONFIG_DICT = yaml.load(EXAMPLE_CONFIG_YAML, Loader=yaml.BaseLoader)
 
 
 class Test_get_config(TestCase):
@@ -41,21 +19,6 @@ class Test_get_config(TestCase):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
-
-        t.config_file_data = {
-            'default': 'test_config',
-            'test_config': {
-                'battodo': {
-                    'AModule': {
-                        'arg_1': 'conf_file_arg_1',
-                        'arg_2': 'conf_file_arg_2',
-                    },
-                    'BModule': {
-                        'arg_1': '2020-20-21',
-                    },
-                }
-            },
-        }
 
         @dataclass
         class ConfA:
@@ -124,4 +87,4 @@ class Test_get_config(TestCase):
 
         conf = get_config(t.GlobalConfig)
         with t.assertRaises(AttributeError):
-            conf._sir_not_appearing_in_this_film
+            _ = conf._sir_not_appearing_in_this_film

@@ -1,11 +1,12 @@
 from unittest import TestCase
-from unittest.mock import patch, Mock, call
+from unittest.mock import Mock, call, patch
+
 from battodo.example.cli import (
-    hello_world,
-    get_help,
-    default,
-    argparse,
     Configuration,
+    argparse,
+    default,
+    get_help,
+    hello_world,
 )
 
 

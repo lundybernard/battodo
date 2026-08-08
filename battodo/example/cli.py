@@ -1,6 +1,6 @@
 import argparse
 import textwrap
-from typing import Callable
+from collections.abc import Callable
 
 from batconf.manager import Configuration
 

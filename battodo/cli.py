@@ -4,11 +4,9 @@ from logging.config import dictConfig
 from sys import exit
 
 from battodo.conf import get_config
-
 from battodo.example.cli import example_cli
-from battodo.logconf import logging_config
 from battodo.lib import hello_world
-
+from battodo.logconf import logging_config
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -28,7 +26,9 @@ def BATCLI(ARGS=None):
     # execute function set for parsed command
     try:
         args.func(conf)
-    except Exception as exp:
+    # Top-level CLI boundary: any command failure becomes a message plus
+    # usage help, never a traceback.
+    except Exception as exp:  # noqa: BLE001
         print(exp)
         p.print_help()
         exit(1)
