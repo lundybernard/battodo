@@ -13,7 +13,7 @@ from ..conf import (
 
 SRC = 'battodo.conf'
 
-EXAMPLE_CONFIG_YAML = '''
+EXAMPLE_CONFIG_YAML = """
 default: example
 
 example:
@@ -27,15 +27,16 @@ alt:
     battodo:
         module:
             key: alt_value
-'''
+"""
 
 EXAMPLE_CONFIG_DICT = yaml.load(EXAMPLE_CONFIG_YAML, Loader=yaml.BaseLoader)
 
 
 class Test_get_config(TestCase):
-
     def setUp(t):
-        patches = ['FileConfig', ]
+        patches = [
+            'FileConfig',
+        ]
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -49,9 +50,11 @@ class Test_get_config(TestCase):
                         'arg_1': 'conf_file_arg_1',
                         'arg_2': 'conf_file_arg_2',
                     },
-                    'BModule': {'arg_1': '2020-20-21', },
+                    'BModule': {
+                        'arg_1': '2020-20-21',
+                    },
                 }
-            }
+            },
         }
 
         @dataclass
@@ -95,8 +98,7 @@ class Test_get_config(TestCase):
         t.assertEqual(conf.AModule.arg_1, 'cli_arg_1')
 
     def test_arg_config_file(t):
-        '''The given config_file parameter is used for attribute lookups
-        '''
+        """The given config_file parameter is used for attribute lookups"""
         config_file = t.FileConfig.return_value
         conf = get_config(t.GlobalConfig, config_file=config_file)
 
@@ -104,17 +106,13 @@ class Test_get_config(TestCase):
         config_file.get.assert_called_with('arg_1', module='battodo.AModule')
 
     def test_arg_config_file_name(t):
-        '''The given config_file_name is passed to the FileConfig constructor
-        '''
+        """The given config_file_name is passed to the FileConfig constructor"""
         config_file_name = './test.config.yaml'
-        get_config(
-            t.GlobalConfig, config_file_name=config_file_name
-        )
+        get_config(t.GlobalConfig, config_file_name=config_file_name)
         t.FileConfig.assert_called_with(config_file_name, config_env=None)
 
     def test_arg_config_env(t):
-        '''The given config_env name is passed to the FileConfig constructor
-        '''
+        """The given config_env name is passed to the FileConfig constructor"""
         config_env = 'configuration file environment'
         get_config(t.GlobalConfig, config_env=config_env)
         t.FileConfig.assert_called_with(None, config_env=config_env)

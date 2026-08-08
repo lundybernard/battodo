@@ -22,9 +22,9 @@ def get_config(
     config_sources = [
         CliArgsConfig(cli_args) if cli_args else None,
         EnvConfig(),
-        config_file if config_file else FileConfig(
-            config_file_name, config_env=config_env
-        ),
+        config_file
+        if config_file
+        else FileConfig(config_file_name, config_env=config_env),
         DataclassConfig(config_class),
     ]
 

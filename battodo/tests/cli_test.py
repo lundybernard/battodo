@@ -15,15 +15,16 @@ SRC = 'battodo.cli'
 
 
 class TestArgparser(TestCase):
-
     def test_argparser(t):
         argparser()
 
 
 class TestBATCLI(TestCase):
-
     def setUp(t):
-        patches = ['exit', 'get_config', ]
+        patches = [
+            'exit',
+            'get_config',
+        ]
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -43,22 +44,22 @@ class TestBATCLI(TestCase):
                         config_file=args.config_file,
                         config_env=args.config_env,
                     )
-                    m_cmd.assert_called_with(
-                        t.get_config.return_value
-                    )
+                    m_cmd.assert_called_with(t.get_config.return_value)
                     t.exit.assert_called_with(0)
 
     @patch(f'{SRC}.Commands.set_log_level', autospec=True)
     def test_set_log_level(t, set_log_level):
-        args = ['--debug', 'hello', ]
+        args = [
+            '--debug',
+            'hello',
+        ]
         BATCLI(args)
         set_log_level.assert_called_with(argparser().parse_args(args))
         t.exit.assert_called_with(0)
 
     @patch(f'{SRC}.argparser', wraps=argparser)
     def test_missing_command(t, argparser):
-        '''prints help if no arguments are given
-        '''
+        """prints help if no arguments are given"""
         # first get the actual parsed args
         ARGS = []
         parser = argparser()
@@ -76,8 +77,7 @@ class TestBATCLI(TestCase):
     @patch('builtins.print')
     @patch(f'{SRC}.argparser', wraps=argparser)
     def test_command_error(t, argparser, print):
-        '''prints the error message, and help if a command throws an error
-        '''
+        """prints the error message, and help if a command throws an error"""
         exc = Exception()
 
         def fail(args):
@@ -105,7 +105,6 @@ class TestBATCLI(TestCase):
 
 
 class TestNestedNameSpace(TestCase):
-
     def test_nesting(t):
         nns = NestedNameSpace()
         setattr(nns, 'top', 'level')
@@ -118,7 +117,6 @@ class TestNestedNameSpace(TestCase):
 
 
 class TestCommands(TestCase):
-
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):
