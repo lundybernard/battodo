@@ -96,6 +96,28 @@ class TestBATCLI(TestCase):
     # TODO: full coverage of CLI arguments that trigger commands
 
 
+class TestCommandsView(TestCase):
+    @patch('builtins.print')
+    @patch(f'{SRC}.build_view', autospec=True)
+    def test_view(t, build_view, print):
+        conf = Mock()
+        conf.view.source_dir = '~/todo'
+        conf.show_all = True
+
+        Commands.view(conf)
+
+        args, kwargs = build_view.call_args
+
+        with t.subTest('source dir is expanded'):
+            t.assertFalse(str(args[0]).startswith('~'))
+
+        with t.subTest('show_all is forwarded'):
+            t.assertTrue(kwargs['show_all'])
+
+        with t.subTest('rendered view is printed'):
+            print.assert_called_with(build_view.return_value)
+
+
 class TestNestedNameSpace(TestCase):
     def test_nesting(t):
         nns = NestedNameSpace()

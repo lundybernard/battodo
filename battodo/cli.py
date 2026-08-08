@@ -1,12 +1,15 @@
 import argparse
 import logging
+from datetime import datetime
 from logging.config import dictConfig
+from pathlib import Path
 from sys import exit
 
 from battodo.conf import get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
+from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -101,6 +104,19 @@ def argparser():
     )
     hello.set_defaults(func=Commands.hello)
 
+    view = commands.add_parser(
+        'view',
+        description='show open items for the currently active categories',
+        help='for details use view --help',
+    )
+    view.set_defaults(func=Commands.view)
+    view.add_argument(
+        '--all',
+        dest='show_all',
+        action='store_true',
+        help='show every open item, not just the top few per category',
+    )
+
     # Add a subparser from a module
     commands.add_parser(
         'example',
@@ -123,6 +139,17 @@ class Commands:
     @staticmethod
     def hello(conf):
         print(hello_world())
+
+    @staticmethod
+    def view(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        print(
+            build_view(
+                source,
+                datetime.now(TZ),
+                show_all=bool(getattr(conf, 'show_all', False)),
+            )
+        )
 
     @staticmethod
     def set_log_level(conf):

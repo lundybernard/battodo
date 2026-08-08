@@ -1,8 +1,10 @@
+from datetime import date
 from unittest import TestCase
 
 from ..parser import (
     Task,
     parse,
+    parse_date,
     serialize,
 )
 
@@ -144,6 +146,20 @@ class TestTask(TestCase):
 
     def test_raw_index(t) -> None:
         t.assertEqual(t.tk.raw_index, 2)
+
+
+class TestParseDate(TestCase):
+    def test_parse_date(t) -> None:
+        cases = {
+            '2026-08-08': date(2026, 8, 8),
+            'YYYY-MM-DD': None,
+            'not a date': None,
+            '': None,
+            None: None,
+        }
+        for value, expected in cases.items():
+            with t.subTest(str(value)):
+                t.assertEqual(parse_date(value), expected)
 
 
 class TestTaskDataclass(TestCase):

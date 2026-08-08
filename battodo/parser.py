@@ -11,6 +11,7 @@ rewrite every line it touched.
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 FIELD_RE = re.compile(r'\[(P|LOE|DUE|BUMPED|REPEAT|TAGS|ID):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
@@ -90,6 +91,21 @@ class TodoFile:
 
     lines: list[str]
     tasks: list[Task] = field(default_factory=list)
+
+
+def parse_date(value: str | None) -> date | None:
+    """Parse an ISO date field, tolerating placeholders.
+
+    Hand-edited files and templates carry literal placeholder text such
+    as `[DUE:YYYY-MM-DD]`. Reading one must never raise: btodo operates
+    on files people type into by hand.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _parse_fields(text: str) -> dict[str, str]:
