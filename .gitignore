@@ -103,3 +103,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Claude Code personal per-checkout instructions (private)
+/CLAUDE.local.md
