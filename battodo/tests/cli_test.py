@@ -97,8 +97,6 @@ class TestBATCLI(TestCase):
     def test_commands(t):
         commands = [
             'hello',
-            'run_functional_tests',
-            'run_container_tests',
         ]
 
         t.validate_commands(commands)

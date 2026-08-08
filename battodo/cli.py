@@ -5,7 +5,6 @@ from sys import exit
 
 from battodo.conf import get_config
 
-from battodo.server import server_parser
 from battodo.example.cli import example_cli
 from battodo.logconf import logging_config
 from battodo.lib import hello_world
@@ -27,7 +26,6 @@ def BATCLI(ARGS=None):
     )
     Commands.set_log_level(args)
     # execute function set for parsed command
-#    if not hasattr(Commands, args.func.__name__):
     try:
         args.func(conf)
     except Exception as exp:
@@ -98,12 +96,6 @@ def argparser():
     )
     hello.set_defaults(func=Commands.hello)
 
-    commands.add_parser(
-        'server',
-        help='http server related commands',
-        add_help=False,
-        parents=[server_parser()],
-    )
     # Add a subparser from a module
     commands.add_parser(
         'example',
@@ -112,8 +104,6 @@ def argparser():
         parents=[example_cli()],
     )
 
-    testing_cli(commands)
-
     return p
 
 
@@ -121,44 +111,6 @@ def get_help(parser):
     def help(args):
         parser.print_help()
     return help
-
-
-def testing_cli(subparser):
-    # run_functional_tests args
-    run_functional_tests = subparser.add_parser(
-        'run_functional_tests',
-        description='start the server locally and run functional tests',
-        help='for details use test --help'
-    )
-    run_functional_tests.set_defaults(func=Commands.run_functional_tests)
-    run_functional_tests.add_argument(
-        '-H', '--host', dest='host',
-        default='0.0.0.0',
-        help='host ip on which the service will be run',
-    )
-    run_functional_tests.add_argument(
-        '-P', '--port', dest='port',
-        default='5000',
-        help='port on which the service service will be run'
-    )
-
-    # run_functional_tests args
-    run_container_tests = subparser.add_parser(
-        'run_container_tests',
-        description='start docker-compose and run functional tests',
-        help='for details use test --help'
-    )
-    run_container_tests.set_defaults(func=Commands.run_container_tests)
-    run_container_tests.add_argument(
-        '-H', '--host', dest='host',
-        default='0.0.0.0',
-        help='host ip on which the service will be run',
-    )
-    run_container_tests.add_argument(
-        '-P', '--port', dest='port',
-        default='5000',
-        help='port on which the service service will be run'
-    )
 
 
 class Commands:
@@ -173,37 +125,3 @@ class Commands:
             log.setLevel(conf.loglevel)
         else:
             log.setLevel(logging.ERROR)
-
-    @staticmethod
-    def run_functional_tests(conf):
-        import subprocess
-        import os
-        import signal
-        from time import sleep
-        a = subprocess.Popen(['btodo', 'start'])
-        sleep(0.5)
-        Commands.test(conf)
-
-        os.kill(a.pid, signal.SIGTERM)
-
-    @staticmethod
-    def run_container_tests(conf):
-        import subprocess
-        import os
-        import signal
-        from time import sleep
-        a = subprocess.Popen(['docker-compose', 'up'])
-        sleep(0.5)
-        Commands.test(conf)
-
-        os.kill(a.pid, signal.SIGTERM)
-        sleep(0.5)
-
-    @staticmethod
-    def test(conf):
-        print('++ run functional tests ++')
-        import unittest
-        loader = unittest.TestLoader()
-        suite = loader.discover('functional_tests', pattern='*_test.py')
-        runner = unittest.TextTestRunner()
-        runner.run(suite)
