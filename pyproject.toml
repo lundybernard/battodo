@@ -28,7 +28,9 @@ packages = ["battodo"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64", "win-64"]
+# Unix-only, matching the CI matrix: the journal's flock single-writer
+# (ADR 0004) has no Windows counterpart, and no target device runs it.
+platforms = ["linux-64", "osx-arm64"]
 # Cooldown: re-solves skip packages <3 days old (yank/malware window).
 # Runs unaffected — the lock pins. Currency: periodic `pixi update`.
 exclude-newer = "3d"

@@ -105,3 +105,11 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   the cruft and new code propagated it. The convention is now explicit
   in the shared python-style skill (`references/unittest-idioms.md`);
   the fix is queued on the template's `tier1-bugfixes` branch.
+- **Default CI matrix presumes library-grade portability:** the template
+  ships `[ubuntu, macos, windows]`, which is right for a library but
+  wrong-by-default for an app that chose Unix-only primitives (battodo's
+  `flock` journal, ADR 0004). Windows CI failed on `import fcntl` plus
+  an 8.3 short-path vs resolved-path assertion mismatch — platform cost
+  paid for a user that doesn't exist. Apps should prune the matrix to
+  their actual targets at bootstrap; same library-vs-app inversion as
+  the locking/pin-currency lesson.

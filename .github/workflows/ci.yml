@@ -14,7 +14,10 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Unix-only by design: the journal's flock single-writer (ADR
+        # 0004) has no Windows counterpart, and no target device runs
+        # Windows.
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
