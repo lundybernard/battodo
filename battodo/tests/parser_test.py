@@ -16,7 +16,7 @@ OPEN_DOC = """# Work
 
 <!-- Add items here. -->
 
-- [ ] Alpha [P:95] [BUMPED:2026-08-08] [LOE:8] [TAGS:a,b]
+- [ ] Alpha [P:95] [BUMPED:2026-08-08] [ADDED:2026-07-01] [LOE:8] [TAGS:a,b]
       A note line, six-space indented.
   - [ ] Sub one [LOE:3]
     - [ ] Checklist item
@@ -49,8 +49,13 @@ class TestParse(TestCase):
             t.assertEqual(alpha.loe, 8)
             t.assertIsNone(alpha.due)
             t.assertEqual(alpha.bumped, '2026-08-08')
+            t.assertEqual(alpha.added, '2026-07-01')
             t.assertEqual(alpha.tags, ['a', 'b'])
             t.assertIsNone(alpha.task_id)
+
+        with t.subTest('added is absent on hand-written tasks'):
+            doc = parse('## Open\n\n- [ ] Bare\n')
+            t.assertIsNone(doc.tasks[0].added)
 
         with t.subTest('due and repeat'):
             beta = t.doc.tasks[1]

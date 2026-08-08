@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
-FIELD_RE = re.compile(r'\[(P|LOE|DUE|BUMPED|REPEAT|TAGS|ID):([^\]]*)\]')
+FIELD_RE = re.compile(r'\[(P|LOE|DUE|BUMPED|ADDED|REPEAT|TAGS|ID):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
 OPEN_HEADING = '## Open'
 
@@ -47,6 +47,15 @@ class Task:
     @property
     def bumped(self) -> str | None:
         return self.fields.get('BUMPED')
+
+    @property
+    def added(self) -> str | None:
+        """When the task entered the list, per ADR 0005.
+
+        Absent on every hand-written task and on everything predating
+        the field, so readers must tolerate None.
+        """
+        return self.fields.get('ADDED')
 
     @property
     def repeat(self) -> str | None:
