@@ -3,12 +3,12 @@ import logging
 from logging.config import dictConfig
 from sys import exit
 
-from bat.conf import get_config
+from battodo.conf import get_config
 
-from bat.server import server_parser
-from bat.example.cli import example_cli
-from bat.logconf import logging_config
-from bat.lib import hello_world
+from battodo.server import server_parser
+from battodo.example.cli import example_cli
+from battodo.logconf import logging_config
+from battodo.lib import hello_world
 
 
 dictConfig(logging_config)
@@ -50,8 +50,8 @@ class NestedNameSpace(argparse.Namespace):
 
 def argparser():
     p = argparse.ArgumentParser(
-        description='Utility for executing various bat tasks',
-        usage='bat [<args>] <command>',
+        description='Utility for executing various btodo tasks',
+        usage='btodo [<args>] <command>',
     )
     p.set_defaults(func=get_help(p))
 
@@ -88,7 +88,7 @@ def argparser():
         dest='command',
         title='commands',
         description='for additonal details on each command use: '
-                    '"bat {command name} --help"',
+                    '"btodo {command name} --help"',
     )
     # hello args
     hello = commands.add_parser(
@@ -180,7 +180,7 @@ class Commands:
         import os
         import signal
         from time import sleep
-        a = subprocess.Popen(['bat', 'start'])
+        a = subprocess.Popen(['btodo', 'start'])
         sleep(0.5)
         Commands.test(conf)
 

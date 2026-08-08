@@ -11,20 +11,20 @@ from ..conf import (
 )
 
 
-SRC = 'bat.conf'
+SRC = 'battodo.conf'
 
 EXAMPLE_CONFIG_YAML = '''
 default: example
 
 example:
-    bat:
+    battodo:
         key: value
         remote_host:
             api_key: example_api_key
             url: https://api-example.host.io/
 
 alt:
-    bat:
+    battodo:
         module:
             key: alt_value
 '''
@@ -44,7 +44,7 @@ class Test_get_config(TestCase):
         t.config_file_data = {
             'default': 'test_config',
             'test_config': {
-                'bat': {
+                'battodo': {
                     'AModule': {
                         'arg_1': 'conf_file_arg_1',
                         'arg_2': 'conf_file_arg_2',
@@ -65,8 +65,8 @@ class Test_get_config(TestCase):
             arg_1: str = 'dataclass_default_isodate'
 
         #  As if imported from a module
-        ConfA.__module__ = 'bat.AModule'
-        ConfB.__module__ = 'bat.BModule'
+        ConfA.__module__ = 'battodo.AModule'
+        ConfB.__module__ = 'battodo.BModule'
 
         @dataclass
         class GlobalConfig:
@@ -74,7 +74,7 @@ class Test_get_config(TestCase):
             BModule: ConfB
             config_file: str = './GlobalConfig.yaml'
 
-        GlobalConfig.__module__ = 'bat'
+        GlobalConfig.__module__ = 'battodo'
         t.GlobalConfig = GlobalConfig
 
     @patch(f'{SRC}.EnvConfig', autospec=True)
@@ -101,7 +101,7 @@ class Test_get_config(TestCase):
         conf = get_config(t.GlobalConfig, config_file=config_file)
 
         t.assertEqual(conf.AModule.arg_1, config_file.get.return_value)
-        config_file.get.assert_called_with('arg_1', module='bat.AModule')
+        config_file.get.assert_called_with('arg_1', module='battodo.AModule')
 
     def test_arg_config_file_name(t):
         '''The given config_file_name is passed to the FileConfig constructor

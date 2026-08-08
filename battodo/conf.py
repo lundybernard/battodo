@@ -1,4 +1,4 @@
-from bat import GlobalConfig
+from battodo import GlobalConfig
 
 from batconf.manager import Configuration, ConfigProtocol
 

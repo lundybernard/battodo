@@ -1,5 +1,5 @@
-# BAT Project Template
-example python microservice project
+# BatTodo
+Personal todo-list CLI (BAT ecosystem test-bed)
 
 [![Build Status](https://travis-ci.org/lundybernard/project_template.svg?branch=master)](https://travis-ci.org/lundybernard/project_template)
 
@@ -22,7 +22,7 @@ pip install git+ssh://git@github.com/lundybernard/batconf.git@main
 start the web server on local host
 
 ```
-bat start
+btodo start
 ```
 
 run tests against the web server
@@ -43,13 +43,13 @@ python setup.py develop
 start webserver with cli
 
 ```
-bat start
+btodo start
 ```
 
 Run functional tests
 
 ```
-bat test service
+btodo test service
 pytest functional_tests/service_test.py
 ```
 
@@ -78,7 +78,7 @@ pytest container_tests/container_test.py
 CLI
 
 ```
-bat run_container_tests
+btodo run_container_tests
 ```
 
 

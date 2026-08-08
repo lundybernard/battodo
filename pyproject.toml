@@ -7,14 +7,15 @@ requires = ['poetry-core~=1.0']
 build-backend = 'poetry.core.masonry.api'
 
 [tool.poetry]
-name = 'bat'
+name = 'battodo'
 version = '0.0.1'
-description = ''
+description = 'Personal todo-list CLI (BAT ecosystem test-bed)'
 authors = ['Lundy Bernard']
 license = 'MIT'
 
 [tool.poetry.scripts]
-bat = 'bat.cli:BATCLI'
+btodo = 'battodo.cli:BATCLI'
+btd = 'battodo.cli:BATCLI'
 
 [tool.poetry.dependencies]
 python = '^3.8'
@@ -30,12 +31,12 @@ pytest = '*'
 
 
 [tool.pytest.ini_options]
-addopts = "--cov=bat --cov-report html --cov-fail-under=100"
+addopts = "--cov=battodo --cov-report html --cov-fail-under=100"
 
 [tool.coverage.run]
 omit = [
     # ignore coverage for these files
-    "bat/_version.py",
-    "bat/server.py",
-    "bat/tests/common_api_tests.py",
+    "battodo/_version.py",
+    "battodo/server.py",
+    "battodo/tests/common_api_tests.py",
 ]

@@ -1,7 +1,7 @@
 from flask import Flask
 import connexion
 
-from bat.lib import hello_world
+from battodo.lib import hello_world
 
 app = Flask(__name__)
 

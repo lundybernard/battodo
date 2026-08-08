@@ -7,7 +7,7 @@ from ..cli import (
 )
 
 
-SRC = 'bat.server.cli'
+SRC = 'battodo.server.cli'
 
 
 class Test_server_parser(TestCase):

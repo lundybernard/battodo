@@ -18,7 +18,7 @@ def example_cli():
         description=textwrap.dedent('''\
             print the state of the deployment,
             or execute sub commands to manage the deployment:
-                bat deployment YYYY-MM-DD {sub command}
+                btodo deployment YYYY-MM-DD {sub command}
         '''),
     )
     # Default behavior if no sub-command is given
@@ -37,7 +37,7 @@ def example_cli():
         dest='example.cmds',
         title='example commands',
         description='for additonal details on each command use: '
-        '"bat example x {command name} --help"',
+        '"btodo example x {command name} --help"',
     )
 
     hello = commands.add_parser(

@@ -8,7 +8,7 @@ from ..server import (
 )
 
 
-SRC = 'bat.server.server'
+SRC = 'battodo.server.server'
 
 
 class TestFlaskApp(TestCase):
@@ -35,7 +35,7 @@ class TestServer(TestCase):
     def test_start_api_server(t, connexion):
         start_api_server()
         connexion.FlaskApp.assert_called_with(
-            'bat.server.server', specification_dir='../api/'
+            'battodo.server.server', specification_dir='../api/'
         )
         app = connexion.FlaskApp.return_value
         app.run.assert_called_with(host='0.0.0.0', port='5000', debug=True)
