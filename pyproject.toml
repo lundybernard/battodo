@@ -28,15 +28,19 @@ packages = ["battodo"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64", "win-64"]
+# Unix-only, matching the CI matrix: the journal's flock single-writer
+# (ADR 0004) has no Windows counterpart, and no target device runs it.
+platforms = ["linux-64", "osx-arm64"]
 # Cooldown: re-solves skip packages <3 days old (yank/malware window).
 # Runs unaffected — the lock pins. Currency: periodic `pixi update`.
 exclude-newer = "3d"
 
 # Default feature: interpreter + project only. Tools live on their own
-# features so each env is the minimum install for its job.
+# features so each env is the minimum install for its job. The python
+# spec mirrors requires-python; the concrete interpreter comes from a
+# pyNNN feature, so one manifest can build an env per supported version.
 [tool.pixi.dependencies]
-python = ">=3.14.5,<3.15"
+python = ">=3.10"
 
 [tool.pixi.pypi-dependencies]
 battodo = { path = ".", editable = true }
@@ -52,6 +56,13 @@ tests = { depends-on = [
 ] }
 test = { depends-on = [{ task = "_test", environment = "test" }] }
 unit = { depends-on = [{ task = "_unit", environment = "test" }] }
+# Same suite, one entry point per supported interpreter. CI fans these
+# out; locally they are the way to check a requires-python claim.
+unit-py310 = { depends-on = [{ task = "_unit", environment = "test-py310" }] }
+unit-py311 = { depends-on = [{ task = "_unit", environment = "test-py311" }] }
+unit-py312 = { depends-on = [{ task = "_unit", environment = "test-py312" }] }
+unit-py313 = { depends-on = [{ task = "_unit", environment = "test-py313" }] }
+unit-py314 = { depends-on = [{ task = "_unit", environment = "test-py314" }] }
 typecheck = { depends-on = [
     { task = "_typecheck", environment = "typecheck" },
 ] }
@@ -80,7 +91,28 @@ mypy = "*"
 [tool.pixi.feature.typecheck.tasks]
 _typecheck = "mypy battodo"
 
+# Interpreter-only features: one per CPython in requires-python. They
+# carry no tools — pair one with `test` to get that version's suite.
+[tool.pixi.feature.py310.dependencies]
+python = "3.10.*"
+
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
+
+[tool.pixi.feature.py313.dependencies]
+python = "3.13.*"
+
+[tool.pixi.feature.py314.dependencies]
+python = "3.14.*"
+
 [tool.pixi.environments]
+# Spelled out to pin the dev interpreter at the newest supported
+# version; a solve group resolves as one package set, so test,
+# typecheck and dev inherit that same interpreter build.
+default = { features = ["py314"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 # ruff is a standalone binary: no interpreter, no project install.
 lint = { features = [
@@ -89,6 +121,14 @@ lint = { features = [
 # mypy checks the test tree too, so it needs what the tests import.
 typecheck = { features = ["typecheck", "test"], solve-group = "default" }
 dev = { features = ["test", "lint", "typecheck"], solve-group = "default" }
+# The version matrix: what turns requires-python from a claim into a
+# tested range. Each older interpreter needs its own solve group, since
+# one group means one shared package set.
+test-py310 = { features = ["py310", "test"] }
+test-py311 = { features = ["py311", "test"] }
+test-py312 = { features = ["py312", "test"] }
+test-py313 = { features = ["py313", "test"] }
+test-py314 = { features = ["py314", "test"], solve-group = "default" }
 
 [tool.coverage.run]
 data_file = ".cache/coverage"
