@@ -1,11 +1,14 @@
 """Render open todo items as sorted markdown tables (R3).
 
-Selection and ordering match `view_todos.py` in the live system, which
-is the parity target: open items only, future-dated *recurring* items
-suppressed, sorted by priority descending then due date ascending with
-undated items last. Note that SCHEMA.md's prose is stricter than this
-(it would also hide future-dated non-recurring items); R3 and the script
-agree with each other, so btodo follows them.
+Selection matches `view_todos.py` in the live system: open items only,
+future-dated *recurring* items suppressed. Note that SCHEMA.md's prose
+is stricter than this (it would also hide future-dated non-recurring
+items); R3 and the script agree with each other, so btodo follows them.
+
+Ordering does *not* match the script any more. Items sort by the rank
+computed in `rank.py` (ADR 0005) rather than by stored priority, so the
+table shows that rank -- the ordering is otherwise unreadable, since
+nothing in the file states it.
 
 The host clock runs UTC while todos are anchored to the user's local
 day, so the zone is named rather than a fixed offset.
@@ -17,6 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .parser import Task, TodoFile, parse, parse_date
+from .rank import multiplier, rank
 
 
 @dataclass
@@ -45,6 +49,9 @@ ALWAYS_ACTIVE = frozenset({'study', 'career', 'events'})
 CATEGORY_ORDER = ['work', 'chores', 'study', 'career', 'events']
 OPEN_HEADING = '## Open'
 NO_DUE_SORTS_LAST = 'zzzz'
+# A list carrying this marker anywhere is parked: still discovered, so
+# mutations reach it, but never surfaced in a view (ADR 0005).
+PARKED_MARKER = 'battodo:parked'
 
 
 def active_categories(now: datetime) -> set[str]:
@@ -68,6 +75,9 @@ def discover_lists(directory: Path) -> list[Path]:
     fixes the hard-coded five-category bug: ad-hoc lists such as
     backlog.md are picked up, while SCHEMA.md, CLAUDE.md, and the
     differently-formatted completed.md are excluded.
+
+    Parked lists are included -- opting out of *views* is not opting out
+    of existing, and a mutation must still reach them.
     """
     if not directory.is_dir():
         return []
@@ -91,9 +101,13 @@ def visible_tasks(doc: TodoFile, today: date) -> list[Task]:
     return visible
 
 
-def sort_key(task: Task) -> tuple[int, str]:
-    """Priority descending, then nearest due, undated last."""
-    return (-task.priority, task.due or NO_DUE_SORTS_LAST)
+def sort_key(task: Task, today: date) -> tuple[float, str, str]:
+    """Rank descending, then nearest due, undated last, then title."""
+    return (
+        -rank(task, today),
+        task.due or NO_DUE_SORTS_LAST,
+        task.title,
+    )
 
 
 def due_label(due: str | None, today: date) -> str:
@@ -111,14 +125,17 @@ def due_label(due: str | None, today: date) -> str:
 
 
 def _table(tasks: list[Task], today: date) -> list[str]:
-    rows = ['| P | LOE | Task | Due |', '|---|-----|------|-----|']
+    rows = [
+        '| Rank | P | LOE | Task | Due |',
+        '|------|---|-----|------|-----|',
+    ]
     for task in tasks:
         loe = task.loe if task.loe is not None else ''
         open_children = [c for c in task.children if not c.done]
         badge = f' _({len(open_children)} subtasks)_' if open_children else ''
         rows.append(
-            f'| {task.priority} | {loe} | {task.title}{badge} '
-            f'| {due_label(task.due, today)} |'
+            f'| {rank(task, today):.1f} | {multiplier(task):g} | {loe} '
+            f'| {task.title}{badge} | {due_label(task.due, today)} |'
         )
     return rows
 
@@ -164,8 +181,12 @@ def build_view(
         category = path.stem
         if category in CATEGORY_ORDER and category not in active:
             continue
+        text = path.read_text()
+        if PARKED_MARKER in text:
+            continue
         tasks = sorted(
-            visible_tasks(parse(path.read_text()), today), key=sort_key
+            visible_tasks(parse(text), today),
+            key=lambda task: sort_key(task, today),
         )
         if not tasks:
             continue

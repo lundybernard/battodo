@@ -27,6 +27,7 @@ LIST = """# Work
 - [x] Done [P:99]
 - [ ] Future repeat [P:99] [DUE:2999-01-01] [REPEAT:14d]
 - [ ] Future plain [P:50] [DUE:2999-01-01]
+- [ ] Waiting [P:2] [ADDED:2026-05-10]
 """
 
 
@@ -95,36 +96,58 @@ class TestVisibleTasks(TestCase):
 
 
 class TestSortKey(TestCase):
-    def test_sort_key(t) -> None:
-        doc = parse(LIST)
-        tasks = sorted(visible_tasks(doc, date(2026, 8, 8)), key=sort_key)
+    def setUp(t) -> None:
+        t.today = date(2026, 8, 8)
+        t.order = [
+            task.title
+            for task in sorted(
+                visible_tasks(parse(LIST), t.today),
+                key=lambda task: sort_key(task, t.today),
+            )
+        ]
 
-        with t.subTest('priority descending, then due ascending'):
+    def test_sort_key(t) -> None:
+        with t.subTest('rank descending, then due ascending'):
             t.assertEqual(
-                [task.title for task in tasks],
+                t.order,
                 [
-                    'Future plain',
+                    # 2 x (1 + two months waiting) = 6.0
+                    'Waiting',
+                    # 1.36 x (1 + capped lateness) = 5.44, earlier first
                     'Earlier',
                     'Dated',
+                    # 3.0 x 1: a high legacy P, but nothing pressing
+                    'Future plain',
                     'High',
                     'Low',
                 ],
             )
 
-        with t.subTest('undated sorts after dated at equal priority'):
-            order = [task.title for task in tasks]
-            t.assertLess(order.index('Earlier'), order.index('High'))
+        with t.subTest('undated sorts after dated at equal rank'):
+            t.assertLess(t.order.index('Earlier'), t.order.index('High'))
+
+        with t.subTest('lateness outranks a much larger stored priority'):
+            t.assertLess(
+                t.order.index('Earlier'), t.order.index('Future plain')
+            )
 
 
 class TestPlaceholderDates(TestCase):
-    """Template files carry literal [DUE:YYYY-MM-DD]; nothing may crash."""
+    """Template files carry literal YYYY-MM-DD; nothing may crash."""
 
     def setUp(t) -> None:
-        t.doc = parse('## Open\n\n- [ ] Tmpl [P:6] [DUE:YYYY-MM-DD]\n')
+        t.doc = parse(
+            '## Open\n\n- [ ] Tmpl [P:6] [DUE:YYYY-MM-DD] [ADDED:YYYY-MM-DD]\n'
+        )
 
     def test_visible_tasks(t) -> None:
         tasks = visible_tasks(t.doc, date(2026, 8, 8))
         t.assertEqual([task.title for task in tasks], ['Tmpl'])
+
+    def test_sort_key(t) -> None:
+        today = date(2026, 8, 8)
+        task = t.doc.tasks[0]
+        t.assertEqual(sort_key(task, today), (-1.24, 'YYYY-MM-DD', 'Tmpl'))
 
     def test_due_label(t) -> None:
         t.assertEqual(due_label('YYYY-MM-DD', date(2026, 8, 8)), 'YYYY-MM-DD')
@@ -161,12 +184,17 @@ class TestBuildView(TestCase):
 
         with t.subTest('inactive category omitted'):
             out = build_view(t.dir, at('2026-08-05T22:00'), show_all=True)
-            t.assertNotIn('| 9 |', out)
+            t.assertNotIn('Earlier', out)
             t.assertIn('Read', out)
+
+        with t.subTest('rows carry the computed rank and the multiplier'):
+            out = build_view(t.dir, t.now, show_all=True)
+            t.assertIn('| Rank | P | LOE | Task | Due |', out)
+            t.assertIn('| 6.0 | 2 |  | Waiting |  |', out)
 
         with t.subTest('top-N limits rows'):
             limited = build_view(t.dir, t.now, show_all=False, top_n=1)
-            t.assertIn('Future plain', limited)
+            t.assertIn('Waiting', limited)
             t.assertNotIn('Earlier', limited)
 
         with t.subTest('header names the day and active set'):
@@ -183,6 +211,18 @@ class TestBuildView(TestCase):
             out = build_view(t.dir, t.now, show_all=True)
             t.assertIn('Backlog', out)
             t.assertIn('Someday', out)
+
+        with t.subTest('a parked list opts out of the view'):
+            (t.dir / 'backlog.md').write_text(
+                '# Backlog\n\n<!-- battodo:parked -->\n\n'
+                '## Open\n\n- [ ] Someday [P:4]\n'
+            )
+            out = build_view(t.dir, t.now, show_all=True)
+            t.assertNotIn('Someday', out)
+
+        with t.subTest('but stays discoverable, so mutations reach it'):
+            found = [p.name for p in discover_lists(t.dir)]
+            t.assertIn('backlog.md', found)
 
 
 class TestMissingSource(TestCase):
