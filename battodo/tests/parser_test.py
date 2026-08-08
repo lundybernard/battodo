@@ -28,7 +28,7 @@ OPEN_DOC = """# Work
 """
 
 
-class TestParse(TestCase):
+class ParseTests(TestCase):
     def setUp(t) -> None:
         t.doc = parse(OPEN_DOC)
 
@@ -110,7 +110,7 @@ class TestParse(TestCase):
         t.assertEqual(t.doc.lines, OPEN_DOC.split('\n'))
 
 
-class TestSerialize(TestCase):
+class SerializeTests(TestCase):
     def test_serialize(t) -> None:
         cases = {
             'full document': OPEN_DOC,
@@ -125,7 +125,7 @@ class TestSerialize(TestCase):
                 t.assertEqual(serialize(parse(text)), text)
 
 
-class TestTask(TestCase):
+class TaskTests(TestCase):
     def setUp(t) -> None:
         t.tk = parse('## Open\n\n- [ ] X [P:2] [LOE:1]\n').tasks[0]
 
@@ -158,7 +158,7 @@ class TestTask(TestCase):
         t.assertEqual(t.tk.raw_index, 2)
 
 
-class TestParseDate(TestCase):
+class ParseDateTests(TestCase):
     def test_parse_date(t) -> None:
         cases = {
             '2026-08-08': date(2026, 8, 8),
@@ -172,7 +172,7 @@ class TestParseDate(TestCase):
                 t.assertEqual(parse_date(value), expected)
 
 
-class TestTaskDataclass(TestCase):
+class TaskDataclassTests(TestCase):
     def test_defaults(t) -> None:
         task = Task(raw_index=0, indent=0, done=False, title='T', fields={})
         t.assertEqual(task.children, [])

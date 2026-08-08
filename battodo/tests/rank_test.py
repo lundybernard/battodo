@@ -17,7 +17,7 @@ def item(line: str) -> Task:
     return parse(f'## Open\n\n{line}\n').tasks[0]
 
 
-class TestMultiplier(TestCase):
+class MultiplierTests(TestCase):
     def test_multiplier(t) -> None:
         cases = {
             # New 0-5 scale, taken as written.
@@ -46,7 +46,7 @@ class TestMultiplier(TestCase):
         t.assertEqual(len(set(folded)), len(folded))
 
 
-class TestAgeScore(TestCase):
+class AgeScoreTests(TestCase):
     def test_age_score(t) -> None:
         cases = {
             # No ADDED: the whole legacy corpus, and every hand-added item.
@@ -66,7 +66,7 @@ class TestAgeScore(TestCase):
                 t.assertAlmostEqual(age_score(item(line), TODAY), expected)
 
 
-class TestDueScore(TestCase):
+class DueScoreTests(TestCase):
     def test_due_score(t) -> None:
         cases = {
             '- [ ] X': 0.0,
@@ -87,7 +87,7 @@ class TestDueScore(TestCase):
                 t.assertAlmostEqual(due_score(item(line), TODAY), expected)
 
 
-class TestRank(TestCase):
+class RankTests(TestCase):
     def test_rank(t) -> None:
         with t.subTest('a fresh undated item ranks at its multiplier'):
             t.assertAlmostEqual(rank(item('- [ ] X [P:3]'), TODAY), 3.0)

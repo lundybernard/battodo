@@ -13,7 +13,7 @@ from ..journal import (
 SRC = 'battodo.journal'
 
 
-class TestNewTaskId(TestCase):
+class NewTaskIdTests(TestCase):
     def test_new_task_id(t) -> None:
         with t.subTest('six base36 characters'):
             for _ in range(20):
@@ -32,7 +32,7 @@ class TestNewTaskId(TestCase):
             )
 
 
-class TestJournal(TestCase):
+class JournalTests(TestCase):
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)

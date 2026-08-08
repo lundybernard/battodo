@@ -10,7 +10,7 @@ from ..conf import (
 SRC = 'battodo.conf'
 
 
-class Test_get_config(TestCase):
+class GetConfigTests(TestCase):
     def setUp(t):
         patches = [
             'FileConfig',

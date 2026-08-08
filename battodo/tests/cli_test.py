@@ -13,12 +13,12 @@ from ..cli import (
 SRC = 'battodo.cli'
 
 
-class TestArgparser(TestCase):
+class ArgparserTests(TestCase):
     def test_argparser(t):
         argparser()
 
 
-class TestBATCLI(TestCase):
+class BATCLITests(TestCase):
     def setUp(t):
         patches = [
             'exit',
@@ -96,7 +96,7 @@ class TestBATCLI(TestCase):
     # TODO: full coverage of CLI arguments that trigger commands
 
 
-class TestCommandsView(TestCase):
+class CommandsViewTests(TestCase):
     @patch('builtins.print')
     @patch(f'{SRC}.build_view', autospec=True)
     def test_view(t, build_view, print):
@@ -118,7 +118,7 @@ class TestCommandsView(TestCase):
             print.assert_called_with(build_view.return_value)
 
 
-class TestCommandsBackfill(TestCase):
+class CommandsBackfillTests(TestCase):
     def setUp(t):
         t.conf = Mock()
         t.conf.view.source_dir = '~/todo'
@@ -140,7 +140,7 @@ class TestCommandsBackfill(TestCase):
             t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
 
 
-class TestNestedNameSpace(TestCase):
+class NestedNameSpaceTests(TestCase):
     def test_nesting(t):
         nns = NestedNameSpace()
         nns.top = 'level'
@@ -152,7 +152,7 @@ class TestNestedNameSpace(TestCase):
         t.assertEqual(nns.bat.sub.var, 'sub_var')
 
 
-class TestCommands(TestCase):
+class CommandsTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):

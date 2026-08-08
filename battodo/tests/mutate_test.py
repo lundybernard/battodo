@@ -28,7 +28,7 @@ LIST = """# Work
 TODAY = date(2026, 8, 8)
 
 
-class TestTaskSnapshot(TestCase):
+class TaskSnapshotTests(TestCase):
     def test_task_snapshot(t) -> None:
         task = parse('## Open\n\n- [ ] X [P:2] [TAGS:a]\n').tasks[0]
         t.assertEqual(
@@ -41,7 +41,7 @@ class TestTaskSnapshot(TestCase):
         )
 
 
-class TestBackfillFile(TestCase):
+class BackfillFileTests(TestCase):
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -127,7 +127,7 @@ class TestBackfillFile(TestCase):
         t.assertEqual(path.read_text(), before)
 
 
-class TestBackfillAll(TestCase):
+class BackfillAllTests(TestCase):
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)

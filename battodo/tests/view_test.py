@@ -35,7 +35,7 @@ def at(iso: str) -> datetime:
     return datetime.fromisoformat(iso).replace(tzinfo=TZ)
 
 
-class TestActiveCategories(TestCase):
+class ActiveCategoriesTests(TestCase):
     def test_active_categories(t) -> None:
         always = {'study', 'career', 'events'}
         cases = {
@@ -53,7 +53,7 @@ class TestActiveCategories(TestCase):
                 t.assertEqual(active_categories(at(stamp)), expected)
 
 
-class TestDiscoverLists(TestCase):
+class DiscoverListsTests(TestCase):
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -77,7 +77,7 @@ class TestDiscoverLists(TestCase):
             t.assertEqual(discover_lists(t.dir / 'nope'), [])
 
 
-class TestVisibleTasks(TestCase):
+class VisibleTasksTests(TestCase):
     def setUp(t) -> None:
         t.doc = parse(LIST)
         t.today = date(2026, 8, 8)
@@ -95,7 +95,7 @@ class TestVisibleTasks(TestCase):
             t.assertIn('Future plain', titles)
 
 
-class TestSortKey(TestCase):
+class SortKeyTests(TestCase):
     def setUp(t) -> None:
         t.today = date(2026, 8, 8)
         t.order = [
@@ -132,7 +132,7 @@ class TestSortKey(TestCase):
             )
 
 
-class TestPlaceholderDates(TestCase):
+class PlaceholderDatesTests(TestCase):
     """Template files carry literal YYYY-MM-DD; nothing may crash."""
 
     def setUp(t) -> None:
@@ -153,7 +153,7 @@ class TestPlaceholderDates(TestCase):
         t.assertEqual(due_label('YYYY-MM-DD', date(2026, 8, 8)), 'YYYY-MM-DD')
 
 
-class TestDueLabel(TestCase):
+class DueLabelTests(TestCase):
     def test_due_label(t) -> None:
         today = date(2026, 8, 8)
         cases = {
@@ -167,7 +167,7 @@ class TestDueLabel(TestCase):
                 t.assertEqual(due_label(due, today), expected)
 
 
-class TestBuildView(TestCase):
+class BuildViewTests(TestCase):
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -225,7 +225,7 @@ class TestBuildView(TestCase):
             t.assertIn('backlog.md', found)
 
 
-class TestMissingSource(TestCase):
+class MissingSourceTests(TestCase):
     """A source that yields no lists is an error, not a bare header.
 
     Pointed at a home directory with no `todo/` in it, `btodo view`
@@ -262,6 +262,6 @@ class TestMissingSource(TestCase):
             t.assertIn('active:', build_view(t.dir, t.now, show_all=True))
 
 
-class TestTimezone(TestCase):
+class TimezoneTests(TestCase):
     def test_tz(t) -> None:
         t.assertEqual(TZ, ZoneInfo('America/Los_Angeles'))
