@@ -117,3 +117,6 @@ venv.bak/
 # direnv (personal, per-checkout)
 .envrc
 .direnv/
+
+# dev data sandbox (cloned live todo, never committed)
+/sandbox/
