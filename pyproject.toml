@@ -26,6 +26,70 @@ include = ["battodo/", "LICENSE", "pyproject.toml"]
 [tool.hatch.build.targets.wheel]
 packages = ["battodo"]
 
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+# Cooldown: re-solves skip packages <3 days old (yank/malware window).
+# Runs unaffected — the lock pins. Currency: periodic `pixi update`.
+exclude-newer = "3d"
+
+# Default feature: interpreter + project only. Tools live on their own
+# features so each env is the minimum install for its job.
+[tool.pixi.dependencies]
+python = ">=3.14.5,<3.15"
+
+[tool.pixi.pypi-dependencies]
+battodo = { path = ".", editable = true }
+
+# Command-less public aggregators: staging + fail-fast live in these
+# ordered depends-on lists. Env pins are mandatory — an unpinned
+# depends-on resolves globally (ambiguous), not in the caller's env.
+[tool.pixi.tasks]
+tests = { depends-on = [
+    { task = "_unit", environment = "test" },
+    { task = "_typecheck", environment = "typecheck" },
+    { task = "_lint", environment = "lint" },
+] }
+test = { depends-on = [{ task = "_test", environment = "test" }] }
+unit = { depends-on = [{ task = "_unit", environment = "test" }] }
+typecheck = { depends-on = [
+    { task = "_typecheck", environment = "typecheck" },
+] }
+lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
+
+[tool.pixi.feature.test.dependencies]
+coverage = "*"
+
+# Stdlib unittest, no pytest. Coverage gates the unit suite at 100%.
+# Unit tests live beside the code (battodo/**/tests), so discovery walks
+# the package rather than a top-level tests/ directory.
+[tool.pixi.feature.test.tasks]
+# Quick manual run: no coverage, no gate.
+_test = "python -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py'"
+_unit = "coverage run --source=battodo -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py' && coverage report --fail-under=100"
+
+[tool.pixi.feature.lint.dependencies]
+ruff = "*"
+
+[tool.pixi.feature.lint.tasks]
+_lint = "ruff check battodo && ruff format --check battodo"
+
+[tool.pixi.feature.typecheck.dependencies]
+mypy = "*"
+
+[tool.pixi.feature.typecheck.tasks]
+_typecheck = "mypy battodo"
+
+[tool.pixi.environments]
+test = { features = ["test"], solve-group = "default" }
+# ruff is a standalone binary: no interpreter, no project install.
+lint = { features = [
+    "lint",
+], no-default-feature = true, solve-group = "default" }
+# mypy checks the test tree too, so it needs what the tests import.
+typecheck = { features = ["typecheck", "test"], solve-group = "default" }
+dev = { features = ["test", "lint", "typecheck"], solve-group = "default" }
+
 [tool.coverage.run]
 data_file = ".cache/coverage"
 omit = [

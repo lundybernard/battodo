@@ -106,3 +106,14 @@ venv.bak/
 
 # Claude Code personal per-checkout instructions (private)
 /CLAUDE.local.md
+
+## pixi environments (pixi.lock IS committed)
+.pixi/*
+!.pixi/config.toml
+
+# tool caches and generated reports
+.cache/
+
+# direnv (personal, per-checkout)
+.envrc
+.direnv/
