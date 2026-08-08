@@ -9,6 +9,7 @@ from battodo.conf import get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
+from battodo.mutate import bump_all
 from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
@@ -117,6 +118,13 @@ def argparser():
         help='show every open item, not just the top few per category',
     )
 
+    bump = commands.add_parser(
+        'bump',
+        description='daily priority bump across every discovered list',
+        help='for details use bump --help',
+    )
+    bump.set_defaults(func=Commands.bump)
+
     # Add a subparser from a module
     commands.add_parser(
         'example',
@@ -139,6 +147,15 @@ class Commands:
     @staticmethod
     def hello(conf):
         print(hello_world())
+
+    @staticmethod
+    def bump(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        result = bump_all(source, datetime.now(TZ).date())
+        for name, titles in sorted(result.items()):
+            print(f'{name}: bumped {len(titles)}')
+        if not result:
+            print('nothing to bump')
 
     @staticmethod
     def view(conf):
