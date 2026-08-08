@@ -55,13 +55,35 @@ data. Formatting may differ.
 `DUE` for `REPEAT` items (interval from completion date; schedule from
 the calendar anchor). Appends `TaskCompleted`.
 
-### Phase 5 — `bump` (R4)
+### Phase 5 — `bump` (R4) — landed, then superseded
 
 `btodo bump`. The once-daily `P += 1` pass over every open top-level
 item with `DUE <= today` or no `DUE`, setting `BUMPED:today`. Runs over
 **all discovered lists** — any `.md` containing a `## Open` heading —
 which is the fix for the hard-coded five-category bug that silently
 skips `backlog.md`. Appends `TaskBumped`.
+
+Retired by [ADR 0005](0005-computed-rank.md) on the branch below: rank
+is computed at view time instead of accumulated in the file, so the
+command, the `BUMPED` field, and the `TaskBumped` event all go away.
+Running over all discovered lists turned out to be too broad — it bumped
+`backlog.md`, which declares itself parked.
+
+## Follow-on — computed rank
+
+> Branch: `computed-rank`, stacked on `storage-prototype`
+
+Implements [ADR 0005](0005-computed-rank.md).
+
+1. **Loud source errors** — a missing or list-free source directory
+   raises with the resolved path instead of printing a bare header.
+2. **`[ADDED:]`** — parse the new field.
+3. **`battodo/rank.py`** — the multiplier fold and the bounded
+   age/due urgency terms.
+4. **Rank-ordered views** — sort by computed rank, show a Rank column,
+   skip lists carrying `<!-- battodo:parked -->`.
+5. **`btodo backfill`** — `bump` repurposed to stamp `[ADDED:today]`
+   once, emitting `TaskAdded`.
 
 ## Out of scope
 
