@@ -13,3 +13,12 @@
   "operation denied" (stop, escalate) from "presentation denied"
   (decompose, retry) — the earlier CLAUDE.md write was the former, this
   was the latter.
+- 2026-08-08: bootstrap was committed directly on main, which made
+  pre-push manual review impossible — the repo owner had to push
+  unreviewed history as a one-time exception. Feature-branch workflow
+  adopted from cycle 2 onward.
+- 2026-08-08: `git add -A` in a planned commit series swept `.pixi/envs`
+  and `pixi.lock` into the packaging commit before the ignore rules
+  existed, and pulled in a test fix staged for a later commit. Stage by
+  explicit path when building a commit sequence; `-A` is only safe once
+  .gitignore is already correct.
