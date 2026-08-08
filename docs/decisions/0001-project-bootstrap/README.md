@@ -21,8 +21,8 @@ Branch: `main`
 | [0001](0001-bootstrap-from-project-template.md) | Bootstrap from lundybernard/project_template | Accepted |
 | [0002](0002-batconf-for-configuration.md) | batconf for configuration | Accepted |
 | [0003](0003-argparse-bat-cli-pattern.md) | argparse with the BAT CLI pattern | Accepted |
-| [0004](0004-storage-architecture.md) | Storage architecture | Proposed |
-| [0005](0005-computed-rank.md) | Computed rank | Proposed |
+| [0004](0004-storage-architecture.md) | Storage architecture | Accepted |
+| [0005](0005-computed-rank.md) | Computed rank | Accepted |
 
 ## AI assistance disclosure
 

@@ -1,6 +1,6 @@
 # 0005 — Computed rank
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-08
 
 ## Context

@@ -1,6 +1,6 @@
 # 0004 — Storage architecture
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-08
 
 ## Context
