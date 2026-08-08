@@ -13,11 +13,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
+      # One leg per version: a failure on 3.10 should not hide 3.11.
+      fail-fast: false
       matrix:
         # Unix-only by design: the journal's flock single-writer (ADR
         # 0004) has no Windows counterpart, and no target device runs
         # Windows.
         os: [ubuntu-latest, macos-latest]
+        # Every CPython in requires-python, one pixi env each.
+        py: [py310, py311, py312, py313, py314]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
@@ -25,7 +29,10 @@ jobs:
         with:
           pixi-version: v0.71.1
           locked: true
-      - run: pixi run --locked unit
+          # Install only this leg's env; the default 3.14 env is unused
+          # here and would be an extra download on every older leg.
+          environments: test-${{ matrix.py }}
+      - run: pixi run --locked unit-${{ matrix.py }}
 
   typecheck:
     runs-on: ubuntu-latest
