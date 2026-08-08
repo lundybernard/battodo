@@ -1,42 +1,67 @@
-# pyproject.toml
+[project]
+name = "battodo"
+description = "Personal todo-list CLI (BAT ecosystem test-bed)"
+authors = [{ name = "Lundy Bernard" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = ["batconf"]
+
+[project.scripts]
+btodo = "battodo.cli:BATCLI"
+btd = "battodo.cli:BATCLI"
 
 [build-system]
-#requires = ["setuptools", "wheel"]
-#build-backend = "setuptools.build_meta"
-requires = ['poetry-core~=1.0']
-build-backend = 'poetry.core.masonry.api'
+build-backend = "hatchling.build"
+requires = ["hatchling"]
 
-[tool.poetry]
-name = 'battodo'
-version = '0.0.1'
-description = 'Personal todo-list CLI (BAT ecosystem test-bed)'
-authors = ['Lundy Bernard']
-license = 'MIT'
+# Single source of version truth. The poetry manifest duplicated it: a
+# literal here plus a setup.py import of battodo/_version.py.
+[tool.hatch.version]
+path = "battodo/_version.py"
 
-[tool.poetry.scripts]
-btodo = 'battodo.cli:BATCLI'
-btd = 'battodo.cli:BATCLI'
+[tool.hatch.build.targets.sdist]
+include = ["battodo/", "LICENSE", "pyproject.toml"]
 
-[tool.poetry.dependencies]
-python = '^3.8'
-batconf = '*'
-flask = '*'
-connexion = '*'
-requests = '*'
-pyyaml = '*'
-
-[tool.poetry.dev-dependencies]
-setuptools = '*'
-pytest = '*'
-
-
-[tool.pytest.ini_options]
-addopts = "--cov=battodo --cov-report html --cov-fail-under=100"
+[tool.hatch.build.targets.wheel]
+packages = ["battodo"]
 
 [tool.coverage.run]
+data_file = ".cache/coverage"
 omit = [
-    # ignore coverage for these files
+    # Test files: coverage measures the source, not the suite.
+    "*/tests/*",
+    # Build-time metadata. hatchling reads __version__ from here; nothing
+    # imports it at runtime, so no unit test can legitimately reach it.
     "battodo/_version.py",
-    "battodo/server.py",
-    "battodo/tests/common_api_tests.py",
 ]
+
+# No fail_under here — the 100% gate lives in the `unit` task so partial
+# manual runs are not failures.
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+skip_empty = true
+
+[tool.mypy]
+cache_dir = ".cache/mypy"
+# strict = true is the goal; the imported template code needs a full
+# annotation pass first (74 errors under --strict). Tracked in
+# docs/lessons/project-template.md.
+
+# === Ruff === #
+[tool.ruff]
+cache-dir = ".cache/ruff"
+line-length = 79
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+extend-select = ["S"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+# S101 flags `assert`; the unittest suites use assertion methods and are
+# unaffected. N805 allows the `t` self-argument convention.
+"**/*_test.py" = ["N805", "S101"]
