@@ -99,3 +99,9 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   annotation pass.
 - The template pins the deprecated batconf `FileConfig`; see
   [batconf.md](batconf.md).
+- **Test-prefix TestCase naming cruft:** the template's cli/conf/service
+  test modules name TestCase classes `Test<Subject>`, while its own
+  lib/example tests and batconf use `<Subject>Tests`. battodo inherited
+  the cruft and new code propagated it. The convention is now explicit
+  in the shared python-style skill (`references/unittest-idioms.md`);
+  the fix is queued on the template's `tier1-bugfixes` branch.
