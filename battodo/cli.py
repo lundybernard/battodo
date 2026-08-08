@@ -9,7 +9,7 @@ from battodo.conf import get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
-from battodo.mutate import backfill_all
+from battodo.mutate import backfill_all, complete
 from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
@@ -118,6 +118,17 @@ def argparser():
         help='show every open item, not just the top few per category',
     )
 
+    done = commands.add_parser(
+        'done',
+        description='complete a task and log it to completed.md',
+        help='for details use done --help',
+    )
+    done.set_defaults(func=Commands.done)
+    done.add_argument(
+        'selector',
+        help="the task's [ID:] value, or part of its title",
+    )
+
     backfill = commands.add_parser(
         'backfill',
         description='one-time migration: stamp [ADDED:today] on tasks '
@@ -148,6 +159,13 @@ class Commands:
     @staticmethod
     def hello(conf):
         print(hello_world())
+
+    @staticmethod
+    def done(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        entries = complete(source, conf.selector, datetime.now(TZ).date())
+        # A checklist item is checked off without a completed.md entry.
+        print('\n'.join(entries) if entries else 'checked off')
 
     @staticmethod
     def backfill(conf):

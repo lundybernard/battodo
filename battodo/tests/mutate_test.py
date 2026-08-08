@@ -5,11 +5,15 @@ from unittest import TestCase
 
 from ..journal import Journal
 from ..mutate import (
+    SelectionError,
     backfill_all,
     backfill_file,
+    complete,
+    find_task,
     task_snapshot,
 )
 from ..parser import parse
+from ..repeat import RepeatError
 
 LIST = """# Work
 
@@ -155,3 +159,375 @@ class BackfillAllTests(TestCase):
 
         with t.subTest('a second run is a no-op'):
             t.assertEqual(backfill_all(t.dir, TODAY), {})
+
+
+# Shapes taken from the live lists: legacy inflated P, retired BUMPED,
+# 6-space notes beside 2-space subtasks, a fieldless checklist, an
+# em-dash title, blank-separated blocks in one file and none in another,
+# and a template carrying a literal date placeholder.
+WORK = """# Work
+
+<!-- Active: Mon–Fri 09:00–17:00 | Blocked by: chores -->
+
+## Open
+
+- [ ] Casablanca — continue implementation [P:95] [BUMPED:2026-08-08] \
+[LOE:8] [TAGS:casablanca,rabbitmq] [ADDED:2026-07-01] [ID:9o71lx]
+      RabbitMQ client, partly built. Lots of tests still to implement.
+
+- [ ] Trip prep [P:12] [LOE:8] [ADDED:2026-07-01] [ID:tr1p00]
+  - [ ] Prepare computer bag [LOE:1]
+    - [x] Charger
+    - [ ] Power supply
+  - [ ] Book hotel [LOE:2]
+  - [ ] Pack cooler [LOE:1]
+    - [ ] Ice packs
+    - [ ] Water bottles
+  - [x] Pack tools [LOE:2]
+
+- [ ] Ship the docs [P:33] [DUE:2026-07-27] [LOE:1] [ADDED:2026-07-01] \
+[ID:sf41tf]
+
+- [ ] Captain's log [P:66] [DUE:2026-08-07] [REPEAT:weekly:fri] [LOE:2] \
+[TAGS:career] [ADDED:2026-07-01] [ID:cpt007]
+      Scan GitHub activity, then draft the entries.
+  - [ ] Draft entries [LOE:1]
+
+## Done
+"""
+
+CHORES = """# Chores
+
+## Open
+
+- [ ] Pay credit cards [P:83] [BUMPED:2026-08-08] [DUE:2026-06-24] \
+[REPEAT:15d] [LOE:1] [TAGS:finance] [ADDED:2026-07-01] [ID:sn75q7]
+- [ ] Build workbench [P:64] [BUMPED:2026-08-08] [LOE:5] \
+[TAGS:home,build,workshop] [ADDED:2026-07-01] [ID:vrr7m8]
+  - [x] Build plan + material cost estimate [LOE:2]
+  - [ ] Buy lumber [LOE:2]
+- [ ] Chip the brush pile [P:89] [BUMPED:2026-08-08] [LOE:3] [TAGS:yard] \
+[ADDED:2026-07-01] [ID:zwyx7b]
+- [ ] Water the plants [P:5] [REPEAT:sometimes] [ADDED:2026-07-01] \
+[ID:wtr001]
+
+## Done
+"""
+
+TEMPLATE = """# Van trip prep
+
+## Open
+
+- [ ] Reserve campsite [P:4] [DUE:YYYY-MM-DD] [LOE:2]
+"""
+
+COMPLETED = """# Completed Tasks
+
+<!-- Append-only log. Never edit or delete entries. -->
+2026-07-27 | chores | DONE | Build workbench > Build plan [LOE:2]
+"""
+
+
+def write_lists(directory: Path) -> None:
+    (directory / 'work.md').write_text(WORK)
+    (directory / 'chores.md').write_text(CHORES)
+    (directory / 'van-trip-prep-template.md').write_text(TEMPLATE)
+    (directory / 'completed.md').write_text(COMPLETED)
+
+
+class FindTaskTests(TestCase):
+    def setUp(t) -> None:
+        t.tmp = TemporaryDirectory()
+        t.addCleanup(t.tmp.cleanup)
+        t.dir = Path(t.tmp.name)
+        write_lists(t.dir)
+
+    def test_find_task(t) -> None:
+        with t.subTest('by [ID:]'):
+            match = find_task(t.dir, 'sn75q7')
+            t.assertEqual(match.task.title, 'Pay credit cards')
+            t.assertEqual(match.path.name, 'chores.md')
+
+        with t.subTest('by part of a title, case-insensitively'):
+            t.assertEqual(
+                find_task(t.dir, 'brush PILE').task.title,
+                'Chip the brush pile',
+            )
+
+        with t.subTest('a subtask, which has no id to be found by'):
+            match = find_task(t.dir, 'Power supply')
+            t.assertEqual(
+                [task.title for task in match.trail],
+                ['Trip prep', 'Prepare computer bag', 'Power supply'],
+            )
+
+        with (
+            t.subTest('checked tasks are not candidates'),
+            t.assertRaises(SelectionError),
+        ):
+            find_task(t.dir, 'Pack tools')
+
+        with t.subTest('an [ID:] wins over a title that mentions it'):
+            (t.dir / 'extra.md').write_text(
+                '## Open\n\n- [ ] Chase invoice zz01ab [P:1]\n'
+                '- [ ] File taxes [P:2] [ID:zz01ab]\n'
+            )
+            t.assertEqual(find_task(t.dir, 'zz01ab').task.title, 'File taxes')
+
+
+class CompleteTests(TestCase):
+    def setUp(t) -> None:
+        t.tmp = TemporaryDirectory()
+        t.addCleanup(t.tmp.cleanup)
+        t.dir = Path(t.tmp.name)
+        t.reset()
+
+    def reset(t) -> None:
+        """Fresh lists and an empty journal, for the next subTest."""
+        write_lists(t.dir)
+        (t.dir / '.journal' / 'log.jsonl').unlink(missing_ok=True)
+
+    def logged(t) -> list[str]:
+        """The completed.md entries this run appended."""
+        text = (t.dir / 'completed.md').read_text()
+        return text[len(COMPLETED) :].splitlines()
+
+    def line(t, name: str, needle: str) -> str:
+        return next(
+            line
+            for line in (t.dir / name).read_text().split('\n')
+            if needle in line
+        )
+
+    def test_complete(t) -> None:
+        with t.subTest('a finished top-level task loses its whole block'):
+            complete(t.dir, 'Chip the brush pile', TODAY)
+            text = (t.dir / 'chores.md').read_text()
+            t.assertNotIn('Chip the brush pile', text)
+            t.assertIn('- [ ] Water the plants', text)
+
+        with t.subTest('untouched lines survive byte-identically'):
+            t.reset()
+            complete(t.dir, 'Casablanca', TODAY)
+            kept = [
+                line
+                for index, line in enumerate(WORK.split('\n'))
+                # the task, its note, and the blank the removal orphans
+                if index not in {6, 7, 8}
+            ]
+            t.assertEqual((t.dir / 'work.md').read_text(), '\n'.join(kept))
+
+        with t.subTest('completing the last open child empties the block'):
+            t.reset()
+            complete(t.dir, 'Buy lumber', TODAY)
+            text = (t.dir / 'chores.md').read_text()
+            t.assertNotIn('Build workbench', text)
+            t.assertNotIn('Buy lumber', text)
+            t.assertIn('- [ ] Chip the brush pile', text)
+
+        with t.subTest('a cascade that stops checks lines off in place'):
+            t.reset()
+            complete(t.dir, 'Power supply', TODAY)
+            lines = (t.dir / 'work.md').read_text().split('\n')
+            t.assertIn('    - [x] Power supply', lines)
+            t.assertRegex(
+                t.line('work.md', 'Prepare computer bag'),
+                r'^  - \[x\] Prepare computer bag \[LOE:1\] \[ID:\w{6}\]$',
+            )
+            t.assertIn('  - [ ] Book hotel [LOE:2]', lines)
+            t.assertIn(
+                '- [ ] Trip prep [P:12] [LOE:8] [ADDED:2026-07-01] '
+                '[ID:tr1p00]',
+                lines,
+            )
+
+        with t.subTest('a checklist item alone gets no [ID:], its owner does'):
+            t.reset()
+            complete(t.dir, 'Ice packs', TODAY)
+            lines = (t.dir / 'work.md').read_text().split('\n')
+            t.assertIn('    - [x] Ice packs', lines)
+            t.assertIn('    - [ ] Water bottles', lines)
+            t.assertRegex(
+                t.line('work.md', 'Pack cooler'),
+                r'^  - \[ \] Pack cooler \[LOE:1\] \[ID:\w{6}\]$',
+            )
+
+        with t.subTest('a recurring task is rescheduled, not removed'):
+            t.reset()
+            complete(t.dir, 'Pay credit cards', TODAY)
+            t.assertEqual(
+                t.line('chores.md', 'Pay credit cards'),
+                '- [ ] Pay credit cards [P:83] [BUMPED:2026-08-08] '
+                '[DUE:2026-08-23] [REPEAT:15d] [LOE:1] [TAGS:finance] '
+                '[ADDED:2026-07-01] [ID:sn75q7]',
+            )
+
+        with t.subTest('a parent completed early takes its children along'):
+            t.reset()
+            t.assertEqual(
+                complete(t.dir, 'Trip prep', TODAY),
+                ['2026-08-08 | work | DONE | Trip prep [P:12] [LOE:8]'],
+            )
+            text = (t.dir / 'work.md').read_text()
+            # SCHEMA.md removes the block, parent and all; the open
+            # children go with it and are not logged individually.
+            t.assertNotIn('Trip prep', text)
+            t.assertNotIn('Book hotel', text)
+
+        with t.subTest('a recurrence keeps its notes, drops its children'):
+            t.reset()
+            complete(t.dir, "Captain's log", TODAY)
+            text = (t.dir / 'work.md').read_text()
+            t.assertIn('[DUE:2026-08-14] [REPEAT:weekly:fri]', text)
+            t.assertIn('      Scan GitHub activity, then draft', text)
+            t.assertNotIn('Draft entries', text)
+
+    def test_complete_log(t) -> None:
+        with t.subTest('date, category, status, title, and fields'):
+            t.assertEqual(
+                complete(t.dir, 'Chip the brush pile', TODAY),
+                [
+                    (
+                        '2026-08-08 | chores | DONE | Chip the brush pile '
+                        '[P:89] [LOE:3] [TAGS:yard]'
+                    )
+                ],
+            )
+            t.assertEqual(len(t.logged()), 1)
+
+        with t.subTest('a recurrence logs the DUE it was completed against'):
+            t.reset()
+            t.assertEqual(
+                t.logged(),
+                [],
+            )
+            complete(t.dir, 'Pay credit cards', TODAY)
+            t.assertEqual(
+                t.logged(),
+                [
+                    (
+                        '2026-08-08 | chores | DONE | Pay credit cards '
+                        '[P:83] [LOE:1] [DUE:2026-06-24] [REPEAT:15d] '
+                        '[TAGS:finance]'
+                    )
+                ],
+            )
+
+        with t.subTest('ancestry with a line per completion, deepest first'):
+            t.reset()
+            complete(t.dir, 'Buy lumber', TODAY)
+            t.assertEqual(
+                t.logged(),
+                [
+                    (
+                        '2026-08-08 | chores | DONE | Build workbench > '
+                        'Buy lumber [LOE:2]'
+                    ),
+                    (
+                        '2026-08-08 | chores | DONE | Build workbench '
+                        '[P:64] [LOE:5] [TAGS:home,build,workshop]'
+                    ),
+                ],
+            )
+
+        with t.subTest('checklist items are not logged, their parent is'):
+            t.reset()
+            t.assertEqual(
+                complete(t.dir, 'Power supply', TODAY),
+                [
+                    (
+                        '2026-08-08 | work | DONE | Trip prep > '
+                        'Prepare computer bag [LOE:1]'
+                    )
+                ],
+            )
+
+        with t.subTest('a checklist item that finishes nothing logs nothing'):
+            t.reset()
+            t.assertEqual(complete(t.dir, 'Ice packs', TODAY), [])
+            t.assertEqual((t.dir / 'completed.md').read_text(), COMPLETED)
+
+        with t.subTest('appended to a log that has no trailing newline'):
+            t.reset()
+            (t.dir / 'completed.md').write_text(COMPLETED.rstrip('\n'))
+            complete(t.dir, 'Chip the brush pile', TODAY)
+            text = (t.dir / 'completed.md').read_text()
+            t.assertTrue(text.startswith(COMPLETED))
+            t.assertTrue(text.endswith('[TAGS:yard]\n'))
+
+        with t.subTest('created when there is no log yet'):
+            t.reset()
+            (t.dir / 'completed.md').unlink()
+            complete(t.dir, 'Chip the brush pile', TODAY)
+            t.assertTrue(
+                (t.dir / 'completed.md')
+                .read_text()
+                .startswith('2026-08-08 | chores | DONE |')
+            )
+
+    def test_complete_journal(t) -> None:
+        with t.subTest('one TaskCompleted per completion, deepest first'):
+            complete(t.dir, 'Buy lumber', TODAY)
+            events = Journal(t.dir).read()
+            t.assertEqual([e['type'] for e in events], ['TaskCompleted'] * 2)
+            t.assertEqual(
+                [e['payload']['ancestry'] for e in events],
+                ['Build workbench > Buy lumber', 'Build workbench'],
+            )
+            t.assertEqual(events[1]['stream_id'], 'task/vrr7m8')
+            t.assertEqual(events[0]['metadata']['source_file'], 'chores.md')
+
+        with t.subTest('delta and pre-state snapshot'):
+            t.assertEqual(
+                Journal(t.dir).read()[0]['payload'],
+                {
+                    'delta': {'done': [False, True]},
+                    'snapshot': {
+                        'title': 'Buy lumber',
+                        'done': False,
+                        'fields': {'LOE': '2'},
+                    },
+                    'ancestry': 'Build workbench > Buy lumber',
+                },
+            )
+
+        with t.subTest('a reschedule records the due date it moved to'):
+            t.reset()
+            complete(t.dir, 'Pay credit cards', TODAY)
+            t.assertEqual(
+                Journal(t.dir).read()[0]['payload']['delta'],
+                {'done': [False, True], 'DUE': ['2026-06-24', '2026-08-23']},
+            )
+
+        with t.subTest('a checklist item records on its parent stream'):
+            t.reset()
+            complete(t.dir, 'Power supply', TODAY)
+            events = Journal(t.dir).read()
+            streams = {e['stream_id'] for e in events}
+            t.assertEqual(len(streams), 1)
+            t.assertIn(
+                streams.pop().removeprefix('task/'),
+                t.line('work.md', 'Prepare computer bag'),
+            )
+
+    def test_complete_errors(t) -> None:
+        before = (t.dir / 'chores.md').read_text()
+
+        with t.subTest('nothing matches'):
+            with t.assertRaises(SelectionError) as caught:
+                complete(t.dir, 'nonexistent', TODAY)
+            t.assertIn("'nonexistent'", str(caught.exception))
+
+        with t.subTest('several tasks match'):
+            with t.assertRaises(SelectionError) as caught:
+                complete(t.dir, 'the', TODAY)
+            t.assertIn('matches 3 open tasks', str(caught.exception))
+
+        with t.subTest(
+            'an unreadable REPEAT stops before anything is written'
+        ):
+            with t.assertRaises(RepeatError):
+                complete(t.dir, 'Water the plants', TODAY)
+            t.assertEqual((t.dir / 'chores.md').read_text(), before)
+            t.assertEqual((t.dir / 'completed.md').read_text(), COMPLETED)
+            t.assertEqual(Journal(t.dir).read(), [])
