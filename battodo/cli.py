@@ -9,7 +9,7 @@ from battodo.conf import get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
-from battodo.mutate import backfill_all, complete
+from battodo.mutate import backfill_all, complete, scratch
 from battodo.view import TZ, build_view
 
 dictConfig(logging_config)
@@ -129,6 +129,17 @@ def argparser():
         help="the task's [ID:] value, or part of its title",
     )
 
+    drop = commands.add_parser(
+        'scratch',
+        description='abandon a task: remove it and log it as SCRATCHED',
+        help='for details use scratch --help',
+    )
+    drop.set_defaults(func=Commands.scratch)
+    drop.add_argument(
+        'selector',
+        help="the task's [ID:] value, or part of its title",
+    )
+
     backfill = commands.add_parser(
         'backfill',
         description='one-time migration: stamp [ADDED:today] on tasks '
@@ -166,6 +177,13 @@ class Commands:
         entries = complete(source, conf.selector, datetime.now(TZ).date())
         # A checklist item is checked off without a completed.md entry.
         print('\n'.join(entries) if entries else 'checked off')
+
+    @staticmethod
+    def scratch(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        entries = scratch(source, conf.selector, datetime.now(TZ).date())
+        # A checklist item is dropped without a completed.md entry.
+        print('\n'.join(entries) if entries else 'dropped')
 
     @staticmethod
     def backfill(conf):

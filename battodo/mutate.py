@@ -5,10 +5,12 @@ the markdown stays authoritative while the journal accumulates history.
 Files with nothing to change are not rewritten at all, which keeps
 mtimes stable for Syncthing.
 
-Two mutations live here. `complete` implements SCHEMA.md's completion
-rules: log the ancestry to `completed.md`, mark `[x]`, remove the block
-once the whole thing is done, and reschedule a recurring task instead of
-deleting it. `backfill` is the one-time `[ADDED:]` stamp that replaced
+`complete` implements SCHEMA.md's completion rules: log the ancestry to
+`completed.md`, mark `[x]`, remove the block once the whole thing is
+done, and reschedule a recurring task instead of deleting it. `scratch`
+is the same plumbing for abandoning a task rather than finishing it:
+the block goes, the log records it as SCRATCHED, and nothing cascades
+or reschedules. `backfill` is the one-time `[ADDED:]` stamp that replaced
 the daily bump, which ADR 0005 retired along with the `BUMPED` field and
 the `TaskBumped` event: rank is computed from the files rather than
 accumulated in them, so btodo has nothing to write once a day.
@@ -27,9 +29,11 @@ from .view import discover_lists
 
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
+SCRATCHED_EVENT = 'TaskScratched'
 DATE_FIELDS = ('DUE',)
 COMPLETED_LOG = 'completed.md'
 DONE_STATUS = 'DONE'
+SCRATCHED_STATUS = 'SCRATCHED'
 ANCESTRY_SEPARATOR = ' > '
 # Field order for a completed.md entry. btodo authors those lines, so
 # unlike a task line they are canonical, and they carry only SCHEMA.md's
@@ -203,6 +207,11 @@ def _drop_lines(lines: list[str], drop: set[int]) -> list[str]:
     return [line for index, line in enumerate(lines) if index not in drop]
 
 
+def _ancestry(trail: list[Task]) -> str:
+    """The `Parent > Child` path SCHEMA.md logs a nested task under."""
+    return ANCESTRY_SEPARATOR.join(task.title for task in trail)
+
+
 def _log_entry(path: Path, trail: list[Task], status: str, today: date) -> str:
     """One `completed.md` record: date, category, status, ancestry."""
     task = trail[-1]
@@ -211,8 +220,9 @@ def _log_entry(path: Path, trail: list[Task], status: str, today: date) -> str:
         for name in LOG_FIELDS
         if name in task.fields
     )
-    ancestry = ANCESTRY_SEPARATOR.join(item.title for item in trail)
-    entry = f'{today.isoformat()} | {path.stem} | {status} | {ancestry}'
+    entry = (
+        f'{today.isoformat()} | {path.stem} | {status} | {_ancestry(trail)}'
+    )
     return f'{entry} {fields}' if fields else entry
 
 
@@ -326,14 +336,85 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
                 # Pre-state, as everywhere here: the delta says what
                 # changed, the snapshot says what it changed from.
                 'snapshot': task_snapshot(task),
-                'ancestry': ANCESTRY_SEPARATOR.join(
-                    item.title for item in trail
-                ),
+                'ancestry': _ancestry(trail),
             },
             actor='agent',
             source_file=match.path.name,
         )
 
+    return entries
+
+
+def scratch(directory: Path, selector: str, today: date) -> list[str]:
+    """Drop the task `selector` names without completing it.
+
+    The whole block goes -- the task, its notes, its children -- and
+    nothing cascades: abandoning one child says nothing about its
+    parent, which stays open.
+
+    SCHEMA.md logs a scratch only for a task genuinely accepted in an
+    earlier session, and silently drops proposals culled in the session
+    that produced them. btodo cannot see that difference; by the time an
+    item is written to a list it can only be treated as accepted, so
+    every scratch is logged.
+
+    Parameters
+    ----------
+    directory : Path
+        The source directory: its lists, its `completed.md`, its
+        journal.
+    selector : str
+        A task `[ID:]` or part of a title.
+    today : date
+        The date the task was abandoned, in the user's local day.
+
+    Returns
+    -------
+    list of str
+        The one `completed.md` entry written, or none for a checklist
+        item, which SCHEMA.md does not log.
+
+    Raises
+    ------
+    SelectionError
+        If `selector` does not name exactly one open task.
+    """
+    match = find_task(directory, selector)
+    task = match.task
+    stream = _stream_task(match.trail)
+    stream_id = stream.task_id or new_task_id()
+
+    lines = list(match.doc.lines)
+    if stream is not task:
+        # A checklist item cannot hold an id, so the event belongs to
+        # the ancestor's stream and the ancestor's line is the one that
+        # has to carry it.
+        lines[stream.raw_index] = set_field(
+            lines[stream.raw_index], 'ID', stream_id
+        )
+    lines = _drop_lines(lines, _block_indices(task))
+
+    entries = (
+        []
+        if _is_checklist_item(task)
+        else [_log_entry(match.path, match.trail, SCRATCHED_STATUS, today)]
+    )
+
+    match.doc.lines = lines
+    match.path.write_text(serialize(match.doc))
+    _append_log(directory, entries)
+
+    Journal(directory).append(
+        SCRATCHED_EVENT,
+        f'task/{stream_id}',
+        {
+            'delta': {'removed': [False, True]},
+            'snapshot': task_snapshot(task),
+            'ancestry': _ancestry(match.trail),
+        },
+        actor='agent',
+        source_file=match.path.name,
+    )
     return entries
 
 

@@ -10,6 +10,7 @@ from ..mutate import (
     backfill_file,
     complete,
     find_task,
+    scratch,
     task_snapshot,
 )
 from ..parser import parse
@@ -275,7 +276,9 @@ class FindTaskTests(TestCase):
             t.assertEqual(find_task(t.dir, 'zz01ab').task.title, 'File taxes')
 
 
-class CompleteTests(TestCase):
+class MutationTests(TestCase):
+    """A fixture source directory the mutation suites share."""
+
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -299,6 +302,8 @@ class CompleteTests(TestCase):
             if needle in line
         )
 
+
+class CompleteTests(MutationTests):
     def test_complete(t) -> None:
         with t.subTest('a finished top-level task loses its whole block'):
             complete(t.dir, 'Chip the brush pile', TODAY)
@@ -531,3 +536,97 @@ class CompleteTests(TestCase):
             t.assertEqual((t.dir / 'chores.md').read_text(), before)
             t.assertEqual((t.dir / 'completed.md').read_text(), COMPLETED)
             t.assertEqual(Journal(t.dir).read(), [])
+
+
+class ScratchTests(MutationTests):
+    def test_scratch(t) -> None:
+        with t.subTest('the block goes, untouched lines byte-identically'):
+            scratch(t.dir, 'Casablanca', TODAY)
+            kept = [
+                line
+                for index, line in enumerate(WORK.split('\n'))
+                if index not in {6, 7, 8}
+            ]
+            t.assertEqual((t.dir / 'work.md').read_text(), '\n'.join(kept))
+
+        with t.subTest('a subtask goes without touching its parent'):
+            t.reset()
+            scratch(t.dir, 'Book hotel', TODAY)
+            text = (t.dir / 'work.md').read_text()
+            t.assertNotIn('Book hotel', text)
+            t.assertIn(
+                '- [ ] Trip prep [P:12] [LOE:8] [ADDED:2026-07-01] '
+                '[ID:tr1p00]',
+                text,
+            )
+            t.assertIn('  - [ ] Prepare computer bag [LOE:1]\n', text)
+
+        with t.subTest('a checklist item goes, its owner gains an [ID:]'):
+            t.reset()
+            scratch(t.dir, 'Ice packs', TODAY)
+            text = (t.dir / 'work.md').read_text()
+            t.assertNotIn('Ice packs', text)
+            t.assertIn('    - [ ] Water bottles', text)
+            t.assertRegex(
+                t.line('work.md', 'Pack cooler'),
+                r'^  - \[ \] Pack cooler \[LOE:1\] \[ID:\w{6}\]$',
+            )
+
+        with t.subTest('a recurring task is abandoned, not rescheduled'):
+            t.reset()
+            scratch(t.dir, 'Pay credit cards', TODAY)
+            t.assertNotIn(
+                'Pay credit cards', (t.dir / 'chores.md').read_text()
+            )
+
+    def test_scratch_log(t) -> None:
+        with t.subTest('one SCRATCHED entry, with ancestry and fields'):
+            t.assertEqual(
+                scratch(t.dir, 'Book hotel', TODAY),
+                [
+                    (
+                        '2026-08-08 | work | SCRATCHED | Trip prep > '
+                        'Book hotel [LOE:2]'
+                    )
+                ],
+            )
+            t.assertEqual(len(t.logged()), 1)
+
+        with t.subTest('checklist items are not logged'):
+            t.reset()
+            t.assertEqual(scratch(t.dir, 'Ice packs', TODAY), [])
+            t.assertEqual((t.dir / 'completed.md').read_text(), COMPLETED)
+
+    def test_scratch_journal(t) -> None:
+        with t.subTest('TaskScratched on the task, no cascade'):
+            scratch(t.dir, 'Casablanca', TODAY)
+            events = Journal(t.dir).read()
+            t.assertEqual(len(events), 1)
+            t.assertEqual(events[0]['type'], 'TaskScratched')
+            t.assertEqual(events[0]['stream_id'], 'task/9o71lx')
+            t.assertEqual(events[0]['metadata']['source_file'], 'work.md')
+            t.assertEqual(
+                events[0]['payload']['delta'], {'removed': [False, True]}
+            )
+
+        with t.subTest('ancestry and pre-state snapshot'):
+            t.reset()
+            scratch(t.dir, 'Book hotel', TODAY)
+            payload = Journal(t.dir).read()[0]['payload']
+            t.assertEqual(payload['ancestry'], 'Trip prep > Book hotel')
+            t.assertEqual(
+                payload['snapshot'],
+                {
+                    'title': 'Book hotel',
+                    'done': False,
+                    'fields': {'LOE': '2'},
+                },
+            )
+
+        with t.subTest('a checklist item records on its parent stream'):
+            t.reset()
+            scratch(t.dir, 'Ice packs', TODAY)
+            stream = Journal(t.dir).read()[0]['stream_id']
+            t.assertIn(
+                stream.removeprefix('task/'), t.line('work.md', 'Pack cooler')
+            )
