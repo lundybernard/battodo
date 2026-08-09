@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime
+from json import loads
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -10,6 +11,7 @@ from ..view import (
     TZ,
     SourceError,
     active_categories,
+    build_json,
     build_view,
     discover_lists,
     due_label,
@@ -183,7 +185,9 @@ class DueLabelTests(TestCase):
                 t.assertEqual(due_label(due, today), expected)
 
 
-class BuildViewTests(TestCase):
+class ListsFixture(TestCase):
+    """A work and a study list, read at a weekday mid-morning."""
+
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -192,6 +196,8 @@ class BuildViewTests(TestCase):
         (t.dir / 'study.md').write_text('## Open\n\n- [ ] Read [P:2]\n')
         t.now = at('2026-08-05T10:00')
 
+
+class BuildViewTests(ListsFixture):
     def test_build_view(t) -> None:
         with t.subTest('active categories only'):
             out = build_view(t.dir, t.now, show_all=True)
@@ -241,6 +247,73 @@ class BuildViewTests(TestCase):
         with t.subTest('but stays discoverable, so mutations reach it'):
             found = [p.name for p in discover_lists(t.dir)]
             t.assertIn('backlog.md', found)
+
+
+class BuildJsonTests(ListsFixture):
+    """The agent-facing view (R2): same selection, no presentation."""
+
+    def render(t, **kwargs) -> dict:
+        # Default: show_all=True,
+        kwargs.setdefault('show_all', True)
+        return loads(build_json(t.dir, t.now, **kwargs))
+
+    def test_build_json(t) -> None:
+        doc = t.render()
+
+        with t.subTest('the header fields the human view prints'):
+            t.assertEqual(doc['date'], '2026-08-05')
+            t.assertEqual(doc['active'], ['career', 'events', 'study', 'work'])
+
+        with t.subTest('active categories only, in view order'):
+            names = [category['name'] for category in doc['categories']]
+            t.assertEqual(names, ['work', 'study'])
+
+        with t.subTest('tasks carry the rank order, not a rank label'):
+            titles = [task['title'] for task in doc['categories'][0]['tasks']]
+            t.assertEqual(
+                titles,
+                ['Waiting', 'Earlier', 'Dated', 'Future plain', 'High', 'Low'],
+            )
+
+        with t.subTest('every field of a task is serialized'):
+            t.assertEqual(
+                doc['categories'][0]['tasks'][0],
+                {
+                    'id': None,
+                    'title': 'Waiting',
+                    'rank': 6.0,
+                    'priority': 2.0,
+                    'loe': None,
+                    'due': None,
+                    'added': '2026-05-10',
+                    'repeat': None,
+                    'tags': [],
+                    'subtasks': 0,
+                },
+            )
+
+        with t.subTest('due dates stay verbatim, unlabelled'):
+            dated = doc['categories'][0]['tasks'][1]
+            t.assertEqual(dated['due'], '2026-01-01')
+
+        with t.subTest('top-N limits tasks'):
+            work = t.render(show_all=False, top_n=1)['categories'][0]
+            t.assertEqual(
+                [task['title'] for task in work['tasks']], ['Waiting']
+            )
+
+        with t.subTest('open subtasks are counted, not nested'):
+            (t.dir / 'career.md').write_text(
+                '## Open\n\n- [ ] Parent [P:3]\n'
+                '  - [ ] Child [P:1]\n'
+                '  - [x] Finished [P:1]\n'
+            )
+            career = next(
+                category
+                for category in t.render()['categories']
+                if category['name'] == 'career'
+            )
+            t.assertEqual(career['tasks'][0]['subtasks'], 1)
 
 
 class TableLayoutTests(TestCase):

@@ -10,7 +10,7 @@ from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
 from battodo.mutate import backfill_all, complete, scratch
-from battodo.view import TZ, build_view
+from battodo.view import TZ, build_json, build_view
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -117,6 +117,12 @@ def argparser():
         action='store_true',
         help='show every open item, not just the top few per category',
     )
+    view.add_argument(
+        '--format',
+        choices=('text', 'json'),
+        default='text',
+        help='output format: text for a terminal, json for agents',
+    )
 
     done = commands.add_parser(
         'done',
@@ -197,8 +203,13 @@ class Commands:
     @staticmethod
     def view(conf):
         source = Path(conf.view.source_dir).expanduser()
+        build = (
+            build_json
+            if getattr(conf, 'format', 'text') == 'json'
+            else build_view
+        )
         print(
-            build_view(
+            build(
                 source,
                 datetime.now(TZ),
                 show_all=bool(getattr(conf, 'show_all', False)),

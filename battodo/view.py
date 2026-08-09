@@ -28,6 +28,7 @@ day, so the zone is named rather than a fixed offset.
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from json import dumps
 from pathlib import Path
 from shutil import get_terminal_size
 from zoneinfo import ZoneInfo
@@ -150,12 +151,17 @@ def due_label(due: str | None, today: date) -> str:
     return due
 
 
+def open_children(task: Task) -> list[Task]:
+    """The task's incomplete children: subtasks and checklist items."""
+    return [child for child in task.children if not child.done]
+
+
 def _row(task: Task, today: date) -> tuple[str, ...]:
     """One task as its five cell strings, in COLUMNS order."""
-    open_children = [c for c in task.children if not c.done]
+    children = open_children(task)
     # `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
     # the count needs no plural.
-    badge = f' (+{len(open_children)})' if open_children else ''
+    badge = f' (+{len(children)})' if children else ''
     return (
         f'{rank(task, today):.1f}',
         f'{multiplier(task):.1f}',
@@ -219,18 +225,38 @@ def _heading(category: str, widths: list[int]) -> str:
     return prefix + RULE * max(0, _table_width(widths) - len(prefix))
 
 
-def build_view(
+def _select(
     directory: Path,
     now: datetime,
     *,
     show_all: bool,
-    top_n: int = 5,
-    width: int = 0,
-) -> str:
-    """Render the tables for every active category in `directory`.
+    top_n: int,
+) -> tuple[set[str], list[tuple[str, list[Task], int]]]:
+    """What a view shows: the active set, and each category with its tasks.
 
-    `width` is the terminal width to lay the columns out in; 0 probes
-    the terminal (80 columns when there is none, e.g. a pipe).
+    Parameters
+    ----------
+    directory : Path
+        The source directory, `~` unexpanded.
+    now : datetime
+        The clock, which decides both the active set and every rank.
+    show_all : bool
+        Keep every task rather than the top `top_n` per category.
+    top_n : int
+        How many tasks survive per category when `show_all` is false.
+
+    Returns
+    -------
+    set of str
+        The categories whose window is open at `now`.
+    list of (str, list of Task, int)
+        Categories in display order, each with its tasks ranked and the
+        number of them held back by `top_n`.
+
+    Raises
+    ------
+    SourceError
+        The directory is missing, or holds no todo lists.
     """
     today = now.date()
     resolved = directory.expanduser().resolve()
@@ -245,11 +271,6 @@ def build_view(
         )
 
     active = active_categories(now)
-    header = (
-        f'{now.strftime("%A")} {today} {now.strftime("%H:%M")} '
-        f'— active: {", ".join(sorted(active))}'
-    )
-
     ordered = sorted(
         paths,
         key=lambda p: (
@@ -260,9 +281,7 @@ def build_view(
         ),
     )
 
-    # Rendering waits until every section is built: the columns are
-    # sized against the whole view, not one category at a time.
-    sections = []
+    selected = []
     for path in ordered:
         category = path.stem
         if category in CATEGORY_ORDER and category not in active:
@@ -277,8 +296,38 @@ def build_view(
         if not tasks:
             continue
         shown = tasks if show_all else tasks[:top_n]
-        rows = [_row(task, today) for task in shown]
-        sections.append((category, rows, len(tasks) - len(shown)))
+        selected.append((category, shown, len(tasks) - len(shown)))
+
+    return active, selected
+
+
+def build_view(
+    directory: Path,
+    now: datetime,
+    *,
+    show_all: bool,
+    top_n: int = 5,
+    width: int = 0,
+) -> str:
+    """Render the tables for every active category in `directory`.
+
+    `width` is the terminal width to lay the columns out in; 0 probes
+    the terminal (80 columns when there is none, e.g. a pipe).
+    """
+    today = now.date()
+    active, selected = _select(directory, now, show_all=show_all, top_n=top_n)
+
+    header = (
+        f'{now.strftime("%A")} {today} {now.strftime("%H:%M")} '
+        f'— active: {", ".join(sorted(active))}'
+    )
+
+    # Rendering waits until every section is built: the columns are
+    # sized against the whole view, not one category at a time.
+    sections = [
+        (category, [_row(task, today) for task in tasks], hidden)
+        for category, tasks, hidden in selected
+    ]
 
     width = width or get_terminal_size().columns
     widths = _column_widths(
@@ -295,3 +344,79 @@ def build_view(
             out.append(f'{INDENT}{ELLIPSIS} and {hidden} more')
 
     return '\n'.join(out)
+
+
+def _task_json(task: Task, today: date) -> dict[str, object]:
+    return {
+        'id': task.task_id,
+        'title': task.title,
+        'rank': round(rank(task, today), 2),
+        'priority': multiplier(task),
+        'loe': task.loe,
+        'due': task.due,
+        'added': task.added,
+        'repeat': task.repeat,
+        'tags': task.tags,
+        'subtasks': len(open_children(task)),
+    }
+
+
+def build_json(
+    directory: Path,
+    now: datetime,
+    *,
+    show_all: bool,
+    top_n: int = 5,
+) -> str:
+    """Serialize the same selection `build_view` renders.
+
+    The schema is a contract for agents (R2), so it carries stored
+    fields verbatim -- no OVERDUE/TODAY labels, no column widths. Task
+    arrays are in rank order; `rank` itself is rounded for display and
+    must not be used to re-sort.
+
+    Parameters
+    ----------
+    directory : Path
+        The source directory, `~` unexpanded.
+    now : datetime
+        The clock, which decides both the active set and every rank.
+    show_all : bool
+        Emit every task rather than the top `top_n` per category.
+    top_n : int, optional
+        How many tasks survive per category when `show_all` is false.
+
+    Returns
+    -------
+    str
+        A JSON document::
+
+            {"date": "2026-08-05",
+             "active": ["career", "events", "study", "work"],
+             "categories": [{"name": "work", "tasks": [
+                 {"id": null, "title": "...", "rank": 6.0,
+                  "priority": 2.0, "loe": null, "due": null,
+                  "added": "2026-05-10", "repeat": null,
+                  "tags": [], "subtasks": 0}]}]}
+
+    Raises
+    ------
+    SourceError
+        The directory is missing, or holds no todo lists.
+    """
+    today = now.date()
+    active, selected = _select(directory, now, show_all=show_all, top_n=top_n)
+    return dumps(
+        {
+            'date': today.isoformat(),
+            'active': sorted(active),
+            'categories': [
+                {
+                    'name': category,
+                    'tasks': [_task_json(task, today) for task in tasks],
+                }
+                for category, tasks, _ in selected
+            ],
+        },
+        indent=2,
+    )
