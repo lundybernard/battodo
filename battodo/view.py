@@ -1,4 +1,16 @@
-"""Render open todo items as sorted markdown tables (R3).
+"""Render open todo items as sorted, aligned tables (R3).
+
+Output is plain aligned text, not markdown. The pipe tables this started
+as were written for a chat client to re-render; read in a terminal --
+which is where `btodo view` actually lands -- they printed ragged,
+because a markdown table needs no column widths and so nothing computed
+any. Widths here come from the content, once for the whole view, so the
+columns line up down the page and not merely within one category.
+
+Terminal width is read here rather than at the CLI boundary: the width
+is an input to the layout, and `build_view` is the only caller that
+knows whether one was supplied. Passing `width` explicitly overrides the
+probe, which is what keeps the layout tests independent of `$COLUMNS`.
 
 Selection matches `view_todos.py` in the live system: open items only,
 future-dated *recurring* items suppressed. Note that SCHEMA.md's prose
@@ -17,6 +29,7 @@ day, so the zone is named rather than a fixed offset.
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from shutil import get_terminal_size
 from zoneinfo import ZoneInfo
 
 from .parser import Task, TodoFile, parse, parse_date
@@ -52,6 +65,19 @@ NO_DUE_SORTS_LAST = 'zzzz'
 # A list carrying this marker anywhere is parked: still discovered, so
 # mutations reach it, but never surfaced in a view (ADR 0005).
 PARKED_MARKER = 'battodo:parked'
+
+# Layout. TASK is the elastic column: every other one is as wide as its
+# widest value, and the titles absorb whatever room is left over.
+COLUMNS = ('RANK', 'P', 'LOE', 'TASK', 'DUE')
+ALIGN = ('>', '>', '>', '<', '<')
+TASK_COLUMN = COLUMNS.index('TASK')
+INDENT = '  '
+GAP = '  '
+RULE = '─'
+ELLIPSIS = '…'
+# Below this, titles are too clipped to identify; a line that overruns a
+# very narrow terminal and wraps beats one that says nothing.
+MIN_TASK_WIDTH = 20
 
 
 def active_categories(now: datetime) -> set[str]:
@@ -124,20 +150,73 @@ def due_label(due: str | None, today: date) -> str:
     return due
 
 
-def _table(tasks: list[Task], today: date) -> list[str]:
-    rows = [
-        '| Rank | P | LOE | Task | Due |',
-        '|------|---|-----|------|-----|',
+def _row(task: Task, today: date) -> tuple[str, ...]:
+    """One task as its five cell strings, in COLUMNS order."""
+    open_children = [c for c in task.children if not c.done]
+    # `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
+    # the count needs no plural.
+    badge = f' (+{len(open_children)})' if open_children else ''
+    return (
+        f'{rank(task, today):.1f}',
+        f'{multiplier(task):.1f}',
+        '' if task.loe is None else str(task.loe),
+        f'{task.title}{badge}',
+        due_label(task.due, today),
+    )
+
+
+def _table_width(widths: list[int]) -> int:
+    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
+
+
+def _column_widths(rows: list[tuple[str, ...]], width: int) -> list[int]:
+    """Width of each column: its widest cell, TASK fitted to `width`.
+
+    Parameters
+    ----------
+    rows : list[tuple[str, ...]]
+        Every row in the whole view, so one set of widths serves all of
+        its tables.
+    width : int
+        Terminal width to fit the rendered line into.
+    """
+    widths = [
+        max([len(name), *(len(row[index]) for row in rows)])
+        for index, name in enumerate(COLUMNS)
     ]
-    for task in tasks:
-        loe = task.loe if task.loe is not None else ''
-        open_children = [c for c in task.children if not c.done]
-        badge = f' _({len(open_children)} subtasks)_' if open_children else ''
-        rows.append(
-            f'| {rank(task, today):.1f} | {multiplier(task):g} | {loe} '
-            f'| {task.title}{badge} | {due_label(task.due, today)} |'
-        )
-    return rows
+    room = width - (_table_width(widths) - widths[TASK_COLUMN])
+    widths[TASK_COLUMN] = max(MIN_TASK_WIDTH, min(widths[TASK_COLUMN], room))
+    return widths
+
+
+def _clip(text: str, width: int) -> str:
+    if len(text) <= width:
+        return text
+    return text[: width - 1] + ELLIPSIS
+
+
+def _line(row: tuple[str, ...], widths: list[int]) -> str:
+    """Pad and align one row's cells. Trailing space is stripped."""
+    cells = list(row)
+    cells[TASK_COLUMN] = _clip(cells[TASK_COLUMN], widths[TASK_COLUMN])
+    padded = (
+        f'{cell:{align}{size}}'
+        for cell, align, size in zip(cells, ALIGN, widths)
+    )
+    return f'{INDENT}{GAP.join(padded)}'.rstrip()
+
+
+def _heading(category: str, widths: list[int]) -> str:
+    """A titled rule spanning the table, e.g. `-- Work ------`.
+
+    Ruled to the table's own width rather than the terminal's: the two
+    differ only where the MIN_TASK_WIDTH floor has already overrun a
+    very narrow terminal, and a divider that wraps looks worse than a
+    row that does.
+    """
+    title = category.replace('-', ' ').capitalize()
+    prefix = f'{RULE * 2} {title} '
+    return prefix + RULE * max(0, _table_width(widths) - len(prefix))
 
 
 def build_view(
@@ -146,8 +225,13 @@ def build_view(
     *,
     show_all: bool,
     top_n: int = 5,
+    width: int = 0,
 ) -> str:
-    """Render the tables for every active category in `directory`."""
+    """Render the tables for every active category in `directory`.
+
+    `width` is the terminal width to lay the columns out in; 0 probes
+    the terminal (80 columns when there is none, e.g. a pipe).
+    """
     today = now.date()
     resolved = directory.expanduser().resolve()
     if not resolved.is_dir():
@@ -162,10 +246,9 @@ def build_view(
 
     active = active_categories(now)
     header = (
-        f'**{now.strftime("%A")} {today} {now.strftime("%H:%M")}** '
+        f'{now.strftime("%A")} {today} {now.strftime("%H:%M")} '
         f'— active: {", ".join(sorted(active))}'
     )
-    out = [header, '']
 
     ordered = sorted(
         paths,
@@ -177,6 +260,9 @@ def build_view(
         ),
     )
 
+    # Rendering waits until every section is built: the columns are
+    # sized against the whole view, not one category at a time.
+    sections = []
     for path in ordered:
         category = path.stem
         if category in CATEGORY_ORDER and category not in active:
@@ -190,11 +276,22 @@ def build_view(
         )
         if not tasks:
             continue
-        if not show_all:
-            tasks = tasks[:top_n]
-        out.append(f'### {category.capitalize()}')
+        shown = tasks if show_all else tasks[:top_n]
+        rows = [_row(task, today) for task in shown]
+        sections.append((category, rows, len(tasks) - len(shown)))
+
+    width = width or get_terminal_size().columns
+    widths = _column_widths(
+        [row for _, rows, _ in sections for row in rows], width
+    )
+
+    out = [header]
+    for category, rows, hidden in sections:
         out.append('')
-        out.extend(_table(tasks, today))
-        out.append('')
+        out.append(_heading(category, widths))
+        out.append(_line(COLUMNS, widths))
+        out.extend(_line(row, widths) for row in rows)
+        if hidden:
+            out.append(f'{INDENT}{ELLIPSIS} and {hidden} more')
 
     return '\n'.join(out)

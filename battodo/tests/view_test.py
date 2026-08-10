@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -28,6 +29,21 @@ LIST = """# Work
 - [ ] Future repeat [P:99] [DUE:2999-01-01] [REPEAT:14d]
 - [ ] Future plain [P:50] [DUE:2999-01-01]
 - [ ] Waiting [P:2] [ADDED:2026-05-10]
+"""
+
+# Shapes taken from the live lists: a legacy inflated P, an item with no
+# LOE and no DUE, a parent with an open child, and a template's literal
+# YYYY-MM-DD placeholder -- each one sizes a column differently.
+CHORES = """# Chores
+
+## Open
+
+- [ ] Pay credit cards [P:95] [LOE:1] [DUE:2026-08-01]
+- [ ] Put together a repair plan for the back porch deck [P:70] [LOE:3]
+  - [ ] Measure the joists [LOE:1]
+  - [x] Price the lumber [LOE:1]
+- [ ] Chip the brush pile [P:89]
+- [ ] Cat Care [P:7] [LOE:6] [DUE:YYYY-MM-DD]
 """
 
 
@@ -189,8 +205,10 @@ class BuildViewTests(TestCase):
 
         with t.subTest('rows carry the computed rank and the multiplier'):
             out = build_view(t.dir, t.now, show_all=True)
-            t.assertIn('| Rank | P | LOE | Task | Due |', out)
-            t.assertIn('| 6.0 | 2 |  | Waiting |  |', out)
+            t.assertIn('RANK', out)
+            t.assertRegex(
+                out, re.compile(r'^\s+6\.0\s+2\.0\s+Waiting$', re.MULTILINE)
+            )
 
         with t.subTest('top-N limits rows'):
             limited = build_view(t.dir, t.now, show_all=False, top_n=1)
@@ -223,6 +241,77 @@ class BuildViewTests(TestCase):
         with t.subTest('but stays discoverable, so mutations reach it'):
             found = [p.name for p in discover_lists(t.dir)]
             t.assertIn('backlog.md', found)
+
+
+class TableLayoutTests(TestCase):
+    """Column widths come from the content, for the whole view at once.
+
+    The markdown pipe tables this replaced computed no widths at all, so
+    every table printed ragged in a terminal.
+    """
+
+    def setUp(t) -> None:
+        t.tmp = TemporaryDirectory()
+        t.addCleanup(t.tmp.cleanup)
+        t.dir = Path(t.tmp.name)
+        (t.dir / 'chores.md').write_text(CHORES)
+        # Sat midday: chores are active, and nothing else has a list.
+        t.now = at('2026-08-08T12:00')
+
+    def test_build_view(t) -> None:
+        lines = build_view(t.dir, t.now, show_all=True, width=100).split('\n')
+
+        with t.subTest('columns are padded to their widest cell'):
+            t.assertEqual(
+                lines[3:8],
+                [
+                    '  RANK    P  LOE  TASK' + ' ' * 53 + 'DUE',
+                    '  14.4  4.8    1  Pay credit cards'
+                    + ' ' * 41
+                    + 'OVERDUE',
+                    '   4.6  4.6       Chip the brush pile',
+                    (
+                        '   3.8  3.8    3  Put together a repair plan '
+                        'for the back porch deck (+1)'
+                    ),
+                    '   1.3  1.3    6  Cat Care' + ' ' * 49 + 'YYYY-MM-DD',
+                ],
+            )
+
+        with t.subTest('the rule spans the table, under a titled heading'):
+            heading = lines[2]
+            t.assertTrue(heading.startswith('── Chores ─'))
+            t.assertEqual(len(heading), 85)
+
+        with t.subTest('a narrow terminal clips titles, nothing else'):
+            rendered = build_view(t.dir, t.now, show_all=True, width=50)
+            narrow = rendered.split('\n')
+            t.assertEqual(
+                narrow[4],
+                '  14.4  4.8    1  Pay credit cards      OVERDUE',
+            )
+            t.assertIn('   3.8  3.8    3  Put together a repa…', narrow)
+            t.assertEqual(len(narrow[2]), 50)
+
+        with t.subTest('below the floor, titles keep a readable width'):
+            rendered = build_view(t.dir, t.now, show_all=True, width=10)
+            cramped = rendered.split('\n')
+            t.assertIn('   3.8  3.8    3  Put together a repa…', cramped)
+
+        with t.subTest('and the rule still spans its overrunning table'):
+            t.assertEqual(len(cramped[2]), 50)
+
+        with t.subTest('the terminal is probed when no width is given'):
+            t.assertIn('Chores', build_view(t.dir, t.now, show_all=True))
+
+        with t.subTest('a truncated table says how much it is hiding'):
+            top = build_view(t.dir, t.now, show_all=False, top_n=2, width=100)
+            t.assertIn('Pay credit cards', top)
+            t.assertNotIn('Cat Care', top)
+            t.assertIn('… and 2 more', top)
+
+        with t.subTest('a complete table says nothing about hiding'):
+            t.assertNotIn('… and', '\n'.join(lines))
 
 
 class MissingSourceTests(TestCase):
