@@ -68,5 +68,35 @@
   though a template were a category. A structural predicate finds every
   list, including the ones a human knew to leave alone — intent that
   lives in prose needs a machine-readable form (hence the
-  `<!-- battodo:parked -->` marker in ADR 0005). When a net gets wider,
+  `<!-- battodo:parked -->` marker in ADR 0006). When a net gets wider,
   audit what else it caught.
+- 2026-08-08: the spec and the implementation of the *same* system
+  disagree, and nobody had noticed. `~/todo/SCHEMA.md` — the template of
+  record — says to surface open items where `DUE` is absent or
+  `DUE <= today`, which would hide every future-dated item. Both
+  `view_todos.py` and R3 hide only *future-recurring* items. btodo
+  follows the script and R3, because that is the behaviour people
+  actually rely on. Lesson: when reimplementing a system, the written
+  spec is a third opinion, not the tiebreaker — reconcile it against
+  observed behaviour before encoding either. The inconsistency is in the
+  live system and is its owner's to reconcile; it is recorded here
+  rather than silently resolved in BatTodo's ADRs.
+- 2026-08-10: an ADR mirrors the altitude of its work order. ADRs
+  0004/0005 came out 4–6x the size of 0001–0003 and full of
+  implementation spec; the suspected causes (verbose agent, saturated
+  context) were both eliminated by a controlled comparison: the *same*
+  agent instance wrote a tight ~46-line 0004 v1, then a 202-line v2
+  after the coordinator's work order said "rewrite ADR 0004 ...
+  including identity + journal layout sub-decisions" with a
+  design-specifics block attached — which the writer transcribed
+  faithfully. A fresh-context agent given "the ADR must also cover X
+  and Y" likewise produced three decisions in one file. Fixes applied:
+  adr-write got a length/altitude section (cognitive-load bands at
+  100/150/200 lines), a one-`(chosen)`-per-file rule, and a
+  don't-transcribe-the-work-order section; adr-directory got DESIGN.md
+  as the designated home for spec (the gap that made the ADR the only
+  container); the delegation rules got "hand ADR writers a decision
+  summary, never the spec". A replay of the poison work order against
+  the updated skills produced four 84–114-line ADRs with the spec in
+  DESIGN.md — the skills resisted the exact instruction that caused
+  the original failure.

@@ -59,7 +59,7 @@ Views and operations merge multiple list sources: the personal
 home-directory list, explicitly configured lists in shared/synced
 directories, and lists auto-discovered from the working directory when
 inside a project that carries one. (Source discovery/merge semantics are
-part of the open storage design, ADR 0004.)
+the multi-source work deferred in ADR 0004.)
 
 ### R7 — Configuration via batconf
 All configuration (list source paths, time windows, category rules) goes

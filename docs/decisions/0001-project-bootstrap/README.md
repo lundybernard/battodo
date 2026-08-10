@@ -12,6 +12,7 @@ Branch: `main`
 | File | Purpose |
 | ---- | ------- |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Testable acceptance criteria |
+| [DESIGN.md](DESIGN.md) | How the decided design works — grammar, parser, journal, rank |
 | [PLAN.md](PLAN.md) | Phased implementation plan for the storage prototype |
 
 ## ADRs
@@ -21,8 +22,9 @@ Branch: `main`
 | [0001](0001-bootstrap-from-project-template.md) | Bootstrap from lundybernard/project_template | Accepted |
 | [0002](0002-batconf-for-configuration.md) | batconf for configuration | Accepted |
 | [0003](0003-argparse-bat-cli-pattern.md) | argparse with the BAT CLI pattern | Accepted |
-| [0004](0004-storage-architecture.md) | Storage architecture | Proposed |
-| [0005](0005-computed-rank.md) | Computed rank | Proposed |
+| [0004](0004-storage-architecture.md) | Storage architecture | Accepted |
+| [0005](0005-computed-rank.md) | Computed rank | Accepted |
+| [0006](0006-parked-lists.md) | Parked lists | Accepted |
 
 ## AI assistance disclosure
 
