@@ -68,5 +68,16 @@
   though a template were a category. A structural predicate finds every
   list, including the ones a human knew to leave alone — intent that
   lives in prose needs a machine-readable form (hence the
-  `<!-- battodo:parked -->` marker in ADR 0005). When a net gets wider,
+  `<!-- battodo:parked -->` marker in ADR 0006). When a net gets wider,
   audit what else it caught.
+- 2026-08-08: the spec and the implementation of the *same* system
+  disagree, and nobody had noticed. `~/todo/SCHEMA.md` — the template of
+  record — says to surface open items where `DUE` is absent or
+  `DUE <= today`, which would hide every future-dated item. Both
+  `view_todos.py` and R3 hide only *future-recurring* items. btodo
+  follows the script and R3, because that is the behaviour people
+  actually rely on. Lesson: when reimplementing a system, the written
+  spec is a third opinion, not the tiebreaker — reconcile it against
+  observed behaviour before encoding either. The inconsistency is in the
+  live system and is its owner's to reconcile; it is recorded here
+  rather than silently resolved in BatTodo's ADRs.
