@@ -6,6 +6,7 @@ from ..parser import (
     parse,
     parse_date,
     serialize,
+    set_field,
 )
 
 OPEN_DOC = """# Work
@@ -125,26 +126,38 @@ class SerializeTests(TestCase):
                 t.assertEqual(serialize(parse(text)), text)
 
 
+class SetFieldTests(TestCase):
+    def test_set_field(t) -> None:
+        raw = '- [ ] X [P:2] [LOE:1]'
+
+        with t.subTest('existing field replaced in place'):
+            t.assertEqual(set_field(raw, 'P', '3'), '- [ ] X [P:3] [LOE:1]')
+
+        with t.subTest('other fields keep their position'):
+            t.assertEqual(set_field(raw, 'LOE', '5'), '- [ ] X [P:2] [LOE:5]')
+
+        with t.subTest('absent field appended at the end'):
+            t.assertEqual(
+                set_field(raw, 'ID', 'zz01ab'),
+                '- [ ] X [P:2] [LOE:1] [ID:zz01ab]',
+            )
+
+        with t.subTest('edits chain onto an already-edited line'):
+            t.assertEqual(
+                set_field(set_field(raw, 'DUE', '2026-08-23'), 'ID', 'zz01ab'),
+                '- [ ] X [P:2] [LOE:1] [DUE:2026-08-23] [ID:zz01ab]',
+            )
+
+        with t.subTest('a trailing-whitespace line does not gain a gap'):
+            t.assertEqual(
+                set_field('- [ ] X [P:2]   ', 'ID', 'zz01ab'),
+                '- [ ] X [P:2] [ID:zz01ab]',
+            )
+
+
 class TaskTests(TestCase):
     def setUp(t) -> None:
         t.tk = parse('## Open\n\n- [ ] X [P:2] [LOE:1]\n').tasks[0]
-
-    def test_replace_field(t) -> None:
-        with t.subTest('existing field replaced in place'):
-            t.assertEqual(
-                t.tk.replace_field('P', '3'), '- [ ] X [P:3] [LOE:1]'
-            )
-
-        with t.subTest('other fields keep their position'):
-            t.assertEqual(
-                t.tk.replace_field('LOE', '5'), '- [ ] X [P:2] [LOE:5]'
-            )
-
-        with t.subTest('absent field appended at end'):
-            t.assertEqual(
-                t.tk.replace_field('ID', 'zz01'),
-                '- [ ] X [P:2] [LOE:1] [ID:zz01]',
-            )
 
     def test_is_subtask(t) -> None:
         with t.subTest('top-level task is not a subtask'):

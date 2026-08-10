@@ -140,6 +140,56 @@ class CommandsBackfillTests(TestCase):
             t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
 
 
+class CommandsDoneTests(TestCase):
+    def setUp(t):
+        t.conf = Mock()
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+
+    @patch('builtins.print')
+    @patch(f'{SRC}.complete', autospec=True)
+    def test_done(t, complete, print):
+        with t.subTest('prints the completed.md entries'):
+            complete.return_value = ['2026-08-08 | chores | DONE | Chip it']
+            Commands.done(t.conf)
+            print.assert_called_with('2026-08-08 | chores | DONE | Chip it')
+
+        with t.subTest('selector is forwarded, source dir expanded'):
+            args = complete.call_args[0]
+            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[1], 'brush pile')
+
+        with t.subTest('says so when the item is not logged'):
+            complete.return_value = []
+            Commands.done(t.conf)
+            print.assert_called_with('checked off')
+
+
+class CommandsScratchTests(TestCase):
+    def setUp(t):
+        t.conf = Mock()
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+
+    @patch('builtins.print')
+    @patch(f'{SRC}.scratch', autospec=True)
+    def test_scratch(t, scratch, print):
+        with t.subTest('prints the completed.md entry'):
+            scratch.return_value = ['2026-08-08 | chores | SCRATCHED | Chip']
+            Commands.scratch(t.conf)
+            print.assert_called_with('2026-08-08 | chores | SCRATCHED | Chip')
+
+        with t.subTest('selector is forwarded, source dir expanded'):
+            args = scratch.call_args[0]
+            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[1], 'brush pile')
+
+        with t.subTest('says so when the item is not logged'):
+            scratch.return_value = []
+            Commands.scratch(t.conf)
+            print.assert_called_with('dropped')
+
+
 class NestedNameSpaceTests(TestCase):
     def test_nesting(t):
         nns = NestedNameSpace()

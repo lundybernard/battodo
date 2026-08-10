@@ -3,7 +3,7 @@
 The parser keeps every source line verbatim and records only *indices*
 into that line list. Serializing rejoins the untouched lines, so
 parse -> serialize is byte-identical for any input. Mutations replace a
-single line via `Task.replace_field`, which edits the raw text in place
+single line via `set_field`, which edits the raw text in place
 rather than rebuilding it from parsed fields -- field order varies from
 line to line in real files, so a canonical-order serializer would
 rewrite every line it touched.
@@ -74,21 +74,6 @@ class Task:
         """
         return bool(self.indent) and bool(self.fields)
 
-    def replace_field(self, name: str, value: str) -> str:
-        """Return this task's line with `name` set to `value`.
-
-        An existing field is replaced where it stands; a new one is
-        appended after the last field so nothing else shifts.
-        """
-        if name in self.fields:
-            return re.sub(
-                rf'\[{name}:[^\]]*\]',
-                f'[{name}:{value}]',
-                self.raw,
-                count=1,
-            )
-        return f'{self.raw.rstrip()} [{name}:{value}]'
-
 
 @dataclass
 class TodoFile:
@@ -96,6 +81,20 @@ class TodoFile:
 
     lines: list[str]
     tasks: list[Task] = field(default_factory=list)
+
+
+def set_field(raw: str, name: str, value: str) -> str:
+    """Return the task line `raw` with `name` set to `value`.
+
+    An existing field is replaced where it stands; a new one is
+    appended after the last field. Either way every other field keeps
+    its position, which is what the round-trip guarantee rests on --
+    field order varies line to line in hand-edited files.
+    """
+    pattern = rf'\[{name}:[^\]]*\]'
+    if re.search(pattern, raw):
+        return re.sub(pattern, f'[{name}:{value}]', raw, count=1)
+    return f'{raw.rstrip()} [{name}:{value}]'
 
 
 def parse_date(value: str | None) -> date | None:
