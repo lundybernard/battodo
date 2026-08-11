@@ -24,9 +24,10 @@ btodo --help
 ## Usage
 
 ```
-btodo view          # open items for the currently active categories
-btodo view --all    # every open item, not just the top few per category
-btodo backfill      # one-time migration: stamp [ADDED:today] where missing
+btodo view              # open items for the currently active categories
+btodo view --all        # every open item, not just the top few per category
+btodo view --format json  # the same view as JSON, for agents
+btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
 
 Items are ordered by a rank computed from the file and the clock —
@@ -36,6 +37,48 @@ pressing its due date is. Nothing is written to keep that current; see
 
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it.
+
+### Machine-readable output
+
+`btodo view --format json` writes the same selection to stdout as a
+JSON document, so an agent never has to scrape the table:
+
+```json
+{
+  "date": "2026-08-05",
+  "active": ["career", "events", "study", "work"],
+  "categories": [
+    {
+      "name": "work",
+      "tasks": [
+        {
+          "id": "k3x9",
+          "title": "File the quarterly report",
+          "rank": 6.0,
+          "priority": 2.0,
+          "loe": 3,
+          "due": "2026-08-07",
+          "added": "2026-05-10",
+          "repeat": null,
+          "tags": ["admin"],
+          "subtasks": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+Fields carry the stored values verbatim: `due` is the date as written,
+never an `OVERDUE`/`TODAY` label, and an absent field is `null`.
+`priority` is `P` folded on to the 0–5 multiplier scale (ADR 0005) —
+the number the text view prints in its `P` column. `rank` is rounded
+for display; each task array is already in rank order, so read the
+order rather than re-sorting by the number. `subtasks` counts open
+children.
+
+The schema grows by addition only: new keys may appear, existing ones
+keep their meaning.
 
 ## Development
 

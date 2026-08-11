@@ -15,7 +15,14 @@ SRC = 'battodo.cli'
 
 class ArgparserTests(TestCase):
     def test_argparser(t):
-        argparser()
+        p = argparser()
+
+        with t.subTest('view renders for a human by default'):
+            t.assertEqual(p.parse_args(['view']).format, 'text')
+
+        with t.subTest('view takes a machine-readable format'):
+            args = p.parse_args(['view', '--format', 'json'])
+            t.assertEqual(args.format, 'json')
 
 
 class BATCLITests(TestCase):
@@ -97,25 +104,40 @@ class BATCLITests(TestCase):
 
 
 class CommandsViewTests(TestCase):
-    @patch('builtins.print')
-    @patch(f'{SRC}.build_view', autospec=True)
-    def test_view(t, build_view, print):
-        conf = Mock()
-        conf.view.source_dir = '~/todo'
-        conf.show_all = True
+    def setUp(t):
+        for target in ('build_view', 'build_json'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print')
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-        Commands.view(conf)
+        t.conf = Mock()
+        t.conf.view.source_dir = '~/todo'
+        t.conf.show_all = True
+        t.conf.format = 'text'
 
-        args, kwargs = build_view.call_args
+    def test_view(t):
+        with t.subTest('the human view is the default'):
+            Commands.view(t.conf)
 
-        with t.subTest('source dir is expanded'):
+            args, kwargs = t.build_view.call_args
+            t.print.assert_called_with(t.build_view.return_value)
             t.assertFalse(str(args[0]).startswith('~'))
-
-        with t.subTest('show_all is forwarded'):
             t.assertTrue(kwargs['show_all'])
 
-        with t.subTest('rendered view is printed'):
-            print.assert_called_with(build_view.return_value)
+        with t.subTest('json format is serialized instead'):
+            t.print.reset_mock()
+            t.conf.format = 'json'
+
+            Commands.view(t.conf)
+
+            args, kwargs = t.build_json.call_args
+            t.print.assert_called_with(t.build_json.return_value)
+            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertTrue(kwargs['show_all'])
+            t.build_view.assert_called_once()
 
 
 class CommandsBackfillTests(TestCase):
