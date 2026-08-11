@@ -43,7 +43,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-8_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-8_cp314.conda
@@ -63,7 +63,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   dev:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -108,7 +108,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.16.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
@@ -141,7 +141,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   lint:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -223,7 +223,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-8_cp314.conda
@@ -245,7 +245,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   test-py310:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -280,7 +280,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.10-8_cp310.conda
@@ -300,7 +301,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h46df422_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   test-py311:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -335,7 +337,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.11-8_cp311.conda
@@ -355,7 +357,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h46df422_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   test-py312:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -390,7 +392,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.12-8_cp312.conda
@@ -410,7 +412,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h46df422_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   test-py313:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -444,7 +446,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.13-8_cp313.conda
@@ -465,7 +467,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h46df422_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   test-py314:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -499,7 +501,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tomli-2.4.1-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-8_cp314.conda
@@ -521,7 +523,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   typecheck:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -565,7 +567,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.16.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
@@ -597,7 +599,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hd3d0363_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -1959,12 +1961,17 @@ packages:
 - pypi: ./
   name: battodo
   requires_dist:
-  - batconf
+  - batconf[toml]>=0.4.0
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/52/26/7ea37b5bb4070ce04080ef4901ba6715308110ced257c3f73418548bb499/batconf-0.3.1-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl
+  name: toml
+  version: 0.10.2
+  sha256: 806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b
+  requires_python: '>=2.6,!=3.0.*,!=3.1.*,!=3.2.*'
+- pypi: https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl
   name: batconf
-  version: 0.3.1
-  sha256: d719c74369f39a5d70391f879f3df2ccd814ae766f1f61bc4f9102f802f7a210
+  version: 0.4.0
+  sha256: 2dd38a0a8bb4742620897b71d0b03506b333a375726856641bd165efe0c4bee6
   requires_dist:
   - toml ; python_full_version < '3.11' and extra == 'toml'
   - pyyaml ; extra == 'yaml'

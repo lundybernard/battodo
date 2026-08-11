@@ -113,6 +113,17 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   paid for a user that doesn't exist. Apps should prune the matrix to
   their actual targets at bootstrap; same library-vs-app inversion as
   the locking/pin-currency lesson.
+- **`dictConfig` silently kills third-party loggers:** the template's
+  `logconf.py` uses a schema-version-1 `dictConfig` without setting
+  `disable_existing_loggers`, whose default is `True`. `cli.py` imports
+  the package's dependencies (batconf via `conf.py`) *before* calling
+  `dictConfig`, so every logger those libraries created at import time
+  is permanently disabled — batconf's `Config file not found` warning
+  never reached stderr through battodo's CLI, while the identical call
+  warns fine in a bare interpreter. Found only because an agent's doc
+  finding contradicted a live run (2026-08-11). The template should ship
+  `'disable_existing_loggers': False`; the import-order trap deserves a
+  comment either way.
 - **CI tests one interpreter while `requires-python` promises a range:**
   the template's test job runs whatever version the pixi default
   feature pins, and nothing cross-checks that against the declared
