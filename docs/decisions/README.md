@@ -1,5 +1,10 @@
 # Architecture Decision Records
 
-| Group | Topic | Status |
+Groups (directories) organize large changes with multiple component
+decisions; single decisions are flat ADR files. ADR numbers are global
+across both.
+
+| Entry | Topic | Status |
 | ----- | ----- | ------ |
-| [0001](0001-project-bootstrap/) | Project bootstrap (6 decisions) | Accepted |
+| [0001](0001-project-bootstrap/) | Project bootstrap (ADRs 0001–0006) | Accepted |
+| [0007](0007-toml-config-file.md) | TOML config file | Accepted |
