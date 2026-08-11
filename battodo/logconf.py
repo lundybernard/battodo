@@ -2,6 +2,10 @@ import logging
 
 logging_config = {
     'version': 1,
+    # Loggers exist before this config is applied: every library
+    # imported above the dictConfig call already made its own. Leave
+    # them alone rather than silencing them.
+    'disable_existing_loggers': False,
     'formatters': {
         'f': {'format': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'},
         'thread_formatter': {
