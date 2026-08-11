@@ -5,7 +5,7 @@ from logging.config import dictConfig
 from pathlib import Path
 from sys import exit
 
-from battodo.conf import get_config
+from battodo.conf import CONFIG_ROOT, get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
@@ -20,10 +20,10 @@ def BATCLI(ARGS=None):
     p = argparser()
     # Execute
     # get only the first command in args
-    args = p.parse_args(ARGS, NestedNameSpace())
+    args = p.parse_args(ARGS)
     conf = get_config(
         cli_args=args,
-        config_file=args.config_file,
+        config_file_name=args.config_file,
         config_env=args.config_env,
     )
     Commands.set_log_level(args)
@@ -37,17 +37,6 @@ def BATCLI(ARGS=None):
         p.print_help()
         exit(1)
     exit(0)
-
-
-class NestedNameSpace(argparse.Namespace):
-    def __setattr__(self, name, value):
-        if '.' in name:
-            group, name = name.split('.', 1)
-            ns = getattr(self, group, NestedNameSpace())
-            setattr(ns, name, value)
-            self.__dict__[group] = ns
-        else:
-            self.__dict__[name] = value
 
 
 def argparser():
@@ -79,7 +68,7 @@ def argparser():
         dest='config_file',
         default=None,
         help='specify a config file to get environment details from.'
-        ' default=./config.yaml',
+        ' default=./config.toml',
     )
     p.add_argument(
         '-e',
@@ -111,14 +100,19 @@ def argparser():
         help='for details use view --help',
     )
     view.set_defaults(func=Commands.view)
+    # Arguments read back through the Configuration are named for their
+    # dotted config path: batconf looks up `{path}.{key}` as one flat
+    # attribute (batconf.sources.argparse.NamespaceConfig), never the
+    # bare dest. Arguments read straight off `args` stay unprefixed.
     view.add_argument(
         '--all',
-        dest='show_all',
+        dest=f'{CONFIG_ROOT}.show_all',
         action='store_true',
         help='show every open item, not just the top few per category',
     )
     view.add_argument(
         '--format',
+        dest=f'{CONFIG_ROOT}.format',
         choices=('text', 'json'),
         default='text',
         help='output format: text for a terminal, json for agents',
@@ -131,7 +125,8 @@ def argparser():
     )
     done.set_defaults(func=Commands.done)
     done.add_argument(
-        'selector',
+        f'{CONFIG_ROOT}.selector',
+        metavar='selector',
         help="the task's [ID:] value, or part of its title",
     )
 
@@ -142,7 +137,8 @@ def argparser():
     )
     drop.set_defaults(func=Commands.scratch)
     drop.add_argument(
-        'selector',
+        f'{CONFIG_ROOT}.selector',
+        metavar='selector',
         help="the task's [ID:] value, or part of its title",
     )
 

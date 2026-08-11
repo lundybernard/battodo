@@ -4,9 +4,9 @@ from unittest.mock import Mock, patch
 from ..cli import (
     BATCLI,
     Commands,
-    NestedNameSpace,
     argparse,
     argparser,
+    get_config,
     logging,
 )
 
@@ -18,11 +18,12 @@ class ArgparserTests(TestCase):
         p = argparser()
 
         with t.subTest('view renders for a human by default'):
-            t.assertEqual(p.parse_args(['view']).format, 'text')
+            args = p.parse_args(['view'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
         with t.subTest('view takes a machine-readable format'):
             args = p.parse_args(['view', '--format', 'json'])
-            t.assertEqual(args.format, 'json')
+            t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
 
 class BATCLITests(TestCase):
@@ -47,7 +48,7 @@ class BATCLITests(TestCase):
                     args = argparser().parse_args(ARGS)
                     t.get_config.assert_called_with(
                         cli_args=args,
-                        config_file=args.config_file,
+                        config_file_name=args.config_file,
                         config_env=args.config_env,
                     )
                     m_cmd.assert_called_with(t.get_config.return_value)
@@ -212,16 +213,37 @@ class CommandsScratchTests(TestCase):
             print.assert_called_with('dropped')
 
 
-class NestedNameSpaceTests(TestCase):
-    def test_nesting(t):
-        nns = NestedNameSpace()
-        nns.top = 'level'
-        setattr(nns, 'bat.baz', 'baz')
-        setattr(nns, 'bat.sub.var', 'sub_var')
+class CliArgsResolutionTests(TestCase):
+    """Parsed CLI arguments must resolve through the real Configuration.
 
-        t.assertEqual(nns.top, 'level')
-        t.assertEqual(nns.bat.baz, 'baz')
-        t.assertEqual(nns.bat.sub.var, 'sub_var')
+    Cross-module by necessity: the contract under test is the seam
+    between argparse dests and batconf's dotted config paths, which only
+    exists when the real parser and the real get_config meet.
+    """
+
+    class NullFileSource:
+        """Stands in for the config file; the filesystem is out of scope."""
+
+        def get(self, key: str, path: str | None = None) -> None:
+            return None
+
+    def resolve(t, argv):
+        args = argparser().parse_args(argv)
+        return get_config(cli_args=args, config_file=t.NullFileSource())
+
+    def test_cli_args(t):
+        with t.subTest('a positional reaches the command'):
+            t.assertEqual(
+                t.resolve(['done', 'brush pile']).selector, 'brush pile'
+            )
+
+        with t.subTest('an option reaches the command'):
+            t.assertEqual(
+                t.resolve(['view', '--format', 'json']).format, 'json'
+            )
+
+        with t.subTest('a flag reaches the command'):
+            t.assertTrue(t.resolve(['view', '--all']).show_all)
 
 
 class CommandsTests(TestCase):

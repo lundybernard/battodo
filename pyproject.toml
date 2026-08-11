@@ -5,7 +5,9 @@ authors = [{ name = "Lundy Bernard" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dynamic = ["version"]
-dependencies = ["batconf"]
+# [toml] extra: on <=3.10 batconf's TomlSource needs the third-party
+# toml package (stdlib tomllib is 3.11+); marker makes it a no-op above.
+dependencies = ["batconf[toml]>=0.4.0"]
 
 [project.scripts]
 btodo = "battodo.cli:BATCLI"
@@ -44,6 +46,10 @@ python = ">=3.10"
 
 [tool.pixi.pypi-dependencies]
 battodo = { path = ".", editable = true }
+
+# batconf is our own upstream — cooldown adds no supply-chain value.
+[tool.pixi.pypi-exclude-newer]
+batconf = "0d"
 
 # Command-less public aggregators: staging + fail-fast live in these
 # ordered depends-on lists. Env pins are mandatory — an unpinned
