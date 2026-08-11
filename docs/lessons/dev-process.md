@@ -100,3 +100,42 @@
   the updated skills produced four 84–114-line ADRs with the spec in
   DESIGN.md — the skills resisted the exact instruction that caused
   the original failure.
+- 2026-08-11: "investigate and verify before modifying" paid twice on
+  the JSON-format review. A measured comparison (JSON vs JSONL vs
+  TSV/CSV vs bare table, real corpus, token counts) upheld the
+  incumbent — the intuitive win evaporated under measurement because
+  tokenizers merge indentation, so compact JSON's 48% character saving
+  is only 21% in tokens — and the investigation itself surfaced three
+  real defects plus the stderr gap (issue #6). Challenging a default
+  is worth the cost even when the default survives: the audit is how
+  the defects were found.
+- 2026-08-11: work-order over-structure, round two. The coordinator's
+  order said "create ADR group 0003" for what turned out to be one
+  decision; the writer faithfully built the group, and review caught
+  it ("groups are for organizing a large change which requires
+  multiple component decisions"). Same failure shape as the 2026-08-10
+  altitude lesson — the agent transcribes the order's structure, so
+  structural decisions (group vs flat file) must be made by counting
+  decisions, not defaulted at delegation time. Guardrail added to the
+  adr-directory skill ("When NOT to use").
+- 2026-08-11: when an agent's written finding and a live run disagree,
+  the delta is a third bug, not noise. The migration report claimed a
+  missing config file warns on stderr; the real CLI run was silent.
+  Neither was wrong: the warning exists, and battodo's own
+  schema-version-1 `dictConfig` (`disable_existing_loggers=True` by
+  default, run after batconf's import) was eating it — a latent bug
+  that had silently disabled every third-party logger since bootstrap.
+  Resolving the contradiction before shipping the findings document
+  was the whole game: publishing the unverified claim upstream would
+  have cost the credibility the dogfooding cycle exists to build.
+- 2026-08-11: experiment design for docs dogfooding. The brief was
+  "find where batconf's docs fail agents", so the coordinator's job
+  was to not contaminate the sample: facts the coordinator verified
+  itself (TomlSource exists; the extra's version marker) informed the
+  decisions, but the implementing agent got a goal-altitude order with
+  no API names and an explicit reframe — "every fallback to reading
+  batconf source is itself a finding, not a failure; take it freely
+  but log it." That reframe matters: an agent graded on success hides
+  its workarounds, and the workarounds were the data. Yield: 13
+  documented findings in one cycle, including one (the `[toml]` lazy
+  trap) the project then reproduced in its own suite the same day.
