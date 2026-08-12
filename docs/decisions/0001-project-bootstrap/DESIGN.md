@@ -23,8 +23,8 @@ Three additions, each optional — absent is always legal:
 
 | Field | Introduced by | Written by |
 | ----- | ------------- | ---------- |
-| `[ID:xxxxxx]` | [ADR 0004](0004-storage-architecture.md) | lazily, on first mediated mutation |
-| `[ADDED:YYYY-MM-DD]` | [ADR 0005](0005-computed-rank.md) | once, by `btodo backfill` (and a future `add`) |
+| `[ID:xxxxxx]` | [ADR 0004](0004-storage-architecture.md) | by `add` at creation; otherwise lazily, on first mediated mutation |
+| `[ADDED:YYYY-MM-DD]` | [ADR 0005](0005-computed-rank.md) | once, by `add` or `btodo backfill` |
 | `<!-- battodo:parked -->` | [ADR 0006](0006-parked-lists.md) | never — hand-authored, file-level |
 
 ## Parser
@@ -70,6 +70,43 @@ A markdown file is a todo list if it contains a `## Open` heading.
 `discover_lists` returns every such file, including ones marked parked;
 only `build_view` filters those out.
 
+## Adding a task
+
+`btodo add <list> <title>` files one new top-level task. Subtasks and
+checklist items are out of scope for it — they stay hand-edited until a
+command claims them.
+
+**Which file.** `<list>` is a filename stem resolved against
+`discover_lists`, so parked lists are valid targets: parking opts a file
+out of *views*, not out of being written to. A stem matching nothing is
+an error naming the resolved directory and the stems that do exist.
+`add` never creates a list — a typo that spawned `wrk.md` would hide the
+task rather than file it. Inferring the category from the title
+(SCHEMA.md's heuristics) is deferred; the list is always explicit.
+
+**Where in the file.** As the last entry of the `## Open` section, after
+the previous item's own notes and children, with every other line kept
+verbatim. `parser.append_open` is the primitive that does it: `set_field`
+only edits lines that already exist.
+
+**Which fields.** Only the ones the user supplied, in SCHEMA.md's own
+order — `P`, `LOE`, `DUE`, `REPEAT`, `TAGS`. Nothing is defaulted: an
+absent `P` already reads as 0 in the parser, so writing `[P:0]` would be
+the same statement with a false provenance. Two fields are always
+stamped — `[ADDED:today]` in the user's local day, since ADR 0005
+computes rank from it, and `[ID:]`, because a task btodo itself created
+has no reason to wait for the lazy injection hand-written ones get.
+
+**What is checked.** `DUE` must be an ISO date, and is written back
+normalised: `date.fromisoformat` accepts more spellings on newer
+interpreters, and a line's meaning must not depend on which one wrote
+it. `REPEAT` must be a spec `repeat.py` can schedule. `LOE` must be one
+of 1, 2, 3, 5, 8. `P` must be a whole number — the parser calls `int()`
+on it, so an unreadable one breaks every view of that file. `TAGS` is
+free-form and cannot be wrong. Validation runs before anything is
+written, so a rejected add leaves both the file and the journal
+untouched.
+
 ## Journal
 
 One log per source directory: `<source_dir>/.journal/log.jsonl`, JSONL,
@@ -96,6 +133,62 @@ projects share one event vocabulary:
 Event types: `TaskAdded`, `TaskCompleted`, `TaskScratched`. (`TaskBumped`
 was emitted by the retired `bump` command; readers must still tolerate
 the type — see ADR 0005.)
+
+The delta contract: `delta` lists every field the mutation wrote to the
+markdown, each as `[before, after]` — bookkeeping stamps (`ID`, `ADDED`)
+included, so a reverse-applier can undo any event by restoring the
+`before` values with no per-command knowledge. `backfill`'s events
+predate this ruling and omit `ID` from their deltas; readers must
+tolerate them.
+
+### `TaskAdded` payloads
+
+Two writers emit `TaskAdded`, with deliberately different payloads. Both
+are `schema_version` 1 and both are permanent; a reader tells them apart
+by the `backfilled` key.
+
+`backfill` stamps a field on a task that already existed, so its delta
+carries `ADDED` alone, its snapshot is the *pre*-state, and
+`"backfilled": true` marks the date as the migration's rather than an
+observed fact.
+
+`add` creates the task, so there is no pre-state to describe. Its delta
+carries every field written to the line — the supplied ones plus `ADDED`
+and `ID` — each as `[null, value]`, and its snapshot is the *post*-state,
+read back from the line as written. `backfilled` is absent. Titles never
+appear in a delta; the snapshot is where they live.
+
+```json
+{
+  "type": "TaskAdded",
+  "stream_id": "task/3usdig",
+  "metadata": {"actor": "agent", "source_file": "chores.md"},
+  "payload": {
+    "delta": {
+      "P": [null, "4"],
+      "LOE": [null, "2"],
+      "DUE": [null, "2026-09-01"],
+      "TAGS": [null, "yard,summer"],
+      "ADDED": [null, "2026-08-11"],
+      "ID": [null, "3usdig"]
+    },
+    "snapshot": {
+      "title": "Water the tomatoes",
+      "done": false,
+      "fields": {
+        "P": "4",
+        "LOE": "2",
+        "DUE": "2026-09-01",
+        "TAGS": "yard,summer",
+        "ADDED": "2026-08-11",
+        "ID": "3usdig"
+      }
+    }
+  }
+}
+```
+
+Envelope fields not shown are as tabled above.
 
 Deferred from OFK's envelope: the hash chain (null, as OFK also does in
 v1) and the `correlation_id` / `commit_len` / `commit_index`
