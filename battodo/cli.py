@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 from datetime import datetime
 from logging.config import dictConfig
 from pathlib import Path
@@ -30,11 +31,12 @@ def BATCLI(ARGS=None):
     # execute function set for parsed command
     try:
         args.func(conf)
-    # Top-level CLI boundary: any command failure becomes a message plus
-    # usage help, never a traceback.
+    # Top-level CLI boundary: any command failure becomes a message on
+    # stderr, never a traceback. stdout carries the command's output and
+    # nothing else, so a consumer can parse it unconditionally; the help
+    # dump is left to argparse, which owns actual usage errors.
     except Exception as exp:  # noqa: BLE001
-        print(exp)
-        p.print_help()
+        print(exp, file=sys.stderr)
         exit(1)
     exit(0)
 

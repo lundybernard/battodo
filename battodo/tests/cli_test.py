@@ -1,5 +1,7 @@
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from ..cli import (
     BATCLI,
@@ -75,10 +77,10 @@ class BATCLITests(TestCase):
 
         parser.print_help.assert_called_with()
 
-    @patch('builtins.print')
-    def test_command_error(t, print):
-        """prints the error message, and help if a command throws an error"""
-        exc = Exception()
+    def test_command_error(t):
+        """a failing command reports on stderr and leaves stdout clean"""
+
+        exc = Exception('boom')
 
         def fail(conf):
             raise exc
@@ -87,12 +89,26 @@ class BATCLITests(TestCase):
         args.func = fail
         parser = Mock(argparse.ArgumentParser)
         parser.parse_args.return_value = args
+        out, err = StringIO(), StringIO()
 
-        with patch(f'{SRC}.argparser', return_value=parser):
+        with (
+            patch(f'{SRC}.argparser', return_value=parser),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
             BATCLI([])
 
-        print.assert_called_with(exc)
-        parser.print_help.assert_called_with()
+        with t.subTest('the message goes to stderr'):
+            t.assertEqual(err.getvalue(), 'boom\n')
+
+        with t.subTest('stdout stays parseable for a consumer'):
+            t.assertEqual(out.getvalue(), '')
+
+        with t.subTest('a runtime failure is not a usage error'):
+            parser.print_help.assert_not_called()
+
+        with t.subTest('the exit code is non-zero'):
+            t.assertEqual(t.exit.call_args_list[0], call(1))
 
     def test_commands(t):
         commands = [
