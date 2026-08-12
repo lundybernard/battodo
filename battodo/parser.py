@@ -97,6 +97,53 @@ def set_field(raw: str, name: str, value: str) -> str:
     return f'{raw.rstrip()} [{name}:{value}]'
 
 
+def append_open(lines: list[str], entry: str) -> list[str]:
+    """Return `lines` with `entry` as the last entry of `## Open`.
+
+    The insertion point is after the last non-blank line of the section,
+    so the entry follows whatever the previous item ended with -- its
+    notes, its children -- and the blank run before the next heading is
+    left where it is. Every existing line keeps its text and its order,
+    which is what the round-trip guarantee rests on.
+
+    Parameters
+    ----------
+    lines : list of str
+        A parsed file's verbatim lines.
+    entry : str
+        The task line to insert, already formatted.
+
+    Returns
+    -------
+    list of str
+        A new list; the argument is not modified.
+
+    Raises
+    ------
+    StopIteration
+        If there is no `## Open` heading. Carrying one is what makes a
+        file a todo list at all, so `discover_lists` has already ruled
+        this out for every caller that goes through it.
+    """
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if line.strip() == OPEN_HEADING
+    )
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].strip().startswith('## ')
+        ),
+        len(lines),
+    )
+    # `start` is itself non-blank, so an empty section appends directly
+    # under the heading rather than falling off the front of the file.
+    last = max(index for index in range(start, end) if lines[index].strip())
+    return [*lines[: last + 1], entry, *lines[last + 1 :]]
+
+
 def parse_date(value: str | None) -> date | None:
     """Parse an ISO date field, tolerating placeholders.
 

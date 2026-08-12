@@ -3,6 +3,7 @@ from unittest import TestCase
 
 from ..parser import (
     Task,
+    append_open,
     parse,
     parse_date,
     serialize,
@@ -191,3 +192,38 @@ class TaskDataclassTests(TestCase):
         t.assertEqual(task.children, [])
         t.assertEqual(task.note_indices, [])
         t.assertEqual(task.priority, 0)
+
+
+class AppendOpenTests(TestCase):
+    def test_append_open(t) -> None:
+        entry = '- [ ] New [P:1]'
+
+        with t.subTest('lands after the last entry of the Open section'):
+            lines = append_open(OPEN_DOC.split('\n'), entry)
+            expected = OPEN_DOC.split('\n')
+            expected.insert(expected.index('## Done') - 1, entry)
+            t.assertEqual(lines, expected)
+
+        with t.subTest('the source list is left alone'):
+            t.assertEqual(len(OPEN_DOC.split('\n')), len(lines) - 1)
+
+        with t.subTest('a note or child line is still the last entry'):
+            doc = '## Open\n\n- [ ] A [P:1]\n  - [ ] Child [LOE:1]\n'
+            t.assertEqual(
+                append_open(doc.split('\n'), entry),
+                [
+                    '## Open',
+                    '',
+                    '- [ ] A [P:1]',
+                    '  - [ ] Child [LOE:1]',
+                    entry,
+                    '',
+                ],
+            )
+
+        with t.subTest('an empty Open section takes the first entry'):
+            doc = '# Work\n\n## Open\n\n## Done\n'
+            t.assertEqual(
+                append_open(doc.split('\n'), entry),
+                ['# Work', '', '## Open', entry, '', '## Done', ''],
+            )
