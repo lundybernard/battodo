@@ -5,7 +5,9 @@ from unittest import TestCase
 
 from ..journal import Journal
 from ..mutate import (
+    ListError,
     SelectionError,
+    add_task,
     backfill_all,
     backfill_file,
     complete,
@@ -630,3 +632,128 @@ class ScratchTests(MutationTests):
             t.assertIn(
                 stream.removeprefix('task/'), t.line('work.md', 'Pack cooler')
             )
+
+
+class AddTaskTests(MutationTests):
+    def task_id(t, line: str) -> str:
+        return parse(f'## Open\n{line}\n').tasks[0].fields['ID']
+
+    def test_add_task(t) -> None:
+        with t.subTest('only supplied fields, plus the stamps btodo owns'):
+            path, line = add_task(
+                t.dir, 'chores', 'Water it', {'P': '4'}, TODAY
+            )
+            t.assertEqual(path, t.dir / 'chores.md')
+            t.assertRegex(
+                line,
+                r'^- \[ \] Water it \[P:4\] \[ADDED:2026-08-08\] '
+                r'\[ID:\w{6}\]$',
+            )
+
+        with t.subTest('appended to Open, every other line byte-identical'):
+            expected = CHORES.split('\n')
+            expected.insert(expected.index('## Done') - 1, line)
+            t.assertEqual(path.read_text(), '\n'.join(expected))
+
+        with t.subTest('fields are written in SCHEMA.md order'):
+            t.reset()
+            _, line = add_task(
+                t.dir,
+                'chores',
+                'Water it',
+                {
+                    'TAGS': 'yard,summer',
+                    'DUE': '2026-09-01',
+                    'P': '4',
+                    'REPEAT': '15d',
+                    'LOE': '2',
+                },
+                TODAY,
+            )
+            t.assertRegex(
+                line,
+                r'^- \[ \] Water it \[P:4\] \[LOE:2\] \[DUE:2026-09-01\] '
+                r'\[REPEAT:15d\] \[TAGS:yard,summer\] \[ADDED:2026-08-08\] '
+                r'\[ID:\w{6}\]$',
+            )
+
+        with t.subTest('a list ending on its Open section keeps its newline'):
+            t.reset()
+            path, line = add_task(
+                t.dir, 'van-trip-prep-template', 'X', {}, TODAY
+            )
+            expected = TEMPLATE.split('\n')
+            expected.insert(-1, line)
+            t.assertEqual(path.read_text(), '\n'.join(expected))
+
+        with t.subTest('a parked list is a valid target'):
+            t.reset()
+            (t.dir / 'backlog.md').write_text(
+                '<!-- battodo:parked -->\n\n## Open\n\n- [ ] B [P:1]\n'
+            )
+            path, line = add_task(t.dir, 'backlog', 'Someday', {}, TODAY)
+            t.assertIn(line, path.read_text())
+
+    def test_add_task_journal(t) -> None:
+        _, line = add_task(
+            t.dir,
+            'chores',
+            'Water it',
+            {'P': '4', 'DUE': '2026-09-01'},
+            TODAY,
+        )
+        task_id = t.task_id(line)
+        (event,) = Journal(t.dir).read()
+
+        with t.subTest('one TaskAdded on the new task stream'):
+            t.assertEqual(event['type'], 'TaskAdded')
+            t.assertEqual(event['stream_id'], f'task/{task_id}')
+            t.assertEqual(
+                event['metadata'],
+                {'actor': 'agent', 'source_file': 'chores.md'},
+            )
+
+        with t.subTest('every written field, against nothing'):
+            fields = {
+                'P': '4',
+                'DUE': '2026-09-01',
+                'ADDED': '2026-08-08',
+                'ID': task_id,
+            }
+            t.assertEqual(
+                event['payload'],
+                {
+                    'delta': {
+                        name: [None, value] for name, value in fields.items()
+                    },
+                    'snapshot': {
+                        'title': 'Water it',
+                        'done': False,
+                        'fields': fields,
+                    },
+                },
+            )
+
+    def test_add_task_errors(t) -> None:
+        with t.subTest('an unknown list names the directory and the stems'):
+            with t.assertRaises(ListError) as caught:
+                add_task(t.dir, 'wrk', 'X', {}, TODAY)
+            message = str(caught.exception)
+            t.assertIn(str(t.dir), message)
+            t.assertIn('chores', message)
+            t.assertIn('work', message)
+            t.assertFalse((t.dir / 'wrk.md').exists())
+
+        bad = (
+            ('DUE', {'DUE': 'tomorrow'}),
+            ('REPEAT', {'REPEAT': 'sometimes'}),
+            ('LOE', {'LOE': '4'}),
+            ('P', {'P': 'high'}),
+        )
+        for name, fields in bad:
+            with t.subTest(f'{name} is rejected'), t.assertRaises(ValueError):
+                add_task(t.dir, 'chores', 'X', fields, TODAY)
+
+        with t.subTest('a rejected add writes nothing at all'):
+            t.assertEqual((t.dir / 'chores.md').read_text(), CHORES)
+            t.assertEqual(Journal(t.dir).read(), [])

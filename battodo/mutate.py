@@ -5,6 +5,11 @@ the markdown stays authoritative while the journal accumulates history.
 Files with nothing to change are not rewritten at all, which keeps
 mtimes stable for Syncthing.
 
+`add_task` is the one mutation that creates rather than edits: a new
+top-level task lands as the last entry of a named list's `## Open`
+section, carrying only the fields the caller gave it plus the `[ADDED:]`
+and `[ID:]` btodo owns.
+
 `complete` implements SCHEMA.md's completion rules: log the ancestry to
 `completed.md`, mark `[x]`, remove the block once the whole thing is
 done, and reschedule a recurring task instead of deleting it. `scratch`
@@ -23,7 +28,16 @@ from pathlib import Path
 from typing import Any
 
 from .journal import Journal, new_task_id
-from .parser import Task, TodoFile, parse, parse_date, serialize, set_field
+from .parser import (
+    OPEN_HEADING,
+    Task,
+    TodoFile,
+    append_open,
+    parse,
+    parse_date,
+    serialize,
+    set_field,
+)
 from .repeat import next_due
 from .view import discover_lists
 
@@ -35,11 +49,22 @@ COMPLETED_LOG = 'completed.md'
 DONE_STATUS = 'DONE'
 SCRATCHED_STATUS = 'SCRATCHED'
 ANCESTRY_SEPARATOR = ' > '
-# Field order for a completed.md entry. btodo authors those lines, so
-# unlike a task line they are canonical, and they carry only SCHEMA.md's
-# own grammar: `BUMPED` is retired, `ADDED` and `ID` are btodo
-# extensions the log format knows nothing about.
-LOG_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
+# SCHEMA.md's own field grammar, in SCHEMA.md's order. `BUMPED` is
+# retired; `ADDED` and `ID` are btodo extensions and so are not in it.
+# Whatever btodo authors -- a `completed.md` record, a brand new task
+# line -- is written in this order, which is what makes those lines
+# canonical where hand-written ones keep whatever order they came with.
+SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
+LOE_VALUES = ('1', '2', '3', '5', '8')
+
+
+class ListError(Exception):
+    """No discovered list in the source directory carries that name.
+
+    Raised rather than creating the file: `btodo add` writes to lists
+    the user already keeps, and a typo that silently spawns `wrk.md`
+    hides the task instead of filing it.
+    """
 
 
 class SelectionError(Exception):
@@ -109,6 +134,145 @@ def _stream_task(trail: list[Task]) -> Task:
 def _identify(task: Task, ids: dict[int, str]) -> str:
     """The task's `[ID:]`, allocating one on first mediated mutation."""
     return ids.setdefault(task.raw_index, task.task_id or new_task_id())
+
+
+# --- Creation -------------------------------------------------------
+
+
+def _resolve_list(directory: Path, name: str) -> Path:
+    """The discovered list whose filename stem is `name`.
+
+    Parked lists count: parking opts a file out of *views*, not out of
+    being written to.
+
+    Raises
+    ------
+    ListError
+        If no discovered list carries that stem.
+    """
+    lists = discover_lists(directory)
+    found = next((path for path in lists if path.stem == name), None)
+    if found is None:
+        stems = ', '.join(path.stem for path in lists)
+        raise ListError(
+            f'no list named {name!r} in {directory}; available: {stems}'
+        )
+    return found
+
+
+def _checked_fields(fields: dict[str, str], today: date) -> dict[str, str]:
+    """The supplied fields, validated and normalised.
+
+    Runs before anything is written, so a bad value costs nothing. Only
+    the values with a grammar btodo actually depends on are checked --
+    a `TAGS` string is free-form and cannot be wrong.
+    """
+    checked = dict(fields)
+    priority = checked.get('P')
+    if priority is not None and not priority.isdigit():
+        raise ValueError(f'P must be a whole number, not {priority!r}')
+
+    loe = checked.get('LOE')
+    if loe is not None and loe not in LOE_VALUES:
+        raise ValueError(
+            f'LOE must be one of {", ".join(LOE_VALUES)}, not {loe!r}'
+        )
+
+    due = checked.get('DUE')
+    if due is not None:
+        parsed = parse_date(due)
+        if parsed is None:
+            raise ValueError(f'DUE must be an ISO date, not {due!r}')
+        # Normalised, not passed through: `date.fromisoformat` accepts
+        # more spellings on newer interpreters, and a line's meaning
+        # must not depend on which one wrote it.
+        checked['DUE'] = parsed.isoformat()
+
+    repeat = checked.get('REPEAT')
+    if repeat is not None:
+        # Validated by scheduling it and throwing the answer away: the
+        # repeat parser is the only definition of a readable spec, and
+        # an unreadable one must fail before a task carries it.
+        next_due(repeat, today)
+    return checked
+
+
+def add_task(
+    directory: Path,
+    list_name: str,
+    title: str,
+    fields: dict[str, str],
+    today: date,
+) -> tuple[Path, str]:
+    """Add a top-level task to `list_name`. Returns the path and line.
+
+    The task is appended as the last entry of the list's `## Open`
+    section; every other line is left exactly as it was. Only the fields
+    the caller supplied are written -- an absent `P` means 0 to the
+    parser, so inventing a default would silently rank the task.
+    `[ADDED:]` and `[ID:]` are always stamped: rank is computed from the
+    add date (ADR 0005), and a task btodo created has no reason to wait
+    for the lazy id injection the hand-written ones get.
+
+    Parameters
+    ----------
+    directory : Path
+        The source directory: its lists and its journal.
+    list_name : str
+        A list's filename stem, e.g. `chores` for `chores.md`.
+    title : str
+        The task title, without fields.
+    fields : dict
+        SCHEMA.md field names to values, as strings. Any of `P`, `LOE`,
+        `DUE`, `REPEAT`, `TAGS`; all optional.
+    today : date
+        The add date, in the user's local day.
+
+    Returns
+    -------
+    tuple of (Path, str)
+        The list written to, and the task line as written.
+
+    Raises
+    ------
+    ListError
+        If `list_name` names no discovered list.
+    ValueError
+        If a supplied `P`, `LOE` or `DUE` is unreadable. `RepeatError`,
+        a ValueError, covers `REPEAT`. Raised before anything is
+        written.
+    """
+    path = _resolve_list(directory, list_name)
+    checked = _checked_fields(fields, today)
+    written = {
+        **{name: checked[name] for name in SCHEMA_FIELDS if name in checked},
+        'ADDED': today.isoformat(),
+        'ID': new_task_id(),
+    }
+    # Built by the same field-append path every other mutation uses, on
+    # a line that starts out carrying none.
+    entry = _set_fields(f'- [ ] {title}', written)
+
+    doc = parse(path.read_text())
+    doc.lines = append_open(doc.lines, entry)
+    path.write_text(serialize(doc))
+
+    Journal(directory).append(
+        ADDED_EVENT,
+        f'task/{written["ID"]}',
+        {
+            'delta': {name: [None, value] for name, value in written.items()},
+            # Post-state, unlike every other event here: an add has no
+            # prior state for a snapshot to describe. Taken from the
+            # line as written, so it records the file, not the intent.
+            'snapshot': task_snapshot(
+                parse(f'{OPEN_HEADING}\n{entry}').tasks[0]
+            ),
+        },
+        actor='agent',
+        source_file=path.name,
+    )
+    return path, entry
 
 
 # --- Completion -----------------------------------------------------
@@ -217,7 +381,7 @@ def _log_entry(path: Path, trail: list[Task], status: str, today: date) -> str:
     task = trail[-1]
     fields = ' '.join(
         f'[{name}:{task.fields[name]}]'
-        for name in LOG_FIELDS
+        for name in SCHEMA_FIELDS
         if name in task.fields
     )
     entry = (
