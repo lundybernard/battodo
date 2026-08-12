@@ -10,11 +10,23 @@ from battodo.conf import CONFIG_ROOT, get_config
 from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
-from battodo.mutate import backfill_all, complete, scratch
+from battodo.mutate import add_task, backfill_all, complete, scratch
 from battodo.view import TZ, build_json, build_view
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
+
+# The SCHEMA.md fields `add` can write, by the option that supplies
+# each. Every one is optional, and an option the user left off is
+# *absent* from the Configuration rather than None, so they are read
+# with `getattr` and only the supplied ones are passed on.
+ADD_FIELDS = {
+    'P': 'priority',
+    'LOE': 'loe',
+    'DUE': 'due',
+    'REPEAT': 'repeat',
+    'TAGS': 'tags',
+}
 
 
 def BATCLI(ARGS=None):
@@ -120,6 +132,49 @@ def argparser():
         help='output format: text for a terminal, json for agents',
     )
 
+    add = commands.add_parser(
+        'add',
+        description='add a task to the end of a list',
+        help='for details use add --help',
+    )
+    add.set_defaults(func=Commands.add)
+    add.add_argument(
+        f'{CONFIG_ROOT}.list',
+        metavar='list',
+        help="the list's filename stem, e.g. chores for chores.md",
+    )
+    add.add_argument(
+        f'{CONFIG_ROOT}.title',
+        metavar='title',
+        help='the task title, without any [FIELD:] markup',
+    )
+    add.add_argument(
+        '-p',
+        '--priority',
+        dest=f'{CONFIG_ROOT}.priority',
+        help='priority multiplier, 0 and up; absent reads as 0',
+    )
+    add.add_argument(
+        '--loe',
+        dest=f'{CONFIG_ROOT}.loe',
+        help='level of effort: 1, 2, 3, 5 or 8',
+    )
+    add.add_argument(
+        '--due',
+        dest=f'{CONFIG_ROOT}.due',
+        help='due date, YYYY-MM-DD',
+    )
+    add.add_argument(
+        '--repeat',
+        dest=f'{CONFIG_ROOT}.repeat',
+        help='recurrence: Nd, Nw, weekly:DAY or monthly:N',
+    )
+    add.add_argument(
+        '--tags',
+        dest=f'{CONFIG_ROOT}.tags',
+        help='comma-separated tags',
+    )
+
     done = commands.add_parser(
         'done',
         description='complete a task and log it to completed.md',
@@ -174,6 +229,26 @@ class Commands:
     @staticmethod
     def hello(conf):
         print(hello_world())
+
+    @staticmethod
+    def add(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        fields = {
+            name: value
+            for name, option in ADD_FIELDS.items()
+            if (value := getattr(conf, option, None)) is not None
+        }
+        path, entry = add_task(
+            source,
+            conf.list,
+            conf.title,
+            fields,
+            datetime.now(TZ).date(),
+        )
+        # Echoed because a P-less task ranks near 0 and so will not
+        # appear in a view: this is the only confirmation of the write.
+        print(entry)
+        print(path)
 
     @staticmethod
     def done(conf):
