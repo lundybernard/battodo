@@ -80,7 +80,6 @@ def argparser():
         '--conf',
         '--config_file',
         dest='config_file',
-        default=None,
         help=MESSAGES['cli.config_file.help'],
     )
     p.add_argument(
@@ -88,13 +87,11 @@ def argparser():
         '--env',
         '--config_environment',
         dest='config_env',
-        default=None,
         help=MESSAGES['cli.config_env.help'],
     )
 
     # Add a subparser to handle sub-commands
     commands = p.add_subparsers(
-        dest='command',
         title=MESSAGES['cli.commands.title'],
         description=MESSAGES['cli.commands.description'],
     )
