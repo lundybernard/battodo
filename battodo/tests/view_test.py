@@ -6,7 +6,6 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from zoneinfo import ZoneInfo
 
-from ..parser import parse
 from ..view import (
     TZ,
     SourceError,
@@ -16,6 +15,7 @@ from ..view import (
     discover_lists,
     due_label,
     open_children,
+    parse,
     sort_key,
     visible_tasks,
 )

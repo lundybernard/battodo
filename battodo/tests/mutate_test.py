@@ -4,8 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, skipIf
 
-from ..journal import Journal
 from ..mutate import (
+    Journal,
     ListError,
     SelectionError,
     add_task,
@@ -13,10 +13,10 @@ from ..mutate import (
     backfill_file,
     complete,
     find_task,
+    parse,
     scratch,
     task_snapshot,
 )
-from ..parser import parse
 from ..repeat import RepeatError
 
 LIST = """# Work

@@ -1,8 +1,9 @@
 from datetime import date
 from unittest import TestCase
 
-from ..parser import Task, parse
+from ..parser import parse
 from ..rank import (
+    Task,
     age_score,
     due_score,
     multiplier,
