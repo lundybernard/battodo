@@ -3,6 +3,17 @@
 Status: Accepted
 Date: 2026-08-08
 
+> **Superseded in part** by
+> [ADR 0008 — Journal authority](../0008-journal-authority/). The
+> storage-authority decision below — markdown authoritative, journal
+> derived — is reversed by
+> [0009](../0008-journal-authority/0009-journal-becomes-authoritative.md).
+> The ordering, merge, and adoption consequences are revised by
+> [0010](../0008-journal-authority/0010-event-ordering-key.md),
+> [0011](../0008-journal-authority/0011-union-merge-and-no-hash-chain.md),
+> and [0012](../0008-journal-authority/0012-optional-per-project-tool.md).
+> Everything else here stands.
+
 ## Context
 
 Storage carries the project's hardest requirements. Constraints:

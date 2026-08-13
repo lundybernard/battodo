@@ -1,4 +1,4 @@
-# 0001 — Project bootstrap
+# 0000 — Project bootstrap
 
 BatTodo rebuilds the plain-text todo system in `~/todo/` (markdown lists +
 helper scripts + a Claude Code skill) as an installable Python CLI

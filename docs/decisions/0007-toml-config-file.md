@@ -11,7 +11,7 @@ ships format-specific file sources — `TomlSource`, `YamlSource`,
 `battodo/conf.py` must be rewritten against the new ones this cycle.
 Picking the file format is the first decision of that migration.
 
-The gap is already on record: [ADR 0006](0001-project-bootstrap/0006-parked-lists.md)
+The gap is already on record: [ADR 0006](0000-project-bootstrap/0006-parked-lists.md)
 rejected a config-based exclusion list partly because "config-file
 configuration is blocked on batconf 0.4.0/`TomlSource`, so this would
 be env-var-only today". That block is now lifted.
@@ -55,7 +55,7 @@ one small file. INI's stdlib parser is free, but its string-only values
 would push type handling back into battodo — paying in code for what
 the dependency buys.
 
-Dogfooding cuts the same way as [ADR 0002](0001-project-bootstrap/0002-batconf-for-configuration.md):
+Dogfooding cuts the same way as [ADR 0002](0000-project-bootstrap/0002-batconf-for-configuration.md):
 `TomlSource` is the 0.4.0 source most worth exercising, and friction
 found there is upstream signal.
 
