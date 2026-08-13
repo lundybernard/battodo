@@ -1,5 +1,8 @@
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+from pathlib import Path
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from ..cli import (
     BATCLI,
@@ -75,10 +78,10 @@ class BATCLITests(TestCase):
 
         parser.print_help.assert_called_with()
 
-    @patch('builtins.print')
-    def test_command_error(t, print):
-        """prints the error message, and help if a command throws an error"""
-        exc = Exception()
+    def test_command_error(t):
+        """a failing command reports on stderr and leaves stdout clean"""
+
+        exc = Exception('boom')
 
         def fail(conf):
             raise exc
@@ -87,12 +90,26 @@ class BATCLITests(TestCase):
         args.func = fail
         parser = Mock(argparse.ArgumentParser)
         parser.parse_args.return_value = args
+        out, err = StringIO(), StringIO()
 
-        with patch(f'{SRC}.argparser', return_value=parser):
+        with (
+            patch(f'{SRC}.argparser', return_value=parser),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
             BATCLI([])
 
-        print.assert_called_with(exc)
-        parser.print_help.assert_called_with()
+        with t.subTest('the message goes to stderr'):
+            t.assertEqual(err.getvalue(), 'boom\n')
+
+        with t.subTest('stdout stays parseable for a consumer'):
+            t.assertEqual(out.getvalue(), '')
+
+        with t.subTest('a runtime failure is not a usage error'):
+            parser.print_help.assert_not_called()
+
+        with t.subTest('the exit code is non-zero'):
+            t.assertEqual(t.exit.call_args_list[0], call(1))
 
     def test_commands(t):
         commands = [
@@ -161,6 +178,55 @@ class CommandsBackfillTests(TestCase):
 
         with t.subTest('source dir is expanded'):
             t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
+
+
+class CommandsAddTests(TestCase):
+    def setUp(t):
+        patcher = patch(f'{SRC}.add_task', autospec=True)
+        t.add_task = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print')
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.path = Path('~/todo/chores.md')
+        t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
+        t.add_task.return_value = (t.path, t.entry)
+
+        # spec models batconf: an argument the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.list = 'chores'
+        t.conf.title = 'Water it'
+        t.conf.priority = '4'
+        t.conf.due = '2026-09-01'
+
+    def test_add(t):
+        with t.subTest('list, title and supplied fields are forwarded'):
+            Commands.add(t.conf)
+
+            args = t.add_task.call_args[0]
+            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[1], 'chores')
+            t.assertEqual(args[2], 'Water it')
+            t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
+
+        with t.subTest('the created line and its file are echoed'):
+            # A P-less add ranks near 0 and will not show in a view, so
+            # the echo is the only confirmation the user gets.
+            t.print.assert_has_calls([call(t.entry), call(t.path)])
+
+        with t.subTest('an add with no fields writes none'):
+            t.add_task.reset_mock()
+            conf = Mock(spec=['view', 'list', 'title'])
+            conf.view.source_dir = '~/todo'
+            conf.list = 'chores'
+            conf.title = 'Water it'
+
+            Commands.add(conf)
+
+            t.assertEqual(t.add_task.call_args[0][3], {})
 
 
 class CommandsDoneTests(TestCase):
@@ -244,6 +310,39 @@ class CliArgsResolutionTests(TestCase):
 
         with t.subTest('a flag reaches the command'):
             t.assertTrue(t.resolve(['view', '--all']).show_all)
+
+        with t.subTest('both add positionals reach the command'):
+            conf = t.resolve(['add', 'chores', 'Water it'])
+            t.assertEqual(conf.list, 'chores')
+            t.assertEqual(conf.title, 'Water it')
+
+        with t.subTest('every add field reaches the command'):
+            conf = t.resolve(
+                [
+                    'add',
+                    'chores',
+                    'X',
+                    '-p',
+                    '4',
+                    '--loe',
+                    '2',
+                    '--due',
+                    '2026-09-01',
+                    '--repeat',
+                    '15d',
+                    '--tags',
+                    'yard,summer',
+                ]
+            )
+            t.assertEqual(conf.priority, '4')
+            t.assertEqual(conf.loe, '2')
+            t.assertEqual(conf.due, '2026-09-01')
+            t.assertEqual(conf.repeat, '15d')
+            t.assertEqual(conf.tags, 'yard,summer')
+
+        with t.subTest('an omitted add field is absent, not empty'):
+            conf = t.resolve(['add', 'chores', 'X'])
+            t.assertIsNone(getattr(conf, 'due', None))
 
 
 class CommandsTests(TestCase):
