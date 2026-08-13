@@ -15,6 +15,7 @@ from ..view import (
     build_view,
     discover_lists,
     due_label,
+    open_children,
     sort_key,
     visible_tasks,
 )
@@ -54,17 +55,30 @@ def at(iso: str) -> datetime:
 
 
 class ActiveCategoriesTests(TestCase):
+    """Each window is half-open: it opens on its first hour and is shut
+    again on its closing hour, so the two never overlap."""
+
     def test_active_categories(t) -> None:
         always = {'study', 'career', 'events'}
+        work = always | {'work'}
+        chores = always | {'chores'}
         cases = {
-            # Wed 2026-08-05
-            'weekday work hours': ('2026-08-05T10:00', always | {'work'}),
-            'weekday evening': ('2026-08-05T18:00', always | {'chores'}),
-            'weekday early': ('2026-08-05T07:00', always),
-            'weekday late': ('2026-08-05T22:00', always),
-            # Sat 2026-08-08
-            'weekend midday': ('2026-08-08T12:00', always | {'chores'}),
-            'weekend early': ('2026-08-08T08:00', always),
+            # Wed 2026-08-05: work 09-17, then chores 17-21.
+            'weekday before work': ('2026-08-05T08:00', always),
+            'weekday work opens': ('2026-08-05T09:00', work),
+            'weekday work last hour': ('2026-08-05T16:00', work),
+            'weekday work closes as chores open': (
+                '2026-08-05T17:00',
+                chores,
+            ),
+            'weekday chores last hour': ('2026-08-05T20:00', chores),
+            'weekday chores close': ('2026-08-05T21:00', always),
+            # Sat 2026-08-08: chores 10-20, and no work at any hour.
+            'weekend before chores': ('2026-08-08T09:00', always),
+            'weekend chores open': ('2026-08-08T10:00', chores),
+            'weekend midday is never work': ('2026-08-08T12:00', chores),
+            'weekend chores last hour': ('2026-08-08T19:00', chores),
+            'weekend chores close': ('2026-08-08T20:00', always),
         }
         for name, (stamp, expected) in cases.items():
             with t.subTest(name):
@@ -111,6 +125,37 @@ class VisibleTasksTests(TestCase):
 
         with t.subTest('future non-recurring shown, per R3 and the script'):
             t.assertIn('Future plain', titles)
+
+        with t.subTest('a recurrence due today is work for today'):
+            # Only a recurrence still ahead of today is suppressed. Due
+            # today it is the occurrence that has come round, and
+            # hiding it is how a repeating chore silently goes undone.
+            doc = parse(
+                '## Open\n\n- [ ] Water [P:2] [DUE:2026-08-08] [REPEAT:7d]\n'
+            )
+            t.assertEqual(
+                [task.title for task in visible_tasks(doc, t.today)],
+                ['Water'],
+            )
+
+
+class OpenChildrenTests(TestCase):
+    def test_open_children(t) -> None:
+        parent = parse(
+            '## Open\n\n'
+            '- [ ] Put together a repair plan [P:70] [LOE:3]\n'
+            '  - [x] Price the lumber [LOE:1]\n'
+            '  - [ ] Measure the joists [LOE:1]\n'
+        ).tasks[0]
+
+        with t.subTest('a checked child is not outstanding work'):
+            t.assertEqual(
+                [child.title for child in open_children(parent)],
+                ['Measure the joists'],
+            )
+
+        with t.subTest('a childless task has nothing outstanding'):
+            t.assertEqual(open_children(parent.children[0]), [])
 
 
 class SortKeyTests(TestCase):

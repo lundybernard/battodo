@@ -52,6 +52,9 @@ class AgeScoreTests(TestCase):
             # No ADDED: the whole legacy corpus, and every hand-added item.
             '- [ ] X': 0.0,
             '- [ ] X [ADDED:2026-08-08]': 0.0,
+            # A single day already counts: waiting starts accruing at
+            # once, rather than after some grace period.
+            '- [ ] X [ADDED:2026-08-07]': 1 / 30,
             '- [ ] X [ADDED:2026-07-24]': 0.5,
             '- [ ] X [ADDED:2026-07-09]': 1.0,
             # Capped at two months of waiting.
