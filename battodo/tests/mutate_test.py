@@ -1,7 +1,8 @@
+import sys
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 from ..journal import Journal
 from ..mutate import (
@@ -482,7 +483,10 @@ class CompleteTests(MutationTests):
                 ['Build workbench > Buy lumber', 'Build workbench'],
             )
             t.assertEqual(events[1]['stream_id'], 'task/vrr7m8')
-            t.assertEqual(events[0]['metadata']['source_file'], 'chores.md')
+            t.assertEqual(
+                events[0]['metadata'],
+                {'actor': 'agent', 'source_file': 'chores.md'},
+            )
 
         with t.subTest('delta and pre-state snapshot'):
             t.assertEqual(
@@ -606,7 +610,10 @@ class ScratchTests(MutationTests):
             t.assertEqual(len(events), 1)
             t.assertEqual(events[0]['type'], 'TaskScratched')
             t.assertEqual(events[0]['stream_id'], 'task/9o71lx')
-            t.assertEqual(events[0]['metadata']['source_file'], 'work.md')
+            t.assertEqual(
+                events[0]['metadata'],
+                {'actor': 'agent', 'source_file': 'work.md'},
+            )
             t.assertEqual(
                 events[0]['payload']['delta'], {'removed': [False, True]}
             )
@@ -734,24 +741,46 @@ class AddTaskTests(MutationTests):
                 },
             )
 
+    @skipIf(
+        sys.version_info < (3, 11),
+        'before 3.11 fromisoformat reads only the canonical spelling',
+    )
+    def test_add_task_normalises_the_due_date(t) -> None:
+        """A line must not record which interpreter wrote it.
+
+        `date.fromisoformat` accepts more spellings on newer versions,
+        so what the user typed is re-rendered rather than passed on.
+        """
+        _, line = add_task(t.dir, 'chores', 'X', {'DUE': '20260901'}, TODAY)
+
+        t.assertIn('[DUE:2026-09-01]', line)
+        t.assertIn(line, (t.dir / 'chores.md').read_text())
+
     def test_add_task_errors(t) -> None:
         with t.subTest('an unknown list names the directory and the stems'):
             with t.assertRaises(ListError) as caught:
                 add_task(t.dir, 'wrk', 'X', {}, TODAY)
             message = str(caught.exception)
             t.assertIn(str(t.dir), message)
-            t.assertIn('chores', message)
-            t.assertIn('work', message)
+            t.assertIn(
+                'available: chores, van-trip-prep-template, work', message
+            )
             t.assertFalse((t.dir / 'wrk.md').exists())
 
+        # Each message must name the field, the rule it broke, and the
+        # value that broke it: the fix is always a re-typed argument.
         bad = (
-            ('DUE', {'DUE': 'tomorrow'}),
-            ('REPEAT', {'REPEAT': 'sometimes'}),
-            ('LOE', {'LOE': '4'}),
-            ('P', {'P': 'high'}),
+            ({'DUE': 'tomorrow'}, r"DUE must be an ISO date, not 'tomorrow'"),
+            ({'REPEAT': 'sometimes'}, r"REPEAT value: 'sometimes'"),
+            ({'LOE': '4'}, r"LOE must be one of 1, 2, 3, 5, 8, not '4'"),
+            ({'P': 'high'}, r"P must be a whole number, not 'high'"),
         )
-        for name, fields in bad:
-            with t.subTest(f'{name} is rejected'), t.assertRaises(ValueError):
+        for fields, expected in bad:
+            name = next(iter(fields))
+            with (
+                t.subTest(f'{name} is rejected'),
+                t.assertRaisesRegex(ValueError, expected),
+            ):
                 add_task(t.dir, 'chores', 'X', fields, TODAY)
 
         with t.subTest('a rejected add writes nothing at all'):
