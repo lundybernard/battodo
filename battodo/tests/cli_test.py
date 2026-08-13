@@ -6,6 +6,8 @@ from unittest.mock import Mock, call, patch
 
 from ..cli import (
     BATCLI,
+    MESSAGES,
+    TZ,
     Commands,
     argparse,
     argparser,
@@ -14,11 +16,85 @@ from ..cli import (
 )
 
 SRC = 'battodo.cli'
+# The configured `~/todo` as every command resolves it.
+SOURCE = Path.home() / 'todo'
+
+
+def subparsers(parser):
+    """Every parser reachable from `parser`, keyed by its command name."""
+    found = {'btodo': parser}
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            found.update(action.choices)
+    return found
+
+
+def documented(parser):
+    """Each string one parser must show, labelled with what shows it.
+
+    `-h` is argparse's own, and a subparsers action carries no help of
+    its own -- the text for each subcommand lives on the pseudo-action
+    standing in for it.
+    """
+    yield 'description', parser.description
+    for action in parser._actions:
+        if isinstance(action, argparse._HelpAction):
+            continue
+        if isinstance(action, argparse._SubParsersAction):
+            for choice in action._choices_actions:
+                yield f'{choice.dest} command', choice.help
+            continue
+        yield action.dest, action.help
+        if not action.option_strings:
+            # A positional shows its metavar, or its dest -- and the
+            # dest is a dotted config path, not something to read.
+            yield f'{action.dest} metavar', action.metavar
+
+
+def displayed(parser):
+    """Every user-facing string one parser holds, `None`s included."""
+    yield parser.usage
+    group = parser._subparsers
+    if group is not None:
+        yield group.title
+        yield group.description
+    for _, text in documented(parser):
+        yield text
+
+
+class MessageCatalogTests(TestCase):
+    """Every string the CLI displays is an entry in the catalog.
+
+    Held apart from the parser so the wording can be translated, and so
+    a display string is never mistaken for behaviour: the catalog is
+    data, and only the lookups that reach into it are logic.
+    """
+
+    def setUp(t):
+        t.parsers = subparsers(argparser())
+
+    def test_every_screen_is_documented(t):
+        for name, parser in t.parsers.items():
+            for label, text in documented(parser):
+                with t.subTest(f'{name} {label}'):
+                    t.assertIn(text, MESSAGES.values())
+
+    def test_no_entry_goes_unused(t):
+        shown = {
+            text
+            for parser in t.parsers.values()
+            for text in displayed(parser)
+            if text is not None
+        }
+        t.assertEqual(set(MESSAGES.values()) - shown, set())
 
 
 class ArgparserTests(TestCase):
+    def setUp(t):
+        t.parser = argparser()
+
     def test_argparser(t):
-        p = argparser()
+        p = t.parser
 
         with t.subTest('view renders for a human by default'):
             args = p.parse_args(['view'])
@@ -27,6 +103,64 @@ class ArgparserTests(TestCase):
         with t.subTest('view takes a machine-readable format'):
             args = p.parse_args(['view', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
+
+        with t.subTest('the default is also a format one may ask for'):
+            args = p.parse_args(['view', '--format', 'text'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+
+        with (
+            t.subTest('an unknown format is a usage error'),
+            redirect_stderr(StringIO()),
+            t.assertRaises(SystemExit),
+        ):
+            p.parse_args(['view', '--format', 'xml'])
+
+    def test_every_subcommand_reaches_its_command(t):
+        cases = [
+            (['hello'], Commands.hello),
+            (['view'], Commands.view),
+            (['add', 'chores', 'Water it'], Commands.add),
+            (['done', 'brush pile'], Commands.done),
+            (['scratch', 'brush pile'], Commands.scratch),
+            (['backfill'], Commands.backfill),
+        ]
+        for argv, command in cases:
+            with t.subTest(argv[0]):
+                t.assertIs(t.parser.parse_args(argv).func, command)
+
+    def test_verbosity(t):
+        cases = {
+            ('hello',): None,
+            ('-v', 'hello'): logging.INFO,
+            ('--verbose', 'hello'): logging.INFO,
+            ('--debug', 'hello'): logging.DEBUG,
+        }
+        for argv, expected in cases.items():
+            with t.subTest(' '.join(argv)):
+                args = t.parser.parse_args(list(argv))
+                t.assertEqual(args.loglevel, expected)
+
+    def test_add_priority_spellings(t):
+        for flag in ('-p', '--priority'):
+            with t.subTest(flag):
+                args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
+                t.assertEqual(getattr(args, 'battodo.priority'), '4')
+
+    def test_config_selection(t):
+        spellings = {
+            'config_file': ('-c', '--conf', '--config_file'),
+            'config_env': ('-e', '--env', '--config_environment'),
+        }
+        for dest, flags in spellings.items():
+            for flag in flags:
+                with t.subTest(flag):
+                    args = t.parser.parse_args([flag, 'chosen', 'hello'])
+                    t.assertEqual(getattr(args, dest), 'chosen')
+
+        with t.subTest('neither is required'):
+            args = t.parser.parse_args(['hello'])
+            t.assertIsNone(args.config_file)
+            t.assertIsNone(args.config_env)
 
 
 class BATCLITests(TestCase):
@@ -118,11 +252,37 @@ class BATCLITests(TestCase):
 
         t.validate_commands(commands)
 
-    # TODO: full coverage of CLI arguments that trigger commands
+    def test_config_arguments_reach_the_configuration(t):
+        """The two global options are the ones only BATCLI can forward."""
+        with patch(f'{SRC}.Commands.hello', autospec=True):
+            BATCLI(['-c', 'other.toml', '-e', 'prod', 'hello'])
+
+        kwargs = t.get_config.call_args[1]
+        t.assertEqual(kwargs['config_file_name'], 'other.toml')
+        t.assertEqual(kwargs['config_env'], 'prod')
 
 
-class CommandsViewTests(TestCase):
+class ClockTests(TestCase):
+    """Base for the commands that read the clock.
+
+    It is mocked rather than compared against a real one: a real-value
+    assertion would only catch a zoneless `now()` during the hours when
+    the host's date and the app timezone's disagree.
+    """
+
     def setUp(t):
+        patcher = patch(f'{SRC}.datetime', autospec=True)
+        t.datetime = patcher.start()
+        t.addCleanup(patcher.stop)
+        t.today = t.datetime.now.return_value.date.return_value
+
+        t.conf = Mock()
+        t.conf.view.source_dir = '~/todo'
+
+
+class CommandsViewTests(ClockTests):
+    def setUp(t):
+        super().setUp()
         for target in ('build_view', 'build_json'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -131,7 +291,9 @@ class CommandsViewTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock()
+        # spec models batconf: an option the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'show_all', 'format'])
         t.conf.view.source_dir = '~/todo'
         t.conf.show_all = True
         t.conf.format = 'text'
@@ -142,8 +304,12 @@ class CommandsViewTests(TestCase):
 
             args, kwargs = t.build_view.call_args
             t.print.assert_called_with(t.build_view.return_value)
-            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], t.datetime.now.return_value)
             t.assertTrue(kwargs['show_all'])
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
 
         with t.subTest('json format is serialized instead'):
             t.print.reset_mock()
@@ -153,16 +319,30 @@ class CommandsViewTests(TestCase):
 
             args, kwargs = t.build_json.call_args
             t.print.assert_called_with(t.build_json.return_value)
-            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], t.datetime.now.return_value)
             t.assertTrue(kwargs['show_all'])
             t.build_view.assert_called_once()
 
+        with t.subTest('an unconfigured view is human and abridged'):
+            conf = Mock(spec=['view'])
+            conf.view.source_dir = '~/todo'
 
-class CommandsBackfillTests(TestCase):
-    def setUp(t):
-        t.conf = Mock()
-        t.conf.view.source_dir = '~/todo'
+            Commands.view(conf)
 
+            t.assertEqual(t.build_view.call_count, 2)
+            t.assertFalse(t.build_view.call_args[1]['show_all'])
+
+
+class CommandsHelloTests(TestCase):
+    @patch('builtins.print')
+    @patch(f'{SRC}.hello_world', autospec=True)
+    def test_hello(t, hello_world, print):
+        Commands.hello(Mock())
+        print.assert_called_with(hello_world.return_value)
+
+
+class CommandsBackfillTests(ClockTests):
     @patch('builtins.print')
     @patch(f'{SRC}.backfill_all', autospec=True)
     def test_backfill(t, backfill_all, print):
@@ -176,12 +356,16 @@ class CommandsBackfillTests(TestCase):
             Commands.backfill(t.conf)
             print.assert_called_with('nothing to backfill')
 
-        with t.subTest('source dir is expanded'):
-            t.assertFalse(str(backfill_all.call_args[0][0]).startswith('~'))
+        with t.subTest('the source dir and the local day are forwarded'):
+            args = backfill_all.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], t.today)
+            t.datetime.now.assert_called_with(TZ)
 
 
-class CommandsAddTests(TestCase):
+class CommandsAddTests(ClockTests):
     def setUp(t):
+        super().setUp()
         patcher = patch(f'{SRC}.add_task', autospec=True)
         t.add_task = patcher.start()
         t.addCleanup(patcher.stop)
@@ -207,10 +391,12 @@ class CommandsAddTests(TestCase):
             Commands.add(t.conf)
 
             args = t.add_task.call_args[0]
-            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], 'chores')
             t.assertEqual(args[2], 'Water it')
             t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
+            t.assertEqual(args[4], t.today)
+            t.datetime.now.assert_called_with(TZ)
 
         with t.subTest('the created line and its file are echoed'):
             # A P-less add ranks near 0 and will not show in a view, so
@@ -229,24 +415,33 @@ class CommandsAddTests(TestCase):
             t.assertEqual(t.add_task.call_args[0][3], {})
 
 
-class CommandsDoneTests(TestCase):
+class CommandsDoneTests(ClockTests):
     def setUp(t):
-        t.conf = Mock()
-        t.conf.view.source_dir = '~/todo'
+        super().setUp()
         t.conf.selector = 'brush pile'
 
     @patch('builtins.print')
     @patch(f'{SRC}.complete', autospec=True)
     def test_done(t, complete, print):
-        with t.subTest('prints the completed.md entries'):
-            complete.return_value = ['2026-08-08 | chores | DONE | Chip it']
+        with t.subTest('prints the completed.md entries, one per line'):
+            # Completing the last open child completes its parent too,
+            # so one command can log more than one entry.
+            complete.return_value = [
+                '2026-08-08 | chores | DONE | Deck > Chip it',
+                '2026-08-08 | chores | DONE | Deck',
+            ]
             Commands.done(t.conf)
-            print.assert_called_with('2026-08-08 | chores | DONE | Chip it')
+            print.assert_called_with(
+                '2026-08-08 | chores | DONE | Deck > Chip it\n'
+                '2026-08-08 | chores | DONE | Deck'
+            )
 
-        with t.subTest('selector is forwarded, source dir expanded'):
+        with t.subTest('selector, source dir and local day are forwarded'):
             args = complete.call_args[0]
-            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], t.today)
+            t.datetime.now.assert_called_with(TZ)
 
         with t.subTest('says so when the item is not logged'):
             complete.return_value = []
@@ -254,24 +449,31 @@ class CommandsDoneTests(TestCase):
             print.assert_called_with('checked off')
 
 
-class CommandsScratchTests(TestCase):
+class CommandsScratchTests(ClockTests):
     def setUp(t):
-        t.conf = Mock()
-        t.conf.view.source_dir = '~/todo'
+        super().setUp()
         t.conf.selector = 'brush pile'
 
     @patch('builtins.print')
     @patch(f'{SRC}.scratch', autospec=True)
     def test_scratch(t, scratch, print):
-        with t.subTest('prints the completed.md entry'):
-            scratch.return_value = ['2026-08-08 | chores | SCRATCHED | Chip']
+        with t.subTest('prints the completed.md entries, one per line'):
+            scratch.return_value = [
+                '2026-08-08 | chores | SCRATCHED | Deck > Chip',
+                '2026-08-08 | chores | SCRATCHED | Deck',
+            ]
             Commands.scratch(t.conf)
-            print.assert_called_with('2026-08-08 | chores | SCRATCHED | Chip')
+            print.assert_called_with(
+                '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
+                '2026-08-08 | chores | SCRATCHED | Deck'
+            )
 
-        with t.subTest('selector is forwarded, source dir expanded'):
+        with t.subTest('selector, source dir and local day are forwarded'):
             args = scratch.call_args[0]
-            t.assertFalse(str(args[0]).startswith('~'))
+            t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], t.today)
+            t.datetime.now.assert_called_with(TZ)
 
         with t.subTest('says so when the item is not logged'):
             scratch.return_value = []
@@ -349,9 +551,9 @@ class CommandsTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):
-            args = argparse.Namespace(loglevel=logging.INFO)
+            args = argparse.Namespace(loglevel=None)
             Commands.set_log_level(args)
-            log.setLevel.assert_called_with(logging.INFO)
+            log.setLevel.assert_called_with(logging.ERROR)
 
         with t.subTest('set given value'):
             args = argparse.Namespace(loglevel=logging.INFO)
