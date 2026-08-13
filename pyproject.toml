@@ -119,7 +119,7 @@ mutmut = ">=3.6"
 # do_not_mutate set plus pyproject.toml, which mutmut always copies.
 # The mutated sources under mutants/battodo are skipped if they already
 # exist, so they stay put as the incremental cache.
-_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/example/tests mutants/battodo/_version.py && mutmut run"
+_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/_version.py && mutmut run"
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.

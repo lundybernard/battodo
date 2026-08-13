@@ -7,7 +7,6 @@ from pathlib import Path
 from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
-from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
 from battodo.mutate import add_task, backfill_all, complete, scratch
@@ -206,14 +205,6 @@ def argparser():
         help='for details use backfill --help',
     )
     backfill.set_defaults(func=Commands.backfill)
-
-    # Add a subparser from a module
-    commands.add_parser(
-        'example',
-        help='example module commands',
-        add_help=False,
-        parents=[example_cli()],
-    )
 
     return p
 
