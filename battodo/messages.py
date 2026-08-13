@@ -1,0 +1,67 @@
+"""Every string the CLI displays, keyed by a stable id.
+
+Pure data: no logic, no imports, no formatting. The parser in `cli.py`
+holds the structure -- flags, dests, choices, defaults -- and looks its
+wording up here, so a translation is a second catalog rather than a
+second parser.
+
+Ids are `{command}.{argument}.{kind}`, or `{command}.{kind}` for a
+screen; the top-level parser is the command named `cli`, so nothing a
+subcommand may later be called can collide with it. Ids are the stable
+half of the pair: the wording may be reworded freely, but renaming a
+key breaks the lookup that reads it.
+
+Excluded from mutation testing (`do_not_mutate` in pyproject.toml).
+Mutating display text produces no behaviour to assert on, while every
+lookup that reaches in here stays under mutation -- a mangled key is a
+`KeyError` the moment the parser is built.
+"""
+
+MESSAGES = {
+    # The top-level screen.
+    'cli.description': 'Utility for executing various btodo tasks',
+    'cli.usage': 'btodo [<args>] <command>',
+    'cli.verbose.help': 'enable INFO output',
+    'cli.debug.help': 'enable DEBUG output',
+    'cli.config_file.help': 'specify a config file to get environment details'
+    ' from. default=./config.toml',
+    'cli.config_env.help': 'specify the remote environment to use from the'
+    ' config file',
+    'cli.commands.title': 'commands',
+    'cli.commands.description': 'for additonal details on each command use: '
+    '"btodo {command name} --help"',
+    # hello
+    'hello.description': 'execute command hello',
+    'hello.help': 'for details use hello --help',
+    # view
+    'view.description': 'show open items for the currently active categories',
+    'view.help': 'for details use view --help',
+    'view.all.help': 'show every open item, not just the top few per category',
+    'view.format.help': 'output format: text for a terminal, json for agents',
+    # add
+    'add.description': 'add a task to the end of a list',
+    'add.help': 'for details use add --help',
+    'add.list.metavar': 'list',
+    'add.list.help': "the list's filename stem, e.g. chores for chores.md",
+    'add.title.metavar': 'title',
+    'add.title.help': 'the task title, without any [FIELD:] markup',
+    'add.priority.help': 'priority multiplier, 0 and up; absent reads as 0',
+    'add.loe.help': 'level of effort: 1, 2, 3, 5 or 8',
+    'add.due.help': 'due date, YYYY-MM-DD',
+    'add.repeat.help': 'recurrence: Nd, Nw, weekly:DAY or monthly:N',
+    'add.tags.help': 'comma-separated tags',
+    # done
+    'done.description': 'complete a task and log it to completed.md',
+    'done.help': 'for details use done --help',
+    'done.selector.metavar': 'selector',
+    'done.selector.help': "the task's [ID:] value, or part of its title",
+    # scratch
+    'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
+    'scratch.help': 'for details use scratch --help',
+    'scratch.selector.metavar': 'selector',
+    'scratch.selector.help': "the task's [ID:] value, or part of its title",
+    # backfill
+    'backfill.description': 'one-time migration: stamp [ADDED:today] on '
+    'tasks that predate the field',
+    'backfill.help': 'for details use backfill --help',
+}
