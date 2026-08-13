@@ -114,6 +114,9 @@ venv.bak/
 # tool caches and generated reports
 .cache/
 
+# mutmut's mutated copy of the tree + its stats/incremental cache
+mutants/
+
 # direnv (personal, per-checkout)
 .envrc
 .direnv/

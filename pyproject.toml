@@ -73,6 +73,11 @@ typecheck = { depends-on = [
     { task = "_typecheck", environment = "typecheck" },
 ] }
 lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
+# Deliberately outside the `tests` aggregator. Runtime is not the
+# reason (~40s on 8 cores); the score is. Two thirds of the survivors
+# are argparse help-string mutants no test can reasonably assert on,
+# so there is no honest number to gate on until they are triaged.
+mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 
 [tool.pixi.feature.test.dependencies]
 coverage = "*"
@@ -96,6 +101,25 @@ mypy = "*"
 
 [tool.pixi.feature.typecheck.tasks]
 _typecheck = "mypy battodo"
+
+# Mutation testing: the structural answer to a 100%-coverage suite that
+# still ships bugs (docs/lessons/). mutmut 3 drives pytest in-process —
+# no unittest runner hook — so this env is the one place pytest exists;
+# it collects the stdlib TestCase suite unchanged.
+[tool.pixi.feature.mutation.dependencies]
+pytest = "*"
+
+[tool.pixi.feature.mutation.pypi-dependencies]
+mutmut = ">=3.6"
+
+[tool.pixi.feature.mutation.tasks]
+# Files mutmut does NOT mutate get re-copied unconditionally every run,
+# and the copy chmods its destination — EPERM when that destination
+# belongs to another dev in this shared checkout. Pre-delete them: the
+# do_not_mutate set plus pyproject.toml, which mutmut always copies.
+# The mutated sources under mutants/battodo are skipped if they already
+# exist, so they stay put as the incremental cache.
+_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/example/tests mutants/battodo/_version.py && mutmut run"
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.
@@ -126,7 +150,15 @@ lint = { features = [
 ], no-default-feature = true, solve-group = "default" }
 # mypy checks the test tree too, so it needs what the tests import.
 typecheck = { features = ["typecheck", "test"], solve-group = "default" }
-dev = { features = ["test", "lint", "typecheck"], solve-group = "default" }
+# mutmut needs the interpreter and the editable install, nothing from
+# the test feature: it runs the suite through its own pytest.
+mutation = { features = ["mutation"], solve-group = "default" }
+dev = { features = [
+    "test",
+    "lint",
+    "typecheck",
+    "mutation",
+], solve-group = "default" }
 # The version matrix: what turns requires-python from a claim into a
 # tested range. Each older interpreter needs its own solve group, since
 # one group means one shared package set.
@@ -152,6 +184,16 @@ omit = [
 skip_covered = true
 show_missing = true
 skip_empty = true
+
+[tool.mutmut]
+source_paths = ["battodo"]
+# Patterns are fnmatch against the path. Tests are the oracle, not the
+# subject. _version.py is build-time metadata the coverage gate omits
+# too — nothing imports it at runtime, so its mutants are unkillable by
+# construction and would be permanent noise in the survivor list.
+do_not_mutate = ["*/tests/*", "*_test.py", "*/_version.py"]
+# no:cacheprovider — a stale .pytest_cache across mutants is a lie.
+pytest_add_cli_args = ["-p", "no:cacheprovider"]
 
 [tool.mypy]
 cache_dir = ".cache/mypy"
