@@ -33,7 +33,7 @@ btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 Items are ordered by a rank computed from the file and the clock —
 priority as a multiplier, times how long the item has waited and how
 pressing its due date is. Nothing is written to keep that current; see
-[ADR 0005](docs/decisions/0001-project-bootstrap/0005-computed-rank.md).
+[ADR 0005](docs/decisions/0000-project-bootstrap/0005-computed-rank.md).
 
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it.

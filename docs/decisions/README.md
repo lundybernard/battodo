@@ -6,5 +6,5 @@ across both.
 
 | Entry | Topic | Status |
 | ----- | ----- | ------ |
-| [0001](0001-project-bootstrap/) | Project bootstrap (ADRs 0001–0006) | Accepted |
+| [0000](0000-project-bootstrap/) | Project bootstrap (ADRs 0001–0006) | Accepted |
 | [0007](0007-toml-config-file.md) | TOML config file | Accepted |
