@@ -17,7 +17,9 @@ CONFIG_FILE_NAME = str(Path.cwd() / 'config.toml')
 
 # Root of the config tree: the path every lookup is namespaced under, and
 # so the prefix CLI arguments must carry to be resolvable as config.
-CONFIG_ROOT = GlobalConfig.__module__
+# Named explicitly and passed to Configuration, so no lookup path ever
+# depends on where a config class happens to be defined.
+CONFIG_ROOT = 'battodo'
 
 
 def get_config(
@@ -47,4 +49,4 @@ def get_config(
 
     source_list = SourceList(config_sources)
 
-    return Configuration(source_list, config_class)
+    return Configuration(source_list, config_class, path=CONFIG_ROOT)
