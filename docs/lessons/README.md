@@ -8,4 +8,5 @@ for upstreamable improvements and write-up material.
 | ---- | ----- |
 | [project-template.md](project-template.md) | Friction/fixes in lundybernard/project_template — upstream PR candidates |
 | [batconf.md](batconf.md) | batconf evaluation findings — upstream issue candidates |
+| [mutmut.md](mutmut.md) | mutmut adoption findings — upstream issue candidates |
 | [dev-process.md](dev-process.md) | Agent / dev-process findings |

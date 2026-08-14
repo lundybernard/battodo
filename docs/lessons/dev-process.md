@@ -139,3 +139,32 @@
   its workarounds, and the workarounds were the data. Yield: 13
   documented findings in one cycle, including one (the `[toml]` lazy
   trap) the project then reproduced in its own suite the same day.
+- 2026-08-14: work orders must carry the test-style rules. The
+  import-isolation rule (unit tests import only from the module under
+  test) lived in a loaded style skill, yet the delivered tests
+  imported from three source files and human review caught it — the
+  implementing agent never sees the orchestrator's skills, so the
+  order is the enforcement point. Same enforcement class as mock
+  discipline (no bare `Mock()`; spec from the input type or constrain
+  to what the code under test reads; `autospec=True` on every patch):
+  these ride inline in every test-writing order now.
+- 2026-08-14: durable prose leaks local context. Two catches in one
+  cycle: a commit body described the dev arrangement and named an
+  unrelated project as the pattern source; a test docstring leaned on
+  the host's timezone. Rule extracted: commits, code comments,
+  docstrings, and PR prose read as if the repo is the whole world —
+  generic statements about any host are fine, claims about this
+  particular setup are not. Related phrasing rule from the same
+  cycle: mutation-testing prose in durable artifacts says "improve
+  coverage" / "mutant caught", never kill/dead.
+- 2026-08-14: verify outcomes, not work orders — round two. The
+  implementing agent reported a green per-commit gate, but its gate
+  had omitted the format check; the orchestrator's own rerun found an
+  unformatted file at the tip. The cheap full-gate rerun by the
+  orchestrator stays mandatory no matter what the report says.
+- 2026-08-14: first full review loop through the agent's own GitHub
+  identity: review comment, threaded reply over REST, fix dissolved
+  into its introducing commit, re-approve, merge. API notes worth
+  keeping: pending reviews are invisible to the API until submitted,
+  and GraphQL endpoints want `read:org` — classic-PAT flows should
+  stay on REST.

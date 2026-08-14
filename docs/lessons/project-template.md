@@ -136,3 +136,19 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   tested. Here the claim survived contact — 3.10–3.14 all pass with no
   source changes — but until the matrix existed that was a guess that
   happened to be right, not a tested property.
+- **Message catalog for CLI strings:** extracting every user-facing
+  argparse string into a pure-data module (`messages.py`, stable
+  namespaced keys) gave three wins at once: a future localization
+  seam, no string duplication between parser and tests (a conformance
+  test walks `parser._actions` against the catalog), and a clean
+  mutation-testing boundary — the data file is excluded while every
+  reference to it stays mutated. Two-thirds of the baseline surviving
+  mutants were display-string noise; this removed them structurally.
+  Template candidate: ship the example CLI with a catalog from day
+  one.
+- **Mutation testing as a pixi feature:** a `mutation` env (mutmut +
+  pytest collecting the stdlib unittest suite unchanged) slotted into
+  the template's feature-per-tool layout with no friction. Worth
+  upstreaming once the run recipe stabilizes — see
+  [mutmut.md](mutmut.md) for the tool-side caveats the recipe has to
+  work around.
