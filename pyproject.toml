@@ -114,8 +114,8 @@ mutmut = ">=3.6"
 
 [tool.pixi.feature.mutation.tasks]
 # Files mutmut does NOT mutate get re-copied unconditionally every run,
-# and the copy chmods its destination — EPERM when that destination
-# belongs to another dev in this shared checkout. Pre-delete them: the
+# and the copy chmods its destination — EPERM when the existing copy
+# belongs to another user. Pre-delete them: the
 # do_not_mutate set plus pyproject.toml, which mutmut always copies.
 # The mutated sources under mutants/battodo are skipped if they already
 # exist, so they stay put as the incremental cache.
