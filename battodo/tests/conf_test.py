@@ -33,17 +33,12 @@ class GetConfigTests(TestCase):
         class ConfB:
             arg_1: str = 'dataclass_default_isodate'
 
-        #  As if imported from a module
-        ConfA.__module__ = 'battodo.AModule'
-        ConfB.__module__ = 'battodo.BModule'
-
         @dataclass
         class GlobalConfig:
             AModule: ConfA
             BModule: ConfB
             config_file: str = './GlobalConfig.toml'
 
-        GlobalConfig.__module__ = 'battodo'
         t.GlobalConfig = GlobalConfig
 
     @patch(f'{SRC}.EnvSource', autospec=True)
