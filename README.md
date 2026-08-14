@@ -25,7 +25,7 @@ btodo --help
 
 ```
 btodo view              # open items for the currently active categories
-btodo view --all        # every open item, not just the top few per category
+btodo view --all        # every open item, and every category, active or not
 btodo view --format json  # the same view as JSON, for agents
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
@@ -36,7 +36,8 @@ pressing its due date is. Nothing is written to keep that current; see
 [ADR 0005](docs/decisions/0000-project-bootstrap/0005-computed-rank.md).
 
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
-in the file. It stays discoverable, so migrations still reach it.
+in the file. It stays discoverable, so migrations still reach it, and
+it stays out of `--all` too — opting out is not a time window.
 
 ### Machine-readable output
 

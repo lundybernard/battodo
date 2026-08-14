@@ -452,6 +452,25 @@ class SelectionTests(TestCase):
             with t.subTest(name):
                 t.assertEqual(t.s.shows(found), expected)
 
+        t.s.show_all = True
+        everything = {
+            'asking for everything reaches past a shut window': (
+                t.todo('chores'),
+                True,
+            ),
+            'an open one is unaffected by the asking': (
+                t.todo('work'),
+                True,
+            ),
+            'and a list that opted out is still not shown': (
+                t.todo('backlog', parked=True),
+                False,
+            ),
+        }
+        for name, (found, expected) in everything.items():
+            with t.subTest(name):
+                t.assertEqual(t.s.shows(found), expected)
+
     def test_categories(t) -> None:
         t.active_categories.return_value = {'work', 'study'}
         shown, shut, empty = (

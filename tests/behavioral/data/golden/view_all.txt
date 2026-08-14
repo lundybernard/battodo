@@ -9,6 +9,10 @@ Wednesday 2026-08-05 10:30 — active: career, events, study, work
    3.0  3.0       Placeholder due date task                           YYYY-MM-DD
    1.0  1.0       Lowest ranked task
 
+── Chores ──────────────────────────────────────────────────────────────────────
+  RANK    P  LOE  TASK                                                DUE
+   6.4  3.0       Inactive category task                              OVERDUE
+
 ── Side quests ─────────────────────────────────────────────────────────────────
   RANK    P  LOE  TASK                                                DUE
    2.0  2.0    4  Future due date task                                2026-08-20

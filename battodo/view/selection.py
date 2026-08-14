@@ -255,12 +255,17 @@ class Selection:
     def shows(self, todo: TodoList) -> bool:
         """Whether `todo` has any place in this view.
 
-        A named category is shown only while its window is open. A list
-        that opted out is never shown, and a name the display order does
-        not know has no window to be outside of.
+        A named category is shown while its window is open, or whenever
+        everything has been asked for -- a shut window is the view being
+        selective, and asking for all of it says not to be. A name the
+        display order does not know has no window to be outside of.
+
+        Opting out is not a window, and nothing reopens it: a parked
+        list stays out of every view.
         """
         named = todo.category in CATEGORY_ORDER
-        if named and todo.category not in self.active:
+        shut = named and todo.category not in self.active
+        if shut and not self.show_all:
             return False
         return not todo.parked
 
