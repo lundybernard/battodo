@@ -51,6 +51,7 @@ JSON document, so an agent never has to scrape the table:
   "categories": [
     {
       "name": "work",
+      "hidden": 2,
       "tasks": [
         {
           "id": "k3x9",
@@ -76,7 +77,9 @@ never an `OVERDUE`/`TODAY` label, and an absent field is `null`.
 the number the text view prints in its `P` column. `rank` is rounded
 for display; each task array is already in rank order, so read the
 order rather than re-sorting by the number. `subtasks` counts open
-children.
+children. `hidden` is how many of the category's open items were left
+out — `0` means the array is the whole of it, and anything higher means
+`--all` will show more.
 
 The schema grows by addition only: new keys may appear, existing ones
 keep their meaning.

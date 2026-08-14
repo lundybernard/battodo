@@ -286,11 +286,16 @@ class Selection:
 
             {"date": "2026-08-05",
              "active": ["career", "events", "study", "work"],
-             "categories": [{"name": "work", "tasks": [
+             "categories": [{"name": "work", "hidden": 2, "tasks": [
                  {"id": null, "title": "...", "rank": 6.0,
                   "priority": 2.0, "loe": null, "due": null,
                   "added": "2026-05-10", "repeat": null,
                   "tags": [], "subtasks": 0}]}]}
+
+        `hidden` is how many of the category's open items this leaves
+        out. Without it an abridged document reads exactly like a
+        complete one, and a reader has no way of knowing to ask for
+        the rest.
         """
         return {
             'date': self.today.isoformat(),
@@ -298,6 +303,7 @@ class Selection:
             'categories': [
                 {
                     'name': category.name,
+                    'hidden': category.hidden,
                     'tasks': [
                         task_entry(task, self.today) for task in category.shown
                     ],

@@ -9,6 +9,7 @@
   "categories": [
     {
       "name": "work",
+      "hidden": 1,
       "tasks": [
         {
           "id": null,
@@ -74,6 +75,7 @@
     },
     {
       "name": "side-quests",
+      "hidden": 0,
       "tasks": [
         {
           "id": null,

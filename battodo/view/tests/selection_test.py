@@ -494,11 +494,12 @@ class SelectionTests(TestCase):
         with t.subTest('a list with nothing open contributes no category'):
             t.assertNotIn('study', [c.name for c in categories])
 
-    def category(t, name: str, shown=('task',)) -> Mock:
+    def category(t, name: str, hidden: int = 0, shown=('task',)) -> Mock:
         """A stand-in category, holding what the document reads off one."""
-        stub = Mock(spec=['name', 'shown'])
+        stub = Mock(spec=['name', 'shown', 'hidden'])
         stub.name = name
         stub.shown = list(shown)
+        stub.hidden = hidden
         return stub
 
     def setUpData(t) -> Mock:
@@ -523,11 +524,34 @@ class SelectionTests(TestCase):
         with t.subTest('a category carries its name and its tasks'):
             t.assertEqual(
                 t.s.data['categories'],
-                [{'name': 'work', 'tasks': [{'title': 'task'}]}],
+                [
+                    {
+                        'name': 'work',
+                        'hidden': 0,
+                        'tasks': [{'title': 'task'}],
+                    }
+                ],
             )
 
         with t.subTest('only the tasks the selection shows are serialized'):
             task_entry_double.assert_called_once_with('task', TODAY)
+
+        with t.subTest('and it says how many it is holding back'):
+            # Without the count, an abridged document reads exactly like
+            # a complete one, and a reader cannot tell it should ask for
+            # the rest.
+            t.s.categories = [t.category('work', hidden=4)]
+            t.s.__dict__.pop('data')
+            t.assertEqual(
+                t.s.data['categories'],
+                [
+                    {
+                        'name': 'work',
+                        'hidden': 4,
+                        'tasks': [{'title': 'task'}],
+                    }
+                ],
+            )
 
         with t.subTest('the keys are the documented ones, in order'):
             t.assertEqual(list(t.s.data), ['date', 'active', 'categories'])

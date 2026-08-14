@@ -294,10 +294,18 @@ class BuildJsonTests(SourceDirTests):
             tasks = t.categories(show_all=True)[0]['tasks']
             t.assertEqual(len(tasks), 7)
 
-        with t.subTest('nothing in the document says any were held back'):
-            # The document does not say when it is abridged.
+        with t.subTest('the document says how many were held back'):
+            # A reader that cannot tell an abridged document from a
+            # complete one has no way of knowing to ask for the rest.
             t.assertEqual(list(abridged), ['date', 'active', 'categories'])
-            t.assertEqual(list(abridged['categories'][0]), ['name', 'tasks'])
+            t.assertEqual(
+                list(abridged['categories'][0]),
+                ['name', 'hidden', 'tasks'],
+            )
+            t.assertEqual(abridged['categories'][0]['hidden'], 2)
+
+        with t.subTest('and says none are when it is holding nothing back'):
+            t.assertEqual(t.categories(show_all=True)[0]['hidden'], 0)
 
     def test_rank_is_rounded(t) -> None:
         # Seven days over a 30-day scale is a repeating fraction, so
