@@ -1,0 +1,15 @@
+Wednesday 2026-08-05 10:30 — active: career, events, study, work
+
+── Work ────────────────────────────────────────────────────────────────────────
+  RANK    P  LOE  TASK                                                DUE
+  10.3  4.0    2  Overdue task                                        OVERDUE
+   6.0  3.0    1  Due today task                                      TODAY
+   4.8  4.8    2  Legacy priority task (+2)
+   4.5  3.0    5  A very long task title that the task column has t…  2026-08-12
+   3.0  3.0       Placeholder due date task                           YYYY-MM-DD
+   1.0  1.0       Lowest ranked task
+
+── Side quests ─────────────────────────────────────────────────────────────────
+  RANK    P  LOE  TASK                                                DUE
+   2.0  2.0    4  Future due date task                                2026-08-20
+   1.2  1.0       Fractional rank task

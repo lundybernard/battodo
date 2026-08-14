@@ -58,6 +58,7 @@ batconf = "0d"
 tests = { depends-on = [
     { task = "_unit", environment = "test" },
     { task = "_integration", environment = "test" },
+    { task = "_behavioral", environment = "test" },
     { task = "_typecheck", environment = "typecheck" },
     { task = "_lint", environment = "lint" },
 ] }
@@ -68,6 +69,11 @@ unit = { depends-on = [{ task = "_unit", environment = "test" }] }
 integration = { depends-on = [
     { task = "_unit", environment = "test" },
     { task = "_integration", environment = "test" },
+] }
+behavioral = { depends-on = [
+    { task = "_unit", environment = "test" },
+    { task = "_integration", environment = "test" },
+    { task = "_behavioral", environment = "test" },
 ] }
 # Same suite, one entry point per supported interpreter. CI fans these
 # out; locally they are the way to check a requires-python claim.
@@ -98,6 +104,7 @@ coverage = "*"
 _test = "python -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py'"
 _unit = "coverage run --source=battodo -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py' && coverage report --fail-under=100"
 _integration = "python -m unittest discover --top-level-directory tests --start-directory tests/integration --pattern '*_test.py'"
+_behavioral = "python -m unittest discover --top-level-directory tests --start-directory tests/behavioral --pattern '*_test.py'"
 
 [tool.pixi.feature.lint.dependencies]
 ruff = "*"
