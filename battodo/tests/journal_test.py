@@ -93,6 +93,24 @@ class JournalTests(TestCase):
             t.assertEqual(t.append(stream_id='task/other')['stream_seq'], 1)
             t.assertEqual(t.append()['stream_seq'], 4)
 
+    def test_append_creates_the_whole_path(t) -> None:
+        """A source directory btodo has never written to may not exist.
+
+        More than one level can be missing, so the journal digs the
+        whole way down rather than only the last directory.
+        """
+        nested = Journal(t.dir / 'new' / 'nested')
+
+        event = nested.append(
+            event_type='TaskAdded',
+            stream_id='task/abc123',
+            payload={},
+            actor='agent',
+            source_file='work.md',
+        )
+
+        t.assertEqual(nested.read(), [event])
+
     def test_append_event_id(t) -> None:
         with patch(f'{SRC}.uuid4', return_value='fixed-uuid'):
             t.assertEqual(t.append()['event_id'], 'fixed-uuid')

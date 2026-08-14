@@ -7,9 +7,9 @@ from pathlib import Path
 from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
-from battodo.example.cli import example_cli
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
+from battodo.messages import MESSAGES
 from battodo.mutate import add_task, backfill_all, complete, scratch
 from battodo.view import TZ, build_json, build_view
 
@@ -55,22 +55,22 @@ def BATCLI(ARGS=None):
 
 def argparser():
     p = argparse.ArgumentParser(
-        description='Utility for executing various btodo tasks',
-        usage='btodo [<args>] <command>',
+        description=MESSAGES['cli.description'],
+        usage=MESSAGES['cli.usage'],
     )
     p.set_defaults(func=get_help(p))
 
     p.add_argument(
         '-v',
         '--verbose',
-        help='enable INFO output',
+        help=MESSAGES['cli.verbose.help'],
         action='store_const',
         dest='loglevel',
         const=logging.INFO,
     )
     p.add_argument(
         '--debug',
-        help='enable DEBUG output',
+        help=MESSAGES['cli.debug.help'],
         action='store_const',
         dest='loglevel',
         const=logging.DEBUG,
@@ -80,38 +80,33 @@ def argparser():
         '--conf',
         '--config_file',
         dest='config_file',
-        default=None,
-        help='specify a config file to get environment details from.'
-        ' default=./config.toml',
+        help=MESSAGES['cli.config_file.help'],
     )
     p.add_argument(
         '-e',
         '--env',
         '--config_environment',
         dest='config_env',
-        default=None,
-        help='specify the remote environment to use from the config file',
+        help=MESSAGES['cli.config_env.help'],
     )
 
     # Add a subparser to handle sub-commands
     commands = p.add_subparsers(
-        dest='command',
-        title='commands',
-        description='for additonal details on each command use: '
-        '"btodo {command name} --help"',
+        title=MESSAGES['cli.commands.title'],
+        description=MESSAGES['cli.commands.description'],
     )
     # hello args
     hello = commands.add_parser(
         'hello',
-        description='execute command hello',
-        help='for details use hello --help',
+        description=MESSAGES['hello.description'],
+        help=MESSAGES['hello.help'],
     )
     hello.set_defaults(func=Commands.hello)
 
     view = commands.add_parser(
         'view',
-        description='show open items for the currently active categories',
-        help='for details use view --help',
+        description=MESSAGES['view.description'],
+        help=MESSAGES['view.help'],
     )
     view.set_defaults(func=Commands.view)
     # Arguments read back through the Configuration are named for their
@@ -122,98 +117,89 @@ def argparser():
         '--all',
         dest=f'{CONFIG_ROOT}.show_all',
         action='store_true',
-        help='show every open item, not just the top few per category',
+        help=MESSAGES['view.all.help'],
     )
     view.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
         choices=('text', 'json'),
         default='text',
-        help='output format: text for a terminal, json for agents',
+        help=MESSAGES['view.format.help'],
     )
 
     add = commands.add_parser(
         'add',
-        description='add a task to the end of a list',
-        help='for details use add --help',
+        description=MESSAGES['add.description'],
+        help=MESSAGES['add.help'],
     )
     add.set_defaults(func=Commands.add)
     add.add_argument(
         f'{CONFIG_ROOT}.list',
-        metavar='list',
-        help="the list's filename stem, e.g. chores for chores.md",
+        metavar=MESSAGES['add.list.metavar'],
+        help=MESSAGES['add.list.help'],
     )
     add.add_argument(
         f'{CONFIG_ROOT}.title',
-        metavar='title',
-        help='the task title, without any [FIELD:] markup',
+        metavar=MESSAGES['add.title.metavar'],
+        help=MESSAGES['add.title.help'],
     )
     add.add_argument(
         '-p',
         '--priority',
         dest=f'{CONFIG_ROOT}.priority',
-        help='priority multiplier, 0 and up; absent reads as 0',
+        help=MESSAGES['add.priority.help'],
     )
     add.add_argument(
         '--loe',
         dest=f'{CONFIG_ROOT}.loe',
-        help='level of effort: 1, 2, 3, 5 or 8',
+        help=MESSAGES['add.loe.help'],
     )
     add.add_argument(
         '--due',
         dest=f'{CONFIG_ROOT}.due',
-        help='due date, YYYY-MM-DD',
+        help=MESSAGES['add.due.help'],
     )
     add.add_argument(
         '--repeat',
         dest=f'{CONFIG_ROOT}.repeat',
-        help='recurrence: Nd, Nw, weekly:DAY or monthly:N',
+        help=MESSAGES['add.repeat.help'],
     )
     add.add_argument(
         '--tags',
         dest=f'{CONFIG_ROOT}.tags',
-        help='comma-separated tags',
+        help=MESSAGES['add.tags.help'],
     )
 
     done = commands.add_parser(
         'done',
-        description='complete a task and log it to completed.md',
-        help='for details use done --help',
+        description=MESSAGES['done.description'],
+        help=MESSAGES['done.help'],
     )
     done.set_defaults(func=Commands.done)
     done.add_argument(
         f'{CONFIG_ROOT}.selector',
-        metavar='selector',
-        help="the task's [ID:] value, or part of its title",
+        metavar=MESSAGES['done.selector.metavar'],
+        help=MESSAGES['done.selector.help'],
     )
 
     drop = commands.add_parser(
         'scratch',
-        description='abandon a task: remove it and log it as SCRATCHED',
-        help='for details use scratch --help',
+        description=MESSAGES['scratch.description'],
+        help=MESSAGES['scratch.help'],
     )
     drop.set_defaults(func=Commands.scratch)
     drop.add_argument(
         f'{CONFIG_ROOT}.selector',
-        metavar='selector',
-        help="the task's [ID:] value, or part of its title",
+        metavar=MESSAGES['scratch.selector.metavar'],
+        help=MESSAGES['scratch.selector.help'],
     )
 
     backfill = commands.add_parser(
         'backfill',
-        description='one-time migration: stamp [ADDED:today] on tasks '
-        'that predate the field',
-        help='for details use backfill --help',
+        description=MESSAGES['backfill.description'],
+        help=MESSAGES['backfill.help'],
     )
     backfill.set_defaults(func=Commands.backfill)
-
-    # Add a subparser from a module
-    commands.add_parser(
-        'example',
-        help='example module commands',
-        add_help=False,
-        parents=[example_cli()],
-    )
 
     return p
 

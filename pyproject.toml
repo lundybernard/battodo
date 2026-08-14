@@ -114,12 +114,12 @@ mutmut = ">=3.6"
 
 [tool.pixi.feature.mutation.tasks]
 # Files mutmut does NOT mutate get re-copied unconditionally every run,
-# and the copy chmods its destination — EPERM when that destination
-# belongs to another dev in this shared checkout. Pre-delete them: the
+# and the copy chmods its destination — EPERM when the existing copy
+# belongs to another user. Pre-delete them: the
 # do_not_mutate set plus pyproject.toml, which mutmut always copies.
 # The mutated sources under mutants/battodo are skipped if they already
 # exist, so they stay put as the incremental cache.
-_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/example/tests mutants/battodo/_version.py && mutmut run"
+_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/_version.py mutants/battodo/messages.py && mutmut run"
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.
@@ -191,7 +191,16 @@ source_paths = ["battodo"]
 # subject. _version.py is build-time metadata the coverage gate omits
 # too — nothing imports it at runtime, so its mutants are unkillable by
 # construction and would be permanent noise in the survivor list.
-do_not_mutate = ["*/tests/*", "*_test.py", "*/_version.py"]
+do_not_mutate = [
+    "*/tests/*",
+    "*_test.py",
+    "*/_version.py",
+    # Pure data: display strings with no behaviour to assert on, so
+    # their mutants are noise by construction. Every lookup that reads
+    # the catalog stays under mutation -- a mangled key is a KeyError
+    # the moment the parser is built.
+    "*/messages.py",
+]
 # no:cacheprovider — a stale .pytest_cache across mutants is a lie.
 pytest_add_cli_args = ["-p", "no:cacheprovider"]
 
