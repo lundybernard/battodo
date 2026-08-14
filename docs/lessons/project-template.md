@@ -152,3 +152,18 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   upstreaming once the run recipe stabilizes — see
   [mutmut.md](mutmut.md) for the tool-side caveats the recipe has to
   work around.
+- **Config namespace derived from `__module__`:** the template's
+  conf.py sets `CONFIG_ROOT = GlobalConfig.__module__` and builds
+  `Configuration` without a path, so every lookup path, environment
+  variable name, and CLI argument prefix silently depends on where the
+  schema class is defined — placement of config dataclasses becomes
+  load-bearing, and battodo grew a docstring justifying one such
+  placement before the dependency was spotted. batconf 0.4.0's
+  `Configuration` takes an explicit `path=` and treats the module as a
+  fallback only. The template's conf tests also fake `__module__` on
+  *nested* schema classes ("As if imported from a module"), which is
+  dead weight in any batconf version: nested namespaces are built from
+  the schema's field names, never from the nested class's module.
+  Upstream candidate: literal `CONFIG_ROOT` + `path=CONFIG_ROOT` +
+  drop the fixture overrides (battodo commit
+  `refactor(conf): name the config namespace explicitly`).

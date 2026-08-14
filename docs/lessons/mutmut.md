@@ -26,6 +26,17 @@ upstream issue candidates against boxed/mutmut.
   not reliably invalidate it — stale survivor lists read as real
   results. `rm -rf mutants/` is the reliable reset before any run
   whose numbers will be quoted.
+- **`@property` bodies are never mutated:** converting a module of
+  functions into classes whose computed data lives behind properties
+  dropped the project's mutant count from 1614 to 1482 and removed the
+  converted logic from the oracle entirely — the survivors in that
+  module went to zero partly because the code they lived in stopped
+  being a mutation target. A style the house prefers (classes with
+  properties over free functions) therefore silently shrinks mutation
+  coverage. Compensated locally with 100% line coverage plus a manual
+  defect-injection sweep (43 injected defects, 42 caught, 1 provably
+  equivalent); upstream issue candidate, since property-heavy code is
+  hardly rare.
 - **pytest is the only runner:** mutmut 3 drives pytest in-process;
   there is no unittest-runner hook. Harmless for a stdlib-unittest
   suite (pytest collects it unchanged) but it decides the shape of

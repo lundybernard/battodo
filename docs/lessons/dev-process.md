@@ -139,6 +139,18 @@
   its workarounds, and the workarounds were the data. Yield: 13
   documented findings in one cycle, including one (the `[toml]` lazy
   trap) the project then reproduced in its own suite the same day.
+- 2026-08-14: an observed default is not a requirement. A live probe
+  of a dependency's config resolution saw the lookup namespace derive
+  from the schema class's `__module__` and recorded that as a hard
+  placement constraint — in a docstring and a commit body — when the
+  constructor accepts an explicit `path=` two lines above the fallback
+  the probe had exercised. The experiment verified what the code
+  *does* by default, not what the API *allows*; the false constraint
+  shipped and cost a history rewrite to retract. Rule: a constraint
+  claim about a dependency is read from its API surface (signature,
+  docs, source), never inferred from a default-configuration
+  experiment — the probe can only ever confirm behavior, not
+  necessity.
 - 2026-08-14: work orders must carry the test-style rules. The
   import-isolation rule (unit tests import only from the module under
   test) lived in a loaded style skill, yet the delivered tests
