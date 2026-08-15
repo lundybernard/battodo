@@ -180,3 +180,34 @@
   keeping: pending reviews are invisible to the API until submitted,
   and GraphQL endpoints want `read:org` — classic-PAT flows should
   stay on REST.
+- 2026-08-15: improvised history rewrites slip; planned ones do not.
+  Two slips in two sessions from typing rebase/cherry-pick sequences
+  ad hoc: a flag that does not exist on the subcommand
+  (`cherry-pick -q`, twice), and a commit landed on top of the target
+  instead of squashed into it. The fix that held: before touching
+  HEAD, write the plan of record — every target parent hash, every
+  branch tip, in order — then execute against it. A rewrite work
+  order now carries that requirement, and the next multi-branch
+  restack under it ran clean on the first pass.
+- 2026-08-15: code prose drifts into dev-process narration unless a
+  register is named. A review rejected a whole PR's prose — module
+  docstrings narrating fixture design, commit bodies walking through
+  reasoning — as "the agent thinking through the problem and writing
+  notes to itself." Adopted ASD-STE100 as the named register for all
+  code prose (short declarative sentences, active voice, present
+  tense), plus a commit-specific rule set: Conventional Commits 1.0.0
+  for the header, Chris Beams' seven rules for mechanics, and a house
+  rule — the body says only what the commit adds, and never repeats
+  what a comment or docstring in the diff already says. Naming an
+  external standard beats adjectives ("be concise") in a work order:
+  it is checkable, and the rewrite under it was accepted first pass.
+- 2026-08-15: worked examples in instruction files leak their
+  payload. Concrete example content (invented issue numbers, scopes,
+  rationale sentences) reappears in real output — the model treats
+  demonstration content as the value space to draw from. Fix pattern:
+  keep examples for what prose states badly (whitespace assembly,
+  layout), but make them schematic — angle-bracket placeholders for
+  every per-use value, one leak-guard line declaring them layout-only
+  — and keep at most one concrete phrase where a rule (imperative
+  mood) needs demonstrating. Rules stay in prose; examples carry
+  layout only.
