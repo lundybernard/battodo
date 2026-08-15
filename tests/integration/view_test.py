@@ -247,20 +247,29 @@ class BuildViewTests(SourceDirTests):
                     probed = build_view(t.source, NOW, show_all=False)
                 t.assertEqual(probed, expected)
 
-    def test_an_inactive_category_is_never_rendered(t) -> None:
+    def test_an_inactive_category(t) -> None:
         t.write('chores', '- [ ] An inactive category task [P:3]')
         t.write('career', '- [ ] An active category task [P:2]')
 
-        # show_all lifts the per-category cut only. The active set
-        # depends on the clock, and stays as it is.
-        for show_all in (False, True):
-            with t.subTest(show_all=show_all):
-                out = build_view(t.source, NOW, show_all=show_all, width=80)
-                t.assertNotIn('An inactive category task', out)
-                t.assertIn('An active category task', out)
-
-        with t.subTest('though the header still names it shut or open'):
+        with t.subTest('a shut window keeps its category out of the view'):
             out = build_view(t.source, NOW, show_all=False, width=80)
+            t.assertNotIn('An inactive category task', out)
+            t.assertIn('An active category task', out)
+
+        with t.subTest('asking for everything reaches past the windows'):
+            out = build_view(t.source, NOW, show_all=True, width=80)
+            t.assertIn('An inactive category task', out)
+            t.assertIn('An active category task', out)
+
+        with t.subTest('though a list that opted out stays out even then'):
+            t.write('backlog', '- [ ] A parked task [P:4]', parked=True)
+            out = build_view(t.source, NOW, show_all=True, width=80)
+            t.assertNotIn('A parked task', out)
+
+        with t.subTest('and the header still names only what is open now'):
+            # Which categories are active is a fact about the clock.
+            # Asking to see everything does not reopen their windows.
+            out = build_view(t.source, NOW, show_all=True, width=80)
             t.assertIn('active: career, events, study, work', out)
 
 
@@ -285,10 +294,18 @@ class BuildJsonTests(SourceDirTests):
             tasks = t.categories(show_all=True)[0]['tasks']
             t.assertEqual(len(tasks), 7)
 
-        with t.subTest('nothing in the document says any were held back'):
-            # The document does not say when it is abridged.
+        with t.subTest('the document says how many were held back'):
+            # A reader that cannot tell an abridged document from a
+            # complete one has no way of knowing to ask for the rest.
             t.assertEqual(list(abridged), ['date', 'active', 'categories'])
-            t.assertEqual(list(abridged['categories'][0]), ['name', 'tasks'])
+            t.assertEqual(
+                list(abridged['categories'][0]),
+                ['name', 'hidden', 'tasks'],
+            )
+            t.assertEqual(abridged['categories'][0]['hidden'], 2)
+
+        with t.subTest('and says none are when it is holding nothing back'):
+            t.assertEqual(t.categories(show_all=True)[0]['hidden'], 0)
 
     def test_rank_is_rounded(t) -> None:
         # Seven days over a 30-day scale is a repeating fraction, so
