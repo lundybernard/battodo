@@ -52,6 +52,12 @@ MESSAGES = {
     'add.due.help': 'due date, YYYY-MM-DD',
     'add.repeat.help': 'recurrence: Nd, Nw, weekly:DAY or monthly:N',
     'add.tags.help': 'comma-separated tags',
+    # show
+    'show.description': 'show one item: its fields and its subtasks',
+    'show.help': 'for details use show --help',
+    'show.selector.metavar': 'selector',
+    'show.selector.help': "the task's [ID:] value, or part of its title",
+    'show.format.help': 'output format: text for a terminal, json for agents',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',

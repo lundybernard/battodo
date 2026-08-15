@@ -1,0 +1,42 @@
+{
+  "list": "work",
+  "id": null,
+  "title": "Legacy priority task",
+  "done": false,
+  "rank": 4.8,
+  "priority": 4.8,
+  "loe": 2,
+  "due": null,
+  "added": null,
+  "repeat": null,
+  "tags": [],
+  "subtasks": [
+    {
+      "id": null,
+      "title": "Open checklist item",
+      "done": false,
+      "loe": null,
+      "due": null,
+      "tags": [],
+      "subtasks": []
+    },
+    {
+      "id": null,
+      "title": "Open subtask",
+      "done": false,
+      "loe": 1,
+      "due": null,
+      "tags": [],
+      "subtasks": []
+    },
+    {
+      "id": null,
+      "title": "Completed checklist item",
+      "done": true,
+      "loe": null,
+      "due": null,
+      "tags": [],
+      "subtasks": []
+    }
+  ]
+}

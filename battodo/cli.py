@@ -7,6 +7,7 @@ from pathlib import Path
 from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
+from battodo.item import build_item, build_item_json
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
@@ -170,6 +171,25 @@ def argparser():
         help=MESSAGES['add.tags.help'],
     )
 
+    show = commands.add_parser(
+        'show',
+        description=MESSAGES['show.description'],
+        help=MESSAGES['show.help'],
+    )
+    show.set_defaults(func=Commands.show)
+    show.add_argument(
+        f'{CONFIG_ROOT}.selector',
+        metavar=MESSAGES['show.selector.metavar'],
+        help=MESSAGES['show.selector.help'],
+    )
+    show.add_argument(
+        '--format',
+        dest=f'{CONFIG_ROOT}.format',
+        choices=('text', 'json'),
+        default='text',
+        help=MESSAGES['show.format.help'],
+    )
+
     done = commands.add_parser(
         'done',
         description=MESSAGES['done.description'],
@@ -235,6 +255,16 @@ class Commands:
         # appear in a view: this is the only confirmation of the write.
         print(entry)
         print(path)
+
+    @staticmethod
+    def show(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        build = (
+            build_item_json
+            if getattr(conf, 'format', 'text') == 'json'
+            else build_item
+        )
+        print(build(source, conf.selector, datetime.now(TZ)))
 
     @staticmethod
     def done(conf):
