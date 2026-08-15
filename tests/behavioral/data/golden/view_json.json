@@ -1,0 +1,105 @@
+{
+  "date": "2026-08-05",
+  "active": [
+    "career",
+    "events",
+    "study",
+    "work"
+  ],
+  "categories": [
+    {
+      "name": "work",
+      "tasks": [
+        {
+          "id": null,
+          "title": "Overdue task",
+          "rank": 10.29,
+          "priority": 4.0,
+          "loe": 2,
+          "due": "2026-08-01",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        },
+        {
+          "id": null,
+          "title": "Due today task",
+          "rank": 6.0,
+          "priority": 3.0,
+          "loe": 1,
+          "due": "2026-08-05",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        },
+        {
+          "id": null,
+          "title": "Legacy priority task",
+          "rank": 4.8,
+          "priority": 4.8,
+          "loe": 2,
+          "due": null,
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 2
+        },
+        {
+          "id": null,
+          "title": "A very long task title that the task column has to clip to fit",
+          "rank": 4.5,
+          "priority": 3.0,
+          "loe": 5,
+          "due": "2026-08-12",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        },
+        {
+          "id": null,
+          "title": "Placeholder due date task",
+          "rank": 3.0,
+          "priority": 3.0,
+          "loe": null,
+          "due": "YYYY-MM-DD",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        }
+      ]
+    },
+    {
+      "name": "side-quests",
+      "tasks": [
+        {
+          "id": null,
+          "title": "Future due date task",
+          "rank": 2.0,
+          "priority": 2.0,
+          "loe": 4,
+          "due": "2026-08-20",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        },
+        {
+          "id": null,
+          "title": "Fractional rank task",
+          "rank": 1.23,
+          "priority": 1.0,
+          "loe": null,
+          "due": null,
+          "added": "2026-07-29",
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        }
+      ]
+    }
+  ]
+}

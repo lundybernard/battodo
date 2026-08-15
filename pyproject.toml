@@ -57,11 +57,24 @@ batconf = "0d"
 [tool.pixi.tasks]
 tests = { depends-on = [
     { task = "_unit", environment = "test" },
+    { task = "_integration", environment = "test" },
+    { task = "_behavioral", environment = "test" },
     { task = "_typecheck", environment = "typecheck" },
     { task = "_lint", environment = "lint" },
 ] }
 test = { depends-on = [{ task = "_test", environment = "test" }] }
 unit = { depends-on = [{ task = "_unit", environment = "test" }] }
+# Each layer runs the layers under it first, so a failure reports at
+# the lowest level that shows it.
+integration = { depends-on = [
+    { task = "_unit", environment = "test" },
+    { task = "_integration", environment = "test" },
+] }
+behavioral = { depends-on = [
+    { task = "_unit", environment = "test" },
+    { task = "_integration", environment = "test" },
+    { task = "_behavioral", environment = "test" },
+] }
 # Same suite, one entry point per supported interpreter. CI fans these
 # out; locally they are the way to check a requires-python claim.
 unit-py310 = { depends-on = [{ task = "_unit", environment = "test-py310" }] }
@@ -82,25 +95,28 @@ mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 [tool.pixi.feature.test.dependencies]
 coverage = "*"
 
-# Stdlib unittest, no pytest. Coverage gates the unit suite at 100%.
-# Unit tests live beside the code (battodo/**/tests), so discovery walks
-# the package rather than a top-level tests/ directory.
+# Stdlib unittest, no pytest. Isolation tests live beside the code
+# (battodo/**/tests) and carry the 100% coverage gate. The top-level
+# tests/ suites use real files and real dependencies, and stay outside
+# that gate: coverage measures the isolation suite only.
 [tool.pixi.feature.test.tasks]
 # Quick manual run: no coverage, no gate.
 _test = "python -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py'"
 _unit = "coverage run --source=battodo -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py' && coverage report --fail-under=100"
+_integration = "python -m unittest discover --top-level-directory tests --start-directory tests/integration --pattern '*_test.py'"
+_behavioral = "python -m unittest discover --top-level-directory tests --start-directory tests/behavioral --pattern '*_test.py'"
 
 [tool.pixi.feature.lint.dependencies]
 ruff = "*"
 
 [tool.pixi.feature.lint.tasks]
-_lint = "ruff check battodo && ruff format --check battodo"
+_lint = "ruff check battodo tests && ruff format --check battodo tests"
 
 [tool.pixi.feature.typecheck.dependencies]
 mypy = "*"
 
 [tool.pixi.feature.typecheck.tasks]
-_typecheck = "mypy battodo"
+_typecheck = "mypy battodo tests"
 
 # Mutation testing: the structural answer to a 100%-coverage suite that
 # still ships bugs (docs/lessons/). mutmut 3 drives pytest in-process —
@@ -116,10 +132,11 @@ mutmut = ">=3.6"
 # Files mutmut does NOT mutate get re-copied unconditionally every run,
 # and the copy chmods its destination — EPERM when the existing copy
 # belongs to another user. Pre-delete them: the
-# do_not_mutate set plus pyproject.toml, which mutmut always copies.
+# do_not_mutate set plus pyproject.toml and the top-level tests/, both
+# of which mutmut always copies.
 # The mutated sources under mutants/battodo are skipped if they already
 # exist, so they stay put as the incremental cache.
-_mutate = "rm -rf mutants/pyproject.toml mutants/battodo/tests mutants/battodo/_version.py mutants/battodo/messages.py && mutmut run"
+_mutate = "rm -rf mutants/pyproject.toml mutants/tests mutants/battodo/tests mutants/battodo/_version.py mutants/battodo/messages.py && mutmut run"
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.
