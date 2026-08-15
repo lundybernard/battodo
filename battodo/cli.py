@@ -11,7 +11,13 @@ from battodo.item import build_item, build_item_json
 from battodo.lib import hello_world
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import add_task, backfill_all, complete, scratch
+from battodo.mutate import (
+    add_task,
+    backfill_all,
+    complete,
+    scratch,
+    update_task,
+)
 from battodo.view import TZ, build_json, build_view
 
 dictConfig(logging_config)
@@ -28,6 +34,10 @@ ADD_FIELDS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
+# The subset `update` writes, read the same way. `LOE` and `REPEAT` are
+# left out: R3 names neither, and a changed `REPEAT` reschedules the
+# task on its next completion, which is a decision of its own.
+UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
 
 
 def BATCLI(ARGS=None):
@@ -190,6 +200,39 @@ def argparser():
         help=MESSAGES['show.format.help'],
     )
 
+    update = commands.add_parser(
+        'update',
+        description=MESSAGES['update.description'],
+        help=MESSAGES['update.help'],
+    )
+    update.set_defaults(func=Commands.update)
+    update.add_argument(
+        f'{CONFIG_ROOT}.selector',
+        metavar=MESSAGES['update.selector.metavar'],
+        help=MESSAGES['update.selector.help'],
+    )
+    update.add_argument(
+        '-p',
+        '--priority',
+        dest=f'{CONFIG_ROOT}.priority',
+        help=MESSAGES['update.priority.help'],
+    )
+    update.add_argument(
+        '--due',
+        dest=f'{CONFIG_ROOT}.due',
+        help=MESSAGES['update.due.help'],
+    )
+    update.add_argument(
+        '--tags',
+        dest=f'{CONFIG_ROOT}.tags',
+        help=MESSAGES['update.tags.help'],
+    )
+    update.add_argument(
+        '--title',
+        dest=f'{CONFIG_ROOT}.title',
+        help=MESSAGES['update.title.help'],
+    )
+
     done = commands.add_parser(
         'done',
         description=MESSAGES['done.description'],
@@ -265,6 +308,24 @@ class Commands:
             else build_item
         )
         print(build(source, conf.selector, datetime.now(TZ)))
+
+    @staticmethod
+    def update(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        fields = {
+            name: value
+            for name, option in UPDATE_FIELDS.items()
+            if (value := getattr(conf, option, None)) is not None
+        }
+        path, entry = update_task(
+            source,
+            conf.selector,
+            fields,
+            datetime.now(TZ).date(),
+            title=getattr(conf, 'title', None),
+        )
+        print(entry)
+        print(path)
 
     @staticmethod
     def done(conf):

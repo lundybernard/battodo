@@ -58,6 +58,15 @@ MESSAGES = {
     'show.selector.metavar': 'selector',
     'show.selector.help': "the task's [ID:] value, or part of its title",
     'show.format.help': 'output format: text for a terminal, json for agents',
+    # update
+    'update.description': 'change the fields or the title of one task',
+    'update.help': 'for details use update --help',
+    'update.selector.metavar': 'selector',
+    'update.selector.help': "the task's [ID:] value, or part of its title",
+    'update.priority.help': 'new priority multiplier, 0 and up',
+    'update.due.help': 'new due date, YYYY-MM-DD',
+    'update.tags.help': 'replacement comma-separated tags',
+    'update.title.help': 'new title, without any [FIELD:] markup',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',

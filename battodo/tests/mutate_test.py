@@ -3,10 +3,12 @@ from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, skipIf
+from unittest.mock import MagicMock, Mock, patch
 
 from ..mutate import (
     Journal,
     ListError,
+    Match,
     SelectionError,
     add_task,
     backfill_all,
@@ -16,6 +18,7 @@ from ..mutate import (
     parse,
     scratch,
     task_snapshot,
+    update_task,
 )
 from ..repeat import RepeatError
 
@@ -786,3 +789,123 @@ class AddTaskTests(MutationTests):
         with t.subTest('a rejected add writes nothing at all'):
             t.assertEqual((t.dir / 'chores.md').read_text(), CHORES)
             t.assertEqual(Journal(t.dir).read(), [])
+
+
+SRC = 'battodo.mutate'
+
+UPDATE_DOC = """# Work
+
+## Open
+
+- [ ] Deck rebuild [P:4] [LOE:8] [ID:9o71lx]
+      A note that stays put.
+
+## Done
+"""
+
+
+class UpdateTaskTests(TestCase):
+    """Isolation tests: the lookup, the file and the journal are mocked."""
+
+    find_task: MagicMock
+    Journal: MagicMock
+    new_task_id: MagicMock
+
+    def setUp(t) -> None:
+        for target in ('find_task', 'Journal', 'new_task_id'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.new_task_id.return_value = 'zz01ab'
+
+        t.path = Mock(spec=Path)
+        t.path.name = 'work.md'
+        t.doc = parse(UPDATE_DOC)
+        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
+        t.dir = Path('/todo')
+        t.append = t.Journal.return_value.append
+
+    def test_update_task(t) -> None:
+        path, entry = update_task(
+            t.dir, '9o71lx', {'P': '5'}, TODAY, title='Renamed'
+        )
+
+        with t.subTest('the selector is resolved against the directory'):
+            t.find_task.assert_called_with(t.dir, '9o71lx')
+
+        with t.subTest('the line carries the new field and the new title'):
+            t.assertEqual(entry, '- [ ] Renamed [P:5] [LOE:8] [ID:9o71lx]')
+            t.assertEqual(path, t.path)
+
+        with t.subTest('and is the only line the written file changes'):
+            t.path.write_text.assert_called_with(
+                UPDATE_DOC.replace(
+                    '- [ ] Deck rebuild [P:4] [LOE:8] [ID:9o71lx]', entry
+                )
+            )
+
+    def test_update_task_event(t) -> None:
+        update_task(t.dir, '9o71lx', {'P': '5'}, TODAY, title='Renamed')
+
+        with t.subTest('the journal of the source directory'):
+            t.Journal.assert_called_with(t.dir)
+
+        with t.subTest('one TaskUpdated, on the task stream'):
+            t.append.assert_called_with(
+                'TaskUpdated',
+                'task/9o71lx',
+                {
+                    'delta': {
+                        'P': ['4', '5'],
+                        'title': ['Deck rebuild', 'Renamed'],
+                    },
+                    # Pre-state, as everywhere but an add: the delta
+                    # says what changed, the snapshot what it was.
+                    'snapshot': {
+                        'title': 'Deck rebuild',
+                        'done': False,
+                        'fields': {'P': '4', 'LOE': '8', 'ID': '9o71lx'},
+                    },
+                },
+                actor='agent',
+                source_file='work.md',
+            )
+
+    def test_update_task_stamps_an_id(t) -> None:
+        doc = parse('## Open\n\n- [ ] Bare [P:2]\n')
+        t.find_task.return_value = Match(t.path, doc, [doc.tasks[0]])
+
+        _, entry = update_task(t.dir, 'Bare', {'P': '5'}, TODAY)
+        stream, payload = t.append.call_args[0][1:3]
+
+        with t.subTest('a task with no id of its own is given one'):
+            t.assertEqual(entry, '- [ ] Bare [P:5] [ID:zz01ab]')
+
+        with t.subTest('which names the stream the event lands on'):
+            t.assertEqual(stream, 'task/zz01ab')
+
+        with t.subTest('the stamp rides in the delta, so it can be undone'):
+            t.assertEqual(payload['delta']['ID'], [None, 'zz01ab'])
+
+    def test_update_task_rejected(t) -> None:
+        with (
+            t.subTest('an update that names no change'),
+            t.assertRaisesRegex(ValueError, 'nothing to update'),
+        ):
+            update_task(t.dir, '9o71lx', {}, TODAY)
+
+        with (
+            t.subTest('a value btodo cannot read'),
+            t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'),
+        ):
+            update_task(t.dir, '9o71lx', {'DUE': 'someday'}, TODAY)
+
+        with t.subTest('a task below the top level'):
+            child = t.doc.tasks[0]
+            t.find_task.return_value = Match(t.path, t.doc, [child, child])
+            with t.assertRaisesRegex(ValueError, 'top-level'):
+                update_task(t.dir, 'child', {'P': '5'}, TODAY)
+
+        with t.subTest('nothing is written and nothing is logged'):
+            t.path.write_text.assert_not_called()
+            t.append.assert_not_called()

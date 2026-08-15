@@ -127,6 +127,7 @@ class ArgparserTests(TestCase):
             (['view'], Commands.view),
             (['add', 'chores', 'Water it'], Commands.add),
             (['show', 'brush pile'], Commands.show),
+            (['update', 'brush pile', '-p', '3'], Commands.update),
             (['done', 'brush pile'], Commands.done),
             (['scratch', 'brush pile'], Commands.scratch),
             (['backfill'], Commands.backfill),
@@ -472,6 +473,58 @@ class CommandsShowTests(ClockTests):
             Commands.show(conf)
 
             t.assertEqual(t.build_item.call_count, 2)
+
+
+class CommandsUpdateTests(ClockTests):
+    def setUp(t):
+        super().setUp()
+        patcher = patch(f'{SRC}.update_task', autospec=True)
+        t.update_task = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print')
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.path = Path('~/todo/chores.md')
+        t.entry = '- [ ] Water it [P:4] [ID:ab12cd]'
+        t.update_task.return_value = (t.path, t.entry)
+
+        # spec models batconf: an option the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+        t.conf.priority = '4'
+        t.conf.due = '2026-09-01'
+        t.conf.title = 'Water it'
+
+    def test_update(t):
+        with t.subTest('selector, supplied fields and title are forwarded'):
+            Commands.update(t.conf)
+
+            args, kwargs = t.update_task.call_args
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
+            t.assertEqual(args[3], t.today)
+            t.assertEqual(kwargs['title'], 'Water it')
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('the written line and its file are echoed'):
+            t.print.assert_has_calls([call(t.entry), call(t.path)])
+
+        with t.subTest('an option left off names no change to that field'):
+            t.update_task.reset_mock()
+            conf = Mock(spec=['view', 'selector', 'tags'])
+            conf.view.source_dir = '~/todo'
+            conf.selector = 'brush pile'
+            conf.tags = 'yard,summer'
+
+            Commands.update(conf)
+
+            args, kwargs = t.update_task.call_args
+            t.assertEqual(args[2], {'TAGS': 'yard,summer'})
+            t.assertIsNone(kwargs['title'])
 
 
 class CommandsDoneTests(ClockTests):

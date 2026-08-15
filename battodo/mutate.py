@@ -15,7 +15,9 @@ and `[ID:]` btodo owns.
 done, and reschedule a recurring task instead of deleting it. `scratch`
 is the same plumbing for abandoning a task rather than finishing it:
 the block goes, the log records it as SCRATCHED, and nothing cascades
-or reschedules. `backfill` is the one-time `[ADDED:]` stamp that replaced
+or reschedules. `update_task` edits a task in place: it writes the
+fields and the title it is given and touches nothing else.
+`backfill` is the one-time `[ADDED:]` stamp that replaced
 the daily bump, which ADR 0005 retired along with the `BUMPED` field and
 the `TaskBumped` event: rank is computed from the files rather than
 accumulated in them, so btodo has nothing to write once a day.
@@ -37,6 +39,7 @@ from .parser import (
     parse_date,
     serialize,
     set_field,
+    set_title,
 )
 from .repeat import next_due
 from .view import discover_lists
@@ -44,6 +47,7 @@ from .view import discover_lists
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
+UPDATED_EVENT = 'TaskUpdated'
 DATE_FIELDS = ('DUE',)
 COMPLETED_LOG = 'completed.md'
 DONE_STATUS = 'DONE'
@@ -580,6 +584,97 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
         source_file=match.path.name,
     )
     return entries
+
+
+# --- Update ---------------------------------------------------------
+
+
+def update_task(
+    directory: Path,
+    selector: str,
+    fields: dict[str, str],
+    today: date,
+    title: str | None = None,
+) -> tuple[Path, str]:
+    """Rewrite the task `selector` names. Returns the path and line.
+
+    Only the fields named are written; the rest of the line, and every
+    other line in the file, is left exactly as it was. An `[ID:]` is
+    stamped where the task has none, so the caller can address it by id
+    from here on.
+
+    Top-level tasks only. A field written to a childless line promotes
+    it from a checklist item to a subtask (SCHEMA.md), and an `[ID:]`
+    on one would do so silently; neither has a settled meaning yet.
+
+    Parameters
+    ----------
+    directory : Path
+        The source directory: its lists and its journal.
+    selector : str
+        A task `[ID:]` or part of a title.
+    fields : dict
+        SCHEMA.md field names to values, as strings.
+    today : date
+        The user's local day, which validates a `REPEAT`.
+    title : str, optional
+        A new title. The fields on the line keep their positions.
+
+    Returns
+    -------
+    tuple of (Path, str)
+        The list written to, and the task line as written.
+
+    Raises
+    ------
+    SelectionError
+        If `selector` does not name exactly one open task.
+    ValueError
+        If nothing was named to change, if the task is not top-level,
+        or if a supplied value is unreadable. Raised before anything is
+        written.
+    """
+    if not fields and title is None:
+        raise ValueError('nothing to update: name a field or a title')
+    checked = _checked_fields(fields, today)
+
+    match = find_task(directory, selector)
+    task = match.task
+    if len(match.trail) > 1:
+        raise ValueError(
+            f'update reaches top-level tasks only, not {task.title!r}'
+        )
+
+    task_id = task.task_id or new_task_id()
+    written = dict(checked)
+    if not task.task_id:
+        written['ID'] = task_id
+    entry = _set_fields(task.raw, written)
+    if title is not None:
+        entry = set_title(entry, title)
+
+    delta: dict[str, list[Any]] = {
+        name: [task.fields.get(name), value] for name, value in written.items()
+    }
+    if title is not None:
+        delta['title'] = [task.title, title]
+
+    match.doc.lines[task.raw_index] = entry
+    match.path.write_text(serialize(match.doc))
+
+    Journal(directory).append(
+        UPDATED_EVENT,
+        f'task/{task_id}',
+        {
+            'delta': delta,
+            # Pre-state, as everywhere but an add: the delta says what
+            # changed, the snapshot says what it changed from.
+            'snapshot': task_snapshot(task),
+        },
+        actor='agent',
+        source_file=match.path.name,
+    )
+    return match.path, entry
 
 
 # --- Backfill -------------------------------------------------------
