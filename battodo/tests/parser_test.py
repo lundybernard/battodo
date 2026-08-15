@@ -8,6 +8,7 @@ from ..parser import (
     parse_date,
     serialize,
     set_field,
+    set_title,
 )
 
 OPEN_DOC = """# Work
@@ -154,6 +155,29 @@ class SetFieldTests(TestCase):
                 set_field('- [ ] X [P:2]   ', 'ID', 'zz01ab'),
                 '- [ ] X [P:2] [ID:zz01ab]',
             )
+
+
+class SetTitleTests(TestCase):
+    def test_set_title(t) -> None:
+        with t.subTest('the title changes, every field keeps its place'):
+            t.assertEqual(
+                set_title('- [ ] X [P:2] [LOE:1]', 'Y'),
+                '- [ ] Y [P:2] [LOE:1]',
+            )
+
+        with t.subTest('a fieldless line is the title alone'):
+            t.assertEqual(set_title('- [ ] X', 'Y'), '- [ ] Y')
+
+        with t.subTest('indent and check mark are preserved'):
+            t.assertEqual(
+                set_title('  - [x] X [LOE:1]', 'Y'), '  - [x] Y [LOE:1]'
+            )
+
+        with (
+            t.subTest('a line that is not a task is rejected'),
+            t.assertRaises(ValueError),
+        ):
+            set_title('      A note line', 'Y')
 
 
 class TaskTests(TestCase):

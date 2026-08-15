@@ -97,6 +97,28 @@ def set_field(raw: str, name: str, value: str) -> str:
     return f'{raw.rstrip()} [{name}:{value}]'
 
 
+def set_title(raw: str, title: str) -> str:
+    """Return the task line `raw` with its title replaced.
+
+    Only the text before the first field changes. Every field keeps its
+    text and its position, as `set_field` leaves them.
+
+    Raises
+    ------
+    ValueError
+        If `raw` is not a task line. A note or a heading carries no
+        title to set.
+    """
+    match = CHECKBOX_RE.match(raw)
+    if match is None:
+        raise ValueError(f'not a task line: {raw!r}')
+    indent, mark, body = match.groups()
+    field = FIELD_RE.search(body)
+    tail = body[field.start() :] if field else ''
+    text = f'{title} {tail}'.rstrip()
+    return f'{indent}- [{mark}] {text}'
+
+
 def append_open(lines: list[str], entry: str) -> list[str]:
     """Return `lines` with `entry` as the last entry of `## Open`.
 
