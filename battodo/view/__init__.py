@@ -6,8 +6,7 @@ lays the same choice out as aligned text for a terminal. `lib`
 composes them into the two functions callers actually use.
 
 The public names of all three are re-exported here, so `battodo.view`
-stays the one import path -- and so the configuration dataclass below
-keeps the dotted path its settings are looked up under.
+stays the one import path.
 """
 
 from dataclasses import dataclass
@@ -40,12 +39,6 @@ class Config:
 
     One source for now; R6 turns this into a list of sources once the
     discovery/merge semantics in ADR 0004 are settled.
-
-    Defined here rather than beside the selection code that uses the
-    directory: the lookup namespace is left at its default, which
-    derives from the module the class lives in, so this placement
-    keeps every configuration key and environment name stable without
-    naming the namespace explicitly.
     """
 
     source_dir: str = '~/todo'
