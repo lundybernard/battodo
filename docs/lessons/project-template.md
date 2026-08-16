@@ -136,3 +136,34 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   tested. Here the claim survived contact — 3.10–3.14 all pass with no
   source changes — but until the matrix existed that was a guess that
   happened to be right, not a tested property.
+- **Message catalog for CLI strings:** extracting every user-facing
+  argparse string into a pure-data module (`messages.py`, stable
+  namespaced keys) gave three wins at once: a future localization
+  seam, no string duplication between parser and tests (a conformance
+  test walks `parser._actions` against the catalog), and a clean
+  mutation-testing boundary — the data file is excluded while every
+  reference to it stays mutated. Two-thirds of the baseline surviving
+  mutants were display-string noise; this removed them structurally.
+  Template candidate: ship the example CLI with a catalog from day
+  one.
+- **Mutation testing as a pixi feature:** a `mutation` env (mutmut +
+  pytest collecting the stdlib unittest suite unchanged) slotted into
+  the template's feature-per-tool layout with no friction. Worth
+  upstreaming once the run recipe stabilizes — see
+  [mutmut.md](mutmut.md) for the tool-side caveats the recipe has to
+  work around.
+- **Config namespace derived from `__module__`:** the template's
+  conf.py sets `CONFIG_ROOT = GlobalConfig.__module__` and builds
+  `Configuration` without a path, so every lookup path, environment
+  variable name, and CLI argument prefix silently depends on where the
+  schema class is defined — placement of config dataclasses becomes
+  load-bearing, and battodo grew a docstring justifying one such
+  placement before the dependency was spotted. batconf 0.4.0's
+  `Configuration` takes an explicit `path=` and treats the module as a
+  fallback only. The template's conf tests also fake `__module__` on
+  *nested* schema classes ("As if imported from a module"), which is
+  dead weight in any batconf version: nested namespaces are built from
+  the schema's field names, never from the nested class's module.
+  Upstream candidate: literal `CONFIG_ROOT` + `path=CONFIG_ROOT` +
+  drop the fixture overrides (battodo commit
+  `refactor(conf): name the config namespace explicitly`).

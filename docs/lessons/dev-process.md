@@ -139,3 +139,75 @@
   its workarounds, and the workarounds were the data. Yield: 13
   documented findings in one cycle, including one (the `[toml]` lazy
   trap) the project then reproduced in its own suite the same day.
+- 2026-08-14: an observed default is not a requirement. A live probe
+  of a dependency's config resolution saw the lookup namespace derive
+  from the schema class's `__module__` and recorded that as a hard
+  placement constraint — in a docstring and a commit body — when the
+  constructor accepts an explicit `path=` two lines above the fallback
+  the probe had exercised. The experiment verified what the code
+  *does* by default, not what the API *allows*; the false constraint
+  shipped and cost a history rewrite to retract. Rule: a constraint
+  claim about a dependency is read from its API surface (signature,
+  docs, source), never inferred from a default-configuration
+  experiment — the probe can only ever confirm behavior, not
+  necessity.
+- 2026-08-14: work orders must carry the test-style rules. The
+  import-isolation rule (unit tests import only from the module under
+  test) lived in a loaded style skill, yet the delivered tests
+  imported from three source files and human review caught it — the
+  implementing agent never sees the orchestrator's skills, so the
+  order is the enforcement point. Same enforcement class as mock
+  discipline (no bare `Mock()`; spec from the input type or constrain
+  to what the code under test reads; `autospec=True` on every patch):
+  these ride inline in every test-writing order now.
+- 2026-08-14: durable prose leaks local context. Two catches in one
+  cycle: a commit body described the dev arrangement and named an
+  unrelated project as the pattern source; a test docstring leaned on
+  the host's timezone. Rule extracted: commits, code comments,
+  docstrings, and PR prose read as if the repo is the whole world —
+  generic statements about any host are fine, claims about this
+  particular setup are not. Related phrasing rule from the same
+  cycle: mutation-testing prose in durable artifacts says "improve
+  coverage" / "mutant caught", never kill/dead.
+- 2026-08-14: verify outcomes, not work orders — round two. The
+  implementing agent reported a green per-commit gate, but its gate
+  had omitted the format check; the orchestrator's own rerun found an
+  unformatted file at the tip. The cheap full-gate rerun by the
+  orchestrator stays mandatory no matter what the report says.
+- 2026-08-14: first full review loop through the agent's own GitHub
+  identity: review comment, threaded reply over REST, fix dissolved
+  into its introducing commit, re-approve, merge. API notes worth
+  keeping: pending reviews are invisible to the API until submitted,
+  and GraphQL endpoints want `read:org` — classic-PAT flows should
+  stay on REST.
+- 2026-08-15: improvised history rewrites slip; planned ones do not.
+  Two slips in two sessions from typing rebase/cherry-pick sequences
+  ad hoc: a flag that does not exist on the subcommand
+  (`cherry-pick -q`, twice), and a commit landed on top of the target
+  instead of squashed into it. The fix that held: before touching
+  HEAD, write the plan of record — every target parent hash, every
+  branch tip, in order — then execute against it. A rewrite work
+  order now carries that requirement, and the next multi-branch
+  restack under it ran clean on the first pass.
+- 2026-08-15: code prose drifts into dev-process narration unless a
+  register is named. A review rejected a whole PR's prose — module
+  docstrings narrating fixture design, commit bodies walking through
+  reasoning — as "the agent thinking through the problem and writing
+  notes to itself." Adopted ASD-STE100 as the named register for all
+  code prose (short declarative sentences, active voice, present
+  tense), plus a commit-specific rule set: Conventional Commits 1.0.0
+  for the header, Chris Beams' seven rules for mechanics, and a house
+  rule — the body says only what the commit adds, and never repeats
+  what a comment or docstring in the diff already says. Naming an
+  external standard beats adjectives ("be concise") in a work order:
+  it is checkable, and the rewrite under it was accepted first pass.
+- 2026-08-15: worked examples in instruction files leak their
+  payload. Concrete example content (invented issue numbers, scopes,
+  rationale sentences) reappears in real output — the model treats
+  demonstration content as the value space to draw from. Fix pattern:
+  keep examples for what prose states badly (whitespace assembly,
+  layout), but make them schematic — angle-bracket placeholders for
+  every per-use value, one leak-guard line declaring them layout-only
+  — and keep at most one concrete phrase where a rule (imperative
+  mood) needs demonstrating. Rules stay in prose; examples carry
+  layout only.
