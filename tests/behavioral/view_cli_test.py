@@ -23,15 +23,14 @@ The fixture lists:
   rank with more decimals than the JSON publishes.
 """
 
-from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
-from io import StringIO
-from os import environ
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import BATCLI, TZ
+from battodo.cli import TZ
+
+from .cli_runner import run_cli
 
 DATA = Path(__file__).parent / 'data'
 TODO_DIR = DATA / 'todo'
@@ -67,21 +66,13 @@ class ViewCommandTests(TestCase):
 
     def render(t, *args: str) -> str:
         """Run `view` with `args` and return what it wrote to stdout."""
-        out = StringIO()
-        err = StringIO()
         env = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
-        with (
-            patch.dict(environ, env),
-            redirect_stdout(out),
-            redirect_stderr(err),
-            t.assertRaises(SystemExit) as exit,
-        ):
-            BATCLI(['view', *args])
+        out, err, code = run_cli(['view', *args], env)
         # A misconfigured run reports on stderr and exits non-zero.
         # Check that before diffing stdout.
-        t.assertEqual(err.getvalue(), '')
-        t.assertEqual(exit.exception.code, 0)
-        return out.getvalue()
+        t.assertEqual(err, '')
+        t.assertEqual(code, 0)
+        return out
 
     def test_view(t) -> None:
         cases = {
