@@ -43,6 +43,7 @@ FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
 WIDTH = '80'
 # The environment outranks any config file in the checkout.
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
+TOP_VAR = 'BATTODO_VIEW_TOP'
 
 
 def golden(name: str) -> str:
@@ -64,10 +65,16 @@ class ViewCommandTests(TestCase):
         t.addCleanup(patcher.stop)
         t.datetime.now.return_value = FROZEN
 
-    def render(t, *args: str) -> str:
+    def cli(
+        t, *args: str, env: dict[str, str] | None = None
+    ) -> tuple[str, str, object]:
+        """Run `view` with `args`, and `env` over the pinned variables."""
+        pinned = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
+        return run_cli(['view', *args], pinned | (env or {}))
+
+    def render(t, *args: str, env: dict[str, str] | None = None) -> str:
         """Run `view` with `args` and return what it wrote to stdout."""
-        env = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
-        out, err, code = run_cli(['view', *args], env)
+        out, err, code = t.cli(*args, env=env)
         # A misconfigured run reports on stderr and exits non-zero.
         # Check that before diffing stdout.
         t.assertEqual(err, '')
@@ -85,7 +92,47 @@ class ViewCommandTests(TestCase):
                 ('--format', 'json'),
                 'view_json.json',
             ),
+            'a chosen count replaces the default five': (
+                ('--top', '1'),
+                'view_top.txt',
+            ),
+            'the document is abridged to the same count': (
+                ('--top', '1', '--format', 'json'),
+                'view_top_json.json',
+            ),
+            'asking for everything outranks a count': (
+                ('--all', '--top', '1'),
+                'view_all.txt',
+            ),
         }
         for name, (args, recorded) in cases.items():
             with t.subTest(name):
                 t.assertEqual(t.render(*args), golden(recorded))
+
+        out, err, code = t.cli('--top', '0')
+
+        with t.subTest('a count below one is a usage error'):
+            t.assertIn('argument --top: ', err)
+            t.assertIn('must be a whole number of 1 or more', err)
+
+        with t.subTest('which exits non-zero and writes no view'):
+            t.assertNotEqual(code, 0)
+            t.assertEqual(out, '')
+
+    def test_view_top_is_configured(t) -> None:
+        with t.subTest('the environment sets the count'):
+            t.assertEqual(t.render(env={TOP_VAR: '1'}), golden('view_top.txt'))
+
+        with t.subTest('the command line outranks the environment'):
+            t.assertEqual(
+                t.render('--top', '5', env={TOP_VAR: '1'}), golden('view.txt')
+            )
+
+        out, err, code = t.cli(env={TOP_VAR: '0'})
+
+        with t.subTest('a configured count below one is reported'):
+            t.assertIn('must be a whole number of 1 or more', err)
+
+        with t.subTest('which exits non-zero and writes no view'):
+            t.assertNotEqual(code, 0)
+            t.assertEqual(out, '')

@@ -25,6 +25,7 @@ btodo --help
 
 ```
 btodo view              # open items for the currently active categories
+btodo view --top 10     # ten items a category, rather than the default five
 btodo view --all        # every open item, and every category, active or not
 btodo view --format json  # the same view as JSON, for agents
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
@@ -79,10 +80,41 @@ for display; each task array is already in rank order, so read the
 order rather than re-sorting by the number. `subtasks` counts open
 children. `hidden` is how many of the category's open items were left
 out — `0` means the array is the whole of it, and anything higher means
-`--all` will show more.
+`--all`, or a larger `--top`, will show more.
 
 The schema grows by addition only: new keys may appear, existing ones
 keep their meaning.
+
+## Configuration
+
+A value comes from the first source that carries it: a command-line
+argument, then an environment variable, then a config file, then the
+built-in default. Every value is a string, which is all the environment
+can hold; the command that reads one decodes it.
+
+- `view.source_dir` — the directory the lists are read from. `~/todo`.
+- `view.top` — how many items a category shows. `5`, and `--top` on the
+  command line overrides it.
+
+An environment variable is the config path in caps:
+
+```
+export BATTODO_VIEW_TOP=10
+```
+
+A config file names an environment, then holds the same paths under it:
+
+```toml
+[batconf]
+default_env = "personal"
+
+[personal.battodo.view]
+source_dir = "~/todo"
+top = "10"
+```
+
+btodo reads `config.toml` from the working directory. `--conf FILE`
+names another file, and `--env NAME` picks an environment from it.
 
 ## Development
 
@@ -101,9 +133,6 @@ lists. Clone them with `cp -rL` — `~/todo` is a symlink, so plain
 `cp -r` copies the link and every "sandbox" write lands on real data.
 Verify the target is a real directory (`ls -ld`) before running anything
 that mutates.
-
-Setting the same value from a config file is blocked on batconf 0.4.0
-and its `TomlSource`; the env var and CLI arguments work today.
 
 Tasks run through pixi; each one uses its own isolated environment.
 

@@ -14,6 +14,7 @@ from ..cli import (
     get_config,
     logging,
 )
+from ..view import TOP_N
 
 SRC = 'battodo.cli'
 # The configured `~/todo` as every command resolves it.
@@ -80,13 +81,17 @@ class MessageCatalogTests(TestCase):
                     t.assertIn(text, MESSAGES.values())
 
     def test_no_entry_goes_unused(t):
+        """An `.error` entry is raised by its command, not shown."""
         shown = {
             text
             for parser in t.parsers.values()
             for text in displayed(parser)
             if text is not None
         }
-        t.assertEqual(set(MESSAGES.values()) - shown, set())
+        raised = {
+            text for key, text in MESSAGES.items() if key.endswith('.error')
+        }
+        t.assertEqual(set(MESSAGES.values()) - shown - raised, set())
 
 
 class ArgparserTests(TestCase):
@@ -114,6 +119,22 @@ class ArgparserTests(TestCase):
             t.assertRaises(SystemExit),
         ):
             p.parse_args(['view', '--format', 'xml'])
+
+        with t.subTest('view leaves the count to the configuration'):
+            args = p.parse_args(['view'])
+            t.assertIsNone(getattr(args, 'battodo.view.top'))
+
+        with t.subTest('view takes a count of its own, as a string'):
+            args = p.parse_args(['view', '--top', '2'])
+            t.assertEqual(getattr(args, 'battodo.view.top'), '2')
+
+        for value in ('0', '-1', 'five'):
+            with (
+                t.subTest(f'a top of {value} is a usage error'),
+                redirect_stderr(StringIO()),
+                t.assertRaises(SystemExit),
+            ):
+                p.parse_args(['view', '--top', value])
 
         with t.subTest('show offers the same two formats, human first'):
             args = p.parse_args(['show', 'brush pile'])
@@ -300,9 +321,12 @@ class CommandsViewTests(ClockTests):
         t.addCleanup(patcher.stop)
 
         # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
+        # absent from the Configuration, not None, and every value that
+        # is there is a string.
         t.conf = Mock(spec=['view', 'show_all', 'format'])
+        t.conf.view = Mock(spec=['source_dir', 'top'])
         t.conf.view.source_dir = '~/todo'
+        t.conf.view.top = '2'
         t.conf.show_all = True
         t.conf.format = 'text'
 
@@ -315,6 +339,7 @@ class CommandsViewTests(ClockTests):
             t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], t.datetime.now.return_value)
             t.assertTrue(kwargs['show_all'])
+            t.assertEqual(kwargs['top_n'], 2)
 
         with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
@@ -330,16 +355,29 @@ class CommandsViewTests(ClockTests):
             t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], t.datetime.now.return_value)
             t.assertTrue(kwargs['show_all'])
+            t.assertEqual(kwargs['top_n'], 2)
             t.build_view.assert_called_once()
 
         with t.subTest('an unconfigured view is human and abridged'):
             conf = Mock(spec=['view'])
+            conf.view = Mock(spec=['source_dir', 'top'])
             conf.view.source_dir = '~/todo'
+            conf.view.top = str(TOP_N)
 
             Commands.view(conf)
 
             t.assertEqual(t.build_view.call_count, 2)
-            t.assertFalse(t.build_view.call_args[1]['show_all'])
+            kwargs = t.build_view.call_args[1]
+            t.assertFalse(kwargs['show_all'])
+            t.assertEqual(kwargs['top_n'], TOP_N)
+
+        with t.subTest('a configured count below one is refused'):
+            t.conf.view.top = '0'
+
+            with t.assertRaises(ValueError) as caught:
+                Commands.view(t.conf)
+
+            t.assertIn(MESSAGES['view.top.error'], str(caught.exception))
 
 
 class CommandsBackfillTests(ClockTests):
@@ -599,6 +637,13 @@ class CliArgsResolutionTests(TestCase):
         def get(self, key: str, path: str | None = None) -> None:
             return None
 
+    def setUp(t):
+        # The environment source outranks the schema defaults: an
+        # ambient BATTODO_* var would answer before them.
+        patcher = patch.dict('os.environ', clear=True)
+        patcher.start()
+        t.addCleanup(patcher.stop)
+
     def resolve(t, argv):
         args = argparser().parse_args(argv)
         return get_config(cli_args=args, config_file=t.NullFileSource())
@@ -616,6 +661,12 @@ class CliArgsResolutionTests(TestCase):
 
         with t.subTest('a flag reaches the command'):
             t.assertTrue(t.resolve(['view', '--all']).show_all)
+
+        with t.subTest('a count reaches the command as a string'):
+            t.assertEqual(t.resolve(['view', '--top', '2']).view.top, '2')
+
+        with t.subTest('and the schema answers when no source does'):
+            t.assertEqual(t.resolve(['view']).view.top, str(TOP_N))
 
         with t.subTest('both add positionals reach the command'):
             conf = t.resolve(['add', 'chores', 'Water it'])
