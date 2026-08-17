@@ -14,6 +14,7 @@ from ..selection import (
     SourceError,
     TodoList,
     active_categories,
+    category_order,
     discover_lists,
     item_count,
     open_children,
@@ -176,6 +177,21 @@ class SortKeyTests(TestCase):
         with t.subTest('the key itself is rank, then due, then title'):
             task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
             t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+
+
+class CategoryOrderTests(TestCase):
+    def test_category_order(t) -> None:
+        with t.subTest('the named categories lead, in their own order'):
+            t.assertEqual(
+                sorted(['career', 'work', 'chores'], key=category_order),
+                ['work', 'chores', 'career'],
+            )
+
+        with t.subTest('an ad-hoc name follows them, alphabetically'):
+            t.assertEqual(
+                sorted(['van', 'career', 'arts'], key=category_order),
+                ['career', 'arts', 'van'],
+            )
 
 
 class OpenChildrenTests(TestCase):

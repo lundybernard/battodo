@@ -21,6 +21,7 @@ from .selection import (
     SourceError,
     TodoList,
     active_categories,
+    category_order,
     discover_lists,
     item_count,
     open_children,
