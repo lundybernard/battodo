@@ -8,7 +8,6 @@ from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.item import build_item, build_item_json
-from battodo.lib import hello_world
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 from battodo.mutate import (
@@ -106,14 +105,6 @@ def argparser():
         title=MESSAGES['cli.commands.title'],
         description=MESSAGES['cli.commands.description'],
     )
-    # hello args
-    hello = commands.add_parser(
-        'hello',
-        description=MESSAGES['hello.description'],
-        help=MESSAGES['hello.help'],
-    )
-    hello.set_defaults(func=Commands.hello)
-
     view = commands.add_parser(
         'view',
         description=MESSAGES['view.description'],
@@ -275,10 +266,6 @@ def get_help(parser):
 
 
 class Commands:
-    @staticmethod
-    def hello(conf):
-        print(hello_world())
-
     @staticmethod
     def add(conf):
         source = Path(conf.view.source_dir).expanduser()

@@ -30,9 +30,6 @@ MESSAGES = {
     'cli.commands.title': 'commands',
     'cli.commands.description': 'for additonal details on each command use: '
     '"btodo {command name} --help"',
-    # hello
-    'hello.description': 'execute command hello',
-    'hello.help': 'for details use hello --help',
     # view
     'view.description': 'show open items for the currently active categories',
     'view.help': 'for details use view --help',

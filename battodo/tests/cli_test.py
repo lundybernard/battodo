@@ -123,7 +123,6 @@ class ArgparserTests(TestCase):
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
-            (['hello'], Commands.hello),
             (['view'], Commands.view),
             (['add', 'chores', 'Water it'], Commands.add),
             (['show', 'brush pile'], Commands.show),
@@ -138,10 +137,10 @@ class ArgparserTests(TestCase):
 
     def test_verbosity(t):
         cases = {
-            ('hello',): None,
-            ('-v', 'hello'): logging.INFO,
-            ('--verbose', 'hello'): logging.INFO,
-            ('--debug', 'hello'): logging.DEBUG,
+            ('view',): None,
+            ('-v', 'view'): logging.INFO,
+            ('--verbose', 'view'): logging.INFO,
+            ('--debug', 'view'): logging.DEBUG,
         }
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
@@ -162,11 +161,11 @@ class ArgparserTests(TestCase):
         for dest, flags in spellings.items():
             for flag in flags:
                 with t.subTest(flag):
-                    args = t.parser.parse_args([flag, 'chosen', 'hello'])
+                    args = t.parser.parse_args([flag, 'chosen', 'view'])
                     t.assertEqual(getattr(args, dest), 'chosen')
 
         with t.subTest('neither is required'):
-            args = t.parser.parse_args(['hello'])
+            args = t.parser.parse_args(['view'])
             t.assertIsNone(args.config_file)
             t.assertIsNone(args.config_env)
 
@@ -199,11 +198,12 @@ class BATCLITests(TestCase):
                     m_cmd.assert_called_with(t.get_config.return_value)
                     t.exit.assert_called_with(0)
 
+    @patch(f'{SRC}.Commands.view', autospec=True)
     @patch(f'{SRC}.Commands.set_log_level', autospec=True)
-    def test_set_log_level(t, set_log_level):
+    def test_set_log_level(t, set_log_level, view):
         args = [
             '--debug',
-            'hello',
+            'view',
         ]
         BATCLI(args)
         set_log_level.assert_called_with(argparser().parse_args(args))
@@ -255,15 +255,15 @@ class BATCLITests(TestCase):
 
     def test_commands(t):
         commands = [
-            'hello',
+            'view',
         ]
 
         t.validate_commands(commands)
 
     def test_config_arguments_reach_the_configuration(t):
         """The two global options are the ones only BATCLI can forward."""
-        with patch(f'{SRC}.Commands.hello', autospec=True):
-            BATCLI(['-c', 'other.toml', '-e', 'prod', 'hello'])
+        with patch(f'{SRC}.Commands.view', autospec=True):
+            BATCLI(['-c', 'other.toml', '-e', 'prod', 'view'])
 
         kwargs = t.get_config.call_args[1]
         t.assertEqual(kwargs['config_file_name'], 'other.toml')
@@ -340,14 +340,6 @@ class CommandsViewTests(ClockTests):
 
             t.assertEqual(t.build_view.call_count, 2)
             t.assertFalse(t.build_view.call_args[1]['show_all'])
-
-
-class CommandsHelloTests(TestCase):
-    @patch('builtins.print')
-    @patch(f'{SRC}.hello_world', autospec=True)
-    def test_hello(t, hello_world, print):
-        Commands.hello(Mock())
-        print.assert_called_with(hello_world.return_value)
 
 
 class CommandsBackfillTests(ClockTests):
