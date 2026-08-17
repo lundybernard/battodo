@@ -107,6 +107,32 @@ free-form and cannot be wrong. Validation runs before anything is
 written, so a rejected add leaves both the file and the journal
 untouched.
 
+## Reading and updating one item
+
+`btodo show <selector>` and `btodo update <selector>` resolve their
+selector with `find_task`, the lookup `done` and `scratch` already use:
+an `[ID:]`, or a case-insensitive part of a title, matching exactly one
+*open* task. A completed task is out of reach of both.
+
+**What `show` publishes.** Derived values, not stored ones: `P` reads as
+the 0–5 multiplier and a rank accompanies it, so one task reads the same
+here as in a `view` row. `subtasks` is the nested list of children, done
+ones included, where a view row carries only their count. Notes are not
+published. `--format json` serializes the document `--format text` lays
+out.
+
+**What `update` writes.** The fields named on the command line — `P`,
+`DUE`, `TAGS` — and, with `--title`, the text before the first field.
+The rest of the line, and every other line, stays verbatim. `LOE` and
+`REPEAT` are deferred: a changed `REPEAT` reschedules the task on its
+next completion, which is a decision of its own.
+
+**Top-level tasks only.** A field written to a fieldless child promotes
+it from checklist item to subtask (the discriminator above), and the
+`[ID:]` its event stream needs would promote it silently. Neither has a
+settled meaning, so `update` refuses a nested target rather than pick
+one.
+
 ## Journal
 
 One log per source directory: `<source_dir>/.journal/log.jsonl`, JSONL,
@@ -130,7 +156,8 @@ projects share one event vocabulary:
 | `metadata` | actor (`user` \| `agent`), source file |
 | `payload` | field deltas **plus a full task snapshot** |
 
-Event types: `TaskAdded`, `TaskCompleted`, `TaskScratched`. (`TaskBumped`
+Event types: `TaskAdded`, `TaskUpdated`, `TaskCompleted`,
+`TaskScratched`. (`TaskBumped`
 was emitted by the retired `bump` command; readers must still tolerate
 the type — see ADR 0005.)
 
@@ -155,8 +182,8 @@ observed fact.
 `add` creates the task, so there is no pre-state to describe. Its delta
 carries every field written to the line — the supplied ones plus `ADDED`
 and `ID` — each as `[null, value]`, and its snapshot is the *post*-state,
-read back from the line as written. `backfilled` is absent. Titles never
-appear in a delta; the snapshot is where they live.
+read back from the line as written. `backfilled` is absent. A title
+never appears in an `add` delta; the snapshot is where it lives.
 
 ```json
 {
@@ -189,6 +216,18 @@ appear in a delta; the snapshot is where they live.
 ```
 
 Envelope fields not shown are as tabled above.
+
+### `TaskUpdated` payloads
+
+`update` edits a task that already exists, so its snapshot is the
+*pre*-state and its delta carries every value it overwrote as
+`[before, after]`. A field the line did not have reads as
+`[null, value]`, and a lazily injected `[ID:]` rides along like any
+other stamp. A rename adds a `title` key, a pseudo-key on the same
+footing as `TaskCompleted`'s `done` and `TaskScratched`'s `removed`: a
+title is not a field, but a reverse-applier needs the text it replaced.
+`update` reaches top-level tasks only, so the payload carries no
+`ancestry`.
 
 Deferred from OFK's envelope: the hash chain (null, as OFK also does in
 v1) and the `correlation_id` / `commit_len` / `commit_index`

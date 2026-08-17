@@ -1,0 +1,10 @@
+Legacy priority task
+  list  work
+  id    -
+  rank  4.8
+  P     4.8
+  LOE   2
+  subtasks
+    [ ] Open checklist item
+    [ ] Open subtask [LOE:1]
+    [x] Completed checklist item

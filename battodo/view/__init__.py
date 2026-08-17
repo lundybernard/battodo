@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from .lib import build_json, build_view
 from .render import Row, Table, View, due_label
 from .selection import (
+    RANK_PLACES,
     Category,
     Selection,
     SourceError,
