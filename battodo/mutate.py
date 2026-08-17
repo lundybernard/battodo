@@ -5,10 +5,12 @@ the markdown stays authoritative while the journal accumulates history.
 Files with nothing to change are not rewritten at all, which keeps
 mtimes stable for Syncthing.
 
-`add_task` is the one mutation that creates rather than edits: a new
-top-level task lands as the last entry of a named list's `## Open`
-section, carrying only the fields the caller gave it plus the `[ADDED:]`
-and `[ID:]` btodo owns.
+`add_task` and `add_subtask` create rather than edit. A new top-level
+task lands as the last entry of a named list's `## Open` section,
+carrying only the fields the caller gave it plus the `[ADDED:]` and
+`[ID:]` btodo owns. A subtask lands last in its parent's block, one
+indent level deeper: the markdown states the relation by indentation,
+and the event names the parent by id.
 
 `complete` implements SCHEMA.md's completion rules: log the ancestry to
 `completed.md`, mark `[x]`, remove the block once the whole thing is
@@ -60,6 +62,12 @@ ANCESTRY_SEPARATOR = ' > '
 # canonical where hand-written ones keep whatever order they came with.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 LOE_VALUES = ('1', '2', '3', '5', '8')
+# SCHEMA.md indents every level by two spaces.
+SUBTASK_INDENT = 2
+# The fields a top-level task owns. SCHEMA.md gives a subtask no `P` of
+# its own, and only the root task is rescheduled, so a `[REPEAT:]` on a
+# child never fires.
+ROOT_ONLY_FIELDS = ('P', 'REPEAT')
 
 
 class ListError(Exception):
@@ -135,6 +143,14 @@ def _stream_task(trail: list[Task]) -> Task:
     )
 
 
+def _block_indices(task: Task) -> set[int]:
+    """Every line the task owns: its own, its notes, its children's."""
+    indices = {task.raw_index, *task.note_indices}
+    for child in task.children:
+        indices |= _block_indices(child)
+    return indices
+
+
 def _identify(task: Task, ids: dict[int, str]) -> str:
     """The task's `[ID:]`, allocating one on first mediated mutation."""
     return ids.setdefault(task.raw_index, task.task_id or new_task_id())
@@ -164,12 +180,13 @@ def _resolve_list(directory: Path, name: str) -> Path:
     return found
 
 
-def _checked_fields(fields: dict[str, str], today: date) -> dict[str, str]:
+def _checked_values(fields: dict[str, str]) -> dict[str, str]:
     """The supplied fields, validated and normalised.
 
     Runs before anything is written, so a bad value costs nothing. Only
     the values with a grammar btodo actually depends on are checked --
-    a `TAGS` string is free-form and cannot be wrong.
+    a `TAGS` string is free-form and cannot be wrong. `REPEAT` is left
+    to `_checked_fields`, which has the day a schedule needs.
     """
     checked = dict(fields)
     priority = checked.get('P')
@@ -191,7 +208,12 @@ def _checked_fields(fields: dict[str, str], today: date) -> dict[str, str]:
         # more spellings on newer interpreters, and a line's meaning
         # must not depend on which one wrote it.
         checked['DUE'] = parsed.isoformat()
+    return checked
 
+
+def _checked_fields(fields: dict[str, str], today: date) -> dict[str, str]:
+    """`_checked_values`, and a `REPEAT` the scheduler reads."""
+    checked = _checked_values(fields)
     repeat = checked.get('REPEAT')
     if repeat is not None:
         # Validated by scheduling it and throwing the answer away: the
@@ -199,6 +221,49 @@ def _checked_fields(fields: dict[str, str], today: date) -> dict[str, str]:
         # an unreadable one must fail before a task carries it.
         next_due(repeat, today)
     return checked
+
+
+def _added_payload(entry: str, written: dict[str, str]) -> dict[str, Any]:
+    """The `TaskAdded` payload for a line btodo has just created."""
+    return {
+        'delta': {name: [None, value] for name, value in written.items()},
+        # Post-state, unlike every other event here: an add has no
+        # prior state for a snapshot to describe. Taken from the line
+        # as written, so it records the file, not the intent.
+        'snapshot': task_snapshot(parse(f'{OPEN_HEADING}\n{entry}').tasks[0]),
+    }
+
+
+def _refuse_checklist_item(task: Task) -> None:
+    """Reject a task that carries no field of its own.
+
+    Raises
+    ------
+    ValueError
+        If `task` is a checklist item. Any field written to one, an
+        `[ID:]` included, promotes it to a subtask (SCHEMA.md).
+    """
+    if _is_checklist_item(task):
+        raise ValueError(
+            f'{task.title!r} is a checklist item: a field written to it '
+            'would promote it to a subtask'
+        )
+
+
+def _refuse_root_fields(fields: dict[str, str]) -> None:
+    """Reject the fields a child line must not carry.
+
+    Raises
+    ------
+    ValueError
+        If `fields` names one. Nothing reads such a field on a child,
+        so writing it would read as a change that never happened.
+    """
+    for name in ROOT_ONLY_FIELDS:
+        if name in fields:
+            raise ValueError(
+                f'{name} belongs to the top-level task, not to a subtask'
+            )
 
 
 def add_task(
@@ -264,15 +329,108 @@ def add_task(
     Journal(directory).append(
         ADDED_EVENT,
         f'task/{written["ID"]}',
-        {
-            'delta': {name: [None, value] for name, value in written.items()},
-            # Post-state, unlike every other event here: an add has no
-            # prior state for a snapshot to describe. Taken from the
-            # line as written, so it records the file, not the intent.
-            'snapshot': task_snapshot(
-                parse(f'{OPEN_HEADING}\n{entry}').tasks[0]
-            ),
-        },
+        _added_payload(entry, written),
+        actor='agent',
+        source_file=path.name,
+    )
+    return path, entry
+
+
+def add_subtask(
+    directory: Path,
+    list_name: str,
+    parent: str,
+    title: str,
+    fields: dict[str, str],
+) -> tuple[Path, str]:
+    """Add a subtask under `parent`. Returns the path and the line.
+
+    The child lands last in its parent's block, one indent level
+    deeper, and carries an `[ID:]` of its own. Indentation is the
+    file's only statement of the relation; the `TaskAdded` payload
+    names the parent by id. A parent carrying no `[ID:]` is stamped
+    first, on an event of its own, so no line this writes goes
+    unrecorded in a completed run.
+
+    Parameters
+    ----------
+    directory : Path
+        The source directory: its lists and its journal.
+    list_name : str
+        A list's filename stem, e.g. `chores` for `chores.md`.
+    parent : str
+        The parent task's `[ID:]` or part of its title. It must name a
+        task in `list_name`.
+    title : str
+        The subtask title, without fields.
+    fields : dict
+        SCHEMA.md field names to values, as strings. Any of `LOE`,
+        `DUE`, `TAGS`; all optional. No `[ADDED:]` is stamped: rank
+        reads the add date, and only a top-level task is ranked.
+
+    Returns
+    -------
+    tuple of (Path, str)
+        The list written to, and the subtask line as written.
+
+    Raises
+    ------
+    ListError
+        If `list_name` names no discovered list.
+    SelectionError
+        If `parent` does not name exactly one open task.
+    ValueError
+        If a supplied value is unreadable, if `fields` carries a field
+        the top-level task owns, or if `parent` names a checklist item
+        or a task in another list. Raised before anything is written.
+    """
+    path = _resolve_list(directory, list_name)
+    _refuse_root_fields(fields)
+    # `REPEAT` is refused above, so no supplied value needs a day.
+    checked = _checked_values(fields)
+
+    match = find_task(directory, parent)
+    if match.path != path:
+        raise ValueError(
+            f'{parent!r} names a task in {match.path.name}, not {path.name}'
+        )
+
+    task = match.task
+    _refuse_checklist_item(task)
+    stamped = task.task_id is None
+    parent_id = task.task_id or new_task_id()
+    written = {
+        **{name: checked[name] for name in SCHEMA_FIELDS if name in checked},
+        'ID': new_task_id(),
+    }
+    indent = ' ' * (task.indent + SUBTASK_INDENT)
+    entry = _set_fields(f'{indent}- [ ] {title}', written)
+
+    lines = list(match.doc.lines)
+    if stamped:
+        lines[task.raw_index] = set_field(task.raw, 'ID', parent_id)
+    # After every line the parent owns -- its notes, its children and
+    # theirs -- which makes the new child the last of them.
+    lines.insert(max(_block_indices(task)) + 1, entry)
+    match.doc.lines = lines
+    path.write_text(serialize(match.doc))
+
+    journal = Journal(directory)
+    if stamped:
+        journal.append(
+            UPDATED_EVENT,
+            f'task/{parent_id}',
+            {
+                'delta': {'ID': [None, parent_id]},
+                'snapshot': task_snapshot(task),
+            },
+            actor='agent',
+            source_file=path.name,
+        )
+    journal.append(
+        ADDED_EVENT,
+        f'task/{written["ID"]}',
+        {**_added_payload(entry, written), 'parent': parent_id},
         actor='agent',
         source_file=path.name,
     )
@@ -345,14 +503,6 @@ def _completed_trails(match: Match) -> list[list[Task]]:
             break
         trails.append(match.trail[: depth + 1])
     return trails
-
-
-def _block_indices(task: Task) -> set[int]:
-    """Every line the task owns: its own, its notes, its children's."""
-    indices = {task.raw_index, *task.note_indices}
-    for child in task.children:
-        indices |= _block_indices(child)
-    return indices
 
 
 def _drop_lines(lines: list[str], drop: set[int]) -> list[str]:

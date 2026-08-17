@@ -1,4 +1,5 @@
-"""Contract tests for the field update, against real files.
+"""Contract tests for the mutations that edit one line, against real
+files.
 
 Inputs are real directories holding real todo lists, and the journal is
 read back from disk. This layer asserts state; interaction checks stay
@@ -11,9 +12,15 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from battodo.journal import Journal
-from battodo.mutate import update_task
+from battodo.mutate import SelectionError, add_subtask, update_task
 
 TODAY = date(2026, 8, 8)
+
+
+def task_id(line: str) -> str:
+    """The `[ID:]` value a mutation stamped on `line`."""
+    return line.split('[ID:')[1].removesuffix(']')
+
 
 WORK = """# Work
 
@@ -22,6 +29,7 @@ WORK = """# Work
 - [ ] Deck rebuild [P:4] [LOE:8] [ADDED:2026-07-06] [ID:9o71lx]
       A note that stays put.
   - [ ] Chip the brush [LOE:2]
+  - [ ] Sweep up
 - [ ] Unidentified task [P:2]
 
 ## Done
@@ -123,5 +131,110 @@ class UpdateTaskTests(TestCase):
                 update_task(t.source, selector, fields, TODAY)
 
         with t.subTest('a rejected update writes nothing at all'):
+            t.assertEqual(t.path.read_text(encoding='utf-8'), before)
+            t.assertEqual(Journal(t.source).read(), [])
+
+
+class AddSubtaskTests(TestCase):
+    maxDiff = None
+
+    def setUp(t) -> None:
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        t.source = Path(tmp.name)
+        t.path = t.source / 'work.md'
+        t.path.write_text(WORK, encoding='utf-8')
+
+    def test_add_subtask(t) -> None:
+        path, entry = add_subtask(
+            t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
+        )
+
+        with t.subTest('the list written to, and the line as written'):
+            t.assertEqual(path, t.path)
+            t.assertRegex(
+                entry, r'^  - \[ \] Buy lumber \[LOE:2\] \[ID:\w{6}\]$'
+            )
+
+        with t.subTest('the child lands last in its parent block'):
+            t.assertEqual(
+                t.path.read_text(encoding='utf-8'),
+                WORK.replace(
+                    '  - [ ] Sweep up\n', f'  - [ ] Sweep up\n{entry}\n'
+                ),
+            )
+
+    def test_add_subtask_journal(t) -> None:
+        _, entry = add_subtask(
+            t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
+        )
+        child = task_id(entry)
+        (event,) = Journal(t.source).read()
+
+        with t.subTest('one TaskAdded on the new subtask stream'):
+            t.assertEqual(event['type'], 'TaskAdded')
+            t.assertEqual(event['stream_id'], f'task/{child}')
+            t.assertEqual(
+                event['metadata'],
+                {'actor': 'agent', 'source_file': 'work.md'},
+            )
+
+        with t.subTest('the parent rides in the payload, not in the file'):
+            t.assertEqual(
+                event['payload'],
+                {
+                    'delta': {'LOE': [None, '2'], 'ID': [None, child]},
+                    'snapshot': {
+                        'title': 'Buy lumber',
+                        'done': False,
+                        'fields': {'LOE': '2', 'ID': child},
+                    },
+                    'parent': '9o71lx',
+                },
+            )
+
+    def test_add_subtask_stamps_the_parent(t) -> None:
+        _, entry = add_subtask(
+            t.source, 'work', 'Unidentified', 'Get quotes', {}
+        )
+        stamp, added = Journal(t.source).read()
+        parent = stamp['stream_id'].removeprefix('task/')
+
+        with t.subTest('a parent with no id of its own is given one'):
+            t.assertIn(
+                f'- [ ] Unidentified task [P:2] [ID:{parent}]',
+                t.path.read_text(encoding='utf-8'),
+            )
+
+        with t.subTest('the stamp is an event on the parent stream'):
+            t.assertEqual(stamp['type'], 'TaskUpdated')
+            t.assertEqual(stamp['payload']['delta'], {'ID': [None, parent]})
+
+        with t.subTest('which the child then names as its parent'):
+            t.assertEqual(added['stream_id'], f'task/{task_id(entry)}')
+            t.assertEqual(added['payload']['parent'], parent)
+
+    def test_add_subtask_rejected(t) -> None:
+        before = t.path.read_text(encoding='utf-8')
+
+        with (
+            t.subTest('a parent no selector reaches'),
+            t.assertRaises(SelectionError),
+        ):
+            add_subtask(t.source, 'work', 'nothing', 'X', {})
+
+        with (
+            t.subTest('a field only the top-level task carries'),
+            t.assertRaisesRegex(ValueError, 'P belongs to the top-level task'),
+        ):
+            add_subtask(t.source, 'work', '9o71lx', 'X', {'P': '3'})
+
+        with (
+            t.subTest('a checklist item, which cannot hold an id'),
+            t.assertRaisesRegex(ValueError, 'checklist item'),
+        ):
+            add_subtask(t.source, 'work', 'Sweep up', 'X', {})
+
+        with t.subTest('a rejected add writes nothing at all'):
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
             t.assertEqual(Journal(t.source).read(), [])

@@ -382,9 +382,10 @@ class CommandsBackfillTests(ClockTests):
 class CommandsAddTests(ClockTests):
     def setUp(t):
         super().setUp()
-        patcher = patch(f'{SRC}.add_task', autospec=True)
-        t.add_task = patcher.start()
-        t.addCleanup(patcher.stop)
+        for target in ('add_task', 'add_subtask'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
         patcher = patch('builtins.print')
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
@@ -392,6 +393,7 @@ class CommandsAddTests(ClockTests):
         t.path = Path('~/todo/chores.md')
         t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
         t.add_task.return_value = (t.path, t.entry)
+        t.add_subtask.return_value = (t.path, t.entry)
 
         # spec models batconf: an argument the user did not supply is
         # absent from the Configuration, not None.
@@ -429,6 +431,31 @@ class CommandsAddTests(ClockTests):
             Commands.add(conf)
 
             t.assertEqual(t.add_task.call_args[0][3], {})
+
+    def test_add_under_a_parent(t):
+        conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
+        conf.view.source_dir = '~/todo'
+        conf.list = 'work'
+        conf.title = 'Buy lumber'
+        conf.parent = '9o71lx'
+        conf.loe = '2'
+
+        Commands.add(conf)
+
+        with t.subTest('a parent sends the add to the subtask path'):
+            t.add_task.assert_not_called()
+            args = t.add_subtask.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'work')
+            t.assertEqual(args[2], '9o71lx')
+            t.assertEqual(args[3], 'Buy lumber')
+            t.assertEqual(args[4], {'LOE': '2'})
+
+        with t.subTest('a subtask carries no add date, so no clock is read'):
+            t.datetime.now.assert_not_called()
+
+        with t.subTest('the created line and its file are echoed'):
+            t.print.assert_has_calls([call(t.entry), call(t.path)])
 
 
 class CommandsShowTests(ClockTests):

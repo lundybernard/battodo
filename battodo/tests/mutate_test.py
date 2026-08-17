@@ -10,6 +10,7 @@ from ..mutate import (
     ListError,
     Match,
     SelectionError,
+    add_subtask,
     add_task,
     backfill_all,
     backfill_file,
@@ -804,15 +805,21 @@ UPDATE_DOC = """# Work
 """
 
 
-class UpdateTaskTests(TestCase):
-    """Isolation tests: the lookup, the file and the journal are mocked."""
+class IsolatedTests(TestCase):
+    """Isolation tests: the lookup, the file and the journal are mocked.
+
+    Each suite names the targets it needs in `TARGETS` and builds its
+    own document, so what a test stands on stays beside the test.
+    """
+
+    TARGETS: tuple[str, ...] = ('find_task', 'Journal', 'new_task_id')
 
     find_task: MagicMock
     Journal: MagicMock
     new_task_id: MagicMock
 
     def setUp(t) -> None:
-        for target in ('find_task', 'Journal', 'new_task_id'):
+        for target in t.TARGETS:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -820,10 +827,15 @@ class UpdateTaskTests(TestCase):
 
         t.path = Mock(spec=Path)
         t.path.name = 'work.md'
-        t.doc = parse(UPDATE_DOC)
-        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
         t.dir = Path('/todo')
         t.append = t.Journal.return_value.append
+
+
+class UpdateTaskTests(IsolatedTests):
+    def setUp(t) -> None:
+        super().setUp()
+        t.doc = parse(UPDATE_DOC)
+        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
 
     def test_update_task(t) -> None:
         path, entry = update_task(
@@ -905,6 +917,152 @@ class UpdateTaskTests(TestCase):
             t.find_task.return_value = Match(t.path, t.doc, [child, child])
             with t.assertRaisesRegex(ValueError, 'top-level'):
                 update_task(t.dir, 'child', {'P': '5'}, TODAY)
+
+        with t.subTest('nothing is written and nothing is logged'):
+            t.path.write_text.assert_not_called()
+
+
+SUBTASK_DOC = """# Work
+
+## Open
+
+- [ ] Deck rebuild [P:4] [LOE:8] [ID:9o71lx]
+      A note that stays put.
+  - [ ] Chip the brush [LOE:2]
+- [ ] Bare [P:2]
+
+## Done
+"""
+
+
+class AddSubtaskTests(IsolatedTests):
+    TARGETS = ('discover_lists', 'find_task', 'Journal', 'new_task_id')
+
+    discover_lists: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.path.stem = 'work'
+        t.discover_lists.return_value = [t.path]
+        t.doc = parse(SUBTASK_DOC)
+        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
+
+    def test_add_subtask(t) -> None:
+        path, entry = add_subtask(
+            t.dir, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
+        )
+
+        with t.subTest('the parent selector is resolved in the directory'):
+            t.find_task.assert_called_with(t.dir, '9o71lx')
+
+        with t.subTest('the line is indented one level under its parent'):
+            t.assertEqual(entry, '  - [ ] Buy lumber [LOE:2] [ID:zz01ab]')
+            t.assertEqual(path, t.path)
+
+        with t.subTest('and lands last in the parent block'):
+            t.path.write_text.assert_called_with(
+                SUBTASK_DOC.replace(
+                    '  - [ ] Chip the brush [LOE:2]\n',
+                    f'  - [ ] Chip the brush [LOE:2]\n{entry}\n',
+                )
+            )
+
+    def test_add_subtask_event(t) -> None:
+        add_subtask(t.dir, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'})
+
+        with t.subTest('the journal of the source directory'):
+            t.Journal.assert_called_with(t.dir)
+
+        with t.subTest('one TaskAdded, on the new subtask stream'):
+            t.append.assert_called_once_with(
+                'TaskAdded',
+                'task/zz01ab',
+                {
+                    'delta': {'LOE': [None, '2'], 'ID': [None, 'zz01ab']},
+                    # Post-state, as for any add: there is no prior
+                    # state for a snapshot to describe.
+                    'snapshot': {
+                        'title': 'Buy lumber',
+                        'done': False,
+                        'fields': {'LOE': '2', 'ID': 'zz01ab'},
+                    },
+                    # The file states the hierarchy by indentation, so
+                    # the id names the parent here and nowhere else.
+                    'parent': '9o71lx',
+                },
+                actor='agent',
+                source_file='work.md',
+            )
+
+    def test_add_subtask_stamps_the_parent(t) -> None:
+        parent = t.doc.tasks[1]
+        t.find_task.return_value = Match(t.path, t.doc, [parent])
+        t.new_task_id.side_effect = ['pp02cd', 'cc03ef']
+
+        _, entry = add_subtask(t.dir, 'work', 'Bare', 'Get quotes', {})
+        stamp, added = t.append.call_args_list
+
+        with t.subTest('a parent with no id of its own is given one'):
+            t.assertIn(
+                '- [ ] Bare [P:2] [ID:pp02cd]',
+                t.path.write_text.call_args[0][0],
+            )
+            t.assertEqual(entry, '  - [ ] Get quotes [ID:cc03ef]')
+
+        with t.subTest('the stamp is an event of its own, on that stream'):
+            t.assertEqual(
+                stamp.args,
+                (
+                    'TaskUpdated',
+                    'task/pp02cd',
+                    {
+                        'delta': {'ID': [None, 'pp02cd']},
+                        'snapshot': {
+                            'title': 'Bare',
+                            'done': False,
+                            'fields': {'P': '2'},
+                        },
+                    },
+                ),
+            )
+
+        with t.subTest('which the child then names as its parent'):
+            t.assertEqual(added.args[1], 'task/cc03ef')
+            t.assertEqual(added.args[2]['parent'], 'pp02cd')
+
+    def test_add_subtask_rejected(t) -> None:
+        for name in ('P', 'REPEAT'):
+            with (
+                t.subTest(f'{name} belongs to the top-level task'),
+                t.assertRaisesRegex(
+                    ValueError, f'{name} belongs to the top-level task'
+                ),
+            ):
+                add_subtask(t.dir, 'work', '9o71lx', 'X', {name: '3'})
+
+        with (
+            t.subTest('a value btodo cannot read'),
+            t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'),
+        ):
+            add_subtask(t.dir, 'work', '9o71lx', 'X', {'DUE': 'someday'})
+
+        with t.subTest('an unknown list'), t.assertRaises(ListError):
+            add_subtask(t.dir, 'wrk', '9o71lx', 'X', {})
+
+        with t.subTest('a checklist item, which cannot hold an id'):
+            item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
+            t.find_task.return_value = Match(
+                t.path, item, [item.tasks[0], item.tasks[0].children[0]]
+            )
+            with t.assertRaisesRegex(ValueError, 'checklist item'):
+                add_subtask(t.dir, 'work', 'Sweep up', 'X', {})
+
+        with t.subTest('a parent that lives in another list'):
+            other = Mock(spec=Path)
+            other.name = 'chores.md'
+            t.find_task.return_value = Match(other, t.doc, [t.doc.tasks[0]])
+            with t.assertRaisesRegex(ValueError, 'a task in chores.md'):
+                add_subtask(t.dir, 'work', '9o71lx', 'X', {})
 
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()

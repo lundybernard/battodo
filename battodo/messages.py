@@ -42,7 +42,7 @@ MESSAGES = {
     ),
     'view.format.help': 'output format: text for a terminal, json for agents',
     # add
-    'add.description': 'add a task to the end of a list',
+    'add.description': 'add a task to a list, or under a parent task',
     'add.help': 'for details use add --help',
     'add.list.metavar': 'list',
     'add.list.help': "the list's filename stem, e.g. chores for chores.md",
@@ -53,6 +53,8 @@ MESSAGES = {
     'add.due.help': 'due date, YYYY-MM-DD',
     'add.repeat.help': 'recurrence: Nd, Nw, weekly:DAY or monthly:N',
     'add.tags.help': 'comma-separated tags',
+    'add.parent.help': 'add under this task, in the same list: its [ID:]'
+    ' value, or part of its title',
     # show
     'show.description': 'show one item: its fields and its subtasks',
     'show.help': 'for details use show --help',
