@@ -220,6 +220,23 @@ class AddSubtaskTests(TestCase):
                 },
             )
 
+    def test_add_subtask_nests_deeper(t) -> None:
+        """A subtask is itself a parent, as SCHEMA.md allows."""
+        _, entry = add_subtask(
+            t.source, 'work', 'Chip the brush', 'Rake the chips', {}
+        )
+        stamp = Journal(t.source).read()[0]
+        parent = stamp['stream_id'].removeprefix('task/')
+
+        with t.subTest('the child indents one level under its parent'):
+            t.assertRegex(entry, r'^    - \[ \] Rake the chips \[ID:\w{6}\]$')
+
+        with t.subTest('and lands directly beneath it'):
+            t.assertIn(
+                f'  - [ ] Chip the brush [LOE:2] [ID:{parent}]\n{entry}\n',
+                t.path.read_text(encoding='utf-8'),
+            )
+
     def test_add_subtask_stamps_the_parent(t) -> None:
         _, entry = add_subtask(
             t.source, 'work', 'Unidentified', 'Get quotes', {}
