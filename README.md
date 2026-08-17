@@ -113,8 +113,21 @@ source_dir = "~/todo"
 top = "10"
 ```
 
-btodo reads `config.toml` from the working directory. `--conf FILE`
-names another file, and `--env NAME` picks an environment from it.
+### Where the config file lives
+
+`btodo` runs from any directory, so it reads the first config file it
+finds of:
+
+1. the path given to `--conf`,
+2. the path in `$BATTODO_CONFIG_FILE`,
+3. `./battodo.toml`, for a checkout that keeps its own lists,
+4. `$XDG_CONFIG_HOME/battodo/config.toml`, or
+   `~/.config/battodo/config.toml` when that variable is unset.
+
+Finding none is normal: defaults and environment variables answer on
+their own. `example.config.toml` is the file to copy into place, and
+`--env NAME` picks an environment from whichever file is read. The
+order is [ADR 0015](docs/decisions/0015-config-file-location.md).
 
 ## Development
 
@@ -133,6 +146,10 @@ lists. Clone them with `cp -rL` — `~/todo` is a symlink, so plain
 `cp -r` copies the link and every "sandbox" write lands on real data.
 Verify the target is a real directory (`ls -ld`) before running anything
 that mutates.
+
+A config file sets the same value; see
+[Configuration](#configuration).
+
 
 Tasks run through pixi; each one uses its own isolated environment.
 

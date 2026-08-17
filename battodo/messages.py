@@ -23,8 +23,8 @@ MESSAGES = {
     'cli.usage': 'btodo [<args>] <command>',
     'cli.verbose.help': 'enable INFO output',
     'cli.debug.help': 'enable DEBUG output',
-    'cli.config_file.help': 'specify a config file to get environment details'
-    ' from. default=./config.toml',
+    'cli.config_file.help': 'read config from this file. without it,'
+    ' ./battodo.toml and then the XDG user config file are searched',
     'cli.config_env.help': 'specify the remote environment to use from the'
     ' config file',
     'cli.commands.title': 'commands',

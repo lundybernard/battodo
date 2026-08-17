@@ -9,7 +9,7 @@ collecting it.
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from os import environ
+from os import chdir, environ, getcwd
 from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
@@ -25,9 +25,11 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
     args : list of str
         The command line, without the program name.
     env : dict
-        Environment variables to set for the run, and only for it.
-        The user config directory is an empty one unless `env` names
-        another, so no config file of the host reaches the run.
+        The whole environment of the run: the host's environment is
+        cleared first. The run starts in an empty sandbox directory,
+        and searches that sandbox for the user config file unless
+        `env` names another, so no config file of the host reaches
+        the run.
 
     Raises
     ------
@@ -35,14 +37,23 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
         If the entry point returns without exiting.
     """
     out, err = StringIO(), StringIO()
+    cwd = getcwd()
     try:
         with (
-            TemporaryDirectory() as config_home,
-            patch.dict(environ, {'XDG_CONFIG_HOME': config_home} | env),
+            TemporaryDirectory() as sandbox,
+            patch.dict(
+                environ,
+                {'XDG_CONFIG_HOME': sandbox} | env,
+                clear=True,
+            ),
             redirect_stdout(out),
             redirect_stderr(err),
         ):
-            BATCLI(args)
+            try:
+                chdir(sandbox)
+                BATCLI(args)
+            finally:
+                chdir(cwd)
     except SystemExit as exit:
         return out.getvalue(), err.getvalue(), exit.code
     raise AssertionError('the entry point returned without exiting')
