@@ -135,3 +135,26 @@ model an agent guesses correctly on the first try; and `pixi`'s 3-day
 `exclude-newer` cooldown needed a per-package override
 (`[tool.pixi.pypi-exclude-newer]`) to install a 2-day-old release of
 our own upstream, which is the cooldown working as designed.
+
+Found during the view `--top` cycle:
+
+- **`SourceList.get` returns the first *truthy* value, not the first
+  non-`None` one**, though its docstring says non-`None`. An argparse
+  option with a non-falsy `default=` fills its namespace key on every
+  run, so it shadows the env and file sources under it for good:
+  `BATTODO_VIEW_TOP=99` leaves the view at 5, while
+  `BATTODO_SHOW_ALL=1` works, because `store_true` defaults to `False`
+  and a falsy value falls through. An option that is also a config
+  value must therefore leave its argparse default unset and let the
+  schema default answer, which is what `--top` does.
+- **Config values are strings by design, and the schema enforces it.**
+  `_default_values` keeps a field default only when
+  `isinstance(f.default, str)`, so `top: int = 5` on a config schema
+  never reaches a lookup: the read raises `AttributeError`, as though
+  the field carried no default. The rule is right — the environment
+  source carries strings and nothing else — and decoding a value to
+  the type its consumer needs is the consumer's job, conventionally a
+  `from_config` method on the class that requires it. The gap is that
+  neither the rule nor this failure mode is documented: the
+  `AttributeError` reports a missing value rather than a rejected
+  default, which sends a reader hunting for a missing source.
