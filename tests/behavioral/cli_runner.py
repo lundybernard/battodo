@@ -10,6 +10,7 @@ collecting it.
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from os import environ
+from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
@@ -25,6 +26,8 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
         The command line, without the program name.
     env : dict
         Environment variables to set for the run, and only for it.
+        The user config directory is an empty one unless `env` names
+        another, so no config file of the host reaches the run.
 
     Raises
     ------
@@ -34,7 +37,8 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
     out, err = StringIO(), StringIO()
     try:
         with (
-            patch.dict(environ, env),
+            TemporaryDirectory() as config_home,
+            patch.dict(environ, {'XDG_CONFIG_HOME': config_home} | env),
             redirect_stdout(out),
             redirect_stderr(err),
         ):
