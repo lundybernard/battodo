@@ -122,6 +122,12 @@ def argparser():
         help=MESSAGES['view.all.help'],
     )
     view.add_argument(
+        '--top',
+        dest=f'{CONFIG_ROOT}.view.top',
+        type=checked_count,
+        help=MESSAGES['view.top.help'],
+    )
+    view.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
         choices=('text', 'json'),
@@ -258,6 +264,37 @@ def argparser():
     return p
 
 
+def item_count(value: str) -> int:
+    """Decode a count of items, from whichever source configured it.
+
+    Raises
+    ------
+    ValueError
+        The value is not a whole number of one or more.
+    """
+    count = int(value) if value.isdecimal() else 0
+    if count < 1:
+        raise ValueError(f'{MESSAGES["view.top.error"]}: {value}')
+    return count
+
+
+def checked_count(value: str) -> str:
+    """Check a count given on the command line; it stays a string.
+
+    Every configuration value is a string, whichever source carries it.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        The value is not a whole number of one or more.
+    """
+    try:
+        item_count(value)
+    except ValueError as exp:
+        raise argparse.ArgumentTypeError(str(exp)) from exp
+    return value
+
+
 def get_help(parser):
     def help(args):
         parser.print_help()
@@ -350,6 +387,7 @@ class Commands:
                 source,
                 datetime.now(TZ),
                 show_all=bool(getattr(conf, 'show_all', False)),
+                top_n=item_count(conf.view.top),
             )
         )
 

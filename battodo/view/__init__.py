@@ -16,6 +16,7 @@ from .lib import build_json, build_view
 from .render import Row, Table, View, due_label
 from .selection import (
     RANK_PLACES,
+    TOP_N,
     Category,
     Selection,
     SourceError,
@@ -36,10 +37,15 @@ TZ = ZoneInfo('America/Los_Angeles')
 
 @dataclass
 class Config:
-    """Where btodo looks for lists.
+    """What a view reads, and how much of it a view shows.
 
-    One source for now; R6 turns this into a list of sources once the
-    discovery/merge semantics in ADR 0004 are settled.
+    One source for now; R6 turns `source_dir` into a list of sources
+    once the discovery/merge semantics in ADR 0004 are settled.
+
+    Every value is a string: the environment source carries nothing
+    else, so a consumer decodes what it needs. `top` is read as an
+    integer by the view command.
     """
 
     source_dir: str = '~/todo'
+    top: str = str(TOP_N)
