@@ -6,6 +6,12 @@ from logging.config import dictConfig
 from pathlib import Path
 from sys import exit
 
+from battodo.completed import (
+    DEFAULT_PERIOD,
+    PERIODS,
+    build_digest,
+    build_digest_json,
+)
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.item import build_item, build_item_json
 from battodo.lib import get_view
@@ -262,6 +268,28 @@ def argparser():
     )
     backfill.set_defaults(func=Commands.backfill)
 
+    completed = commands.add_parser(
+        'completed',
+        description=MESSAGES['completed.description'],
+        help=MESSAGES['completed.help'],
+    )
+    completed.set_defaults(func=Commands.completed)
+    completed.add_argument(
+        f'{CONFIG_ROOT}.period',
+        nargs='?',
+        choices=PERIODS,
+        default=DEFAULT_PERIOD,
+        metavar=MESSAGES['completed.period.metavar'],
+        help=MESSAGES['completed.period.help'],
+    )
+    completed.add_argument(
+        '--format',
+        dest=f'{CONFIG_ROOT}.format',
+        choices=('text', 'json'),
+        default='text',
+        help=MESSAGES['completed.format.help'],
+    )
+
     return p
 
 
@@ -364,6 +392,22 @@ class Commands:
     @staticmethod
     def view(conf):
         print(get_view(conf, datetime.now(TZ)))
+
+    @staticmethod
+    def completed(conf):
+        source = Path(conf.view.source_dir).expanduser()
+        build = (
+            build_digest_json
+            if getattr(conf, 'format', 'text') == 'json'
+            else build_digest
+        )
+        print(
+            build(
+                source,
+                datetime.now(TZ),
+                period=getattr(conf, 'period', DEFAULT_PERIOD),
+            )
+        )
 
     @staticmethod
     def set_log_level(conf):

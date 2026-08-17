@@ -1,0 +1,52 @@
+{
+  "period": "week",
+  "start": "2026-07-30",
+  "end": "2026-08-05",
+  "total": 6,
+  "categories": [
+    {
+      "name": "work",
+      "entries": [
+        {
+          "date": "2026-07-30",
+          "title": "Review the storage ADR"
+        },
+        {
+          "date": "2026-08-05",
+          "title": "Update the captain's log"
+        }
+      ]
+    },
+    {
+      "name": "chores",
+      "entries": [
+        {
+          "date": "2026-08-04",
+          "title": "Deck > Chip the brush pile"
+        },
+        {
+          "date": "2026-08-04",
+          "title": "Deck"
+        }
+      ]
+    },
+    {
+      "name": "career",
+      "entries": [
+        {
+          "date": "2026-07-31",
+          "title": "Apply for a job"
+        }
+      ]
+    },
+    {
+      "name": "van",
+      "entries": [
+        {
+          "date": "2026-08-02",
+          "title": "Rebuild the galley shelf"
+        }
+      ]
+    }
+  ]
+}

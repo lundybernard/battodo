@@ -6,7 +6,9 @@ from unittest.mock import Mock, call, patch
 
 from ..cli import (
     BATCLI,
+    DEFAULT_PERIOD,
     MESSAGES,
+    PERIODS,
     TZ,
     Commands,
     argparse,
@@ -138,6 +140,12 @@ class ArgparserTests(TestCase):
             args = p.parse_args(['show', 'brush pile', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
+        with t.subTest('and so does completed'):
+            args = p.parse_args(['completed'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            args = p.parse_args(['completed', '--format', 'json'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'json')
+
     def test_every_subcommand_reaches_its_command(t):
         cases = [
             (['view'], Commands.view),
@@ -147,6 +155,7 @@ class ArgparserTests(TestCase):
             (['done', 'brush pile'], Commands.done),
             (['scratch', 'brush pile'], Commands.scratch),
             (['backfill'], Commands.backfill),
+            (['completed'], Commands.completed),
         ]
         for argv, command in cases:
             with t.subTest(argv[0]):
@@ -169,6 +178,23 @@ class ArgparserTests(TestCase):
             with t.subTest(flag):
                 args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
                 t.assertEqual(getattr(args, 'battodo.priority'), '4')
+
+    def test_completed_period(t):
+        with t.subTest('the week when none is named'):
+            args = t.parser.parse_args(['completed'])
+            t.assertEqual(getattr(args, 'battodo.period'), DEFAULT_PERIOD)
+
+        for period in PERIODS:
+            with t.subTest(period):
+                args = t.parser.parse_args(['completed', period])
+                t.assertEqual(getattr(args, 'battodo.period'), period)
+
+        with (
+            t.subTest('a period with no definition is a usage error'),
+            redirect_stderr(StringIO()),
+            t.assertRaises(SystemExit),
+        ):
+            t.parser.parse_args(['completed', 'fortnight'])
 
     def test_config_selection(t):
         spellings = {
@@ -457,6 +483,61 @@ class CommandsShowTests(ClockTests):
             t.assertEqual(t.build_item.call_count, 2)
 
 
+class CommandsCompletedTests(ClockTests):
+    def setUp(t):
+        super().setUp()
+        for target in ('build_digest', 'build_digest_json'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print')
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        # spec models batconf: an option the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'period', 'format'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.period = 'month'
+        t.conf.format = 'text'
+
+    def test_completed(t):
+        with t.subTest('the human digest is the default'):
+            Commands.completed(t.conf)
+
+            args, kwargs = t.build_digest.call_args
+            t.print.assert_called_with(t.build_digest.return_value)
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], t.datetime.now.return_value)
+            t.assertEqual(kwargs['period'], 'month')
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('json format is serialized instead'):
+            t.print.reset_mock()
+            t.conf.format = 'json'
+
+            Commands.completed(t.conf)
+
+            args, kwargs = t.build_digest_json.call_args
+            t.print.assert_called_with(t.build_digest_json.return_value)
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(kwargs['period'], 'month')
+            t.build_digest.assert_called_once()
+
+        with t.subTest('an unconfigured digest is human, and the week'):
+            conf = Mock(spec=['view'])
+            conf.view.source_dir = '~/todo'
+
+            Commands.completed(conf)
+
+            t.assertEqual(t.build_digest.call_count, 2)
+            t.assertEqual(
+                t.build_digest.call_args[1]['period'], DEFAULT_PERIOD
+            )
+
+
 class CommandsUpdateTests(ClockTests):
     def setUp(t):
         super().setUp()
@@ -652,6 +733,10 @@ class CliArgsResolutionTests(TestCase):
         with t.subTest('an omitted add field is absent, not empty'):
             conf = t.resolve(['add', 'chores', 'X'])
             t.assertIsNone(getattr(conf, 'due', None))
+
+        with t.subTest('an optional positional reaches the command'):
+            t.assertEqual(t.resolve(['completed', 'month']).period, 'month')
+            t.assertEqual(t.resolve(['completed']).period, DEFAULT_PERIOD)
 
 
 class CommandsTests(TestCase):

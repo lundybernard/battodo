@@ -1,0 +1,19 @@
+Completed week: 2026-07-30 to 2026-08-05 — 6 done
+
+── Work ────────────────────────────────
+  DATE        TASK
+  2026-07-30  Review the storage ADR
+  2026-08-05  Update the captain's log
+
+── Chores ──────────────────────────────
+  DATE        TASK
+  2026-08-04  Deck > Chip the brush pile
+  2026-08-04  Deck
+
+── Career ──────────────────────────────
+  DATE        TASK
+  2026-07-31  Apply for a job
+
+── Van ─────────────────────────────────
+  DATE        TASK
+  2026-08-02  Rebuild the galley shelf

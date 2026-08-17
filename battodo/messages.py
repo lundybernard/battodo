@@ -82,4 +82,12 @@ MESSAGES = {
     'backfill.description': 'one-time migration: stamp [ADDED:today] on '
     'tasks that predate the field',
     'backfill.help': 'for details use backfill --help',
+    # completed
+    'completed.description': 'digest the completed log for one period',
+    'completed.help': 'for details use completed --help',
+    'completed.period.metavar': 'period',
+    'completed.period.help': 'how far back to read: today, week or month;'
+    ' default week',
+    'completed.format.help': 'output format: text for a terminal, json for'
+    ' agents',
 }
