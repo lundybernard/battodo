@@ -899,6 +899,27 @@ class UpdateTaskTests(IsolatedTests):
         with t.subTest('the stamp rides in the delta, so it can be undone'):
             t.assertEqual(payload['delta']['ID'], [None, 'zz01ab'])
 
+    def test_update_task_reaches_a_subtask(t) -> None:
+        doc = parse(SUBTASK_DOC)
+        parent = doc.tasks[0]
+        t.find_task.return_value = Match(
+            t.path, doc, [parent, parent.children[0]]
+        )
+
+        _, entry = update_task(
+            t.dir, 'Chip the brush', {'DUE': '2026-09-01'}, TODAY
+        )
+        payload = t.append.call_args[0][2]
+
+        with t.subTest('the child keeps its indent and gains an id'):
+            t.assertEqual(
+                entry,
+                '  - [ ] Chip the brush [LOE:2] [DUE:2026-09-01] [ID:zz01ab]',
+            )
+
+        with t.subTest('the event records where the child sits'):
+            t.assertEqual(payload['ancestry'], 'Deck rebuild > Chip the brush')
+
     def test_update_task_rejected(t) -> None:
         with (
             t.subTest('an update that names no change'),
@@ -912,11 +933,25 @@ class UpdateTaskTests(IsolatedTests):
         ):
             update_task(t.dir, '9o71lx', {'DUE': 'someday'}, TODAY)
 
-        with t.subTest('a task below the top level'):
-            child = t.doc.tasks[0]
-            t.find_task.return_value = Match(t.path, t.doc, [child, child])
-            with t.assertRaisesRegex(ValueError, 'top-level'):
-                update_task(t.dir, 'child', {'P': '5'}, TODAY)
+        doc = parse(SUBTASK_DOC)
+        parent = doc.tasks[0]
+        t.find_task.return_value = Match(
+            t.path, doc, [parent, parent.children[0]]
+        )
+
+        with (
+            t.subTest('a field the top-level task owns'),
+            t.assertRaisesRegex(ValueError, 'P belongs to the top-level task'),
+        ):
+            update_task(t.dir, 'Chip the brush', {'P': '5'}, TODAY)
+
+        with t.subTest('a checklist item, which carries no fields'):
+            item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
+            t.find_task.return_value = Match(
+                t.path, item, [item.tasks[0], item.tasks[0].children[0]]
+            )
+            with t.assertRaisesRegex(ValueError, 'checklist item'):
+                update_task(t.dir, 'Sweep up', {'DUE': '2026-09-01'}, TODAY)
 
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()

@@ -753,9 +753,9 @@ def update_task(
     stamped where the task has none, so the caller can address it by id
     from here on.
 
-    Top-level tasks only. A field written to a childless line promotes
-    it from a checklist item to a subtask (SCHEMA.md), and an `[ID:]`
-    on one would do so silently; neither has a settled meaning yet.
+    Subtasks are reached at any depth, and the event then carries the
+    `Parent > Child` ancestry. A checklist item is refused: writing a
+    field to one promotes it to a subtask (SCHEMA.md).
 
     Parameters
     ----------
@@ -780,8 +780,9 @@ def update_task(
     SelectionError
         If `selector` does not name exactly one open task.
     ValueError
-        If nothing was named to change, if the task is not top-level,
-        or if a supplied value is unreadable. Raised before anything is
+        If nothing was named to change, if the task is a checklist
+        item, if `fields` carries a field the top-level task owns, or
+        if a supplied value is unreadable. Raised before anything is
         written.
     """
     if not fields and title is None:
@@ -790,10 +791,10 @@ def update_task(
 
     match = find_task(directory, selector)
     task = match.task
-    if len(match.trail) > 1:
-        raise ValueError(
-            f'update reaches top-level tasks only, not {task.title!r}'
-        )
+    nested = len(match.trail) > 1
+    _refuse_checklist_item(task)
+    if nested:
+        _refuse_root_fields(fields)
 
     task_id = task.task_id or new_task_id()
     written = dict(checked)
@@ -809,18 +810,24 @@ def update_task(
     if title is not None:
         delta['title'] = [task.title, title]
 
+    payload: dict[str, Any] = {
+        'delta': delta,
+        # Pre-state, as everywhere but an add: the delta says what
+        # changed, the snapshot says what it changed from.
+        'snapshot': task_snapshot(task),
+    }
+    if nested:
+        # Only a child needs it. A top-level task's ancestry is its own
+        # title, which the snapshot already carries.
+        payload['ancestry'] = _ancestry(match.trail)
+
     match.doc.lines[task.raw_index] = entry
     match.path.write_text(serialize(match.doc))
 
     Journal(directory).append(
         UPDATED_EVENT,
         f'task/{task_id}',
-        {
-            'delta': delta,
-            # Pre-state, as everywhere but an add: the delta says what
-            # changed, the snapshot says what it changed from.
-            'snapshot': task_snapshot(task),
-        },
+        payload,
         actor='agent',
         source_file=match.path.name,
     )

@@ -107,3 +107,45 @@ class SubtaskCommandTests(TestCase):
                     (t.source / 'work.md').read_text(encoding='utf-8'),
                     original,
                 )
+
+    def add_subtask(t) -> str:
+        """Add one subtask under PARENT and return its id."""
+        t.run_ok(
+            'add', 'work', 'Sand the rails', '--parent', PARENT, '--loe', '2'
+        )
+        return t.show(PARENT)['subtasks'][-1]['id']
+
+    def test_update_and_done_reach_a_subtask(t) -> None:
+        child = t.add_subtask()
+
+        echoed = t.run_ok(
+            'update', child, '--due', '2026-09-01', '--title', 'Sand and seal'
+        )
+        with t.subTest('the child line is rewritten where it stands'):
+            t.assertIn('  - [ ] Sand and seal', echoed)
+
+        after = t.show(child)
+        with t.subTest('the change reads back by the same id'):
+            t.assertEqual(after['title'], 'Sand and seal')
+            t.assertEqual(after['due'], '2026-09-01')
+
+        with t.subTest('what the update did not name is left alone'):
+            t.assertEqual(after['loe'], 2)
+
+        logged = t.run_ok('done', child)
+        with t.subTest('done logs the child under its ancestry'):
+            t.assertIn('Legacy priority task > Sand and seal', logged)
+
+    def test_scratch_reaches_a_subtask(t) -> None:
+        child = t.add_subtask()
+
+        logged = t.run_ok('scratch', child)
+
+        with t.subTest('the log entry names the child under its parent'):
+            t.assertIn('Legacy priority task > Sand the rails', logged)
+
+        with t.subTest('and the line is gone'):
+            t.assertNotIn(
+                'Sand the rails',
+                [child['title'] for child in t.show(PARENT)['subtasks']],
+            )

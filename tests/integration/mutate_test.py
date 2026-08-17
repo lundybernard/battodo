@@ -118,11 +118,38 @@ class UpdateTaskTests(TestCase):
         with t.subTest('the stamp is in the delta, so it can be undone'):
             t.assertEqual(event['payload']['delta']['ID'], [None, task_id])
 
+    def test_update_task_reaches_a_subtask(t) -> None:
+        _, entry = update_task(
+            t.source, 'Chip the brush', {'DUE': '2026-09-01'}, TODAY
+        )
+        child = task_id(entry)
+        (event,) = Journal(t.source).read()
+
+        with t.subTest('the child keeps its indent and gains an id'):
+            t.assertEqual(
+                entry,
+                '  - [ ] Chip the brush [LOE:2] '
+                f'[DUE:2026-09-01] [ID:{child}]',
+            )
+            t.assertIn(entry, t.path.read_text(encoding='utf-8'))
+
+        with t.subTest('the event lands on the child stream'):
+            t.assertEqual(event['stream_id'], f'task/{child}')
+
+        with t.subTest('and records where the child sits'):
+            t.assertEqual(
+                event['payload']['ancestry'], 'Deck rebuild > Chip the brush'
+            )
+
     def test_update_task_rejected(t) -> None:
         before = t.path.read_text(encoding='utf-8')
         cases = {
             'an update that names no change': ('9o71lx', {}),
-            'a task below the top level': ('Chip the brush', {'P': '5'}),
+            'a field the top-level task owns': ('Chip the brush', {'P': '5'}),
+            'a checklist item, which carries no fields': (
+                'Sweep up',
+                {'DUE': '2026-09-01'},
+            ),
             'a value btodo cannot read': ('9o71lx', {'DUE': 'someday'}),
         }
 
