@@ -1,0 +1,47 @@
+{
+  "date": "2026-08-05",
+  "active": [
+    "career",
+    "events",
+    "study",
+    "work"
+  ],
+  "categories": [
+    {
+      "name": "work",
+      "hidden": 5,
+      "tasks": [
+        {
+          "id": null,
+          "title": "Overdue task",
+          "rank": 10.29,
+          "priority": 4.0,
+          "loe": 2,
+          "due": "2026-08-01",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        }
+      ]
+    },
+    {
+      "name": "side-quests",
+      "hidden": 1,
+      "tasks": [
+        {
+          "id": null,
+          "title": "Future due date task",
+          "rank": 2.0,
+          "priority": 2.0,
+          "loe": 4,
+          "due": "2026-08-20",
+          "added": null,
+          "repeat": null,
+          "tags": [],
+          "subtasks": 0
+        }
+      ]
+    }
+  ]
+}

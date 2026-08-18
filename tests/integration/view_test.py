@@ -16,8 +16,8 @@ from unittest.mock import patch
 
 from battodo.view import (
     TZ,
-    build_json,
-    build_view,
+    Selection,
+    View,
     discover_lists,
     due_label,
     open_children,
@@ -166,7 +166,7 @@ class OpenChildrenTests(TestCase):
             t.assertEqual(open_children(childless), [])
 
 
-class BuildViewTests(SourceDirTests):
+class RenderedViewTests(SourceDirTests):
     def test_a_parked_list_does_not_end_the_scan(t) -> None:
         # The parked list sorts first. The scan must step over it,
         # not stop at it.
@@ -174,7 +174,7 @@ class BuildViewTests(SourceDirTests):
         t.write('career', '- [ ] A task after the parked list [P:2]')
         t.write('home-repair', '- [ ] The last task of all [P:2]')
 
-        out = build_view(t.source, NOW, show_all=False, width=80)
+        out = View(Selection(t.source, NOW, show_all=False), 80).text
 
         with t.subTest('the parked list contributes nothing'):
             t.assertNotIn('A parked task', out)
@@ -191,7 +191,7 @@ class BuildViewTests(SourceDirTests):
         t.write('events', '- [x] A completed task [P:3]')
         t.write('backlog', '- [ ] A visible task [P:2]')
 
-        out = build_view(t.source, NOW, show_all=False, width=80)
+        out = View(Selection(t.source, NOW, show_all=False), 80).text
 
         with t.subTest('a list with no items has no table'):
             t.assertNotIn('Career', out)
@@ -206,26 +206,27 @@ class BuildViewTests(SourceDirTests):
         t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
 
         with t.subTest('five items, and a count of what is held back'):
-            out = build_view(t.source, NOW, show_all=False, width=80)
+            out = View(Selection(t.source, NOW, show_all=False), 80).text
             t.assertIn('Item 5', out)
             t.assertNotIn('Item 6', out)
             t.assertIn('… and 2 more', out)
 
         with t.subTest('an explicit top_n replaces the default'):
-            out = build_view(t.source, NOW, show_all=False, top_n=2, width=80)
+            selection = Selection(t.source, NOW, show_all=False, top_n=2)
+            out = View(selection, 80).text
             t.assertIn('Item 2', out)
             t.assertNotIn('Item 3', out)
             t.assertIn('… and 5 more', out)
 
         with t.subTest('show_all keeps every item and holds back none'):
-            out = build_view(t.source, NOW, show_all=True, width=80)
+            out = View(Selection(t.source, NOW, show_all=True), 80).text
             t.assertIn('Item 7', out)
             t.assertNotIn('… and', out)
 
     def test_width(t) -> None:
         t.write('career', f'- [ ] {LONG_TITLE} [P:3]')
-        narrow = build_view(t.source, NOW, show_all=False, width=60)
-        wide = build_view(t.source, NOW, show_all=False, width=120)
+        narrow = View(Selection(t.source, NOW, show_all=False), 60).text
+        wide = View(Selection(t.source, NOW, show_all=False), 120).text
 
         with t.subTest('an explicit width bounds the table'):
             # The header line is prose, not columns.
@@ -244,7 +245,8 @@ class BuildViewTests(SourceDirTests):
         for columns, expected in (('60', narrow), ('120', wide)):
             with t.subTest(f'no width given probes {columns} columns'):
                 with patch.dict(environ, {'COLUMNS': columns}):
-                    probed = build_view(t.source, NOW, show_all=False)
+                    selection = Selection(t.source, NOW, show_all=False)
+                    probed = View(selection).text
                 t.assertEqual(probed, expected)
 
     def test_an_inactive_category(t) -> None:
@@ -252,35 +254,35 @@ class BuildViewTests(SourceDirTests):
         t.write('career', '- [ ] An active category task [P:2]')
 
         with t.subTest('a shut window keeps its category out of the view'):
-            out = build_view(t.source, NOW, show_all=False, width=80)
+            out = View(Selection(t.source, NOW, show_all=False), 80).text
             t.assertNotIn('An inactive category task', out)
             t.assertIn('An active category task', out)
 
         with t.subTest('asking for everything reaches past the windows'):
-            out = build_view(t.source, NOW, show_all=True, width=80)
+            out = View(Selection(t.source, NOW, show_all=True), 80).text
             t.assertIn('An inactive category task', out)
             t.assertIn('An active category task', out)
 
         with t.subTest('though a list that opted out stays out even then'):
             t.write('backlog', '- [ ] A parked task [P:4]', parked=True)
-            out = build_view(t.source, NOW, show_all=True, width=80)
+            out = View(Selection(t.source, NOW, show_all=True), 80).text
             t.assertNotIn('A parked task', out)
 
         with t.subTest('and the header still names only what is open now'):
             # Which categories are active is a fact about the clock.
             # Asking to see everything does not reopen their windows.
-            out = build_view(t.source, NOW, show_all=True, width=80)
+            out = View(Selection(t.source, NOW, show_all=True), 80).text
             t.assertIn('active: career, events, study, work', out)
 
 
-class BuildJsonTests(SourceDirTests):
+class SelectionDocumentTests(SourceDirTests):
     def categories(t, **kwargs: object) -> list[dict]:
-        document = loads(build_json(t.source, NOW, **kwargs))  # type: ignore[arg-type]
+        document = loads(Selection(t.source, NOW, **kwargs).json)  # type: ignore[arg-type]
         return document['categories']
 
     def test_top_n(t) -> None:
         t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
-        abridged = loads(build_json(t.source, NOW, show_all=False))
+        abridged = loads(Selection(t.source, NOW, show_all=False).json)
 
         with t.subTest('five tasks by default'):
             tasks = abridged['categories'][0]['tasks']
@@ -323,7 +325,7 @@ class BuildJsonTests(SourceDirTests):
     def test_the_document_is_pretty_printed(t) -> None:
         t.write('career', '- [ ] A single task [P:2]')
 
-        lines = build_json(t.source, NOW, show_all=False).split('\n')
+        lines = Selection(t.source, NOW, show_all=False).json.split('\n')
 
         with t.subTest('it spans more than one line'):
             t.assertGreater(len(lines), 1)

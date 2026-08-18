@@ -8,6 +8,7 @@ from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.item import build_item, build_item_json
+from battodo.lib import get_view
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 from battodo.mutate import (
@@ -17,7 +18,7 @@ from battodo.mutate import (
     scratch,
     update_task,
 )
-from battodo.view import TZ, build_json, build_view
+from battodo.view import TZ, item_count
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -120,6 +121,12 @@ def argparser():
         dest=f'{CONFIG_ROOT}.show_all',
         action='store_true',
         help=MESSAGES['view.all.help'],
+    )
+    view.add_argument(
+        '--top',
+        dest=f'{CONFIG_ROOT}.view.top',
+        type=checked_count,
+        help=MESSAGES['view.top.help'],
     )
     view.add_argument(
         '--format',
@@ -258,6 +265,23 @@ def argparser():
     return p
 
 
+def checked_count(value: str) -> str:
+    """Check a count given on the command line; it stays a string.
+
+    Every configuration value is a string, whichever source carries it.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        The value is not a whole number of one or more.
+    """
+    try:
+        item_count(value)
+    except ValueError as exp:
+        raise argparse.ArgumentTypeError(str(exp)) from exp
+    return value
+
+
 def get_help(parser):
     def help(args):
         parser.print_help()
@@ -339,19 +363,7 @@ class Commands:
 
     @staticmethod
     def view(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        build = (
-            build_json
-            if getattr(conf, 'format', 'text') == 'json'
-            else build_view
-        )
-        print(
-            build(
-                source,
-                datetime.now(TZ),
-                show_all=bool(getattr(conf, 'show_all', False)),
-            )
-        )
+        print(get_view(conf, datetime.now(TZ)))
 
     @staticmethod
     def set_log_level(conf):

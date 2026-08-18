@@ -36,6 +36,10 @@ MESSAGES = {
     'view.all.help': (
         'show every open item, and every category, not just those active now'
     ),
+    'view.top.help': (
+        'how many items a category shows, 1 or more; overrides the'
+        ' configured view.top, and --all outranks it'
+    ),
     'view.format.help': 'output format: text for a terminal, json for agents',
     # add
     'add.description': 'add a task to the end of a list',

@@ -21,6 +21,8 @@ from functools import cached_property
 from json import dumps
 from pathlib import Path
 
+from batconf import Configuration
+
 from ..parser import OPEN_HEADING, Task, TodoFile, parse, parse_date
 from ..rank import multiplier, rank
 
@@ -45,6 +47,22 @@ PARKED_MARKER = 'battodo:parked'
 TOP_N = 5
 # How many decimal places a published rank carries.
 RANK_PLACES = 2
+# What a rejected item count reports, wherever it was configured.
+COUNT_ERROR = 'the item count must be a whole number of 1 or more'
+
+
+def item_count(value: str) -> int:
+    """Decode a count of items, from whichever source configured it.
+
+    Raises
+    ------
+    ValueError
+        The value is not a whole number of one or more.
+    """
+    count = int(value) if value.isdecimal() else 0
+    if count < 1:
+        raise ValueError(f'{COUNT_ERROR}: {value}')
+    return count
 
 
 def active_categories(now: datetime) -> set[str]:
@@ -206,6 +224,25 @@ class Selection:
         self.now = now
         self.show_all = show_all
         self.top_n = top_n
+
+    @classmethod
+    def from_config(cls, conf: Configuration, now: datetime) -> 'Selection':
+        """Build a selection from a resolved configuration.
+
+        Every configuration value is a string, so the item count is
+        decoded here. A flag the user left off is absent, not false.
+
+        Raises
+        ------
+        ValueError
+            The configured count is not a whole number of one or more.
+        """
+        return cls(
+            Path(conf.view.source_dir),
+            now,
+            show_all=bool(getattr(conf, 'show_all', False)),
+            top_n=item_count(conf.view.top),
+        )
 
     @cached_property
     def today(self) -> date:
