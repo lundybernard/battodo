@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from .lib import build_json, build_view
 from .render import Row, Table, View, due_label
 from .selection import (
+    COUNT_ERROR,
     RANK_PLACES,
     TOP_N,
     Category,
@@ -23,6 +24,7 @@ from .selection import (
     TodoList,
     active_categories,
     discover_lists,
+    item_count,
     open_children,
     parse,
     sort_key,
