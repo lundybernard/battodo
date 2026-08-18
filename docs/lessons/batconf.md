@@ -95,9 +95,11 @@ actually hit, since that is what upstream wants to fix:
 - **Config-file conventions are thin.** Quickstart shows only an
   app-level constant (`CONFIG_FILE_NAME = str(Path.cwd() /
   "config.ini")`); no search order, no env-var override — it suggests
-  wiring `--config-file`/`--env` CLI options yourself. battodo
-  therefore defines its own `config.toml` constant and invents no env
-  var. The `environments` file format (`[batconf]` + `default_env`,
+  wiring `--config-file`/`--env` CLI options yourself. A CLI that runs
+  from any directory needs a search order, so battodo writes its own
+  (ADR 0015) and names the file's env var through
+  `EnvSource.env_name`, the one piece of the convention batconf does
+  supply. The `environments` file format (`[batconf]` + `default_env`,
   then env-prefixed tables) had to be reconstructed from source and
   verified end-to-end.
 - **Smaller gaps:** `TomlSource.__init__`/`.get` docstrings empty; bad

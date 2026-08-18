@@ -102,7 +102,7 @@ The config file is resolved in this order:
 
 1. the path given to `--conf`,
 2. the path in `$BATTODO_CONFIG_FILE`,
-3. `./config.toml`,
+3. `./battodo.toml`,
 4. `$XDG_CONFIG_HOME/battodo/config.toml`, or
    `~/.config/battodo/config.toml` when that variable is unset.
 

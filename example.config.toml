@@ -1,0 +1,15 @@
+# Example config file. Copy it to ./battodo.toml for one checkout, or
+# to ~/.config/battodo/config.toml for every run. See ADR 0015 for the
+# order the locations are searched in.
+
+# The environment `btodo` reads when `--env` names none.
+[batconf]
+default_env = "default"
+
+# Every value is addressed by its config path, under the environment.
+[default.battodo.view]
+source_dir = "~/todo"
+
+# A second environment: `btodo --env sandbox view` reads this one.
+[sandbox.battodo.view]
+source_dir = "~/todo-sandbox"
