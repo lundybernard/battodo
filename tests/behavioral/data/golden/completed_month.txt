@@ -1,0 +1,14 @@
+Completed month: 2026-08-01 to 2026-08-05 — 4 done
+
+── Work ────────────────────────────────
+  DATE        TASK
+  2026-08-05  Update the captain's log
+
+── Chores ──────────────────────────────
+  DATE        TASK
+  2026-08-04  Deck > Chip the brush pile
+  2026-08-04  Deck
+
+── Van ─────────────────────────────────
+  DATE        TASK
+  2026-08-02  Rebuild the galley shelf

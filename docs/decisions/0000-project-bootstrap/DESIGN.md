@@ -133,6 +133,35 @@ it from checklist item to subtask (the discriminator above), and the
 settled meaning, so `update` refuses a nested target rather than pick
 one.
 
+## Digesting the completed log
+
+`btodo completed [today|week|month]` reports what was finished in one
+period. `completed.md` is append-only and carries no `## Open` heading,
+so list discovery steps over it and the list parser never reaches it.
+The digest reads it on its own terms: `DATE | CATEGORY | STATUS |
+TITLE`, split on the first three separators, so a separator inside a
+title stays in the title.
+
+**What a period covers.** `today` is the local day. `week` is seven
+days, today included. `month` reaches back to the first of the month.
+Every period ends today, and the period is an optional positional that
+defaults to the week.
+
+**What counts.** DONE records only: a SCRATCHED record reports an
+abandonment, not work done. A line whose four fields or whose date
+cannot be read is skipped rather than raised on — the log is
+hand-edited, and its own header comments carry placeholder dates.
+
+**What a record shows.** The date, and the title with its
+`Parent > Child` ancestry intact and its `[FIELD:]` markup removed.
+Categories group in the order a view shows them; records sort by date
+rather than by their position in the file, which follows the order they
+were appended in only while nobody edits the log by hand.
+
+**A missing log is an error.** Pointed at a directory with no
+`completed.md`, an empty digest would read as "nothing done" — the same
+reasoning that makes a missing source directory an error.
+
 ## Journal
 
 One log per source directory: `<source_dir>/.journal/log.jsonl`, JSONL,

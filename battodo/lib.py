@@ -12,6 +12,7 @@ from datetime import datetime
 
 from batconf import Configuration
 
+from .completed import Digest, DigestView
 from .view import Selection, View
 
 
@@ -42,3 +43,32 @@ def get_view(conf: Configuration, now: datetime) -> str:
     if getattr(conf, 'format', 'text') == 'json':
         return selection.json
     return View(selection).text
+
+
+def get_completed(conf: Configuration, now: datetime) -> str:
+    """The completed digest the configuration asks for.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `format` chooses the form.
+    now : datetime
+        The clock, whose local day ends the period.
+
+    Returns
+    -------
+    str
+        The rendered digest, or the digest as JSON, without a trailing
+        newline.
+
+    Raises
+    ------
+    CompletedError
+        The source directory holds no completed log.
+    ValueError
+        The configured period has no definition.
+    """
+    digest = Digest.from_config(conf, now)
+    if getattr(conf, 'format', 'text') == 'json':
+        return digest.json
+    return DigestView(digest).text

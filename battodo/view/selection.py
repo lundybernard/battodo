@@ -121,6 +121,20 @@ def sort_key(task: Task, today: date) -> tuple[float, str, str]:
     )
 
 
+def category_order(name: str) -> tuple[int, str]:
+    """Where a category sorts among the others.
+
+    The named categories lead, in their own order; everything else
+    follows alphabetically, which is the only order an ad-hoc list can
+    be given.
+    """
+    known = name in CATEGORY_ORDER
+    return (
+        CATEGORY_ORDER.index(name) if known else len(CATEGORY_ORDER),
+        name,
+    )
+
+
 def open_children(task: Task) -> list[Task]:
     """The task's incomplete children: subtasks and checklist items."""
     return [child for child in task.children if not child.done]
@@ -173,19 +187,8 @@ class TodoList:
 
     @property
     def order(self) -> tuple[int, str]:
-        """Where this list sits among the others.
-
-        The named categories lead, in their own order; everything else
-        follows alphabetically, which is the only order an ad-hoc list
-        can be given.
-        """
-        known = self.category in CATEGORY_ORDER
-        return (
-            CATEGORY_ORDER.index(self.category)
-            if known
-            else len(CATEGORY_ORDER),
-            self.category,
-        )
+        """Where this list sits among the others."""
+        return category_order(self.category)
 
 
 class Category:
