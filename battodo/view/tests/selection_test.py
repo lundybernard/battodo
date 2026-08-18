@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from ..selection import (
     CATEGORY_ORDER,
+    COUNT_ERROR,
     RANK_PLACES,
     TOP_N,
     Category,
@@ -14,6 +15,7 @@ from ..selection import (
     TodoList,
     active_categories,
     discover_lists,
+    item_count,
     open_children,
     parse,
     sort_key,
@@ -567,3 +569,58 @@ class SelectionTests(TestCase):
             t.assertGreater(len(lines), 1)
             t.assertTrue(lines[1].startswith('  "'))
             t.assertFalse(lines[1].startswith('   '))
+
+
+class ItemCountTests(TestCase):
+    def test_item_count(t) -> None:
+        with t.subTest('a configured count is read as a number'):
+            t.assertEqual(item_count('2'), 2)
+
+        for value in ('0', '-1', 'five', ''):
+            with (
+                t.subTest(f'{value!r} is not a count'),
+                t.assertRaises(ValueError) as caught,
+            ):
+                item_count(value)
+            t.assertIn(COUNT_ERROR, str(caught.exception))
+
+
+class SelectionFromConfigTests(TestCase):
+    """The decode from configuration strings to what a selection takes."""
+
+    def setUp(t) -> None:
+        t.now = at('2026-08-05T10:30')
+        t.conf = Mock(spec=['view', 'show_all'])
+        t.conf.view = Mock(spec=['source_dir', 'top'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.view.top = '2'
+        t.conf.show_all = True
+
+    def test_from_config(t) -> None:
+        selection = Selection.from_config(t.conf, t.now)
+
+        with t.subTest('the source directory is left unexpanded'):
+            t.assertEqual(selection.directory, Path('~/todo'))
+
+        with t.subTest('the clock is the one it was given'):
+            t.assertEqual(selection.now, t.now)
+
+        with t.subTest('the count is read as a number'):
+            t.assertEqual(selection.top_n, 2)
+
+        with t.subTest('and the flag as a flag'):
+            t.assertTrue(selection.show_all)
+
+        with t.subTest('an unsupplied flag reads as off'):
+            conf = Mock(spec=['view'])
+            conf.view = Mock(spec=['source_dir', 'top'])
+            conf.view.source_dir = '~/todo'
+            conf.view.top = str(TOP_N)
+
+            t.assertFalse(Selection.from_config(conf, t.now).show_all)
+
+        with t.subTest('a count below one is refused'):
+            t.conf.view.top = '0'
+
+            with t.assertRaises(ValueError):
+                Selection.from_config(t.conf, t.now)

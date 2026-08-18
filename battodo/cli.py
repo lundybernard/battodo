@@ -8,6 +8,7 @@ from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.item import build_item, build_item_json
+from battodo.lib import get_view
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 from battodo.mutate import (
@@ -17,7 +18,7 @@ from battodo.mutate import (
     scratch,
     update_task,
 )
-from battodo.view import TZ, build_json, build_view
+from battodo.view import TZ, item_count
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -264,20 +265,6 @@ def argparser():
     return p
 
 
-def item_count(value: str) -> int:
-    """Decode a count of items, from whichever source configured it.
-
-    Raises
-    ------
-    ValueError
-        The value is not a whole number of one or more.
-    """
-    count = int(value) if value.isdecimal() else 0
-    if count < 1:
-        raise ValueError(f'{MESSAGES["view.top.error"]}: {value}')
-    return count
-
-
 def checked_count(value: str) -> str:
     """Check a count given on the command line; it stays a string.
 
@@ -376,20 +363,7 @@ class Commands:
 
     @staticmethod
     def view(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        build = (
-            build_json
-            if getattr(conf, 'format', 'text') == 'json'
-            else build_view
-        )
-        print(
-            build(
-                source,
-                datetime.now(TZ),
-                show_all=bool(getattr(conf, 'show_all', False)),
-                top_n=item_count(conf.view.top),
-            )
-        )
+        print(get_view(conf, datetime.now(TZ)))
 
     @staticmethod
     def set_log_level(conf):
