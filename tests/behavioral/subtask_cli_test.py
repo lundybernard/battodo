@@ -18,6 +18,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.cli import TZ
+from battodo.journal import Journal
 
 from .cli_runner import run_cli
 
@@ -114,6 +115,21 @@ class SubtaskCommandTests(TestCase):
             'add', 'work', 'Sand the rails', '--parent', PARENT, '--loe', '2'
         )
         return t.show(PARENT)['subtasks'][-1]['id']
+
+    def test_add_subtask_journal(t) -> None:
+        """The journal carries the relation the file states by indent."""
+        child = t.add_subtask()
+        parent = t.show(PARENT)['id']
+        stamp, added = Journal(t.source).read()
+
+        with t.subTest('the parent is stamped first, on its own stream'):
+            t.assertEqual(stamp['type'], 'TaskUpdated')
+            t.assertEqual(stamp['stream_id'], f'task/{parent}')
+
+        with t.subTest('the child event names that parent by id'):
+            t.assertEqual(added['type'], 'TaskAdded')
+            t.assertEqual(added['stream_id'], f'task/{child}')
+            t.assertEqual(added['payload']['parent'], parent)
 
     def test_update_and_done_reach_a_subtask(t) -> None:
         child = t.add_subtask()
