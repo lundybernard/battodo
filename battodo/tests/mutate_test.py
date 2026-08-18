@@ -920,6 +920,27 @@ class UpdateTaskTests(IsolatedTests):
         with t.subTest('the event records where the child sits'):
             t.assertEqual(payload['ancestry'], 'Deck rebuild > Chip the brush')
 
+    def test_update_task_reaches_a_third_level(t) -> None:
+        doc = parse(
+            '## Open\n\n'
+            '- [ ] Trip prep [P:12]\n'
+            '  - [ ] Pack cooler [LOE:1]\n'
+            '    - [ ] Ice packs [LOE:1]\n'
+        )
+        parent = doc.tasks[0]
+        child = parent.children[0]
+        t.find_task.return_value = Match(
+            t.path, doc, [parent, child, child.children[0]]
+        )
+
+        update_task(t.dir, 'Ice packs', {'DUE': '2026-09-01'}, TODAY)
+        payload = t.append.call_args[0][2]
+
+        with t.subTest('the ancestry names every level above the target'):
+            t.assertEqual(
+                payload['ancestry'], 'Trip prep > Pack cooler > Ice packs'
+            )
+
     def test_update_task_rejected(t) -> None:
         with (
             t.subTest('an update that names no change'),

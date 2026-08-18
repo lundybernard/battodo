@@ -12,7 +12,13 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from battodo.journal import Journal
-from battodo.mutate import SelectionError, add_subtask, update_task
+from battodo.mutate import (
+    SelectionError,
+    add_subtask,
+    complete,
+    scratch,
+    update_task,
+)
 
 TODAY = date(2026, 8, 8)
 
@@ -282,3 +288,68 @@ class AddSubtaskTests(TestCase):
         with t.subTest('a rejected add writes nothing at all'):
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
             t.assertEqual(Journal(t.source).read(), [])
+
+
+class ChecklistItemTargetTests(TestCase):
+    """`complete` and `scratch` act on a checklist item where it stands.
+
+    The item can hold no `[ID:]`, so its event goes to the nearest
+    ancestor that can.
+    """
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        t.source = Path(tmp.name)
+        t.path = t.source / 'work.md'
+        t.path.write_text(WORK, encoding='utf-8')
+
+    def test_complete_a_checklist_item(t) -> None:
+        entries = complete(t.source, 'Sweep up', TODAY)
+        (event,) = Journal(t.source).read()
+        text = t.path.read_text(encoding='utf-8')
+
+        with t.subTest('the item is checked off, gaining no id'):
+            t.assertIn('  - [x] Sweep up\n', text)
+            t.assertIn('  - [ ] Chip the brush [LOE:2]\n', text)
+
+        with t.subTest('SCHEMA.md logs no checklist item'):
+            t.assertEqual(entries, [])
+            t.assertFalse((t.source / 'completed.md').exists())
+
+        with t.subTest('the event lands on the ancestor stream'):
+            t.assertEqual(event['type'], 'TaskCompleted')
+            t.assertEqual(event['stream_id'], 'task/9o71lx')
+
+        with t.subTest('and names the item under that ancestor'):
+            t.assertEqual(
+                event['payload']['ancestry'], 'Deck rebuild > Sweep up'
+            )
+
+    def test_scratch_a_checklist_item(t) -> None:
+        entries = scratch(t.source, 'Sweep up', TODAY)
+        (event,) = Journal(t.source).read()
+        text = t.path.read_text(encoding='utf-8')
+
+        with t.subTest('the line goes, its ancestor stays as it was'):
+            t.assertNotIn('Sweep up', text)
+            t.assertIn(
+                '- [ ] Deck rebuild [P:4] [LOE:8] [ADDED:2026-07-06] '
+                '[ID:9o71lx]\n',
+                text,
+            )
+
+        with t.subTest('SCHEMA.md logs no checklist item'):
+            t.assertEqual(entries, [])
+            t.assertFalse((t.source / 'completed.md').exists())
+
+        with t.subTest('the event lands on the ancestor stream'):
+            t.assertEqual(event['type'], 'TaskScratched')
+            t.assertEqual(event['stream_id'], 'task/9o71lx')
+
+        with t.subTest('and names the item under that ancestor'):
+            t.assertEqual(
+                event['payload']['ancestry'], 'Deck rebuild > Sweep up'
+            )
