@@ -68,7 +68,7 @@ guarantee.
 
 A markdown file is a todo list if it contains a `## Open` heading.
 `discover_lists` returns every such file, including ones marked parked;
-only `build_view` filters those out.
+only `Selection.shows` filters those out.
 
 ## Adding a task
 

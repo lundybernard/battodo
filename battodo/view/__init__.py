@@ -2,17 +2,15 @@
 
 `selection` decides which lists and which of their tasks a view holds,
 and carries the machine-readable form of that choice (R2); `render`
-lays the same choice out as aligned text for a terminal. `lib`
-composes them into the two functions callers actually use.
+lays the same choice out as aligned text for a terminal.
 
-The public names of all three are re-exported here, so `battodo.view`
+The public names of both are re-exported here, so `battodo.view`
 stays the one import path.
 """
 
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
-from .lib import build_json, build_view
 from .render import Row, Table, View, due_label
 from .selection import (
     COUNT_ERROR,
