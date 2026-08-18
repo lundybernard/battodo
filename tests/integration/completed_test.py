@@ -11,11 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from battodo.completed import (
-    CompletedError,
-    build_digest,
-    build_digest_json,
-)
+from battodo.completed import CompletedError, Digest, DigestView
 
 # Wednesday. The week reaches back to 2026-07-30, the month to
 # 2026-08-01.
@@ -42,9 +38,13 @@ class LogDirTests(TestCase):
         (t.source / 'completed.md').write_text(LOG, encoding='utf-8')
 
 
-class BuildDigestTests(LogDirTests):
-    def test_build_digest(t) -> None:
-        digest = build_digest(t.source, NOW, period='week')
+class RenderedDigestTests(LogDirTests):
+    def rendered(t, source: Path, period: str) -> str:
+        """The digest `source` renders for `period`, at the pinned hour."""
+        return DigestView(Digest(source, NOW, period=period)).text
+
+    def test_rendered_digest(t) -> None:
+        digest = t.rendered(t.source, 'week')
 
         with t.subTest('the period, its span, and how much it holds'):
             t.assertIn(
@@ -66,11 +66,11 @@ class BuildDigestTests(LogDirTests):
         with t.subTest('a shorter period reads as one day'):
             t.assertIn(
                 'Completed today: 2026-08-05 — 1 done',
-                build_digest(t.source, NOW, period='today'),
+                t.rendered(t.source, 'today'),
             )
 
         with t.subTest('and the month reaches back to its first day'):
-            month = build_digest(t.source, NOW, period='month')
+            month = t.rendered(t.source, 'month')
             t.assertIn(
                 'Completed month: 2026-08-01 to 2026-08-05 — 2 done', month
             )
@@ -80,19 +80,19 @@ class BuildDigestTests(LogDirTests):
             TemporaryDirectory() as bare,
         ):
             with t.assertRaises(CompletedError) as caught:
-                build_digest(Path(bare), NOW, period='week')
+                t.rendered(Path(bare), 'week')
             t.assertIn(bare, str(caught.exception))
 
         with (
             t.subTest('so is a period with no definition'),
             t.assertRaises(ValueError),
         ):
-            build_digest(t.source, NOW, period='fortnight')
+            t.rendered(t.source, 'fortnight')
 
 
-class BuildDigestJsonTests(LogDirTests):
-    def test_build_digest_json(t) -> None:
-        data = loads(build_digest_json(t.source, NOW, period='week'))
+class DigestDocumentTests(LogDirTests):
+    def test_digest_document(t) -> None:
+        data = loads(Digest(t.source, NOW, period='week').json)
 
         with t.subTest('the period and its span'):
             t.assertEqual(data['period'], 'week')

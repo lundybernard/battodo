@@ -10,8 +10,7 @@ its `[FIELD:]` markup. Categories sort in the view's order, so a
 category leads in both.
 
 `Digest` decides what one digest holds; `DigestView` lays the same
-digest out as aligned text. The two `build_` functions are what a
-consumer calls.
+digest out as aligned text. `lib.get_completed` composes them.
 """
 
 from collections.abc import Callable
@@ -21,6 +20,8 @@ from functools import cached_property
 from json import dumps
 from pathlib import Path
 from typing import Any
+
+from batconf import Configuration
 
 from .mutate import COMPLETED_LOG, DONE_STATUS
 from .parser import FIELD_RE, parse_date
@@ -129,6 +130,18 @@ class Digest:
         self.directory = directory
         self.now = now
         self.period = period
+
+    @classmethod
+    def from_config(cls, conf: Configuration, now: datetime) -> 'Digest':
+        """Build a digest from a resolved configuration.
+
+        A period the user left off is absent, not None.
+        """
+        return cls(
+            Path(conf.view.source_dir),
+            now,
+            period=getattr(conf, 'period', DEFAULT_PERIOD),
+        )
 
     @cached_property
     def today(self) -> date:
@@ -311,57 +324,3 @@ class DigestView:
 
     def __str__(self) -> str:
         return self.text
-
-
-def build_digest(directory: Path, now: datetime, *, period: str) -> str:
-    """Render the completed records `period` covers.
-
-    Parameters
-    ----------
-    directory : Path
-        The source directory, `~` unexpanded.
-    now : datetime
-        The clock, whose local day ends every period.
-    period : str
-        One of `PERIODS`.
-
-    Returns
-    -------
-    str
-        The rendered digest, without a trailing newline.
-
-    Raises
-    ------
-    CompletedError
-        The source directory holds no completed log.
-    ValueError
-        The period has no definition.
-    """
-    return DigestView(Digest(directory, now, period=period)).text
-
-
-def build_digest_json(directory: Path, now: datetime, *, period: str) -> str:
-    """Serialize the same digest `build_digest` renders.
-
-    Parameters
-    ----------
-    directory : Path
-        The source directory, `~` unexpanded.
-    now : datetime
-        The clock, whose local day ends every period.
-    period : str
-        One of `PERIODS`.
-
-    Returns
-    -------
-    str
-        A JSON document; see `Digest.data` for its shape.
-
-    Raises
-    ------
-    CompletedError
-        The source directory holds no completed log.
-    ValueError
-        The period has no definition.
-    """
-    return Digest(directory, now, period=period).json

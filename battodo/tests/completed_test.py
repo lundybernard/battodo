@@ -2,17 +2,16 @@ from datetime import date, datetime, timezone
 from json import loads
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 from ..completed import (
+    DEFAULT_PERIOD,
     CompletedError,
     Digest,
     DigestView,
     Group,
     Record,
     Table,
-    build_digest,
-    build_digest_json,
     read_record,
 )
 
@@ -31,14 +30,6 @@ LOG = """\
 """
 # Wide enough to lay a short record out.
 WIDTHS = [10, 20]
-
-
-def autopatch(case: TestCase, target: str) -> Mock:
-    """Stand in for `target`, put back when `case` finishes."""
-    patcher = patch(f'{SRC}.{target}', autospec=True)
-    double = patcher.start()
-    case.addCleanup(patcher.stop)
-    return double
 
 
 def record(day: str, category: str = 'work', title: str = 'A task') -> Record:
@@ -231,6 +222,37 @@ class DigestTests(TestCase):
             t.assertIn('\n  "period": "week"', t.d.json)
 
 
+class DigestFromConfigTests(TestCase):
+    """The decode from configuration values to what a digest takes."""
+
+    def setUp(t) -> None:
+        # spec models batconf: an option the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'period'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.period = 'month'
+
+    def test_from_config(t) -> None:
+        digest = Digest.from_config(t.conf, NOW)
+
+        with t.subTest('the source directory is left unexpanded'):
+            t.assertEqual(digest.directory, Path('~/todo'))
+
+        with t.subTest('the clock is the one it was given'):
+            t.assertEqual(digest.now, NOW)
+
+        with t.subTest('and the period is the configured one'):
+            t.assertEqual(digest.period, 'month')
+
+        with t.subTest('an unsupplied period reads as the default'):
+            conf = Mock(spec=['view'])
+            conf.view = Mock(spec=['source_dir'])
+            conf.view.source_dir = '~/todo'
+
+            t.assertEqual(Digest.from_config(conf, NOW).period, DEFAULT_PERIOD)
+
+
 class TableTests(TestCase):
     def setUp(t) -> None:
         t.group = Group('work', [record('2026-08-05', title='Ship it')])
@@ -324,40 +346,3 @@ class DigestViewTests(TestCase):
 
     def test___str__(t) -> None:
         t.assertEqual(str(t.v), t.v.text)
-
-
-class ComposedTests(TestCase):
-    """Base: the pieces the two functions put together, stood in for."""
-
-    def setUp(t) -> None:
-        t.Digest = autopatch(t, 'Digest')
-        t.DigestView = autopatch(t, 'DigestView')
-        t.directory = Path('~/todo')
-
-
-class BuildDigestTests(ComposedTests):
-    def test_build_digest(t) -> None:
-        rendered = build_digest(t.directory, NOW, period='week')
-
-        with t.subTest('what comes back is the rendered digest'):
-            t.assertEqual(rendered, t.DigestView.return_value.text)
-
-        with t.subTest('the source, the clock and the period are read'):
-            t.Digest.assert_called_once_with(t.directory, NOW, period='week')
-
-        with t.subTest('which the digest is laid out from'):
-            t.DigestView.assert_called_once_with(t.Digest.return_value)
-
-
-class BuildDigestJsonTests(ComposedTests):
-    def test_build_digest_json(t) -> None:
-        serialized = build_digest_json(t.directory, NOW, period='month')
-
-        with t.subTest('what comes back is the digest, serialized'):
-            t.assertEqual(serialized, t.Digest.return_value.json)
-
-        with t.subTest('read from the same source, clock and period'):
-            t.Digest.assert_called_once_with(t.directory, NOW, period='month')
-
-        with t.subTest('and laid out by nothing'):
-            t.DigestView.assert_not_called()

@@ -486,56 +486,28 @@ class CommandsShowTests(ClockTests):
 class CommandsCompletedTests(ClockTests):
     def setUp(t):
         super().setUp()
-        for target in ('build_digest', 'build_digest_json'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
+        patcher = patch(f'{SRC}.get_completed', autospec=True)
+        t.get_completed = patcher.start()
+        t.addCleanup(patcher.stop)
         patcher = patch('builtins.print')
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'period', 'format'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.period = 'month'
-        t.conf.format = 'text'
 
     def test_completed(t):
-        with t.subTest('the human digest is the default'):
-            Commands.completed(t.conf)
+        Commands.completed(t.conf)
 
-            args, kwargs = t.build_digest.call_args
-            t.print.assert_called_with(t.build_digest.return_value)
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], t.datetime.now.return_value)
-            t.assertEqual(kwargs['period'], 'month')
+        with t.subTest('the configuration reaches the library unread'):
+            t.get_completed.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
 
         with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('json format is serialized instead'):
-            t.print.reset_mock()
-            t.conf.format = 'json'
-
-            Commands.completed(t.conf)
-
-            args, kwargs = t.build_digest_json.call_args
-            t.print.assert_called_with(t.build_digest_json.return_value)
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(kwargs['period'], 'month')
-            t.build_digest.assert_called_once()
-
-        with t.subTest('an unconfigured digest is human, and the week'):
-            conf = Mock(spec=['view'])
-            conf.view.source_dir = '~/todo'
-
-            Commands.completed(conf)
-
-            t.assertEqual(t.build_digest.call_count, 2)
-            t.assertEqual(
-                t.build_digest.call_args[1]['period'], DEFAULT_PERIOD
-            )
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.get_completed.return_value)
 
 
 class CommandsUpdateTests(ClockTests):

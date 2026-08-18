@@ -2,7 +2,7 @@ from datetime import datetime
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from battodo.lib import get_view
+from battodo.lib import get_completed, get_view
 
 SRC = 'battodo.lib'
 
@@ -43,3 +43,41 @@ class GetViewTests(TestCase):
             conf = Mock(spec=['view'])
 
             t.assertEqual(get_view(conf, t.now), t.View.return_value.text)
+
+
+class GetCompletedTests(TestCase):
+    def setUp(t):
+        for target in ('Digest', 'DigestView'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.digest = t.Digest.from_config.return_value
+
+        t.now = Mock(spec=datetime)
+        t.conf = Mock(spec=['view', 'format'])
+        t.conf.format = 'text'
+
+    def test_get_completed(t):
+        with t.subTest('the configuration is decoded once, by the digest'):
+            rendered = get_completed(t.conf, t.now)
+
+            t.Digest.from_config.assert_called_once_with(t.conf, t.now)
+
+        with t.subTest('which a human reads as a rendered digest'):
+            t.DigestView.assert_called_once_with(t.digest)
+            t.assertEqual(rendered, t.DigestView.return_value.text)
+
+        with t.subTest('and a machine reads as the same digest, as JSON'):
+            t.conf.format = 'json'
+
+            t.assertEqual(get_completed(t.conf, t.now), t.digest.json)
+
+        with t.subTest('which is serialized, never rendered'):
+            t.DigestView.assert_called_once()
+
+        with t.subTest('an unconfigured format is the human digest'):
+            conf = Mock(spec=['view'])
+
+            t.assertEqual(
+                get_completed(conf, t.now), t.DigestView.return_value.text
+            )
