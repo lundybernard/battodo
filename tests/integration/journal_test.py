@@ -25,7 +25,7 @@ class JournalTests(TestCase):
 
     def append(t, **kwargs):
         params = {
-            'event_type': 'TaskBumped',
+            'event_type': 'TaskUpdated',
             'stream_id': 'task/abc123',
             'payload': {'delta': {'P': [1, 2]}},
             'actor': 'agent',
@@ -46,7 +46,7 @@ class JournalTests(TestCase):
             t.assertEqual(event['seq'], 1)
             t.assertEqual(event['stream_id'], 'task/abc123')
             t.assertEqual(event['stream_seq'], 1)
-            t.assertEqual(event['type'], 'TaskBumped')
+            t.assertEqual(event['type'], 'TaskUpdated')
             t.assertEqual(event['schema_version'], SCHEMA_VERSION)
             t.assertIsNone(event['prev_hash'])
             t.assertIsNone(event['hash'])
@@ -108,7 +108,7 @@ class JournalTests(TestCase):
             t.append(event_type='TaskCompleted')
             events = t.journal.read()
             t.assertEqual(
-                [e['type'] for e in events], ['TaskBumped', 'TaskCompleted']
+                [e['type'] for e in events], ['TaskUpdated', 'TaskCompleted']
             )
 
         with t.subTest('blank trailing lines are skipped'):

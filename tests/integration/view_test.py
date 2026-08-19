@@ -177,8 +177,8 @@ class RenderedViewTests(SourceDirTests):
 
 class SelectionDocumentTests(SourceDirTests):
     def categories(t, **kwargs: object) -> list[dict]:
-        document = loads(Selection(t.source, NOW, **kwargs).json)  # type: ignore[arg-type]
-        return document['categories']
+        selection = Selection(t.source, NOW, **kwargs)  # type: ignore[arg-type]
+        return loads(selection.json)['categories']
 
     def test_top_n(t) -> None:
         t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
