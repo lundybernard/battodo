@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 from battodo.conf import get_config
 
+SRC = 'battodo.conf'
+
 ENV_VAR = 'BATTODO_CONFIG_FILE'
 
 
@@ -83,3 +85,65 @@ class ConfigFileSearchTests(TestCase):
             conf = get_config(config_file_name=str(t.root / 'gone.toml'))
             with t.assertRaises(FileNotFoundError):
                 _ = conf.view.source_dir
+
+
+class TomlBackendTests(TestCase):
+    """The config file is read for real: no mocked TomlSource.
+
+    Parsing TOML needs a backend batconf only declares under its
+    optional `toml` extra on python < 3.11, and the failure is lazy —
+    importing TomlSource succeeds, only the first read fails. Mocked
+    tests cannot see that, so this one parses an actual file.
+    """
+
+    def setUp(t):
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        t.config_file = Path(tmp.name) / 'config.toml'
+
+        # EnvSource outranks the config file: an ambient BATTODO_* var
+        # would answer first and hide whatever the file says. The
+        # search reads the environment too, so the user config
+        # directory is the empty temporary one.
+        patcher = patch.dict(
+            'os.environ',
+            {'XDG_CONFIG_HOME': tmp.name},
+            clear=True,
+        )
+        patcher.start()
+        t.addCleanup(patcher.stop)
+
+        # The searched working directory is the temporary one as well.
+        cwd = patch(
+            f'{SRC}.Path.cwd',
+            autospec=True,
+            return_value=Path(tmp.name),
+        )
+        cwd.start()
+        t.addCleanup(cwd.stop)
+
+    def test_config_file(t):
+        t.config_file.write_text(
+            '[batconf]\n'
+            'default_env = "test"\n'
+            '\n'
+            '[test.battodo.view]\n'
+            'source_dir = "~/todo-from-config-file"\n'
+        )
+
+        conf = get_config(config_file_name=str(t.config_file))
+
+        t.assertEqual(conf.view.source_dir, '~/todo-from-config-file')
+
+    def test_missing_config_file(t):
+        missing = str(t.config_file)  # setUp never writes it
+
+        with t.subTest('an explicitly named file must exist'):
+            conf = get_config(config_file_name=missing)
+            with t.assertRaises(FileNotFoundError):
+                _ = conf.view.source_dir
+
+        with t.subTest('the searched locations are optional'):
+            conf = get_config()
+
+            t.assertEqual(conf.view.source_dir, '~/todo')
