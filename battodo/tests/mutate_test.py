@@ -1123,3 +1123,432 @@ class AddSubtaskTests(IsolatedTests):
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()
             t.append.assert_not_called()
+
+
+OPEN_DOC = """# Work
+
+## Open
+
+- [ ] Deck rebuild [P:4] [ID:9o71lx]
+
+## Done
+"""
+
+CASCADE_DOC = """# Work
+
+## Open
+
+- [ ] Deck rebuild [P:4] [ID:9o71lx]
+  - [ ] Chip the brush [LOE:2]
+  - [x] Sand it [LOE:1]
+- [ ] Bare [P:2]
+
+## Done
+"""
+
+REPEAT_DOC = """# Chores
+
+## Open
+
+- [ ] Water the plants [P:3] [REPEAT:7d] [DUE:2026-08-05] [ID:rr01ab]
+
+## Done
+"""
+
+
+class FileIsolatedTests(TestCase):
+    """Base: the list file, the directory and the journal stand in.
+
+    The document is real, parsed from the suite's own fixture, so what
+    a test stands on stays beside the test. Nothing reaches a disk.
+    """
+
+    TARGETS: tuple[str, ...] = ('Journal', 'new_task_id')
+
+    Journal: MagicMock
+    new_task_id: MagicMock
+
+    def setUp(t) -> None:
+        for target in t.TARGETS:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.new_task_id.return_value = 'zz01ab'
+        t.append = t.Journal.return_value.append
+
+        t.path = MagicMock(spec=Path)
+        t.path.name = 'work.md'
+        t.path.stem = 'work'
+        t.dir = MagicMock(spec=Path)
+        t.log = t.dir.__truediv__.return_value
+        t.log_handle = t.log.open.return_value.__enter__.return_value
+
+    def written(t) -> list[str]:
+        """The lines of the document handed to `write_text`."""
+        return t.path.write_text.call_args[0][0].split('\n')
+
+    def logged(t) -> str:
+        """What the completed log was asked to append."""
+        return t.log_handle.write.call_args[0][0]
+
+
+class AddTaskIsolationTests(FileIsolatedTests):
+    TARGETS = (*FileIsolatedTests.TARGETS, '_resolve_list')
+
+    _resolve_list: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t._resolve_list.return_value = t.path
+        t.path.read_text.return_value = OPEN_DOC
+
+    def test_add_task(t) -> None:
+        path, entry = add_task(t.dir, 'work', 'Buy lumber', {'P': '3'}, TODAY)
+
+        with t.subTest('the list is resolved in the source directory'):
+            t._resolve_list.assert_called_once_with(t.dir, 'work')
+            t.assertEqual(path, t.path)
+
+        with t.subTest('the line carries the supplied field and the stamps'):
+            t.assertEqual(
+                entry,
+                f'- [ ] Buy lumber [P:3] [ADDED:{TODAY.isoformat()}] '
+                '[ID:zz01ab]',
+            )
+
+        with t.subTest('and lands last in the open section'):
+            lines = t.written()
+            t.assertEqual(lines[lines.index('## Done') - 2], entry)
+
+        with t.subTest('one TaskAdded, on the new task stream'):
+            t.Journal.assert_called_once_with(t.dir)
+            stream, payload = t.append.call_args[0][1:3]
+            t.assertEqual(stream, 'task/zz01ab')
+            t.assertEqual(payload['snapshot']['title'], 'Buy lumber')
+            t.assertEqual(payload['delta']['P'], [None, '3'])
+            t.assertEqual(
+                t.append.call_args[1],
+                {'actor': 'agent', 'source_file': 'work.md'},
+            )
+
+    def test_add_task_rejected(t) -> None:
+        cases = {
+            'a priority that is not a number': ({'P': 'high'}, ValueError),
+            'a level of effort off the scale': ({'LOE': '4'}, ValueError),
+            'a due date btodo cannot read': ({'DUE': 'someday'}, ValueError),
+            'a recurrence it cannot read': ({'REPEAT': 'often'}, RepeatError),
+        }
+        for name, (fields, error) in cases.items():
+            with t.subTest(name), t.assertRaises(error):
+                add_task(t.dir, 'work', 'X', fields, TODAY)
+
+        with t.subTest('nothing is written and nothing is logged'):
+            t.path.write_text.assert_not_called()
+            t.append.assert_not_called()
+
+
+class FindTaskIsolationTests(FileIsolatedTests):
+    TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
+
+    discover_lists: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.discover_lists.return_value = [t.path]
+        t.path.read_text.return_value = CASCADE_DOC
+
+    def test_find_task(t) -> None:
+        with t.subTest('an id names the task that carries it'):
+            match = find_task(t.dir, '9o71lx')
+            t.assertEqual(match.task.title, 'Deck rebuild')
+            t.assertEqual(match.path, t.path)
+
+        with t.subTest('a title reaches a child no id has been stamped on'):
+            match = find_task(t.dir, 'chip the brush')
+            t.assertEqual(match.task.title, 'Chip the brush')
+
+        with t.subTest('and the trail names every level above it'):
+            t.assertEqual(
+                [task.title for task in match.trail],
+                ['Deck rebuild', 'Chip the brush'],
+            )
+
+        with (
+            t.subTest('a completed task is not open, so it is not found'),
+            t.assertRaisesRegex(SelectionError, 'no open task'),
+        ):
+            find_task(t.dir, 'Sand it')
+
+        with (
+            t.subTest('an ambiguous title names the tasks it matched'),
+            t.assertRaisesRegex(SelectionError, "3 open tasks: 'Deck"),
+        ):
+            find_task(t.dir, 'b')
+
+    def test_find_task_prefers_an_id(t) -> None:
+        t.path.read_text.return_value = (
+            '## Open\n\n- [ ] Bare [ID:bare]\n- [ ] A bare copy [P:2]\n'
+        )
+
+        match = find_task(t.dir, 'bare')
+
+        t.assertEqual(match.task.title, 'Bare')
+
+
+class CompleteIsolationTests(FileIsolatedTests):
+    TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
+
+    find_task: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.doc = parse(CASCADE_DOC)
+
+    def match(t, trail_titles: list[str]) -> Match:
+        """A match for the trail the titles name, deepest last."""
+        trail: list = []
+        tasks = t.doc.tasks
+        for title in trail_titles:
+            found = next(task for task in tasks if task.title == title)
+            trail.append(found)
+            tasks = found.children
+        return Match(t.path, t.doc, trail)
+
+    def test_complete(t) -> None:
+        t.find_task.return_value = t.match(['Deck rebuild', 'Chip the brush'])
+
+        entries = complete(t.dir, 'Chip the brush', TODAY)
+
+        with t.subTest('the finished block leaves the open section'):
+            written = t.written()
+            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', written)
+            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
+
+        with t.subTest('and the task that followed it stays'):
+            t.assertIn('- [ ] Bare [P:2]', written)
+
+        with t.subTest('the log records the child under its ancestry'):
+            t.assertEqual(
+                entries[0],
+                f'{TODAY.isoformat()} | work | DONE | '
+                'Deck rebuild > Chip the brush [LOE:2]',
+            )
+
+        with t.subTest('then the parent it finished'):
+            t.assertEqual(
+                entries[1],
+                f'{TODAY.isoformat()} | work | DONE | Deck rebuild [P:4]',
+            )
+
+        with t.subTest('which is what the completed log is handed'):
+            t.assertEqual(t.logged(), '\n'.join(entries) + '\n')
+
+        with t.subTest('one event a completion, deepest first'):
+            child, parent = t.append.call_args_list
+            t.assertEqual(
+                child.args[2]['ancestry'], 'Deck rebuild > Chip the brush'
+            )
+            t.assertEqual(child.args[2]['delta'], {'done': [False, True]})
+            t.assertEqual(parent.args[1], 'task/9o71lx')
+
+    def test_complete_a_child_whose_parent_stays_open(t) -> None:
+        doc = parse(
+            '## Open\n\n'
+            '- [ ] Deck rebuild [P:4] [ID:9o71lx]\n'
+            '  - [ ] Chip the brush [LOE:2]\n'
+            '  - [ ] Sand it [LOE:1]\n'
+        )
+        t.doc = doc
+        parent = doc.tasks[0]
+        t.find_task.return_value = Match(
+            t.path, doc, [parent, parent.children[0]]
+        )
+
+        entries = complete(t.dir, 'Chip the brush', TODAY)
+
+        with t.subTest('the child box is checked, and the child stamped'):
+            written = t.written()
+            t.assertIn('  - [x] Chip the brush [LOE:2] [ID:zz01ab]', written)
+
+        with t.subTest('the parent it did not finish stays open'):
+            t.assertIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
+
+        with t.subTest('the parent it did not finish stays out of the log'):
+            t.assertEqual(len(entries), 1)
+            t.assertIn('Deck rebuild > Chip the brush', entries[0])
+
+        with t.subTest('and one event lands, on the stream just stamped'):
+            t.append.assert_called_once()
+            t.assertEqual(t.append.call_args[0][1], 'task/zz01ab')
+
+    def test_complete_a_recurrence(t) -> None:
+        t.doc = parse(REPEAT_DOC)
+        t.path.stem = 'chores'
+        t.find_task.return_value = t.match(['Water the plants'])
+
+        complete(t.dir, 'rr01ab', TODAY)
+
+        with t.subTest('the task stays open, rescheduled to its next due'):
+            line = next(
+                line for line in t.written() if 'Water the plants' in line
+            )
+            t.assertIn('- [ ] Water the plants', line)
+            t.assertIn('[DUE:2026-08-15]', line)
+
+        with t.subTest('and keeps the id it already carried'):
+            t.assertIn('[ID:rr01ab]', line)
+
+        with t.subTest('the event records the reschedule beside the done'):
+            payload = t.append.call_args[0][2]
+            t.assertEqual(payload['delta']['done'], [False, True])
+            t.assertEqual(
+                payload['delta']['DUE'], ['2026-08-05', '2026-08-15']
+            )
+
+
+class ScratchIsolationTests(FileIsolatedTests):
+    TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
+
+    find_task: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.doc = parse(CASCADE_DOC)
+        t.parent = t.doc.tasks[0]
+
+    def test_scratch(t) -> None:
+        t.find_task.return_value = Match(t.path, t.doc, [t.parent])
+
+        entries = scratch(t.dir, '9o71lx', TODAY)
+
+        with t.subTest('the task and everything under it are removed'):
+            written = t.written()
+            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
+            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', written)
+
+        with t.subTest('the task that followed it stays'):
+            t.assertIn('- [ ] Bare [P:2]', written)
+
+        with t.subTest('the log records the abandonment'):
+            t.assertEqual(
+                entries,
+                [
+                    f'{TODAY.isoformat()} | work | SCRATCHED | Deck rebuild [P:4]'
+                ],
+            )
+            t.assertEqual(t.logged(), entries[0] + '\n')
+
+        with t.subTest('one SCRATCHED event, on the task stream'):
+            t.append.assert_called_once()
+            stream, payload = t.append.call_args[0][1:3]
+            t.assertEqual(stream, 'task/9o71lx')
+            t.assertEqual(payload['delta'], {'removed': [False, True]})
+            t.assertEqual(payload['ancestry'], 'Deck rebuild')
+
+    def test_scratch_collapses_the_blank_run_it_leaves(t) -> None:
+        doc = parse(
+            '## Open\n\n'
+            '- [ ] Deck rebuild [P:4] [ID:9o71lx]\n'
+            '\n'
+            '- [ ] Bare [P:2]\n'
+        )
+        t.doc = doc
+        t.find_task.return_value = Match(t.path, doc, [doc.tasks[0]])
+
+        scratch(t.dir, '9o71lx', TODAY)
+
+        with t.subTest('no pair of blank lines is left behind'):
+            written = t.written()
+            pairs = [
+                index
+                for index in range(len(written) - 1)
+                if not written[index].strip()
+                and not written[index + 1].strip()
+            ]
+            t.assertEqual(pairs, [])
+
+    def test_scratch_a_checklist_item(t) -> None:
+        doc = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
+        parent = doc.tasks[0]
+        t.doc = doc
+        t.find_task.return_value = Match(
+            t.path, doc, [parent, parent.children[0]]
+        )
+
+        entries = scratch(t.dir, 'Sweep up', TODAY)
+
+        with t.subTest('a checklist item is not logged as work abandoned'):
+            t.assertEqual(entries, [])
+            t.log.open.assert_not_called()
+
+        with t.subTest('the event lands on the ancestor stream instead'):
+            t.assertEqual(t.append.call_args[0][1], 'task/zz01ab')
+
+        with t.subTest('whose line is stamped, since it carries the id'):
+            t.assertIn('- [ ] Deck [P:4] [ID:zz01ab]', t.written())
+
+
+class BackfillIsolationTests(FileIsolatedTests):
+    TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
+
+    discover_lists: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.discover_lists.return_value = [t.path]
+        t.journal = t.Journal.return_value
+        t.path.read_text.return_value = (
+            '## Open\n\n'
+            '- [ ] No date [P:4]\n'
+            '- [ ] Dated [P:3] [ADDED:2026-01-05]\n'
+            '- [x] Finished [P:2]\n'
+            '- [ ] Placeholder [P:6] [DUE:YYYY-MM-DD]\n'
+            '  - [ ] A child [LOE:1]\n'
+        )
+
+    def test_backfill_file(t) -> None:
+        stamped = backfill_file(t.path, TODAY, t.journal)
+
+        with t.subTest('only the task with no add date is stamped'):
+            t.assertEqual(stamped, ['No date'])
+
+        with t.subTest('which gains the date and an id'):
+            t.assertIn(
+                f'- [ ] No date [P:4] [ADDED:{TODAY.isoformat()}] [ID:zz01ab]',
+                t.written(),
+            )
+
+        with t.subTest('a line btodo cannot read is left alone'):
+            t.assertIn('- [ ] Placeholder [P:6] [DUE:YYYY-MM-DD]', t.written())
+
+        with t.subTest('the event says the date is the migration date'):
+            payload = t.journal.append.call_args[0][2]
+            t.assertTrue(payload['backfilled'])
+            t.assertEqual(payload['delta']['ADDED'], [None, TODAY.isoformat()])
+
+    def test_backfill_file_writes_nothing_when_nothing_is_missing(t) -> None:
+        t.path.read_text.return_value = (
+            '## Open\n\n- [ ] Dated [P:3] [ADDED:2026-01-05]\n'
+        )
+
+        t.assertEqual(backfill_file(t.path, TODAY, t.journal), [])
+        t.path.write_text.assert_not_called()
+
+    def test_backfill_all(t) -> None:
+        result = backfill_all(t.dir, TODAY)
+
+        with t.subTest('every discovered list is read'):
+            t.discover_lists.assert_called_once_with(t.dir)
+
+        with t.subTest('and the stamped titles are keyed by file name'):
+            t.assertEqual(result, {'work.md': ['No date']})
+
+        with t.subTest('one journal serves the whole run'):
+            t.Journal.assert_called_once_with(t.dir)
+
+    def test_backfill_all_reports_only_the_files_it_changed(t) -> None:
+        t.path.read_text.return_value = (
+            '## Open\n\n- [ ] Dated [P:3] [ADDED:2026-01-05]\n'
+        )
+
+        t.assertEqual(backfill_all(t.dir, TODAY), {})
