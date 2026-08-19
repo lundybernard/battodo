@@ -96,7 +96,7 @@ class JournalTests(TestCase):
         t.assertEqual(nested.read(), [event])
 
     def test_append_event_id(t) -> None:
-        with patch(f'{SRC}.uuid4', return_value='fixed-uuid'):
+        with patch(f'{SRC}.uuid4', autospec=True, return_value='fixed-uuid'):
             t.assertEqual(t.append()['event_id'], 'fixed-uuid')
 
     def test_read(t) -> None:

@@ -6,6 +6,14 @@ from ..logconf import logging_config
 
 
 class LoggingConfigTests(TestCase):
+    def setUp(t):
+        # dictConfig rewrites the root logger, which outlives the test.
+        root = logging.getLogger()
+        handlers, level = list(root.handlers), root.level
+        t.addCleanup(setattr, root, 'level', level)
+        t.addCleanup(root.handlers.extend, handlers)
+        t.addCleanup(root.handlers.clear)
+
     def test_logging_config(t):
         """Applying the config must not silence loggers it does not name.
 

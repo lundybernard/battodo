@@ -256,7 +256,7 @@ class BATCLITests(TestCase):
         parser = argparser()
         parser.print_help = Mock(wraps=parser.print_help)
 
-        with patch(f'{SRC}.argparser', return_value=parser):
+        with patch(f'{SRC}.argparser', autospec=True, return_value=parser):
             BATCLI([])
 
         parser.print_help.assert_called_with()
@@ -276,7 +276,7 @@ class BATCLITests(TestCase):
         out, err = StringIO(), StringIO()
 
         with (
-            patch(f'{SRC}.argparser', return_value=parser),
+            patch(f'{SRC}.argparser', autospec=True, return_value=parser),
             redirect_stdout(out),
             redirect_stderr(err),
         ):
@@ -325,9 +325,6 @@ class ClockTests(TestCase):
         t.addCleanup(patcher.stop)
         t.today = t.datetime.now.return_value.date.return_value
 
-        t.conf = Mock()
-        t.conf.view.source_dir = '~/todo'
-
 
 class CommandsViewTests(ClockTests):
     def setUp(t):
@@ -335,7 +332,7 @@ class CommandsViewTests(ClockTests):
         patcher = patch(f'{SRC}.get_view', autospec=True)
         t.get_view = patcher.start()
         t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print')
+        patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
@@ -357,7 +354,13 @@ class CommandsViewTests(ClockTests):
 
 
 class CommandsBackfillTests(ClockTests):
-    @patch('builtins.print')
+    def setUp(t):
+        super().setUp()
+        t.conf = Mock(spec=['view'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+
+    @patch('builtins.print', autospec=True)
     @patch(f'{SRC}.backfill_all', autospec=True)
     def test_backfill(t, backfill_all, print):
         with t.subTest('reports a count per changed list'):
@@ -384,7 +387,7 @@ class CommandsAddTests(ClockTests):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print')
+        patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
@@ -396,6 +399,7 @@ class CommandsAddTests(ClockTests):
         # spec models batconf: an argument the user did not supply is
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/todo'
         t.conf.list = 'chores'
         t.conf.title = 'Water it'
@@ -463,13 +467,14 @@ class CommandsShowTests(ClockTests):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print')
+        patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
         # spec models batconf: an option the user did not supply is
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'format'])
+        t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/todo'
         t.conf.selector = 'brush pile'
         t.conf.format = 'text'
@@ -514,7 +519,7 @@ class CommandsCompletedTests(ClockTests):
         patcher = patch(f'{SRC}.get_completed', autospec=True)
         t.get_completed = patcher.start()
         t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print')
+        patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
@@ -541,7 +546,7 @@ class CommandsUpdateTests(ClockTests):
         patcher = patch(f'{SRC}.update_task', autospec=True)
         t.update_task = patcher.start()
         t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print')
+        patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
@@ -552,6 +557,7 @@ class CommandsUpdateTests(ClockTests):
         # spec models batconf: an option the user did not supply is
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/todo'
         t.conf.selector = 'brush pile'
         t.conf.priority = '4'
@@ -590,9 +596,12 @@ class CommandsUpdateTests(ClockTests):
 class CommandsDoneTests(ClockTests):
     def setUp(t):
         super().setUp()
+        t.conf = Mock(spec=['view', 'selector'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
         t.conf.selector = 'brush pile'
 
-    @patch('builtins.print')
+    @patch('builtins.print', autospec=True)
     @patch(f'{SRC}.complete', autospec=True)
     def test_done(t, complete, print):
         with t.subTest('prints the completed.md entries, one per line'):
@@ -624,9 +633,12 @@ class CommandsDoneTests(ClockTests):
 class CommandsScratchTests(ClockTests):
     def setUp(t):
         super().setUp()
+        t.conf = Mock(spec=['view', 'selector'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
         t.conf.selector = 'brush pile'
 
-    @patch('builtins.print')
+    @patch('builtins.print', autospec=True)
     @patch(f'{SRC}.scratch', autospec=True)
     def test_scratch(t, scratch, print):
         with t.subTest('prints the completed.md entries, one per line'):
