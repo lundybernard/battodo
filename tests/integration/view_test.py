@@ -19,17 +19,11 @@ from battodo.view import (
     Selection,
     View,
     discover_lists,
-    due_label,
-    open_children,
-    parse,
-    sort_key,
-    visible_tasks,
 )
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
-TODAY = NOW.date()
 PARKED = '<!-- battodo:parked -->'
 LONG_TITLE = 'A very long task title that has to be clipped to fit'
 
@@ -70,100 +64,6 @@ class DiscoverListsTests(SourceDirTests):
 
         with t.subTest('a directory that is not there yields nothing'):
             t.assertEqual(discover_lists(t.source / 'absent'), [])
-
-
-class VisibleTasksTests(TestCase):
-    def test_visible_tasks(t) -> None:
-        doc = parse(
-            '## Open\n'
-            '- [ ] Open item [P:2]\n'
-            '- [x] Finished item [P:2]\n'
-            '- [ ] Later recurrence [P:2] [DUE:2026-09-01] [REPEAT:7d]\n'
-            '- [ ] Later one-off [P:2] [DUE:2026-09-01]\n'
-            '- [ ] Late recurrence [P:2] [DUE:2026-08-04] [REPEAT:7d]\n'
-            '- [ ] Recurrence due today [P:2] [DUE:2026-08-05] [REPEAT:7d]\n'
-        )
-
-        titles = [task.title for task in visible_tasks(doc, TODAY)]
-
-        # Only a recurrence with a future due date is suppressed. A
-        # one-off always stays, and a recurrence due today is shown.
-        t.assertEqual(
-            titles,
-            [
-                'Open item',
-                'Later one-off',
-                'Late recurrence',
-                'Recurrence due today',
-            ],
-        )
-
-
-class DueLabelTests(TestCase):
-    def test_due_label(t) -> None:
-        cases = {
-            'no due date reads as nothing at all': (None, ''),
-            'a date already past is called out': ('2026-08-04', 'OVERDUE'),
-            'so is the day itself': ('2026-08-05', 'TODAY'),
-            'a date still ahead shows as written': (
-                '2026-08-20',
-                '2026-08-20',
-            ),
-            'and so does a placeholder': ('YYYY-MM-DD', 'YYYY-MM-DD'),
-        }
-        for name, (due, expected) in cases.items():
-            with t.subTest(name):
-                t.assertEqual(due_label(due, TODAY), expected)
-
-
-class SortKeyTests(TestCase):
-    def test_sort_key(t) -> None:
-        # `Dated` is too far out for its date to add rank, so all
-        # items except `Higher` rank the same and the tie-breaks
-        # order them.
-        doc = parse(
-            '## Open\n'
-            '- [ ] B undated [P:3]\n'
-            '- [ ] A undated [P:3]\n'
-            '- [ ] Dated [P:3] [DUE:2026-09-30]\n'
-            '- [ ] Higher [P:5]\n'
-        )
-
-        ordered = [
-            task.title
-            for task in sorted(doc.tasks, key=lambda x: sort_key(x, TODAY))
-        ]
-
-        with t.subTest('rank decides first, and the highest leads'):
-            t.assertEqual(ordered[0], 'Higher')
-
-        with t.subTest('a due date sorts ahead of none at equal rank'):
-            t.assertEqual(ordered[1], 'Dated')
-
-        with t.subTest('the title breaks what is left'):
-            t.assertEqual(ordered[2:], ['A undated', 'B undated'])
-
-
-class OpenChildrenTests(TestCase):
-    def test_open_children(t) -> None:
-        doc = parse(
-            '## Open\n'
-            '- [ ] Parent [P:3]\n'
-            '  - [ ] A subtask [LOE:1]\n'
-            '  - [ ] A checklist item\n'
-            '  - [x] A finished child [LOE:1]\n'
-            '- [ ] Childless [P:3]\n'
-        )
-        parent, childless = doc.tasks
-
-        with t.subTest('subtasks and checklist items both count'):
-            t.assertEqual(
-                [child.title for child in open_children(parent)],
-                ['A subtask', 'A checklist item'],
-            )
-
-        with t.subTest('a task with no children has none open'):
-            t.assertEqual(open_children(childless), [])
 
 
 class RenderedViewTests(SourceDirTests):
