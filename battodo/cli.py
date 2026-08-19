@@ -13,6 +13,7 @@ from battodo.lib import get_completed, get_view
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 from battodo.mutate import (
+    add_subtask,
     add_task,
     backfill_all,
     complete,
@@ -179,6 +180,11 @@ def argparser():
         dest=f'{CONFIG_ROOT}.tags',
         help=MESSAGES['add.tags.help'],
     )
+    add.add_argument(
+        '--parent',
+        dest=f'{CONFIG_ROOT}.parent',
+        help=MESSAGES['add.parent.help'],
+    )
 
     show = commands.add_parser(
         'show',
@@ -321,13 +327,19 @@ class Commands:
             for name, option in ADD_FIELDS.items()
             if (value := getattr(conf, option, None)) is not None
         }
-        path, entry = add_task(
-            source,
-            conf.list,
-            conf.title,
-            fields,
-            datetime.now(TZ).date(),
-        )
+        parent = getattr(conf, 'parent', None)
+        if parent is None:
+            path, entry = add_task(
+                source,
+                conf.list,
+                conf.title,
+                fields,
+                datetime.now(TZ).date(),
+            )
+        else:
+            path, entry = add_subtask(
+                source, conf.list, parent, conf.title, fields
+            )
         # Echoed because a P-less task ranks near 0 and so will not
         # appear in a view: this is the only confirmation of the write.
         print(entry)

@@ -2,9 +2,11 @@
 
 Envelope follows OpenFrameKeeper's event store (its ADR 0002) so the two
 projects share a vocabulary. `prev_hash`/`hash` are reserved and null in
-v1, and the commit-boundary fields are omitted: btodo emits single-event
-commits only, so there is no partial commit to detect. Both are additive
-to add later, needing no schema_version bump.
+v1, and the commit-boundary fields are omitted. A command can append
+several events -- a completion cascade, or a parent stamp beside the
+child that names it -- and nothing marks them as one commit, so a
+partial write is not detectable. Both are additive to add later, needing
+no schema_version bump.
 
 While markdown remains authoritative the journal is a *partial* record:
 hand-edits bypass btodo and so bypass this log. Every payload therefore

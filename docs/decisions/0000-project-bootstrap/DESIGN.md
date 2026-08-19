@@ -72,9 +72,11 @@ only `Selection.shows` filters those out.
 
 ## Adding a task
 
-`btodo add <list> <title>` files one new top-level task. Subtasks and
-checklist items are out of scope for it — they stay hand-edited until a
-command claims them.
+`btodo add <list> <title>` files one new top-level task, and
+`--parent <selector>` files it as a subtask of the task the selector
+names. Checklist items stay hand-edited, and cannot be a parent
+either: they carry no field, so the `[ID:]` a command would stamp
+promotes them to subtasks.
 
 **Which file.** `<list>` is a filename stem resolved against
 `discover_lists`, so parked lists are valid targets: parking opts a file
@@ -88,6 +90,16 @@ task rather than file it. Inferring the category from the title
 the previous item's own notes and children, with every other line kept
 verbatim. `parser.append_open` is the primitive that does it: `set_field`
 only edits lines that already exist.
+
+**Where a subtask goes.** Last in its parent's block, after the
+parent's notes, children and theirs, indented one level deeper —
+SCHEMA.md fixes a level at two spaces. `--parent` resolves through
+`find_task`, the same selector every other command takes, and the
+parent must live in the named list. The child is stamped `[ID:]` but
+not `[ADDED:]`: rank reads the add date, and only a top-level task is
+ranked. `P` and `REPEAT` are refused on a child — SCHEMA.md gives a
+subtask no `P`, and only the root task is rescheduled, so either one
+would be written and never read.
 
 **Which fields.** Only the ones the user supplied, in SCHEMA.md's own
 order — `P`, `LOE`, `DUE`, `REPEAT`, `TAGS`. Nothing is defaulted: an
@@ -127,11 +139,12 @@ The rest of the line, and every other line, stays verbatim. `LOE` and
 `REPEAT` are deferred: a changed `REPEAT` reschedules the task on its
 next completion, which is a decision of its own.
 
-**Top-level tasks only.** A field written to a fieldless child promotes
-it from checklist item to subtask (the discriminator above), and the
-`[ID:]` its event stream needs would promote it silently. Neither has a
-settled meaning, so `update` refuses a nested target rather than pick
-one.
+**Subtasks, but not checklist items.** `update` reaches a child at any
+depth and edits it where it stands. A checklist item is refused: a
+field written to a fieldless child promotes it to a subtask (the
+discriminator above), and the `[ID:]` its event stream needs would
+promote it silently. `P` and `REPEAT` are refused on a child, as they
+are on `add --parent`.
 
 ## Digesting the completed log
 
