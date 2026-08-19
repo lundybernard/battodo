@@ -674,13 +674,11 @@ class ScratchIsolationTests(FileIsolatedTests):
             t.assertIn('- [ ] Bare [P:2]', written)
 
         with t.subTest('the log records the abandonment'):
-            t.assertEqual(
-                entries,
-                [
-                    f'{TODAY.isoformat()} | work | SCRATCHED | Deck rebuild [P:4]'
-                ],
+            logged = (
+                f'{TODAY.isoformat()} | work | SCRATCHED | Deck rebuild [P:4]'
             )
-            t.assertEqual(t.logged(), entries[0] + '\n')
+            t.assertEqual(entries, [logged])
+            t.assertEqual(t.logged(), logged + '\n')
 
         with t.subTest('one SCRATCHED event, on the task stream'):
             t.append.assert_called_once()

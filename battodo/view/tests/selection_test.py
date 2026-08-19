@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, Mock, patch
 from ..selection import (
     CATEGORY_ORDER,
     COUNT_ERROR,
-    RANK_PLACES,
     TOP_N,
     Category,
     Selection,
@@ -271,9 +270,6 @@ class TaskEntryTests(TestCase):
             t.open_children.return_value = [Mock(spec=[]), Mock(spec=[])]
             t.assertEqual(task_entry(t.task, TODAY)['subtasks'], 2)
 
-    def test_rank_places(t) -> None:
-        t.assertEqual(RANK_PLACES, 2)
-
 
 class TodoListTests(TestCase):
     def setUp(t) -> None:
@@ -305,7 +301,12 @@ class TodoListTests(TestCase):
 
     def test_tasks(t) -> None:
         with t.subTest('open tasks come back in view order'):
-            t.tl.text = '## Open\n- [ ] Low [P:1]\n- [ ] High [P:5]\n- [x] Gone [P:9]\n'
+            t.tl.text = (
+                '## Open\n'
+                '- [ ] Low [P:1]\n'
+                '- [ ] High [P:5]\n'
+                '- [x] Gone [P:9]\n'
+            )
             t.assertEqual([task.title for task in t.tl.tasks], ['High', 'Low'])
 
         with t.subTest('a list with nothing open comes back empty'):

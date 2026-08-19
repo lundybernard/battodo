@@ -15,7 +15,6 @@ from ..completed import (
     read_record,
 )
 
-SRC = 'battodo.completed'
 TODAY = date(2026, 8, 5)
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
 # Two records of one category, one of another, one outside every
