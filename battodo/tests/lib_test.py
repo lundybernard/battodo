@@ -3,7 +3,13 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from battodo.lib import add_item, get_completed, get_item, get_view
+from battodo.lib import (
+    add_item,
+    get_completed,
+    get_item,
+    get_view,
+    update_item,
+)
 
 SRC = 'battodo.lib'
 # The configured `~/todo` as every function resolves it.
@@ -209,3 +215,53 @@ class AddItemTests(TestCase):
 
         with t.subTest('the subtask line and its file come back'):
             t.assertEqual(written, f'{t.entry}\n{t.path}')
+
+
+class UpdateItemTests(TestCase):
+    def setUp(t):
+        patcher = patch(f'{SRC}.update_task', autospec=True)
+        t.update_task = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.path = Path('~/todo/chores.md')
+        t.entry = '- [ ] Water it [P:4] [ID:ab12cd]'
+        t.update_task.return_value = (t.path, t.entry)
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        # spec models batconf: an option the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+        t.conf.priority = '4'
+        t.conf.due = '2026-09-01'
+        t.conf.title = 'Water it'
+
+    def test_update_item(t):
+        with t.subTest('selector, supplied fields and title are forwarded'):
+            written = update_item(t.conf, t.now)
+
+            args, kwargs = t.update_task.call_args
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
+            t.assertEqual(args[3], t.today)
+            t.assertEqual(kwargs['title'], 'Water it')
+
+        with t.subTest('the written line and its file come back'):
+            t.assertEqual(written, f'{t.entry}\n{t.path}')
+
+        with t.subTest('an option left off names no change to that field'):
+            t.update_task.reset_mock()
+            conf = Mock(spec=['view', 'selector', 'tags'])
+            conf.view.source_dir = '~/todo'
+            conf.selector = 'brush pile'
+            conf.tags = 'yard,summer'
+
+            update_item(conf, t.now)
+
+            args, kwargs = t.update_task.call_args
+            t.assertEqual(args[2], {'TAGS': 'yard,summer'})
+            t.assertIsNone(kwargs['title'])

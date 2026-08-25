@@ -16,20 +16,14 @@ from battodo.lib import (
     get_item,
     get_view,
     item_count,
+    update_item,
 )
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import backfill_all, complete, scratch, update_task
+from battodo.mutate import backfill_all, complete, scratch
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
-
-# The fields `update` writes, by the option that supplies each. An
-# option the user left off is *absent* from the Configuration rather
-# than None, so they are read with `getattr`. `LOE` and `REPEAT` are
-# left out: R3 names neither, and a changed `REPEAT` reschedules the
-# task on its next completion, which is a decision of its own.
-UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
 
 
 def BATCLI(ARGS=None):
@@ -319,21 +313,7 @@ class Commands:
 
     @staticmethod
     def update(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        fields = {
-            name: value
-            for name, option in UPDATE_FIELDS.items()
-            if (value := getattr(conf, option, None)) is not None
-        }
-        path, entry = update_task(
-            source,
-            conf.selector,
-            fields,
-            datetime.now(TZ).date(),
-            title=getattr(conf, 'title', None),
-        )
-        print(entry)
-        print(path)
+        print(update_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def done(conf):
