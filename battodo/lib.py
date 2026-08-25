@@ -20,17 +20,36 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
+from .mutate import add_subtask, add_task
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
     'DEFAULT_PERIOD',
     'PERIODS',
     'TZ',
+    'add_item',
     'get_completed',
     'get_item',
     'get_view',
     'item_count',
 ]
+
+# The SCHEMA.md fields an add can write, by the option that supplies
+# each. Every one is optional, and an option the user left off is
+# *absent* from the Configuration rather than None, so they are read
+# with `getattr` and only the supplied ones are passed on.
+ADD_FIELDS = {
+    'P': 'priority',
+    'LOE': 'loe',
+    'DUE': 'due',
+    'REPEAT': 'repeat',
+    'TAGS': 'tags',
+}
+
+
+def _source(conf: Configuration) -> Path:
+    """The source directory the configuration names, `~` expanded."""
+    return Path(conf.view.source_dir).expanduser()
 
 
 def get_view(conf: Configuration, now: datetime) -> str:
@@ -118,4 +137,50 @@ def get_item(conf: Configuration, now: datetime) -> str:
         if getattr(conf, 'format', 'text') == 'json'
         else build_item
     )
-    return build(Path(conf.view.source_dir).expanduser(), conf.selector, now)
+    return build(_source(conf), conf.selector, now)
+
+
+def add_item(conf: Configuration, now: datetime) -> str:
+    """Write the task the configuration describes.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `list` and `title` name the task,
+        and `parent` makes it a subtask of the task named there. Each
+        ADD_FIELDS option the user supplied is written.
+    now : datetime
+        The clock, whose local day is the add date. A subtask carries
+        no add date, so none is derived for one.
+
+    Returns
+    -------
+    str
+        The written entry and the file that holds it, one per line.
+
+    Raises
+    ------
+    ListError
+        The configured list does not exist.
+    SelectionError
+        The parent does not name exactly one open task.
+    ValueError
+        A supplied field is unreadable, or the parent cannot hold a
+        subtask. Raised before anything is written.
+    """
+    source = _source(conf)
+    fields = {
+        name: value
+        for name, option in ADD_FIELDS.items()
+        if (value := getattr(conf, option, None)) is not None
+    }
+    parent = getattr(conf, 'parent', None)
+    if parent is None:
+        path, entry = add_task(
+            source, conf.list, conf.title, fields, now.date()
+        )
+    else:
+        path, entry = add_subtask(
+            source, conf.list, parent, conf.title, fields
+        )
+    return f'{entry}\n{path}'

@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from battodo.lib import get_completed, get_item, get_view
+from battodo.lib import add_item, get_completed, get_item, get_view
 
 SRC = 'battodo.lib'
 # The configured `~/todo` as every function resolves it.
@@ -131,3 +131,81 @@ class GetItemTests(TestCase):
             get_item(conf, t.now)
 
             t.assertEqual(t.build_item.call_count, 2)
+
+
+class AddItemTests(TestCase):
+    def setUp(t):
+        for target in ('add_task', 'add_subtask'):
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+
+        t.path = Path('~/todo/chores.md')
+        t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
+        t.add_task.return_value = (t.path, t.entry)
+        t.add_subtask.return_value = (t.path, t.entry)
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        # spec models batconf: an argument the user did not supply is
+        # absent from the Configuration, not None.
+        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.list = 'chores'
+        t.conf.title = 'Water it'
+        t.conf.priority = '4'
+        t.conf.due = '2026-09-01'
+
+    def test_add_item(t):
+        with t.subTest('list, title and supplied fields are forwarded'):
+            written = add_item(t.conf, t.now)
+
+            args = t.add_task.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'chores')
+            t.assertEqual(args[2], 'Water it')
+            t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
+            t.assertEqual(args[4], t.today)
+
+        with t.subTest('the created line and its file come back'):
+            # A P-less add ranks near 0 and will not show in a view, so
+            # this is the only confirmation of the write.
+            t.assertEqual(written, f'{t.entry}\n{t.path}')
+
+        with t.subTest('an add with no fields writes none'):
+            t.add_task.reset_mock()
+            conf = Mock(spec=['view', 'list', 'title'])
+            conf.view.source_dir = '~/todo'
+            conf.list = 'chores'
+            conf.title = 'Water it'
+
+            add_item(conf, t.now)
+
+            t.assertEqual(t.add_task.call_args[0][3], {})
+
+        with t.subTest('a parent sends the add to the subtask path'):
+            t.add_task.reset_mock()
+            t.now.date.reset_mock()
+            conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
+            conf.view.source_dir = '~/todo'
+            conf.list = 'work'
+            conf.title = 'Buy lumber'
+            conf.parent = '9o71lx'
+            conf.loe = '2'
+
+            written = add_item(conf, t.now)
+
+            t.add_task.assert_not_called()
+            args = t.add_subtask.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'work')
+            t.assertEqual(args[2], '9o71lx')
+            t.assertEqual(args[3], 'Buy lumber')
+            t.assertEqual(args[4], {'LOE': '2'})
+
+        with t.subTest('a subtask carries no add date, so none is derived'):
+            t.now.date.assert_not_called()
+
+        with t.subTest('the subtask line and its file come back'):
+            t.assertEqual(written, f'{t.entry}\n{t.path}')
