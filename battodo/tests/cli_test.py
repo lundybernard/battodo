@@ -518,36 +518,28 @@ class CommandsDoneTests(ClockTests):
 class CommandsScratchTests(ClockTests):
     def setUp(t):
         super().setUp()
-        t.conf = Mock(spec=['view', 'selector'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        patcher = patch(f'{SRC}.scratch_item', autospec=True)
+        t.scratch_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.scratch', autospec=True)
-    def test_scratch(t, scratch, print):
-        with t.subTest('prints the completed.md entries, one per line'):
-            scratch.return_value = [
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip',
-                '2026-08-08 | chores | SCRATCHED | Deck',
-            ]
-            Commands.scratch(t.conf)
-            print.assert_called_with(
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
-                '2026-08-08 | chores | SCRATCHED | Deck'
+        t.conf = Mock(spec=['view', 'selector'])
+
+    def test_scratch(t):
+        Commands.scratch(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.scratch_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
             )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = scratch.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('says so when the item is not logged'):
-            scratch.return_value = []
-            Commands.scratch(t.conf)
-            print.assert_called_with('dropped')
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.scratch_item.return_value)
 
 
 class CommandsTests(TestCase):

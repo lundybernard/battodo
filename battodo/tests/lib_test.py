@@ -9,6 +9,7 @@ from battodo.lib import (
     get_completed,
     get_item,
     get_view,
+    scratch_item,
     update_item,
 )
 
@@ -308,3 +309,43 @@ class CompleteItemTests(TestCase):
             t.complete.return_value = []
 
             t.assertEqual(complete_item(t.conf, t.now), 'checked off')
+
+
+class ScratchItemTests(TestCase):
+    def setUp(t):
+        patcher = patch(f'{SRC}.scratch', autospec=True)
+        t.scratch = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        t.conf = Mock(spec=['view', 'selector'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+
+    def test_scratch_item(t):
+        with t.subTest('the completed.md entries come back, one per line'):
+            t.scratch.return_value = [
+                '2026-08-08 | chores | SCRATCHED | Deck > Chip',
+                '2026-08-08 | chores | SCRATCHED | Deck',
+            ]
+
+            logged = scratch_item(t.conf, t.now)
+
+            t.assertEqual(
+                logged,
+                '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
+                '2026-08-08 | chores | SCRATCHED | Deck',
+            )
+
+        with t.subTest('selector, source dir and local day are forwarded'):
+            args = t.scratch.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], t.today)
+
+        with t.subTest('an item that is not logged says so'):
+            t.scratch.return_value = []
+
+            t.assertEqual(scratch_item(t.conf, t.now), 'dropped')

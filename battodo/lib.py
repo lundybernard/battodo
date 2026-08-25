@@ -20,7 +20,7 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
-from .mutate import add_subtask, add_task, complete, update_task
+from .mutate import add_subtask, add_task, complete, scratch, update_task
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -33,6 +33,7 @@ __all__ = [
     'get_item',
     'get_view',
     'item_count',
+    'scratch_item',
     'update_item',
 ]
 
@@ -261,3 +262,28 @@ def complete_item(conf: Configuration, now: datetime) -> str:
     """
     entries = complete(_source(conf), conf.selector, now.date())
     return '\n'.join(entries) if entries else 'checked off'
+
+
+def scratch_item(conf: Configuration, now: datetime) -> str:
+    """Drop the task the configuration names.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `selector` names the task.
+    now : datetime
+        The clock, whose local day stamps the log.
+
+    Returns
+    -------
+    str
+        The logged entries, one per line. A checklist item is dropped
+        without a log entry, and says so instead.
+
+    Raises
+    ------
+    SelectionError
+        The selector does not name exactly one open task.
+    """
+    entries = scratch(_source(conf), conf.selector, now.date())
+    return '\n'.join(entries) if entries else 'dropped'
