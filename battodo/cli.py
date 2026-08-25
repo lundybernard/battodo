@@ -11,6 +11,7 @@ from battodo.lib import (
     DEFAULT_PERIOD,
     PERIODS,
     TZ,
+    add_item,
     get_completed,
     get_item,
     get_view,
@@ -18,30 +19,14 @@ from battodo.lib import (
 )
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import (
-    add_subtask,
-    add_task,
-    backfill_all,
-    complete,
-    scratch,
-    update_task,
-)
+from battodo.mutate import backfill_all, complete, scratch, update_task
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
 
-# The SCHEMA.md fields `add` can write, by the option that supplies
-# each. Every one is optional, and an option the user left off is
-# *absent* from the Configuration rather than None, so they are read
-# with `getattr` and only the supplied ones are passed on.
-ADD_FIELDS = {
-    'P': 'priority',
-    'LOE': 'loe',
-    'DUE': 'due',
-    'REPEAT': 'repeat',
-    'TAGS': 'tags',
-}
-# The subset `update` writes, read the same way. `LOE` and `REPEAT` are
+# The fields `update` writes, by the option that supplies each. An
+# option the user left off is *absent* from the Configuration rather
+# than None, so they are read with `getattr`. `LOE` and `REPEAT` are
 # left out: R3 names neither, and a changed `REPEAT` reschedules the
 # task on its next completion, which is a decision of its own.
 UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
@@ -326,29 +311,7 @@ def get_help(parser):
 class Commands:
     @staticmethod
     def add(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        fields = {
-            name: value
-            for name, option in ADD_FIELDS.items()
-            if (value := getattr(conf, option, None)) is not None
-        }
-        parent = getattr(conf, 'parent', None)
-        if parent is None:
-            path, entry = add_task(
-                source,
-                conf.list,
-                conf.title,
-                fields,
-                datetime.now(TZ).date(),
-            )
-        else:
-            path, entry = add_subtask(
-                source, conf.list, parent, conf.title, fields
-            )
-        # Echoed because a P-less task ranks near 0 and so will not
-        # appear in a view: this is the only confirmation of the write.
-        print(entry)
-        print(path)
+        print(add_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def show(conf):
