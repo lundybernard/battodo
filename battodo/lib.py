@@ -65,6 +65,11 @@ def _source(conf: Configuration) -> Path:
     return Path(conf.view.source_dir).expanduser()
 
 
+def _is_json(conf: Configuration) -> bool:
+    """Whether the configuration asks for the machine-readable form."""
+    return getattr(conf, 'format', 'text') == 'json'
+
+
 def _fields(conf: Configuration, options: dict[str, str]) -> dict[str, str]:
     """The fields `options` names and the configuration carries.
 
@@ -102,7 +107,7 @@ def get_view(conf: Configuration, now: datetime) -> str:
         The configured item count is not a whole number of one or more.
     """
     selection = Selection.from_config(conf, now)
-    if getattr(conf, 'format', 'text') == 'json':
+    if _is_json(conf):
         return selection.json
     return View(selection).text
 
@@ -131,7 +136,7 @@ def get_completed(conf: Configuration, now: datetime) -> str:
         The configured period has no definition.
     """
     digest = Digest.from_config(conf, now)
-    if getattr(conf, 'format', 'text') == 'json':
+    if _is_json(conf):
         return digest.json
     return DigestView(digest).text
 
@@ -158,11 +163,7 @@ def get_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    build = (
-        build_item_json
-        if getattr(conf, 'format', 'text') == 'json'
-        else build_item
-    )
+    build = build_item_json if _is_json(conf) else build_item
     return build(_source(conf), conf.selector, now)
 
 
