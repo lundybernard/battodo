@@ -14,10 +14,12 @@ or plain arguments, is not settled.
 """
 
 from datetime import datetime
+from pathlib import Path
 
 from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
+from .item import build_item, build_item_json
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -25,6 +27,7 @@ __all__ = [
     'PERIODS',
     'TZ',
     'get_completed',
+    'get_item',
     'get_view',
     'item_count',
 ]
@@ -86,3 +89,33 @@ def get_completed(conf: Configuration, now: datetime) -> str:
     if getattr(conf, 'format', 'text') == 'json':
         return digest.json
     return DigestView(digest).text
+
+
+def get_item(conf: Configuration, now: datetime) -> str:
+    """The one item the configuration names.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `selector` names the item and
+        `format` chooses the form.
+    now : datetime
+        The clock, whose local day decides the rank.
+
+    Returns
+    -------
+    str
+        The rendered item, or the item as JSON, without a trailing
+        newline.
+
+    Raises
+    ------
+    SelectionError
+        The selector does not name exactly one open task.
+    """
+    build = (
+        build_item_json
+        if getattr(conf, 'format', 'text') == 'json'
+        else build_item
+    )
+    return build(Path(conf.view.source_dir).expanduser(), conf.selector, now)
