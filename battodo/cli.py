@@ -6,10 +6,16 @@ from logging.config import dictConfig
 from pathlib import Path
 from sys import exit
 
-from battodo.completed import DEFAULT_PERIOD, PERIODS
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.item import build_item, build_item_json
-from battodo.lib import get_completed, get_view
+from battodo.lib import (
+    DEFAULT_PERIOD,
+    PERIODS,
+    TZ,
+    get_completed,
+    get_view,
+    item_count,
+)
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 from battodo.mutate import (
@@ -20,7 +26,6 @@ from battodo.mutate import (
     scratch,
     update_task,
 )
-from battodo.view import TZ, item_count
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
