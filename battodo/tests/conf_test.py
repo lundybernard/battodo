@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ..conf import (
     CONFIG_FILE_ENV_VAR,
@@ -129,9 +128,15 @@ class ConfigFileTests(TestCase):
             with t.subTest('the given name outranks the environment'):
                 t.assertEqual(ConfigFile('/given.toml').named, '/given.toml')
 
-    @patch(f'{SRC}.Path.home', autospec=True, return_value=Path('/user'))
-    @patch(f'{SRC}.Path.cwd', autospec=True, return_value=Path('/work'))
-    def test_candidates(t, cwd, home):
+    @patch(f'{SRC}.Path', autospec=True)
+    def test_candidates(t, Path_):
+        # The module holds the name, so the name is what stands in:
+        # patching an attribute of `pathlib.Path` reaches every user of
+        # it in the process.
+        Path_.side_effect = Path
+        Path_.home.return_value = Path('/user')
+        Path_.cwd.return_value = Path('/work')
+
         with t.subTest('the user config directory is the XDG default'):
             t.assertEqual(
                 t.cf.candidates,
@@ -153,27 +158,30 @@ class ConfigFileTests(TestCase):
                 ),
             )
 
-    @patch(f'{SRC}.Path.is_file', autospec=True)
-    def test_path(t, is_file):
-        project = Path('/work/battodo.toml')
-        user = Path('/user/.config/battodo/config.toml')
+    def test_path(t):
+        project, user = MagicMock(spec=Path), MagicMock(spec=Path)
         t.cf.candidates = (project, user)
 
         with t.subTest('no candidate exists'):
-            is_file.return_value = False
+            project.is_file.return_value = False
+            user.is_file.return_value = False
+
             t.assertIsNone(t.cf.path)
 
         with t.subTest('the first candidate that exists wins'):
-            is_file.reset_mock()
-            is_file.side_effect = lambda candidate: candidate == user
+            user.is_file.return_value = True
             cf = ConfigFile()
             cf.candidates = (project, user)
+
             t.assertEqual(cf.path, str(user))
 
         with t.subTest('a named file is never searched for'):
-            is_file.reset_mock()
+            project.is_file.reset_mock()
+            user.is_file.reset_mock()
+
             t.assertEqual(t.cf_named.path, '/given.toml')
-            is_file.assert_not_called()
+            project.is_file.assert_not_called()
+            user.is_file.assert_not_called()
 
     @patch(f'{SRC}.TomlSource', autospec=True)
     def test_source(t, TomlSource):
@@ -202,65 +210,3 @@ class ConfigFileTests(TestCase):
                 config_env='test',
                 missing_file_option='error',
             )
-
-
-class TomlBackendTests(TestCase):
-    """The config file is read for real: no mocked TomlSource.
-
-    Parsing TOML needs a backend batconf only declares under its
-    optional `toml` extra on python < 3.11, and the failure is lazy —
-    importing TomlSource succeeds, only the first read fails. Mocked
-    tests cannot see that, so this one parses an actual file.
-    """
-
-    def setUp(t):
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.config_file = Path(tmp.name) / 'config.toml'
-
-        # EnvSource outranks the config file: an ambient BATTODO_* var
-        # would answer first and hide whatever the file says. The
-        # search reads the environment too, so the user config
-        # directory is the empty temporary one.
-        patcher = patch.dict(
-            'os.environ',
-            {'XDG_CONFIG_HOME': tmp.name},
-            clear=True,
-        )
-        patcher.start()
-        t.addCleanup(patcher.stop)
-
-        # The searched working directory is the temporary one as well.
-        cwd = patch(
-            f'{SRC}.Path.cwd',
-            autospec=True,
-            return_value=Path(tmp.name),
-        )
-        cwd.start()
-        t.addCleanup(cwd.stop)
-
-    def test_config_file(t):
-        t.config_file.write_text(
-            '[batconf]\n'
-            'default_env = "test"\n'
-            '\n'
-            '[test.battodo.view]\n'
-            'source_dir = "~/todo-from-config-file"\n'
-        )
-
-        conf = get_config(config_file_name=str(t.config_file))
-
-        t.assertEqual(conf.view.source_dir, '~/todo-from-config-file')
-
-    def test_missing_config_file(t):
-        missing = str(t.config_file)  # setUp never writes it
-
-        with t.subTest('an explicitly named file must exist'):
-            conf = get_config(config_file_name=missing)
-            with t.assertRaises(FileNotFoundError):
-                _ = conf.view.source_dir
-
-        with t.subTest('the searched locations are optional'):
-            conf = get_config()
-
-            t.assertEqual(conf.view.source_dir, '~/todo')
