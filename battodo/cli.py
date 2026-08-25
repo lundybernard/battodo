@@ -17,11 +17,12 @@ from battodo.lib import (
     get_item,
     get_view,
     item_count,
+    scratch_item,
     update_item,
 )
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import backfill_all, scratch
+from battodo.mutate import backfill_all
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -322,10 +323,7 @@ class Commands:
 
     @staticmethod
     def scratch(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        entries = scratch(source, conf.selector, datetime.now(TZ).date())
-        # A checklist item is dropped without a completed.md entry.
-        print('\n'.join(entries) if entries else 'dropped')
+        print(scratch_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def backfill(conf):
