@@ -20,7 +20,14 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
-from .mutate import add_subtask, add_task, complete, scratch, update_task
+from .mutate import (
+    add_subtask,
+    add_task,
+    backfill_all,
+    complete,
+    scratch,
+    update_task,
+)
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -28,6 +35,7 @@ __all__ = [
     'PERIODS',
     'TZ',
     'add_item',
+    'backfill_items',
     'complete_item',
     'get_completed',
     'get_item',
@@ -287,3 +295,28 @@ def scratch_item(conf: Configuration, now: datetime) -> str:
     """
     entries = scratch(_source(conf), conf.selector, now.date())
     return '\n'.join(entries) if entries else 'dropped'
+
+
+def backfill_items(conf: Configuration, now: datetime) -> str:
+    """Stamp an add date on every task in the source that lacks one.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. Only the source directory is read.
+    now : datetime
+        The clock, whose local day is stamped.
+
+    Returns
+    -------
+    str
+        A count for each list that changed, one per line, by list
+        name. A run that stamped nothing says so instead.
+    """
+    stamped = backfill_all(_source(conf), now.date())
+    if not stamped:
+        return 'nothing to backfill'
+    return '\n'.join(
+        f'{name}: stamped {len(titles)}'
+        for name, titles in sorted(stamped.items())
+    )

@@ -3,7 +3,6 @@ import logging
 import sys
 from datetime import datetime
 from logging.config import dictConfig
-from pathlib import Path
 from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
@@ -12,6 +11,7 @@ from battodo.lib import (
     PERIODS,
     TZ,
     add_item,
+    backfill_items,
     complete_item,
     get_completed,
     get_item,
@@ -22,7 +22,6 @@ from battodo.lib import (
 )
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import backfill_all
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -327,12 +326,7 @@ class Commands:
 
     @staticmethod
     def backfill(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        result = backfill_all(source, datetime.now(TZ).date())
-        for name, titles in sorted(result.items()):
-            print(f'{name}: stamped {len(titles)}')
-        if not result:
-            print('nothing to backfill')
+        print(backfill_items(conf, datetime.now(TZ)))
 
     @staticmethod
     def view(conf):
