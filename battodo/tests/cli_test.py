@@ -491,38 +491,28 @@ class CommandsUpdateTests(ClockTests):
 class CommandsDoneTests(ClockTests):
     def setUp(t):
         super().setUp()
-        t.conf = Mock(spec=['view', 'selector'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        patcher = patch(f'{SRC}.complete_item', autospec=True)
+        t.complete_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.complete', autospec=True)
-    def test_done(t, complete, print):
-        with t.subTest('prints the completed.md entries, one per line'):
-            # Completing the last open child completes its parent too,
-            # so one command can log more than one entry.
-            complete.return_value = [
-                '2026-08-08 | chores | DONE | Deck > Chip it',
-                '2026-08-08 | chores | DONE | Deck',
-            ]
-            Commands.done(t.conf)
-            print.assert_called_with(
-                '2026-08-08 | chores | DONE | Deck > Chip it\n'
-                '2026-08-08 | chores | DONE | Deck'
+        t.conf = Mock(spec=['view', 'selector'])
+
+    def test_done(t):
+        Commands.done(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.complete_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
             )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = complete.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('says so when the item is not logged'):
-            complete.return_value = []
-            Commands.done(t.conf)
-            print.assert_called_with('checked off')
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.complete_item.return_value)
 
 
 class CommandsScratchTests(ClockTests):

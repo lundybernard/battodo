@@ -12,6 +12,7 @@ from battodo.lib import (
     PERIODS,
     TZ,
     add_item,
+    complete_item,
     get_completed,
     get_item,
     get_view,
@@ -20,7 +21,7 @@ from battodo.lib import (
 )
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import backfill_all, complete, scratch
+from battodo.mutate import backfill_all, scratch
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
@@ -317,10 +318,7 @@ class Commands:
 
     @staticmethod
     def done(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        entries = complete(source, conf.selector, datetime.now(TZ).date())
-        # A checklist item is checked off without a completed.md entry.
-        print('\n'.join(entries) if entries else 'checked off')
+        print(complete_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def scratch(conf):

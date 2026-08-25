@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from battodo.lib import (
     add_item,
+    complete_item,
     get_completed,
     get_item,
     get_view,
@@ -265,3 +266,45 @@ class UpdateItemTests(TestCase):
             args, kwargs = t.update_task.call_args
             t.assertEqual(args[2], {'TAGS': 'yard,summer'})
             t.assertIsNone(kwargs['title'])
+
+
+class CompleteItemTests(TestCase):
+    def setUp(t):
+        patcher = patch(f'{SRC}.complete', autospec=True)
+        t.complete = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        t.conf = Mock(spec=['view', 'selector'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+        t.conf.selector = 'brush pile'
+
+    def test_complete_item(t):
+        with t.subTest('the completed.md entries come back, one per line'):
+            # Completing the last open child completes its parent too,
+            # so one call can log more than one entry.
+            t.complete.return_value = [
+                '2026-08-08 | chores | DONE | Deck > Chip it',
+                '2026-08-08 | chores | DONE | Deck',
+            ]
+
+            logged = complete_item(t.conf, t.now)
+
+            t.assertEqual(
+                logged,
+                '2026-08-08 | chores | DONE | Deck > Chip it\n'
+                '2026-08-08 | chores | DONE | Deck',
+            )
+
+        with t.subTest('selector, source dir and local day are forwarded'):
+            args = t.complete.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], 'brush pile')
+            t.assertEqual(args[2], t.today)
+
+        with t.subTest('an item that is not logged says so'):
+            t.complete.return_value = []
+
+            t.assertEqual(complete_item(t.conf, t.now), 'checked off')

@@ -20,7 +20,7 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
-from .mutate import add_subtask, add_task, update_task
+from .mutate import add_subtask, add_task, complete, update_task
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     'PERIODS',
     'TZ',
     'add_item',
+    'complete_item',
     'get_completed',
     'get_item',
     'get_view',
@@ -232,3 +233,31 @@ def update_item(conf: Configuration, now: datetime) -> str:
         title=getattr(conf, 'title', None),
     )
     return f'{entry}\n{path}'
+
+
+def complete_item(conf: Configuration, now: datetime) -> str:
+    """Complete the task the configuration names.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `selector` names the task.
+    now : datetime
+        The clock, whose local day stamps the log.
+
+    Returns
+    -------
+    str
+        The logged entries, one per line. A checklist item is checked
+        off without a log entry, and says so instead.
+
+    Raises
+    ------
+    SelectionError
+        The selector does not name exactly one open task.
+    RepeatError
+        A completed recurring task carries a `[REPEAT:]` btodo cannot
+        read. Raised before anything is written.
+    """
+    entries = complete(_source(conf), conf.selector, now.date())
+    return '\n'.join(entries) if entries else 'checked off'
