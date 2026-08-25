@@ -26,6 +26,8 @@ TODAY = date(2026, 8, 8)
 
 
 class TaskSnapshotTests(TestCase):
+    """Unit tests for battodo.mutate.task_snapshot."""
+
     def test_task_snapshot(t) -> None:
         task = parse('## Open\n\n- [ ] X [P:2] [TAGS:a]\n').tasks[0]
         t.assertEqual(
@@ -76,6 +78,8 @@ class IsolatedTests(TestCase):
 
 
 class UpdateTaskTests(IsolatedTests):
+    """Unit tests for battodo.mutate.update_task."""
+
     def setUp(t) -> None:
         super().setUp()
         t.doc = parse(UPDATE_DOC)
@@ -236,6 +240,8 @@ SUBTASK_DOC = """# Work
 
 
 class AddSubtaskTests(IsolatedTests):
+    """Unit tests for battodo.mutate.add_subtask."""
+
     TARGETS = ('discover_lists', 'find_task', 'Journal', 'new_task_id')
 
     discover_lists: MagicMock
@@ -437,6 +443,8 @@ class FileIsolatedTests(TestCase):
 
 
 class AddTaskIsolationTests(FileIsolatedTests):
+    """Unit tests for battodo.mutate.add_task."""
+
     TARGETS = (*FileIsolatedTests.TARGETS, '_resolve_list')
 
     _resolve_list: MagicMock
@@ -492,6 +500,8 @@ class AddTaskIsolationTests(FileIsolatedTests):
 
 
 class FindTaskIsolationTests(FileIsolatedTests):
+    """Unit tests for battodo.mutate.find_task."""
+
     TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
 
     discover_lists: MagicMock
@@ -540,6 +550,8 @@ class FindTaskIsolationTests(FileIsolatedTests):
 
 
 class CompleteIsolationTests(FileIsolatedTests):
+    """Unit tests for battodo.mutate.complete."""
+
     TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
 
     find_task: MagicMock
@@ -651,6 +663,8 @@ class CompleteIsolationTests(FileIsolatedTests):
 
 
 class ScratchIsolationTests(FileIsolatedTests):
+    """Unit tests for battodo.mutate.scratch."""
+
     TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
 
     find_task: MagicMock
@@ -731,6 +745,8 @@ class ScratchIsolationTests(FileIsolatedTests):
 
 
 class BackfillIsolationTests(FileIsolatedTests):
+    """Unit tests for battodo.mutate.backfill_all."""
+
     TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
 
     discover_lists: MagicMock

@@ -14,6 +14,8 @@ SRC = 'battodo.conf'
 
 
 class GetConfigTests(TestCase):
+    """Unit tests for battodo.conf.get_config."""
+
     def setUp(t):
         patches = [
             'ConfigFile',
@@ -101,7 +103,10 @@ class GetConfigTests(TestCase):
 
 
 class ConfigFileTests(TestCase):
-    """Where the config file is, and the source that reads it."""
+    """Unit tests for battodo.conf.ConfigFile.
+
+    Where the config file is, and the source that reads it.
+    """
 
     def setUp(t):
         patcher = patch.dict('os.environ', {}, clear=True)

@@ -32,6 +32,8 @@ OPEN_DOC = """# Work
 
 
 class ParseTests(TestCase):
+    """Unit tests for battodo.parser.parse."""
+
     def setUp(t) -> None:
         t.doc = parse(OPEN_DOC)
 
@@ -114,6 +116,8 @@ class ParseTests(TestCase):
 
 
 class SerializeTests(TestCase):
+    """Unit tests for battodo.parser.serialize."""
+
     def test_serialize(t) -> None:
         cases = {
             'full document': OPEN_DOC,
@@ -129,6 +133,8 @@ class SerializeTests(TestCase):
 
 
 class SetFieldTests(TestCase):
+    """Unit tests for battodo.parser.set_field."""
+
     def test_set_field(t) -> None:
         raw = '- [ ] X [P:2] [LOE:1]'
 
@@ -158,6 +164,8 @@ class SetFieldTests(TestCase):
 
 
 class SetTitleTests(TestCase):
+    """Unit tests for battodo.parser.set_title."""
+
     def test_set_title(t) -> None:
         with t.subTest('the title changes, every field keeps its place'):
             t.assertEqual(
@@ -181,6 +189,8 @@ class SetTitleTests(TestCase):
 
 
 class TaskTests(TestCase):
+    """Unit tests for battodo.parser.Task."""
+
     def setUp(t) -> None:
         t.tk = parse('## Open\n\n- [ ] X [P:2] [LOE:1]\n').tasks[0]
 
@@ -197,6 +207,8 @@ class TaskTests(TestCase):
 
 
 class ParseDateTests(TestCase):
+    """Unit tests for battodo.parser.parse_date."""
+
     def test_parse_date(t) -> None:
         cases = {
             '2026-08-08': date(2026, 8, 8),
@@ -211,6 +223,8 @@ class ParseDateTests(TestCase):
 
 
 class TaskDataclassTests(TestCase):
+    """Unit tests for battodo.parser.Task."""
+
     def test_defaults(t) -> None:
         task = Task(raw_index=0, indent=0, done=False, title='T', fields={})
         t.assertEqual(task.children, [])
@@ -219,6 +233,8 @@ class TaskDataclassTests(TestCase):
 
 
 class AppendOpenTests(TestCase):
+    """Unit tests for battodo.parser.append_open."""
+
     def test_append_open(t) -> None:
         entry = '- [ ] New [P:1]'
 

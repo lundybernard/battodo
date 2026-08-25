@@ -29,6 +29,8 @@ def one(name: str, value: str | None) -> Task:
 
 
 class MultiplierTests(TestCase):
+    """Unit tests for battodo.rank.multiplier."""
+
     def test_multiplier(t) -> None:
         cases = {
             # New 0-5 scale, taken as written.
@@ -58,6 +60,8 @@ class MultiplierTests(TestCase):
 
 
 class AgeScoreTests(TestCase):
+    """Unit tests for battodo.rank.age_score."""
+
     def test_age_score(t) -> None:
         cases = {
             # No ADDED: the whole legacy corpus, and every hand-added item.
@@ -83,6 +87,8 @@ class AgeScoreTests(TestCase):
 
 
 class DueScoreTests(TestCase):
+    """Unit tests for battodo.rank.due_score."""
+
     def test_due_score(t) -> None:
         cases = {
             None: 0.0,
@@ -106,6 +112,8 @@ class DueScoreTests(TestCase):
 
 
 class RankTests(TestCase):
+    """Unit tests for battodo.rank.rank."""
+
     def test_rank(t) -> None:
         with t.subTest('a fresh undated item ranks at its multiplier'):
             t.assertAlmostEqual(rank(item(P='3'), TODAY), 3.0)

@@ -17,6 +17,8 @@ STAMP = '2026-08-05T17:30:00+00:00'
 
 
 class NewTaskIdTests(TestCase):
+    """Unit tests for battodo.journal.new_task_id."""
+
     def test_new_task_id(t) -> None:
         with t.subTest('six base36 characters'):
             for _ in range(20):
@@ -36,7 +38,10 @@ class NewTaskIdTests(TestCase):
 
 
 class JournalIsolationTests(TestCase):
-    """The journal with its file, its lock and its clock stood in for."""
+    """Unit tests for battodo.journal.Journal.
+
+    The journal with its file, its lock and its clock stood in for.
+    """
 
     Path: MagicMock
     fcntl: MagicMock

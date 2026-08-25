@@ -37,6 +37,8 @@ def record(day: str, category: str = 'work', title: str = 'A task') -> Record:
 
 
 class ReadRecordTests(TestCase):
+    """Unit tests for battodo.completed.read_record."""
+
     def test_read_record(t) -> None:
         with t.subTest('a DONE line is a record'):
             t.assertEqual(
@@ -81,6 +83,8 @@ class ReadRecordTests(TestCase):
 
 
 class RecordTests(TestCase):
+    """Unit tests for battodo.completed.Record."""
+
     def setUp(t) -> None:
         t.r = record('2026-08-04', 'chores', 'Deck > Chip it')
 
@@ -94,6 +98,8 @@ class RecordTests(TestCase):
 
 
 class GroupTests(TestCase):
+    """Unit tests for battodo.completed.Group."""
+
     def setUp(t) -> None:
         t.g = Group('side-quests', [record('2026-08-04', title='Wash it')])
 
@@ -107,6 +113,8 @@ class GroupTests(TestCase):
 
 
 class DigestTests(TestCase):
+    """Unit tests for battodo.completed.Digest."""
+
     def setUp(t) -> None:
         t.log = MagicMock(spec=Path)
         t.log.is_file.return_value = True
@@ -222,7 +230,10 @@ class DigestTests(TestCase):
 
 
 class DigestFromConfigTests(TestCase):
-    """The decode from configuration values to what a digest takes."""
+    """Unit tests for battodo.completed.Digest.from_config.
+
+    The decode from configuration values to what a digest takes.
+    """
 
     def setUp(t) -> None:
         # spec models batconf: an option the user did not supply is
@@ -253,6 +264,8 @@ class DigestFromConfigTests(TestCase):
 
 
 class TableTests(TestCase):
+    """Unit tests for battodo.completed.Table."""
+
     def setUp(t) -> None:
         t.group = Group('work', [record('2026-08-05', title='Ship it')])
         t.table = Table(t.group, WIDTHS)
@@ -283,6 +296,8 @@ class TableTests(TestCase):
 
 
 class DigestViewTests(TestCase):
+    """Unit tests for battodo.completed.DigestView."""
+
     def setUp(t) -> None:
         t.records = [
             record('2026-07-30', title='Review the ADR'),
