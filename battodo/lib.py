@@ -20,7 +20,7 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
-from .mutate import add_subtask, add_task
+from .mutate import add_subtask, add_task, update_task
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -32,12 +32,11 @@ __all__ = [
     'get_item',
     'get_view',
     'item_count',
+    'update_item',
 ]
 
 # The SCHEMA.md fields an add can write, by the option that supplies
-# each. Every one is optional, and an option the user left off is
-# *absent* from the Configuration rather than None, so they are read
-# with `getattr` and only the supplied ones are passed on.
+# each. Every one is optional.
 ADD_FIELDS = {
     'P': 'priority',
     'LOE': 'loe',
@@ -45,11 +44,28 @@ ADD_FIELDS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
+# The subset an update writes. `LOE` and `REPEAT` are left out: R3
+# names neither, and a changed `REPEAT` reschedules the task on its
+# next completion, which is a decision of its own.
+UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
 
 
 def _source(conf: Configuration) -> Path:
     """The source directory the configuration names, `~` expanded."""
     return Path(conf.view.source_dir).expanduser()
+
+
+def _fields(conf: Configuration, options: dict[str, str]) -> dict[str, str]:
+    """The fields `options` names and the configuration carries.
+
+    An option the user left off is absent from the Configuration
+    rather than None, so only the supplied ones are passed on.
+    """
+    return {
+        name: value
+        for name, option in options.items()
+        if (value := getattr(conf, option, None)) is not None
+    }
 
 
 def get_view(conf: Configuration, now: datetime) -> str:
@@ -169,11 +185,7 @@ def add_item(conf: Configuration, now: datetime) -> str:
         subtask. Raised before anything is written.
     """
     source = _source(conf)
-    fields = {
-        name: value
-        for name, option in ADD_FIELDS.items()
-        if (value := getattr(conf, option, None)) is not None
-    }
+    fields = _fields(conf, ADD_FIELDS)
     parent = getattr(conf, 'parent', None)
     if parent is None:
         path, entry = add_task(
@@ -183,4 +195,40 @@ def add_item(conf: Configuration, now: datetime) -> str:
         path, entry = add_subtask(
             source, conf.list, parent, conf.title, fields
         )
+    return f'{entry}\n{path}'
+
+
+def update_item(conf: Configuration, now: datetime) -> str:
+    """Rewrite the task the configuration names.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `selector` names the task, `title`
+        renames it, and each UPDATE_FIELDS option the user supplied is
+        written.
+    now : datetime
+        The clock, whose local day validates a `REPEAT`.
+
+    Returns
+    -------
+    str
+        The written entry and the file that holds it, one per line.
+
+    Raises
+    ------
+    SelectionError
+        The selector does not name exactly one open task.
+    ValueError
+        Nothing was named to change, the task cannot carry a field, or
+        a supplied value is unreadable. Raised before anything is
+        written.
+    """
+    path, entry = update_task(
+        _source(conf),
+        conf.selector,
+        _fields(conf, UPDATE_FIELDS),
+        now.date(),
+        title=getattr(conf, 'title', None),
+    )
     return f'{entry}\n{path}'
