@@ -44,6 +44,8 @@ def imported_modules(source: str) -> set[str]:
 
 
 class CliImportBoundaryTests(TestCase):
+    """Unit tests for battodo.cli."""
+
     def test_imports(t):
         source = Path(cli.__file__).read_text(encoding='utf-8')
 

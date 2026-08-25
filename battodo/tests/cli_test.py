@@ -61,7 +61,9 @@ def displayed(parser):
 
 
 class MessageCatalogTests(TestCase):
-    """Every string the CLI displays is an entry in the catalog.
+    """Unit tests for battodo.cli.MESSAGES.
+
+    Every string the CLI displays is an entry in the catalog.
 
     Held apart from the parser so the wording can be translated, and so
     a display string is never mistaken for behaviour: the catalog is
@@ -88,6 +90,8 @@ class MessageCatalogTests(TestCase):
 
 
 class ArgparserTests(TestCase):
+    """Unit tests for battodo.cli.argparser."""
+
     def setUp(t):
         t.parser = argparser()
 
@@ -209,6 +213,8 @@ class ArgparserTests(TestCase):
 
 
 class BATCLITests(TestCase):
+    """Unit tests for battodo.cli.BATCLI."""
+
     def setUp(t):
         patches = [
             'exit',
@@ -324,6 +330,8 @@ class ClockTests(TestCase):
 
 
 class CommandsViewTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.view."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.get_view', autospec=True)
@@ -351,6 +359,8 @@ class CommandsViewTests(ClockTests):
 
 
 class CommandsBackfillTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.backfill."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.backfill_items', autospec=True)
@@ -378,6 +388,8 @@ class CommandsBackfillTests(ClockTests):
 
 
 class CommandsAddTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.add."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.add_item', autospec=True)
@@ -405,6 +417,8 @@ class CommandsAddTests(ClockTests):
 
 
 class CommandsShowTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.show."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.get_item', autospec=True)
@@ -432,6 +446,8 @@ class CommandsShowTests(ClockTests):
 
 
 class CommandsCompletedTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.completed."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.get_completed', autospec=True)
@@ -459,6 +475,8 @@ class CommandsCompletedTests(ClockTests):
 
 
 class CommandsUpdateTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.update."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.update_item', autospec=True)
@@ -486,6 +504,8 @@ class CommandsUpdateTests(ClockTests):
 
 
 class CommandsDoneTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.done."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.complete_item', autospec=True)
@@ -513,6 +533,8 @@ class CommandsDoneTests(ClockTests):
 
 
 class CommandsScratchTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.scratch."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.scratch_item', autospec=True)
@@ -540,6 +562,8 @@ class CommandsScratchTests(ClockTests):
 
 
 class CommandsTests(TestCase):
+    """Unit tests for battodo.cli.Commands.set_log_level."""
+
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):
