@@ -20,6 +20,8 @@ SOURCE = Path.home() / 'todo'
 
 
 class GetViewTests(TestCase):
+    """Unit tests for battodo.lib.get_view."""
+
     def setUp(t):
         for target in ('Selection', 'View'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
@@ -58,6 +60,8 @@ class GetViewTests(TestCase):
 
 
 class GetCompletedTests(TestCase):
+    """Unit tests for battodo.lib.get_completed."""
+
     def setUp(t):
         for target in ('Digest', 'DigestView'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
@@ -96,6 +100,8 @@ class GetCompletedTests(TestCase):
 
 
 class GetItemTests(TestCase):
+    """Unit tests for battodo.lib.get_item."""
+
     def setUp(t):
         for target in ('build_item', 'build_item_json'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
@@ -143,6 +149,8 @@ class GetItemTests(TestCase):
 
 
 class AddItemTests(TestCase):
+    """Unit tests for battodo.lib.add_item."""
+
     def setUp(t):
         for target in ('add_task', 'add_subtask'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
@@ -221,6 +229,8 @@ class AddItemTests(TestCase):
 
 
 class UpdateItemTests(TestCase):
+    """Unit tests for battodo.lib.update_item."""
+
     def setUp(t):
         patcher = patch(f'{SRC}.update_task', autospec=True)
         t.update_task = patcher.start()
@@ -271,6 +281,8 @@ class UpdateItemTests(TestCase):
 
 
 class CompleteItemTests(TestCase):
+    """Unit tests for battodo.lib.complete_item."""
+
     def setUp(t):
         patcher = patch(f'{SRC}.complete', autospec=True)
         t.complete = patcher.start()
@@ -313,6 +325,8 @@ class CompleteItemTests(TestCase):
 
 
 class ScratchItemTests(TestCase):
+    """Unit tests for battodo.lib.scratch_item."""
+
     def setUp(t):
         patcher = patch(f'{SRC}.scratch', autospec=True)
         t.scratch = patcher.start()
@@ -353,6 +367,8 @@ class ScratchItemTests(TestCase):
 
 
 class BackfillItemsTests(TestCase):
+    """Unit tests for battodo.lib.backfill_items."""
+
     def setUp(t):
         patcher = patch(f'{SRC}.backfill_all', autospec=True)
         t.backfill_all = patcher.start()
