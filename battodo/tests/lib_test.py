@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from battodo.lib import (
     add_item,
+    backfill_items,
     complete_item,
     get_completed,
     get_item,
@@ -349,3 +350,37 @@ class ScratchItemTests(TestCase):
             t.scratch.return_value = []
 
             t.assertEqual(scratch_item(t.conf, t.now), 'dropped')
+
+
+class BackfillItemsTests(TestCase):
+    def setUp(t):
+        patcher = patch(f'{SRC}.backfill_all', autospec=True)
+        t.backfill_all = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        t.conf = Mock(spec=['view'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/todo'
+
+    def test_backfill_items(t):
+        with t.subTest('a count comes back per changed list, in order'):
+            t.backfill_all.return_value = {
+                'work.md': ['a', 'b'],
+                'chores.md': ['c'],
+            }
+
+            stamped = backfill_items(t.conf, t.now)
+
+            t.assertEqual(stamped, 'chores.md: stamped 1\nwork.md: stamped 2')
+
+        with t.subTest('the source dir and the local day are forwarded'):
+            args = t.backfill_all.call_args[0]
+            t.assertEqual(args[0], SOURCE)
+            t.assertEqual(args[1], t.today)
+
+        with t.subTest('a run that stamped nothing says so'):
+            t.backfill_all.return_value = {}
+
+            t.assertEqual(backfill_items(t.conf, t.now), 'nothing to backfill')

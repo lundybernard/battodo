@@ -1,6 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, call, patch
 
@@ -17,8 +16,6 @@ from ..cli import (
 )
 
 SRC = 'battodo.cli'
-# The configured `~/todo` as every command resolves it.
-SOURCE = Path.home() / 'todo'
 
 
 def subparsers(parser):
@@ -356,28 +353,28 @@ class CommandsViewTests(ClockTests):
 class CommandsBackfillTests(ClockTests):
     def setUp(t):
         super().setUp()
+        patcher = patch(f'{SRC}.backfill_items', autospec=True)
+        t.backfill_items = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
         t.conf = Mock(spec=['view'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.backfill_all', autospec=True)
-    def test_backfill(t, backfill_all, print):
-        with t.subTest('reports a count per changed list'):
-            backfill_all.return_value = {'work.md': ['a', 'b']}
-            Commands.backfill(t.conf)
-            print.assert_called_with('work.md: stamped 2')
+    def test_backfill(t):
+        Commands.backfill(t.conf)
 
-        with t.subTest('says so when nothing needed stamping'):
-            backfill_all.return_value = {}
-            Commands.backfill(t.conf)
-            print.assert_called_with('nothing to backfill')
+        with t.subTest('the configuration reaches the library unread'):
+            t.backfill_items.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
 
-        with t.subTest('the source dir and the local day are forwarded'):
-            args = backfill_all.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], t.today)
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.backfill_items.return_value)
 
 
 class CommandsAddTests(ClockTests):
