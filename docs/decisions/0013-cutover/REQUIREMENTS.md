@@ -84,10 +84,11 @@ reads as work, not as open questions.
 
 ## Open research
 
-- Existing `[BUMPED:]` fields in the live lists: strip them during
-  backfill, or leave them in place — ADR 0005 retired the field but
-  keeps it parsed and round-tripping. Decide at the cutover rehearsal,
-  on the live data.
+- **`[BUMPED:]` handling during backfill — resolved.** Backfill strips
+  existing `[BUMPED:]` fields from the live lists, superseding ADR
+  0005's parse-and-round-trip handling. The field is dropped from the
+  schema entirely. Priority rank is always computed from the task's
+  created date (`[ADDED:]`).
 
 ## Success criteria
 
