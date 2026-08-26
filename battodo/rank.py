@@ -18,7 +18,7 @@ contributes nothing and never raises.
 
 from datetime import date
 
-from .parser import Task, parse_date
+from .parser import TaskNode, parse_date
 
 # `P` on the new scale. Absent reads as NEUTRAL, not zero: an
 # unprioritized item still ranks by its dates. An explicit `P:0` parks it.
@@ -36,12 +36,12 @@ OVERDUE_SCALE_DAYS = 7
 DUE_CAP = 3.0
 
 
-def multiplier(task: Task) -> float:
+def multiplier(task: TaskNode) -> float:
     """The task's priority as a 0-5 multiplier.
 
     Parameters
     ----------
-    task : Task
+    task : TaskNode
         Any task; `P` may be absent, legacy-scaled, or unparseable.
 
     Returns
@@ -61,7 +61,7 @@ def multiplier(task: Task) -> float:
     return min(MAX_MULTIPLIER, 1 + priority / LEGACY_P_DIVISOR)
 
 
-def age_score(task: Task, today: date) -> float:
+def age_score(task: TaskNode, today: date) -> float:
     """How long the task has been waiting: +1 per month, capped at +2."""
     added = parse_date(task.added)
     if added is None:
@@ -72,7 +72,7 @@ def age_score(task: Task, today: date) -> float:
     return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
-def due_score(task: Task, today: date) -> float:
+def due_score(task: TaskNode, today: date) -> float:
     """How pressing the due date is: ramps to +1, then +1 per week late."""
     due = parse_date(task.due)
     if due is None:
@@ -85,7 +85,7 @@ def due_score(task: Task, today: date) -> float:
     return (DUE_HORIZON_DAYS - days) / DUE_HORIZON_DAYS
 
 
-def rank(task: Task, today: date) -> float:
+def rank(task: TaskNode, today: date) -> float:
     """The task's computed rank. Higher sorts first."""
     urgency = BASE_URGENCY + age_score(task, today) + due_score(task, today)
     return multiplier(task) * urgency

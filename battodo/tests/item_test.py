@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from ..item import (
-    Task,
+    TaskNode,
     build_item,
     build_item_json,
     item_data,
@@ -16,9 +16,9 @@ SRC = 'battodo.item'
 TODAY = date(2026, 8, 5)
 
 
-def task(title: str, **fields: str) -> Task:
+def task(title: str, **fields: str) -> TaskNode:
     """A top-level open task carrying `fields`."""
-    return Task(
+    return TaskNode(
         raw_index=0,
         indent=0,
         done=False,
@@ -45,14 +45,14 @@ class SubtaskEntryTests(TestCase):
     """Unit tests for battodo.item.subtask_entry."""
 
     def test_subtask_entry(t) -> None:
-        deep = Task(
+        deep = TaskNode(
             raw_index=3,
             indent=4,
             done=True,
             title='Buy the lumber',
             fields={'DUE': '2026-09-01'},
         )
-        child = Task(
+        child = TaskNode(
             raw_index=2,
             indent=2,
             done=False,
@@ -76,7 +76,7 @@ class SubtaskEntryTests(TestCase):
             )
 
         with t.subTest('a checklist item carries no field at all'):
-            plain = Task(
+            plain = TaskNode(
                 raw_index=1, indent=2, done=False, title='Sweep', fields={}
             )
             t.assertEqual(subtask_entry(plain), entry('Sweep'))
@@ -98,7 +98,7 @@ class ItemDataTests(TestCase):
                 ID='9o71lx',
             )
             subject.children = [
-                Task(
+                TaskNode(
                     raw_index=1,
                     indent=2,
                     done=False,

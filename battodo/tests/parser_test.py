@@ -2,7 +2,7 @@ from datetime import date
 from unittest import TestCase
 
 from ..parser import (
-    Task,
+    TaskNode,
     append_open,
     parse,
     parse_date,
@@ -188,8 +188,8 @@ class SetTitleTests(TestCase):
             set_title('      A note line', 'Y')
 
 
-class TaskTests(TestCase):
-    """Unit tests for battodo.parser.Task."""
+class TaskNodeTests(TestCase):
+    """Unit tests for battodo.parser.TaskNode."""
 
     def setUp(t) -> None:
         t.tk = parse('## Open\n\n- [ ] X [P:2] [LOE:1]\n').tasks[0]
@@ -222,11 +222,17 @@ class ParseDateTests(TestCase):
                 t.assertEqual(parse_date(value), expected)
 
 
-class TaskDataclassTests(TestCase):
-    """Unit tests for battodo.parser.Task."""
+class TaskNodeDataclassTests(TestCase):
+    """Unit tests for battodo.parser.TaskNode."""
 
     def test_defaults(t) -> None:
-        task = Task(raw_index=0, indent=0, done=False, title='T', fields={})
+        task = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='T',
+            fields={},
+        )
         t.assertEqual(task.children, [])
         t.assertEqual(task.note_indices, [])
         t.assertEqual(task.priority, 0)

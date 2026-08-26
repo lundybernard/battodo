@@ -17,7 +17,7 @@ from datetime import date
 from functools import cached_property
 from shutil import get_terminal_size
 
-from ..parser import Task, parse_date
+from ..parser import TaskNode, parse_date
 from ..rank import multiplier, rank
 from .selection import Category, Selection, open_children
 
@@ -65,12 +65,12 @@ def clip(text: str, width: int) -> str:
 class Row:
     """One task as the five cells a table shows it in."""
 
-    def __init__(self, task: Task, today: date) -> None:
+    def __init__(self, task: TaskNode, today: date) -> None:
         self.task = task
         self.today = today
 
     @cached_property
-    def children(self) -> list[Task]:
+    def children(self) -> list[TaskNode]:
         return open_children(self.task)
 
     @property

@@ -19,7 +19,7 @@ OPEN_HEADING = '## Open'
 
 
 @dataclass
-class Task:
+class TaskNode:
     """One `- [ ]` line, plus its children and note lines."""
 
     raw_index: int
@@ -28,7 +28,7 @@ class Task:
     title: str
     fields: dict[str, str]
     raw: str = ''
-    children: list['Task'] = field(default_factory=list)
+    children: list['TaskNode'] = field(default_factory=list)
     note_indices: list[int] = field(default_factory=list)
 
     @property
@@ -80,7 +80,7 @@ class TodoFile:
     """A parsed list: verbatim lines plus the open-section task tree."""
 
     lines: list[str]
-    tasks: list[Task] = field(default_factory=list)
+    tasks: list[TaskNode] = field(default_factory=list)
 
 
 def set_field(raw: str, name: str, value: str) -> str:
@@ -195,7 +195,7 @@ def parse(text: str) -> TodoFile:
     doc = TodoFile(lines=lines)
     in_open = False
     # stack of (indent, task) for the current ancestry
-    stack: list[tuple[int, Task]] = []
+    stack: list[tuple[int, TaskNode]] = []
 
     for index, raw in enumerate(lines):
         stripped = raw.strip()
@@ -219,7 +219,7 @@ def parse(text: str) -> TodoFile:
 
         indent = len(match.group(1))
         body = match.group(3)
-        task = Task(
+        task = TaskNode(
             raw_index=index,
             indent=indent,
             done=match.group(2) in 'xX',
