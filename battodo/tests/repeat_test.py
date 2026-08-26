@@ -8,6 +8,8 @@ SATURDAY = date(2026, 8, 8)
 
 
 class NextDueTests(TestCase):
+    """Unit tests for battodo.repeat.next_due."""
+
     def test_next_due_interval(t) -> None:
         cases = {
             '1d': date(2026, 8, 9),

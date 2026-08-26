@@ -6,6 +6,8 @@ from ..logconf import logging_config
 
 
 class LoggingConfigTests(TestCase):
+    """Unit tests for battodo.logconf.logging_config."""
+
     def setUp(t):
         # dictConfig rewrites the root logger, which outlives the test.
         root = logging.getLogger()

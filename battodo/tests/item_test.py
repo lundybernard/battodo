@@ -42,6 +42,8 @@ def entry(title: str, **overrides: object) -> dict[str, object]:
 
 
 class SubtaskEntryTests(TestCase):
+    """Unit tests for battodo.item.subtask_entry."""
+
     def test_subtask_entry(t) -> None:
         deep = Task(
             raw_index=3,
@@ -81,6 +83,8 @@ class SubtaskEntryTests(TestCase):
 
 
 class ItemDataTests(TestCase):
+    """Unit tests for battodo.item.item_data."""
+
     def test_item_data(t) -> None:
         with t.subTest('the list, the stored fields, and the children'):
             subject = task(
@@ -143,6 +147,8 @@ class ItemDataTests(TestCase):
 
 
 class RenderItemTests(TestCase):
+    """Unit tests for battodo.item.render_item."""
+
     maxDiff = None
 
     def setUp(t) -> None:
@@ -215,6 +221,8 @@ class RenderItemTests(TestCase):
 
 
 class BuildItemTests(TestCase):
+    """Unit tests for battodo.item.build_item."""
+
     find_task: MagicMock
     item_data: MagicMock
     render_item: MagicMock
