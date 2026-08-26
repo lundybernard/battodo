@@ -284,22 +284,25 @@ class CompleteItemTests(TestCase):
     """Unit tests for battodo.lib.complete_item."""
 
     def setUp(t):
-        patcher = patch(f'{SRC}.complete', autospec=True)
-        t.complete = patcher.start()
+        patcher = patch(f'{SRC}.Task', autospec=True)
+        t.Task = patcher.start()
         t.addCleanup(patcher.stop)
+        # autospec builds `from_config` from its signature, so its
+        # return value carries no spec. The instance mock does, so the
+        # classmethod is pointed at that.
+        t.task = t.Task.return_value
+        t.Task.from_config.return_value = t.task
 
         t.now = Mock(spec=datetime)
-        t.today = t.now.date.return_value
+        # The task decodes the configuration, so this call reads no
+        # value off it. The spec still names what a `done` carries.
         t.conf = Mock(spec=['view', 'selector'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
 
     def test_complete_item(t):
         with t.subTest('the completed.md entries come back, one per line'):
             # Completing the last open child completes its parent too,
             # so one call can log more than one entry.
-            t.complete.return_value = [
+            t.task.completed = [
                 '2026-08-08 | chores | DONE | Deck > Chip it',
                 '2026-08-08 | chores | DONE | Deck',
             ]
@@ -312,14 +315,14 @@ class CompleteItemTests(TestCase):
                 '2026-08-08 | chores | DONE | Deck',
             )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = t.complete.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+        with t.subTest('the configuration is decoded once, by the task'):
+            t.Task.from_config.assert_called_once_with(t.conf, t.now)
+
+        with t.subTest('which the call then completes'):
+            t.task.complete.assert_called_once_with()
 
         with t.subTest('an item that is not logged says so'):
-            t.complete.return_value = []
+            t.task.completed = []
 
             t.assertEqual(complete_item(t.conf, t.now), 'checked off')
 
