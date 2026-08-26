@@ -251,9 +251,11 @@ def complete_item(conf: Configuration, now: datetime) -> str:
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task.
+        The resolved configuration. `selector` names the task, and
+        `date` is the day it was completed.
     now : datetime
-        The clock, whose local day stamps the log.
+        The clock, whose local day stamps the log where the
+        configuration names no date.
 
     Returns
     -------
@@ -268,6 +270,9 @@ def complete_item(conf: Configuration, now: datetime) -> str:
     RepeatError
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
+    ValueError
+        The configured date is not an ISO date. Raised before anything
+        is written.
     """
     task = Task.from_config(conf, now)
     task.complete()

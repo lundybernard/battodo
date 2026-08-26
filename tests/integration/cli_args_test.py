@@ -94,3 +94,11 @@ class CliArgsResolutionTests(TestCase):
         with t.subTest('an optional positional reaches the command'):
             t.assertEqual(t.resolve(['completed', 'month']).period, 'month')
             t.assertEqual(t.resolve(['completed']).period, DEFAULT_PERIOD)
+
+        with t.subTest('a completion date reaches the command'):
+            conf = t.resolve(['done', 'brush pile', '--date', '2026-08-15'])
+            t.assertEqual(conf.date, '2026-08-15')
+
+        with t.subTest('and an omitted one is absent, not empty'):
+            conf = t.resolve(['done', 'brush pile'])
+            t.assertIsNone(getattr(conf, 'date', None))

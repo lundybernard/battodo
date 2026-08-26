@@ -17,7 +17,7 @@ class TaskTests(TestCase):
     """Unit tests for battodo.task.Task."""
 
     def setUp(t):
-        for target in ('complete', 'find_task'):
+        for target in ('complete', 'find_task', 'parse_date'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -32,6 +32,14 @@ class TaskTests(TestCase):
         t.conf.view.source_dir = CONFIGURED
         t.conf.selector = 'brush pile'
 
+    def dated(t, value):
+        """The same configuration, carrying a completion date."""
+        conf = Mock(spec=['view', 'selector', 'date'])
+        conf.view = t.conf.view
+        conf.selector = t.conf.selector
+        conf.date = value
+        return conf
+
     def test_from_config(t):
         task = Task.from_config(t.conf, t.now)
 
@@ -43,6 +51,20 @@ class TaskTests(TestCase):
 
         with t.subTest('and the clock gives the day it is logged under'):
             t.assertEqual(task.today, t.now.date.return_value)
+
+        with t.subTest('a configured date is that day instead'):
+            conf = t.dated('2026-07-20')
+
+            task = Task.from_config(conf, t.now)
+
+            t.parse_date.assert_called_once_with('2026-07-20')
+            t.assertEqual(task.today, t.parse_date.return_value)
+
+        with t.subTest('a date btodo cannot read is refused'):
+            t.parse_date.return_value = None
+
+            with t.assertRaises(ValueError):
+                Task.from_config(t.dated('yesterday'), t.now)
 
     def test_source(t):
         t.assertEqual(t.tk.source, SOURCE)

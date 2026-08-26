@@ -12,6 +12,23 @@ from pathlib import Path
 from batconf import Configuration
 
 from .mutate import Match, complete, find_task
+from .parser import parse_date
+
+
+def _completion_day(given: str | None, now: datetime) -> date:
+    """The day a completion is logged under.
+
+    Raises
+    ------
+    ValueError
+        `given` is not an ISO date.
+    """
+    if given is None:
+        return now.date()
+    day = parse_date(given)
+    if day is None:
+        raise ValueError(f'completion date must be an ISO date, not {given!r}')
+    return day
 
 
 class Task:
@@ -25,11 +42,21 @@ class Task:
 
     @classmethod
     def from_config(cls, conf: Configuration, now: datetime) -> 'Task':
-        """Build a task from a resolved configuration."""
+        """Build a task from a resolved configuration.
+
+        A date the user left off is absent, not None, and the clock
+        answers for it.
+
+        Raises
+        ------
+        ValueError
+            The configured date is not an ISO date. Raised before
+            anything is written.
+        """
         return cls(
             Path(conf.view.source_dir),
             conf.selector,
-            now.date(),
+            _completion_day(getattr(conf, 'date', None), now),
         )
 
     @cached_property

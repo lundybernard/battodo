@@ -178,6 +178,17 @@ class ArgparserTests(TestCase):
                 args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
                 t.assertEqual(getattr(args, 'battodo.priority'), '4')
 
+    def test_done_date(t):
+        with t.subTest('Default: None'):
+            args = t.parser.parse_args(['done', 'brush pile'])
+            t.assertIsNone(getattr(args, 'battodo.date'))
+
+        with t.subTest('done --date accepts an ISO date string'):
+            args = t.parser.parse_args(
+                ['done', 'brush pile', '--date', '2026-08-15'],
+            )
+            t.assertEqual(getattr(args, 'battodo.date'), '2026-08-15')
+
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
             args = t.parser.parse_args(['completed'])

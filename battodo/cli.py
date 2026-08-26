@@ -234,6 +234,11 @@ def argparser():
         metavar=MESSAGES['done.selector.metavar'],
         help=MESSAGES['done.selector.help'],
     )
+    done.add_argument(
+        '--date',
+        dest=f'{CONFIG_ROOT}.date',
+        help=MESSAGES['done.date.help'],
+    )
 
     drop = commands.add_parser(
         'scratch',
