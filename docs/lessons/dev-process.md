@@ -153,6 +153,19 @@
   — and keep at most one concrete phrase where a rule (imperative
   mood) needs demonstrating. Rules stay in prose; examples carry
   layout only.
+- 2026-08-25: two pixi-build sharp edges, from packaging the CLI as a
+  globally installable tool. The python build backend cannot read a
+  PEP 621 dynamic version — the metadata hook would have to run
+  before the recipe renders — so a project that keeps its version in
+  the source tree must repeat it as a literal in the pixi manifest
+  and keep the two in step (pixi-build-backends#61); a static
+  `[project]` version is read without help. And build errors
+  name no file: "A [package] section is missing in the manifest"
+  fired for a source *dependency's* manifest, in the same words the
+  root package's own missing section produces, which sent the first
+  diagnosis to the wrong file. With a source dependency in the graph,
+  read a manifest error as "some manifest in this build" and check
+  the dependency's first.
 - 2026-08-27: pushing `fixup!` commits fast-forward for human review,
   and autosquashing only after approval, kept the human gate on
   history without blocking agent progress. The reviewer reads a small
