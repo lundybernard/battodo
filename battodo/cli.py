@@ -3,43 +3,28 @@ import logging
 import sys
 from datetime import datetime
 from logging.config import dictConfig
-from pathlib import Path
 from sys import exit
 
-from battodo.completed import DEFAULT_PERIOD, PERIODS
 from battodo.conf import CONFIG_ROOT, get_config
-from battodo.item import build_item, build_item_json
-from battodo.lib import get_completed, get_view
+from battodo.lib import (
+    DEFAULT_PERIOD,
+    PERIODS,
+    TZ,
+    add_item,
+    backfill_items,
+    complete_item,
+    get_completed,
+    get_item,
+    get_view,
+    item_count,
+    scratch_item,
+    update_item,
+)
 from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
-from battodo.mutate import (
-    add_subtask,
-    add_task,
-    backfill_all,
-    complete,
-    scratch,
-    update_task,
-)
-from battodo.view import TZ, item_count
 
 dictConfig(logging_config)
 log = logging.getLogger('root')
-
-# The SCHEMA.md fields `add` can write, by the option that supplies
-# each. Every one is optional, and an option the user left off is
-# *absent* from the Configuration rather than None, so they are read
-# with `getattr` and only the supplied ones are passed on.
-ADD_FIELDS = {
-    'P': 'priority',
-    'LOE': 'loe',
-    'DUE': 'due',
-    'REPEAT': 'repeat',
-    'TAGS': 'tags',
-}
-# The subset `update` writes, read the same way. `LOE` and `REPEAT` are
-# left out: R3 names neither, and a changed `REPEAT` reschedules the
-# task on its next completion, which is a decision of its own.
-UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
 
 
 def BATCLI(ARGS=None):
@@ -321,80 +306,27 @@ def get_help(parser):
 class Commands:
     @staticmethod
     def add(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        fields = {
-            name: value
-            for name, option in ADD_FIELDS.items()
-            if (value := getattr(conf, option, None)) is not None
-        }
-        parent = getattr(conf, 'parent', None)
-        if parent is None:
-            path, entry = add_task(
-                source,
-                conf.list,
-                conf.title,
-                fields,
-                datetime.now(TZ).date(),
-            )
-        else:
-            path, entry = add_subtask(
-                source, conf.list, parent, conf.title, fields
-            )
-        # Echoed because a P-less task ranks near 0 and so will not
-        # appear in a view: this is the only confirmation of the write.
-        print(entry)
-        print(path)
+        print(add_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def show(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        build = (
-            build_item_json
-            if getattr(conf, 'format', 'text') == 'json'
-            else build_item
-        )
-        print(build(source, conf.selector, datetime.now(TZ)))
+        print(get_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def update(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        fields = {
-            name: value
-            for name, option in UPDATE_FIELDS.items()
-            if (value := getattr(conf, option, None)) is not None
-        }
-        path, entry = update_task(
-            source,
-            conf.selector,
-            fields,
-            datetime.now(TZ).date(),
-            title=getattr(conf, 'title', None),
-        )
-        print(entry)
-        print(path)
+        print(update_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def done(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        entries = complete(source, conf.selector, datetime.now(TZ).date())
-        # A checklist item is checked off without a completed.md entry.
-        print('\n'.join(entries) if entries else 'checked off')
+        print(complete_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def scratch(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        entries = scratch(source, conf.selector, datetime.now(TZ).date())
-        # A checklist item is dropped without a completed.md entry.
-        print('\n'.join(entries) if entries else 'dropped')
+        print(scratch_item(conf, datetime.now(TZ)))
 
     @staticmethod
     def backfill(conf):
-        source = Path(conf.view.source_dir).expanduser()
-        result = backfill_all(source, datetime.now(TZ).date())
-        for name, titles in sorted(result.items()):
-            print(f'{name}: stamped {len(titles)}')
-        if not result:
-            print('nothing to backfill')
+        print(backfill_items(conf, datetime.now(TZ)))
 
     @staticmethod
     def view(conf):

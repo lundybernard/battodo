@@ -1,6 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, call, patch
 
@@ -17,8 +16,6 @@ from ..cli import (
 )
 
 SRC = 'battodo.cli'
-# The configured `~/todo` as every command resolves it.
-SOURCE = Path.home() / 'todo'
 
 
 def subparsers(parser):
@@ -64,7 +61,9 @@ def displayed(parser):
 
 
 class MessageCatalogTests(TestCase):
-    """Every string the CLI displays is an entry in the catalog.
+    """Unit tests for battodo.cli.MESSAGES.
+
+    Every string the CLI displays is an entry in the catalog.
 
     Held apart from the parser so the wording can be translated, and so
     a display string is never mistaken for behaviour: the catalog is
@@ -91,6 +90,8 @@ class MessageCatalogTests(TestCase):
 
 
 class ArgparserTests(TestCase):
+    """Unit tests for battodo.cli.argparser."""
+
     def setUp(t):
         t.parser = argparser()
 
@@ -212,6 +213,8 @@ class ArgparserTests(TestCase):
 
 
 class BATCLITests(TestCase):
+    """Unit tests for battodo.cli.BATCLI."""
+
     def setUp(t):
         patches = [
             'exit',
@@ -327,6 +330,8 @@ class ClockTests(TestCase):
 
 
 class CommandsViewTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.view."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.get_view', autospec=True)
@@ -354,166 +359,95 @@ class CommandsViewTests(ClockTests):
 
 
 class CommandsBackfillTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.backfill."""
+
     def setUp(t):
         super().setUp()
+        patcher = patch(f'{SRC}.backfill_items', autospec=True)
+        t.backfill_items = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
         t.conf = Mock(spec=['view'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.backfill_all', autospec=True)
-    def test_backfill(t, backfill_all, print):
-        with t.subTest('reports a count per changed list'):
-            backfill_all.return_value = {'work.md': ['a', 'b']}
-            Commands.backfill(t.conf)
-            print.assert_called_with('work.md: stamped 2')
+    def test_backfill(t):
+        Commands.backfill(t.conf)
 
-        with t.subTest('says so when nothing needed stamping'):
-            backfill_all.return_value = {}
-            Commands.backfill(t.conf)
-            print.assert_called_with('nothing to backfill')
-
-        with t.subTest('the source dir and the local day are forwarded'):
-            args = backfill_all.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], t.today)
-            t.datetime.now.assert_called_with(TZ)
-
-
-class CommandsAddTests(ClockTests):
-    def setUp(t):
-        super().setUp()
-        for target in ('add_task', 'add_subtask'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print', autospec=True)
-        t.print = patcher.start()
-        t.addCleanup(patcher.stop)
-
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
-        t.add_task.return_value = (t.path, t.entry)
-        t.add_subtask.return_value = (t.path, t.entry)
-
-        # spec models batconf: an argument the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.list = 'chores'
-        t.conf.title = 'Water it'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
-
-    def test_add(t):
-        with t.subTest('list, title and supplied fields are forwarded'):
-            Commands.add(t.conf)
-
-            args = t.add_task.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'chores')
-            t.assertEqual(args[2], 'Water it')
-            t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
-            t.assertEqual(args[4], t.today)
-            t.datetime.now.assert_called_with(TZ)
-
-        with t.subTest('the created line and its file are echoed'):
-            # A P-less add ranks near 0 and will not show in a view, so
-            # the echo is the only confirmation the user gets.
-            t.print.assert_has_calls([call(t.entry), call(t.path)])
-
-        with t.subTest('an add with no fields writes none'):
-            t.add_task.reset_mock()
-            conf = Mock(spec=['view', 'list', 'title'])
-            conf.view.source_dir = '~/todo'
-            conf.list = 'chores'
-            conf.title = 'Water it'
-
-            Commands.add(conf)
-
-            t.assertEqual(t.add_task.call_args[0][3], {})
-
-    def test_add_under_a_parent(t):
-        conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
-        conf.view.source_dir = '~/todo'
-        conf.list = 'work'
-        conf.title = 'Buy lumber'
-        conf.parent = '9o71lx'
-        conf.loe = '2'
-
-        Commands.add(conf)
-
-        with t.subTest('a parent sends the add to the subtask path'):
-            t.add_task.assert_not_called()
-            args = t.add_subtask.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'work')
-            t.assertEqual(args[2], '9o71lx')
-            t.assertEqual(args[3], 'Buy lumber')
-            t.assertEqual(args[4], {'LOE': '2'})
-
-        with t.subTest('a subtask carries no add date, so no clock is read'):
-            t.datetime.now.assert_not_called()
-
-        with t.subTest('the created line and its file are echoed'):
-            t.print.assert_has_calls([call(t.entry), call(t.path)])
-
-
-class CommandsShowTests(ClockTests):
-    def setUp(t):
-        super().setUp()
-        for target in ('build_item', 'build_item_json'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print', autospec=True)
-        t.print = patcher.start()
-        t.addCleanup(patcher.stop)
-
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'selector', 'format'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
-        t.conf.format = 'text'
-
-    def test_show(t):
-        with t.subTest('the human form is the default'):
-            Commands.show(t.conf)
-
-            args = t.build_item.call_args[0]
-            t.print.assert_called_with(t.build_item.return_value)
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.datetime.now.return_value)
+        with t.subTest('the configuration reaches the library unread'):
+            t.backfill_items.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
 
         with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('json format is serialized instead'):
-            t.print.reset_mock()
-            t.conf.format = 'json'
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.backfill_items.return_value)
 
-            Commands.show(t.conf)
 
-            args = t.build_item_json.call_args[0]
-            t.print.assert_called_with(t.build_item_json.return_value)
-            t.assertEqual(args[1], 'brush pile')
-            t.build_item.assert_called_once()
+class CommandsAddTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.add."""
 
-        with t.subTest('an unconfigured show is the human form'):
-            conf = Mock(spec=['view', 'selector'])
-            conf.view.source_dir = '~/todo'
-            conf.selector = 'brush pile'
+    def setUp(t):
+        super().setUp()
+        patcher = patch(f'{SRC}.add_item', autospec=True)
+        t.add_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-            Commands.show(conf)
+        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
 
-            t.assertEqual(t.build_item.call_count, 2)
+    def test_add(t):
+        Commands.add(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.add_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.add_item.return_value)
+
+
+class CommandsShowTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.show."""
+
+    def setUp(t):
+        super().setUp()
+        patcher = patch(f'{SRC}.get_item', autospec=True)
+        t.get_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.conf = Mock(spec=['view', 'selector', 'format'])
+
+    def test_show(t):
+        Commands.show(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.get_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.get_item.return_value)
 
 
 class CommandsCompletedTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.completed."""
+
     def setUp(t):
         super().setUp()
         patcher = patch(f'{SRC}.get_completed', autospec=True)
@@ -541,131 +475,95 @@ class CommandsCompletedTests(ClockTests):
 
 
 class CommandsUpdateTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.update."""
+
     def setUp(t):
         super().setUp()
-        patcher = patch(f'{SRC}.update_task', autospec=True)
-        t.update_task = patcher.start()
+        patcher = patch(f'{SRC}.update_item', autospec=True)
+        t.update_item = patcher.start()
         t.addCleanup(patcher.stop)
         patcher = patch('builtins.print', autospec=True)
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ID:ab12cd]'
-        t.update_task.return_value = (t.path, t.entry)
-
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
-        t.conf.title = 'Water it'
 
     def test_update(t):
-        with t.subTest('selector, supplied fields and title are forwarded'):
-            Commands.update(t.conf)
+        Commands.update(t.conf)
 
-            args, kwargs = t.update_task.call_args
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
-            t.assertEqual(args[3], t.today)
-            t.assertEqual(kwargs['title'], 'Water it')
+        with t.subTest('the configuration reaches the library unread'):
+            t.update_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
+            )
+
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('the written line and its file are echoed'):
-            t.print.assert_has_calls([call(t.entry), call(t.path)])
-
-        with t.subTest('an option left off names no change to that field'):
-            t.update_task.reset_mock()
-            conf = Mock(spec=['view', 'selector', 'tags'])
-            conf.view.source_dir = '~/todo'
-            conf.selector = 'brush pile'
-            conf.tags = 'yard,summer'
-
-            Commands.update(conf)
-
-            args, kwargs = t.update_task.call_args
-            t.assertEqual(args[2], {'TAGS': 'yard,summer'})
-            t.assertIsNone(kwargs['title'])
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.update_item.return_value)
 
 
 class CommandsDoneTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.done."""
+
     def setUp(t):
         super().setUp()
-        t.conf = Mock(spec=['view', 'selector'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        patcher = patch(f'{SRC}.complete_item', autospec=True)
+        t.complete_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.complete', autospec=True)
-    def test_done(t, complete, print):
-        with t.subTest('prints the completed.md entries, one per line'):
-            # Completing the last open child completes its parent too,
-            # so one command can log more than one entry.
-            complete.return_value = [
-                '2026-08-08 | chores | DONE | Deck > Chip it',
-                '2026-08-08 | chores | DONE | Deck',
-            ]
-            Commands.done(t.conf)
-            print.assert_called_with(
-                '2026-08-08 | chores | DONE | Deck > Chip it\n'
-                '2026-08-08 | chores | DONE | Deck'
+        t.conf = Mock(spec=['view', 'selector'])
+
+    def test_done(t):
+        Commands.done(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.complete_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
             )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = complete.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('says so when the item is not logged'):
-            complete.return_value = []
-            Commands.done(t.conf)
-            print.assert_called_with('checked off')
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.complete_item.return_value)
 
 
 class CommandsScratchTests(ClockTests):
+    """Unit tests for battodo.cli.Commands.scratch."""
+
     def setUp(t):
         super().setUp()
-        t.conf = Mock(spec=['view', 'selector'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        patcher = patch(f'{SRC}.scratch_item', autospec=True)
+        t.scratch_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
 
-    @patch('builtins.print', autospec=True)
-    @patch(f'{SRC}.scratch', autospec=True)
-    def test_scratch(t, scratch, print):
-        with t.subTest('prints the completed.md entries, one per line'):
-            scratch.return_value = [
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip',
-                '2026-08-08 | chores | SCRATCHED | Deck',
-            ]
-            Commands.scratch(t.conf)
-            print.assert_called_with(
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
-                '2026-08-08 | chores | SCRATCHED | Deck'
+        t.conf = Mock(spec=['view', 'selector'])
+
+    def test_scratch(t):
+        Commands.scratch(t.conf)
+
+        with t.subTest('the configuration reaches the library unread'):
+            t.scratch_item.assert_called_once_with(
+                t.conf, t.datetime.now.return_value
             )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = scratch.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+        with t.subTest('the clock is read in the local zone, not the host'):
             t.datetime.now.assert_called_with(TZ)
 
-        with t.subTest('says so when the item is not logged'):
-            scratch.return_value = []
-            Commands.scratch(t.conf)
-            print.assert_called_with('dropped')
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.scratch_item.return_value)
 
 
 class CommandsTests(TestCase):
+    """Unit tests for battodo.cli.Commands.set_log_level."""
+
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):
