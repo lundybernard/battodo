@@ -1,35 +1,21 @@
 # Dev-process lessons
 
 - 2026-08-07: a subagent's permission classifier refused a delegated
-  CLAUDE.md write — an instruction relayed by a coordinating agent does
-  not count as user consent for agent-config files. Correct behavior;
-  the pattern: agent-config files get authored from the main thread on a
-  direct user request, subagents prep content in scratchpad.
-- 2026-08-08: the permission classifier also refused a ~40-line compound
-  bash script performing a history rewrite (reset + four commits), while
-  the identical operations run as small single-purpose commands were
-  permitted. Lesson: keep shell steps small and reviewable; a monolithic
-  script reads as unreviewable even when each step is benign. Distinguish
-  "operation denied" (stop, escalate) from "presentation denied"
-  (decompose, retry) — the earlier CLAUDE.md write was the former, this
-  was the latter.
+  agent-config write, then next day refused a compound bash script whose
+  individual commands were all permitted. Rehomed: agent memory
+  permission-classifier-denials (operation-denied vs
+  presentation-denied).
 - 2026-08-08: bootstrap was committed directly on main, which made
-  pre-push manual review impossible — the repo owner had to push
-  unreviewed history as a one-time exception. Feature-branch workflow
-  adopted from cycle 2 onward.
-- 2026-08-08: `git add -A` in a planned commit series swept `.pixi/envs`
-  and `pixi.lock` into the packaging commit before the ignore rules
-  existed, and pulled in a test fix staged for a later commit. Stage by
-  explicit path when building a commit sequence; `-A` is only safe once
-  .gitignore is already correct.
-- 2026-08-08: `gh api repos/{owner}/{repo}` reporting
-  `permissions.push: true` does **not** mean the active token can push.
-  That block reflects the authenticated account's role on the repo,
-  while a fine-grained PAT is separately scoped to an allow-list of
-  repositories. Pushing to `project_template` returned 403 ("Permission
-  to lundybernard/project_template.git denied to lundybernard") while
-  the API reported `admin: true`. Verify write access with an actual
-  throwaway-branch push, never from the API permissions block.
+  pre-push manual review impossible. Resolved: feature-branch rule is
+  project law in CLAUDE.md.
+- 2026-08-08: `git add -A` in a planned commit series swept build
+  artifacts into the packaging commit before the ignore rules existed,
+  and pulled in a test fix staged for a later commit. Rehomed:
+  pr-crafting skill (stage by explicit path).
+- 2026-08-08: an API permissions block reporting `permissions.push:
+  true` does not mean the active token can push, and the later
+  review-loop cycle added its own REST-vs-GraphQL notes. Rehomed: agent
+  memory github-api-write-verification.
 - 2026-08-08: a 48-test suite at 100% coverage still shipped a crash.
   `btodo view` raised `ValueError: Invalid isoformat string:
   'YYYY-MM-DD'` the first time it was pointed at the real `~/todo/`,
@@ -39,18 +25,15 @@
   human-authored files, run it against the real corpus (read-only)
   before claiming it works — that single run found what the whole suite
   missed.
-- 2026-08-08: `cp -r ~/todo sandbox/todo` copied a **symlink**, not a
-  tree. `~/todo` points at `/projects/todo`, so the "sandbox" was the
-  live system under another name and a `btodo bump` run mutated real
-  data. The recovery is the interesting part: it was exact rather than
-  best-effort only because the journal had landed the day before. Every
-  event carries the field delta plus a full task snapshot, so the
-  affected lines could be walked back field by field instead of restored
-  wholesale from a backup that did not exist. The audit trail ADR 0004
-  justified as a *migration asset* paid for itself on day one, against a
-  class of bug it was not designed for. Rule: clone with `cp -rL`, and
-  `ls -ld` the target to confirm it is a real directory, before pointing
-  anything that writes at it.
+- 2026-08-08: a sandbox copy that was really a link to the live data let
+  a write command mutate real records. The recovery is what is worth
+  keeping: it was exact rather than best-effort only because ADR 0004's
+  journal had landed the day before — every event carries the field
+  delta plus a full task snapshot, so the affected records were walked
+  back field by field instead of restored wholesale from a backup that
+  did not exist. An audit trail justified as a *migration asset* paid
+  for itself against a class of bug it was not designed for. Rehomed
+  (the `cp -rL` rule): agent memory.
 - 2026-08-08: a silent empty view. Run by the repo owner rather than the
   agent account, `btodo view` printed its header and exited 0 — that
   user has no `~/todo`, `discover_lists` returned `[]` for a missing
@@ -81,43 +64,21 @@
   observed behaviour before encoding either. The inconsistency is in the
   live system and is its owner's to reconcile; it is recorded here
   rather than silently resolved in BatTodo's ADRs.
-- 2026-08-10: an ADR mirrors the altitude of its work order. ADRs
-  0004/0005 came out 4–6x the size of 0001–0003 and full of
-  implementation spec; the suspected causes (verbose agent, saturated
-  context) were both eliminated by a controlled comparison: the *same*
-  agent instance wrote a tight ~46-line 0004 v1, then a 202-line v2
-  after the coordinator's work order said "rewrite ADR 0004 ...
-  including identity + journal layout sub-decisions" with a
-  design-specifics block attached — which the writer transcribed
-  faithfully. A fresh-context agent given "the ADR must also cover X
-  and Y" likewise produced three decisions in one file. Fixes applied:
-  adr-write got a length/altitude section (cognitive-load bands at
-  100/150/200 lines), a one-`(chosen)`-per-file rule, and a
-  don't-transcribe-the-work-order section; adr-directory got DESIGN.md
-  as the designated home for spec (the gap that made the ADR the only
-  container); the delegation rules got "hand ADR writers a decision
-  summary, never the spec". A replay of the poison work order against
-  the updated skills produced four 84–114-line ADRs with the spec in
-  DESIGN.md — the skills resisted the exact instruction that caused
-  the original failure.
-- 2026-08-11: "investigate and verify before modifying" paid twice on
-  the JSON-format review. A measured comparison (JSON vs JSONL vs
-  TSV/CSV vs bare table, real corpus, token counts) upheld the
-  incumbent — the intuitive win evaporated under measurement because
-  tokenizers merge indentation, so compact JSON's 48% character saving
-  is only 21% in tokens — and the investigation itself surfaced three
-  real defects plus the stderr gap (issue #6). Challenging a default
-  is worth the cost even when the default survives: the audit is how
-  the defects were found.
-- 2026-08-11: work-order over-structure, round two. The coordinator's
-  order said "create ADR group 0003" for what turned out to be one
-  decision; the writer faithfully built the group, and review caught
-  it ("groups are for organizing a large change which requires
-  multiple component decisions"). Same failure shape as the 2026-08-10
-  altitude lesson — the agent transcribes the order's structure, so
-  structural decisions (group vs flat file) must be made by counting
-  decisions, not defaulted at delegation time. Guardrail added to the
-  adr-directory skill ("When NOT to use").
+- 2026-08-10: an ADR mirrors the altitude of its work order. The same
+  agent produced a 46-line ADR from one order and a 202-line one from
+  an order carrying a design-specifics block, which it transcribed
+  faithfully; a later order that said "create ADR group 0003" for what
+  turned out to be a single decision duly produced a group. So hand ADR
+  writers a decision summary, never the spec, and count the decisions
+  before choosing group-vs-flat. Resolved: length band and "when not to
+  use" landed in the adr-write and adr-directory skills.
+- 2026-08-11: a measured comparison upheld the incumbent. Compact JSON's
+  48% character saving over the pretty-printed form is only 21% in
+  tokens, because tokenizers merge indentation, so the intuitive win
+  evaporated and the format stayed as it was. The audit still paid for
+  itself: it surfaced three real defects plus the stderr gap (issue #6,
+  closed). Challenging a default is worth the cost even when the default
+  survives.
 - 2026-08-11: when an agent's written finding and a live run disagree,
   the delta is a third bug, not noise. The migration report claimed a
   missing config file warns on stderr; the real CLI run was silent.
@@ -151,44 +112,25 @@
   docs, source), never inferred from a default-configuration
   experiment — the probe can only ever confirm behavior, not
   necessity.
-- 2026-08-14: work orders must carry the test-style rules. The
-  import-isolation rule (unit tests import only from the module under
-  test) lived in a loaded style skill, yet the delivered tests
-  imported from three source files and human review caught it — the
-  implementing agent never sees the orchestrator's skills, so the
-  order is the enforcement point. Same enforcement class as mock
-  discipline (no bare `Mock()`; spec from the input type or constrain
-  to what the code under test reads; `autospec=True` on every patch):
-  these ride inline in every test-writing order now.
-- 2026-08-14: durable prose leaks local context. Two catches in one
-  cycle: a commit body described the dev arrangement and named an
-  unrelated project as the pattern source; a test docstring leaned on
-  the host's timezone. Rule extracted: commits, code comments,
-  docstrings, and PR prose read as if the repo is the whole world —
-  generic statements about any host are fine, claims about this
-  particular setup are not. Related phrasing rule from the same
-  cycle: mutation-testing prose in durable artifacts says "improve
-  coverage" / "mutant caught", never kill/dead.
+- 2026-08-14: work orders must carry the test-style rules — import
+  isolation and mock discipline lived in a style skill the implementing
+  agent never sees, so the order is the only enforcement point.
+  Resolved: integrated into the work-orders skill and two memories.
+- 2026-08-14: durable prose leaks local context — a commit body
+  described the dev arrangement and named an unrelated project as its
+  pattern source, and a test docstring depended on the host's local
+  timezone. Resolved: carried in full by agent memory.
 - 2026-08-14: verify outcomes, not work orders — round two. The
   implementing agent reported a green per-commit gate, but its gate
   had omitted the format check; the orchestrator's own rerun found an
   unformatted file at the tip. The cheap full-gate rerun by the
   orchestrator stays mandatory no matter what the report says.
-- 2026-08-14: first full review loop through the agent's own GitHub
-  identity: review comment, threaded reply over REST, fix dissolved
-  into its introducing commit, re-approve, merge. API notes worth
-  keeping: pending reviews are invisible to the API until submitted,
-  and GraphQL endpoints want `read:org` — classic-PAT flows should
-  stay on REST.
 - 2026-08-15: improvised history rewrites slip; planned ones do not.
-  Two slips in two sessions from typing rebase/cherry-pick sequences
-  ad hoc: a flag that does not exist on the subcommand
-  (`cherry-pick -q`, twice), and a commit landed on top of the target
-  instead of squashed into it. The fix that held: before touching
-  HEAD, write the plan of record — every target parent hash, every
-  branch tip, in order — then execute against it. A rewrite work
-  order now carries that requirement, and the next multi-branch
-  restack under it ran clean on the first pass.
+  Two slips in two sessions came from typing rebase/cherry-pick
+  sequences ad hoc. Before touching HEAD, write the plan of record —
+  every target parent hash, every branch tip, in order — then execute
+  against it; the next multi-branch restack under that rule ran clean
+  on the first pass. Resolved: required by the work-orders skill.
 - 2026-08-15: code prose drifts into dev-process narration unless a
   register is named. A review rejected a whole PR's prose — module
   docstrings narrating fixture design, commit bodies walking through
@@ -218,3 +160,9 @@
   and the squash that follows has to move no content: an empty
   `git diff <fixup-tip> HEAD` is the proof. Keep it as the default
   shape for review-then-rewrite.
+- 2026-08-27: a docs-gap finding names the upstream ref it was read at,
+  and gets re-checked against upstream main before it is routed.
+  Findings written 2026-08-11 against a dependency's documentation were
+  refuted by an upstream commit dated three days earlier — the report
+  described a docs state that had already stopped existing, and routing
+  it would have spent credibility on a fixed problem.
