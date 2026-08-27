@@ -34,10 +34,10 @@
   did not exist. An audit trail justified as a *migration asset* paid
   for itself against a class of bug it was not designed for. Rehomed
   (the `cp -rL` rule): agent memory.
-- 2026-08-08: a silent empty view. Run by the repo owner rather than the
-  agent account, `btodo view` printed its header and exited 0 — that
-  user has no source directory, `discover_lists` returned `[]` for the
-  missing path, and the view rendered a header over nothing. It reads as
+- 2026-08-08: a silent empty view. Run by a second user with no
+  configured source directory, `btodo view` printed its header and
+  exited 0 — `discover_lists` returned `[]` for the missing path, and
+  the view rendered a header over nothing. It reads as
   "you have no tasks". A read that finds no source is a configuration
   error, not an empty result: name the resolved path and fail. The suite
   had the wrong behavior *encoded* ("empty directory still renders a
