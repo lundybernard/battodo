@@ -211,3 +211,10 @@
   — and keep at most one concrete phrase where a rule (imperative
   mood) needs demonstrating. Rules stay in prose; examples carry
   layout only.
+- 2026-08-27: pushing `fixup!` commits fast-forward for human review,
+  and autosquashing only after approval, kept the human gate on
+  history without blocking agent progress. The reviewer reads a small
+  diff against a named target commit instead of a rewritten branch,
+  and the squash that follows has to move no content: an empty
+  `git diff <fixup-tip> HEAD` is the proof. Keep it as the default
+  shape for review-then-rewrite.
