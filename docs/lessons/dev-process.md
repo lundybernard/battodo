@@ -18,8 +18,8 @@
   memory github-api-write-verification.
 - 2026-08-08: a 48-test suite at 100% coverage still shipped a crash.
   `btodo view` raised `ValueError: Invalid isoformat string:
-  'YYYY-MM-DD'` the first time it was pointed at the real `~/todo/`,
-  because a template file carries literal `[DUE:YYYY-MM-DD]`
+  'YYYY-MM-DD'` the first time it was pointed at the real source
+  directory, because a template file carries literal `[DUE:YYYY-MM-DD]`
   placeholders that no fixture contained. Coverage measures which lines
   ran, not which *inputs* were tried. For a tool that reads
   human-authored files, run it against the real corpus (read-only)
@@ -36,8 +36,8 @@
   (the `cp -rL` rule): agent memory.
 - 2026-08-08: a silent empty view. Run by the repo owner rather than the
   agent account, `btodo view` printed its header and exited 0 — that
-  user has no `~/todo`, `discover_lists` returned `[]` for a missing
-  directory, and the view rendered a header over nothing. It reads as
+  user has no source directory, `discover_lists` returned `[]` for the
+  missing path, and the view rendered a header over nothing. It reads as
   "you have no tasks". A read that finds no source is a configuration
   error, not an empty result: name the resolved path and fail. The suite
   had the wrong behavior *encoded* ("empty directory still renders a
@@ -46,18 +46,18 @@
 - 2026-08-08: widening a discovery predicate is only half a fix. Trading
   five hard-coded category filenames for "any `.md` with a `## Open`
   heading" fixed the silent-skip bug and immediately over-corrected: it
-  bumped `backlog.md`, whose header has always read "Not surfaced in
-  daily views, not bumped", and it lists `van-trip-prep-template.md` as
-  though a template were a category. A structural predicate finds every
-  list, including the ones a human knew to leave alone — intent that
+  bumped a parked list file whose header has always read "Not surfaced
+  in daily views, not bumped", and it listed a template file as though a
+  template were a category. A structural predicate finds every list,
+  including the ones a human knew to leave alone — intent that
   lives in prose needs a machine-readable form (hence the
   `<!-- battodo:parked -->` marker in ADR 0006). When a net gets wider,
   audit what else it caught.
 - 2026-08-08: the spec and the implementation of the *same* system
-  disagree, and nobody had noticed. `~/todo/SCHEMA.md` — the template of
-  record — says to surface open items where `DUE` is absent or
-  `DUE <= today`, which would hide every future-dated item. Both
-  `view_todos.py` and R3 hide only *future-recurring* items. btodo
+  disagree, and nobody had noticed. The source system's `SCHEMA.md` —
+  its template of record — says to surface open items where `DUE` is
+  absent or `DUE <= today`, which would hide every future-dated item.
+  Both `view_todos.py` and R3 hide only *future-recurring* items. btodo
   follows the script and R3, because that is the behaviour people
   actually rely on. Lesson: when reimplementing a system, the written
   spec is a third opinion, not the tiebreaker — reconcile it against
