@@ -63,9 +63,10 @@ btodo scratch <selector>
   `monthly:N`. `--tags` is a comma-separated list.
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
-- `add` echoes the line it wrote and the file it wrote to. A task with
-  no `-p` ranks near zero and does not appear in a view, so read that
-  echo to confirm the write.
+- `add` echoes the line it wrote and the file it wrote to. Read that
+  echo to confirm the write. A task with no `-p` gets a neutral
+  priority and still ranks by its dates; an explicit `-p 0` parks the
+  task out of every view.
 - `done` completes the task and logs it. `scratch` drops the task and
   logs it as abandoned. `completed` counts only the first, so pick the
   one that states what happened.
