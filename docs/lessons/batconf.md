@@ -160,3 +160,20 @@ Found during the view `--top` cycle:
   neither the rule nor this failure mode is documented: the
   `AttributeError` reports a missing value rather than a rejected
   default, which sends a reader hunting for a missing source.
+
+Found during the backdate-completion cycle:
+
+- **`Configuration` has no optional-key access.** `__getattr__` raises
+  on a missing key and there is no public `.get`, so an option the user
+  left off is read as `getattr(conf, 'name', default)`. Every consumer
+  carries the idiom at the point it decodes configuration:
+  `Selection.from_config`, `Digest.from_config`, and now
+  `Task.from_config`. Convention keeps it contained — decoding lives
+  only in `from_config` classmethods, and typed attributes flow out of
+  them — but the idiom is the dict workaround, not an API. Two shapes
+  are worth weighing against each other: a falsy missing-sentinel,
+  which would read as `conf.x or DEFAULT` and therefore needs access
+  that does not raise before any operator syntax can help, since a
+  plain `or` never calls `__or__`; and an explicit `.get`. The choice
+  is the upstream maintainer's, so nothing was routed upstream this
+  cycle.
