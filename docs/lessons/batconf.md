@@ -149,3 +149,19 @@ Found during the backdate-completion cycle:
   plain `or` never calls `__or__`; and an explicit `.get`. The choice
   is the upstream maintainer's, so nothing was routed upstream this
   cycle.
+
+Found during the global-install cycle, packaging battodo as a conda
+package:
+
+- **No conda package means every dependent builds batconf itself.**
+  `pixi global install` resolves runtime dependencies from conda
+  channels, and batconf is on none of them, so battodo declares it as
+  a path source dependency and pixi builds it alongside. The bridge
+  works — the global environment imports batconf — and it costs three
+  things. The dependent's manifest gains a filesystem path, so the
+  install is tied to a layout instead of a channel. batconf's own
+  manifest has to opt into the `pixi-build` preview feature for a
+  consumer's benefit. And the translation drops metadata: the built
+  recipe depends on unbounded `batconf`, losing both the `>=0.4.0`
+  bound and the `[toml]` extra that `[project.dependencies]` states.
+  A conda-forge package (batconf#208) removes all three at once.
