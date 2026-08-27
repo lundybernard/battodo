@@ -13,19 +13,16 @@ upstream issue candidates against boxed/mutmut.
 - **Copy step breaks on foreign-owned files:** mutated sources are
   written with a plain `open(..., 'w')`, but files that are copied
   unmodified (excluded files, `pyproject.toml`) go through
-  `shutil.copy`/`copy2`, whose chmod/copystat raises
+  `shutil.copy`/`copy2`, whose `copystat` raises
   `PermissionError: [Errno 1]` when the existing destination file
   belongs to another user — even with group write on the directory.
-  So a checkout shared between users works for the mutated set and
-  fails on the copied set. Workaround: pre-delete the copied set
-  before every run (see the `_mutate` task); a tool-side fix would be
-  writing copied files the same way mutated ones are written, or
-  tolerating a failed chmod.
-- **Incremental cache is mtime-based on the copies:** `mutants/` is
-  reused when source mtimes look unchanged, and test-only changes do
-  not reliably invalidate it — stale survivor lists read as real
-  results. `rm -rf mutants/` is the reliable reset before any run
-  whose numbers will be quoted.
+  The tool-side fix is to write copied files the same way mutated ones
+  are written, or to tolerate a failed chmod. Resolved: worked around
+  in battodo's pyproject.toml, with a comment naming the cause.
+- **Incremental cache is mtime-based on the copies:** test-only changes
+  do not reliably invalidate `mutants/`, so stale survivor lists read
+  as real results. Clear the tree before any run whose numbers will be
+  quoted.
 - **`@property` bodies are never mutated:** converting a module of
   functions into classes whose computed data lives behind properties
   dropped the project's mutant count from 1614 to 1482 and removed the
@@ -36,8 +33,6 @@ upstream issue candidates against boxed/mutmut.
   coverage. Compensated locally with 100% line coverage plus a manual
   defect-injection sweep (43 injected defects, 42 caught, 1 provably
   equivalent); upstream issue candidate, since property-heavy code is
-  hardly rare.
-- **pytest is the only runner:** mutmut 3 drives pytest in-process;
-  there is no unittest-runner hook. Harmless for a stdlib-unittest
-  suite (pytest collects it unchanged) but it decides the shape of
-  the tool env: pytest must exist there and nowhere else.
+  hardly rare. Re-verify before filing: upstream #387 (open) and #480
+  (closed) may already cover it — check against installed mutmut 3.6 or
+  newer.

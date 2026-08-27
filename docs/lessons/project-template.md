@@ -9,35 +9,20 @@ Found during the pristine import + package rename (commits 1–2):
   Renaming the package silently breaks `run_functional_tests` at runtime.
   The entry-point name should come from one constant (or
   `argparse` `prog=`/`sys.argv[0]`), not be repeated as string literals.
-- Entry points are declared twice, in `pyproject.toml`
-  (`[tool.poetry.scripts]`) and in `setup.py` (`console_scripts`), and
-  must be hand-synced. Same for the version: `pyproject.toml` hard-codes
-  `version = '0.0.1'` while `setup.py` reads it from `bat/_version.py` —
-  two sources of truth that can drift.
-- `setup.py` does `from bat._version import __version__`, importing the
-  package at build time (chicken-and-egg) and hard-coding the package
-  name in a file that is otherwise generic boilerplate.
-- `[tool.coverage.run] omit` lists `bat/server.py`, which does not exist —
-  the real file is `bat/server/server.py`. The omit entry has been dead
-  since the server module became a package.
-- `MANIFEST.in` says `recursive-include bat/api/*`. The directive syntax
-  is `recursive-include <dir> <pattern...>` (space-separated), so the
-  line is malformed and setuptools rejects it with
-  `warning: manifest_maker: ... 'recursive-include' expects <dir>
-  <pattern1> ...`. **Corrected 2026-08-08:** no files are actually lost.
-  poetry-core is the declared backend and ignores MANIFEST.in entirely,
-  and the setup.py fallback ships `bat/api/api.yaml` anyway via
-  `include_package_data`/`package_data`. Fixing the directive silences a
-  warning; it does not restore missing data.
-- Renaming requires a repo-wide sweep, not a `bat/`-scoped one: live
-  references also sit in `functional_tests/service_test.py`,
-  `bat/api/api.yaml` (`operationId: bat.lib.hello_world`, which connexion
-  resolves as an import path), `MANIFEST.in`, and the `dockerfile`.
-- The dockerfile runs `python -m unittest discover bat.tests`, which only
-  discovers `bat/tests/` — `bat/server/tests/` and `bat/example/tests/`
-  never run in the container build.
-- `--cov-fail-under=100` sits in default `addopts`, so any bare `pytest`
-  invocation (including running a single test file) fails on coverage.
+- Packaging carries two sources of truth for two facts. Entry points are
+  declared in `pyproject.toml` (`[tool.poetry.scripts]`) and again in
+  `setup.py` (`console_scripts`); the version is a literal in
+  `pyproject.toml` while `setup.py` does `from bat._version import
+  __version__`, which imports the package at build time and hard-codes
+  its name in otherwise generic boilerplate. A PEP 621 move with
+  hatchling's `[tool.hatch.version] path = ...` collapses both pairs to
+  one declaration each — and must carry over the coverage `omit` entry
+  for `_version.py`, which nothing imports at runtime once the build
+  backend reads it statically and which therefore can never reach 100%.
+- `--cov-fail-under=100` sits in default `[tool.pytest.ini_options]
+  addopts`, so coverage runs on every invocation and a partial run — one
+  test file, one test — fails on coverage rather than on the tests it
+  actually ran. The gate belongs in one explicit task.
 - Stale metadata and tooling: `description = ''` is empty;
   `[tool.poetry.dev-dependencies]` is the deprecated spelling
   (`[tool.poetry.group.dev.dependencies]` since Poetry 1.2);
@@ -48,11 +33,11 @@ Found during the pristine import + package rename (commits 1–2):
   removal is a separate, upstreamable modernization commit.
 - README documents installation as `python setup.py develop` /
   `python setup.py install`, both long deprecated.
-- Container/compose identity is spread across files that must change
-  together: `/opt/bat` in the `dockerfile` is bind-mounted as
-  `./:/opt/bat` by `docker-compose.dev.yaml`, and both compose files name
-  the service `bat`. Left as-is for now (cosmetic, and only correct as a
-  set).
+- Container and service identity — install path, service name,
+  entrypoint, port — is written by hand in the dockerfile, both compose
+  files, the server defaults and CLI, and the container tests, so a
+  rename or a port change has to touch every one. Resolved: filed
+  upstream as project_template#6.
 
 Found during the dev-environment cycle (poetry → PEP 621 + pixi):
 
@@ -65,54 +50,30 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   compose file. A template that advertises itself as a starting point for
   CLIs *or* services should isolate the service behind one optional
   package plus one optional extra, not thread it through the root CLI.
-- Version had two sources of truth (a `pyproject.toml` literal and a
-  `setup.py` import of `_version.py`). Hatchling's `[tool.hatch.version]
-  path = ...` hook collapses them to one — a clean upstream fix.
-- The poetry manifest's `[tool.pytest.ini_options] addopts` carried
-  `--cov=... --cov-fail-under=100`, so coverage ran on every invocation
-  and any partial run failed. Moving the gate into a single explicit
-  task (OFK's pattern) makes ordinary runs usable.
-- `battodo/_version.py` cannot reach 100% coverage: nothing imports it at
-  runtime, since the build backend reads it statically. It needs a
-  coverage `omit` entry (the poetry manifest had one; a template moving
-  to PEP 621 must carry it over).
-- The two `argparser` tests were written against
-  `Mock(wraps=...).return_value` returning a child mock. Modern CPython
-  returns `sentinel.DEFAULT` so the wrapped callable supplies the value,
-  and both tests error. The template's test suite is broken on current
-  Python and nobody noticed, because the suite could not import at all
-  without its dependencies installed.
 - `conf_test.py` carried a dead YAML fixture (`EXAMPLE_CONFIG_YAML` /
   `EXAMPLE_CONFIG_DICT`) and a dead `t.config_file_data`, neither ever
   read. The fixture was the suite's only reason to depend on pyyaml.
 - `example.config.yaml` does not match the `example.Config` dataclass it
   is supposed to illustrate (the file has `remote_host.api_key/url`; the
   dataclass has a single `parameter: str`).
-- ruff 0.16 broadened its default rule set considerably. The imported
-  code produced 14 findings under the OFK ruff profile — implicit
-  `Optional`, a `dict()` call, unsorted imports, an unsafe yaml loader,
-  a bare expression statement. Worth noting that OpenFrameKeeper's lock
-  still pins ruff 0.15.22, so it has not met these defaults yet.
-- `mypy --strict` reports 74 errors against the template code; the
-  non-strict default reports 5 (all implicit-`Optional` in `get_config`
-  plus a missing stub). Strict mode is the goal but needs a dedicated
-  annotation pass.
-- The template pins the deprecated batconf `FileConfig`; see
+- The template's code does not pass current ruff defaults. A
+  modernization pass has to run the linter at its current release, not
+  at whatever version the profile it inherits happens to pin.
+- `mypy --strict` is the goal but needs a dedicated annotation pass
+  first; the non-strict default is close to clean already.
+- **Template main is broken against current batconf:** `pyproject.toml`
+  declares `batconf = '*'` — unpinned — while `bat/conf.py:3` imports
+  `FileConfig`, a class removed in batconf 0.4. A fresh bootstrap
+  installs the newest batconf and fails on import. See
   [batconf.md](batconf.md).
-- **Test-prefix TestCase naming cruft:** the template's cli/conf/service
-  test modules name TestCase classes `Test<Subject>`, while its own
-  lib/example tests and batconf use `<Subject>Tests`. battodo inherited
-  the cruft and new code propagated it. The convention is now explicit
-  in the shared python-style skill (`references/unittest-idioms.md`);
-  the fix is queued on the template's `tier1-bugfixes` branch.
-- **Default CI matrix presumes library-grade portability:** the template
-  ships `[ubuntu, macos, windows]`, which is right for a library but
-  wrong-by-default for an app that chose Unix-only primitives (battodo's
-  `flock` journal, ADR 0004). Windows CI failed on `import fcntl` plus
-  an 8.3 short-path vs resolved-path assertion mismatch — platform cost
-  paid for a user that doesn't exist. Apps should prune the matrix to
-  their actual targets at bootstrap; same library-vs-app inversion as
-  the locking/pin-currency lesson.
+- **Apps prune the CI matrix to their real targets at bootstrap:**
+  battodo started from another project's workflow, which fanned out over
+  `[ubuntu, macos, windows]` — right for a library, wrong by default for
+  an app that chose Unix-only primitives (the `flock` journal, ADR 0004).
+  Windows CI failed on `import fcntl` plus an 8.3 short-path vs
+  resolved-path assertion mismatch: platform cost paid for a user that
+  doesn't exist. Dropped in `b026628`. The template ships no CI at all,
+  so this is the app's call to make on day one.
 - **`dictConfig` silently kills third-party loggers:** the template's
   `logconf.py` uses a schema-version-1 `dictConfig` without setting
   `disable_existing_loggers`, whose default is `True`. `cli.py` imports
@@ -124,18 +85,18 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   finding contradicted a live run (2026-08-11). The template should ship
   `'disable_existing_loggers': False`; the import-order trap deserves a
   comment either way.
-- **CI tests one interpreter while `requires-python` promises a range:**
-  the template's test job runs whatever version the pixi default
-  feature pins, and nothing cross-checks that against the declared
-  range. So the floor is an assertion no run executes — battodo said
-  `>=3.10` and had only ever run 3.14. The gap hides well, because a
-  green check reads as coverage of the supported range rather than of
-  one point in it. The metadata and the matrix should be built
-  together: a feature and env per supported version, CI fanning out
-  over them, or else narrow `requires-python` to the version actually
-  tested. Here the claim survived contact — 3.10–3.14 all pass with no
-  source changes — but until the matrix existed that was a guess that
-  happened to be right, not a tested property.
+- **CI must fan out over the whole interpreter range the metadata
+  promises.** A single test job runs whatever version the default
+  environment pins, and nothing cross-checks that against
+  `requires-python`, so the floor is an assertion no run executes —
+  battodo said `>=3.10` and had only ever run 3.14. The gap hides well:
+  a green check reads as coverage of the supported range rather than of
+  one point in it. Metadata and matrix should be built together, a
+  feature and env per supported version, or else the range should narrow
+  to what is actually tested. Here the claim survived contact — 3.10–3.14
+  all pass with no source changes — but until the matrix existed that was
+  a guess that happened to be right. The template still declares poetry's
+  `python = '^3.8'` and has no CI to check it against.
 - **Message catalog for CLI strings:** extracting every user-facing
   argparse string into a pure-data module (`messages.py`, stable
   namespaced keys) gave three wins at once: a future localization
@@ -146,24 +107,40 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   mutants were display-string noise; this removed them structurally.
   Template candidate: ship the example CLI with a catalog from day
   one.
-- **Mutation testing as a pixi feature:** a `mutation` env (mutmut +
-  pytest collecting the stdlib unittest suite unchanged) slotted into
-  the template's feature-per-tool layout with no friction. Worth
-  upstreaming once the run recipe stabilizes — see
-  [mutmut.md](mutmut.md) for the tool-side caveats the recipe has to
-  work around.
-- **Config namespace derived from `__module__`:** the template's
-  conf.py sets `CONFIG_ROOT = GlobalConfig.__module__` and builds
-  `Configuration` without a path, so every lookup path, environment
-  variable name, and CLI argument prefix silently depends on where the
-  schema class is defined — placement of config dataclasses becomes
-  load-bearing, and battodo grew a docstring justifying one such
-  placement before the dependency was spotted. batconf 0.4.0's
+- **Mutation testing as a pixi feature (contingent):** a `mutation` env
+  (mutmut + pytest collecting the stdlib unittest suite unchanged)
+  slotted in with no friction — but the slotting described is battodo's,
+  and it can only go upstream if the template's pixi support stays
+  optional: `[tool.pixi]` committed as metadata a non-pixi user ignores,
+  never a required toolchain. Worth upstreaming on that condition, once
+  the run recipe stabilizes; see [mutmut.md](mutmut.md) for the
+  tool-side caveats the recipe has to work around.
+- **Config lookups depend on where the schema class lives:** the
+  template builds `Configuration(source_list, config_class)` with no
+  `path=`, so every lookup path, environment variable name, and CLI
+  argument prefix silently derives from the schema class's module —
+  placement of config dataclasses becomes load-bearing. batconf 0.4.0's
   `Configuration` takes an explicit `path=` and treats the module as a
   fallback only. The template's conf tests also fake `__module__` on
-  *nested* schema classes ("As if imported from a module"), which is
-  dead weight in any batconf version: nested namespaces are built from
-  the schema's field names, never from the nested class's module.
-  Upstream candidate: literal `CONFIG_ROOT` + `path=CONFIG_ROOT` +
-  drop the fixture overrides (battodo commit
-  `refactor(conf): name the config namespace explicitly`).
+  *nested* schema classes (`bat/tests/conf_test.py:73-74`, "As if
+  imported from a module"), which is dead weight in any batconf version:
+  nested namespaces are built from the schema's field names, never from
+  the nested class's module.
+
+Fixed upstream, from both cycles above:
+
+- `[tool.coverage.run] omit` listed `bat/server.py`, dead since the
+  server module became a package.
+- `MANIFEST.in`'s `recursive-include bat/api/*` was malformed; the
+  directive takes `<dir> <pattern...>`, space-separated.
+- The dockerfile ran `python -m unittest discover bat.tests`, so
+  `bat/server/tests/` and `bat/example/tests/` never ran in the
+  container build.
+- The two `argparser` tests were written against `Mock(wraps=...)`
+  returning a child mock; modern CPython returns `sentinel.DEFAULT` so
+  the wrapped callable supplies the value, and both tests errored.
+- TestCase classes were named `Test<Subject>` in the cli/conf/service
+  modules and `<Subject>Tests` everywhere else; the `<Subject>Tests`
+  convention now also lives in the shared python-style skill.
+
+Resolved: merged upstream in PR #5.

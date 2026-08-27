@@ -2,7 +2,10 @@
 
 Informal running log, parallel to [decisions/](../decisions/). Findings
 land here as they occur; at feature-cycle boundaries the log is reviewed
-for upstreamable improvements and write-up material.
+for upstreamable improvements and write-up material. Entries are pruned
+at that review: a resolved item collapses to a tombstone naming what
+resolved it. Wins are not pruned — they stay as source records for
+write-ups.
 
 | File | Scope |
 | ---- | ----- |
