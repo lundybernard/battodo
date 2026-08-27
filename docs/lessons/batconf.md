@@ -33,12 +33,15 @@ was run deliberately docs-first by AI agents, logging every place the
 documentation failed them — each item names the failure mode an agent
 actually hit, since that is what upstream wants to fix:
 
-- **A removal in the next release leaves no window.** `FileConfig` and
-  `ConfigProtocol` were removed in 0.4, the release immediately after
-  0.3.1's warning said "will be removed a future release" — so
+- **A deprecated class was removed one release after its first
+  warning.** `FileConfig` and `ConfigProtocol` carried 0.3.1's "will be
+  removed a future release" warning and were gone in 0.4, so
   `import battodo.conf` died with `ImportError` before any migration
-  work started, and Python's own hint (`Did you mean: 'Configuration'?`)
-  actively misled.
+  work started. Resolved: batconf 0.4 released; battodo migrated (ADRs
+  0007, 0015). The upstream ask stands: a deprecated class should
+  survive one full release cycle between its first warning and its
+  removal, and the `Did you mean: 'Configuration'?` hint Python offers
+  once it is gone points a migrator at the wrong replacement.
 - **Deprecation messages name identifiers that don't match the docs.**
   0.3.1's `FileConfig` warning points at `batconf.sources.yaml.
   YamlConfig`; 0.4 ships `YamlSource`. `CliArgsConfig`'s warning says
@@ -101,7 +104,11 @@ actually hit, since that is what upstream wants to fix:
 
 Wins worth keeping: the source-list composition survived the migration
 untouched — priority order (CLI > env > file > defaults) is still the
-model an agent guesses correctly on the first try.
+model an agent guesses correctly on the first try. And pixi's 3-day
+`exclude-newer` cooldown did its job: installing a 2-day-old release of
+our own upstream needed a deliberate per-package override
+(`[tool.pixi.pypi-exclude-newer]`), so the supply-chain delay held for
+everything else while a first-party dependency was exempted on purpose.
 
 Found during the view `--top` cycle:
 

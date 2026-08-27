@@ -33,6 +33,11 @@ Found during the pristine import + package rename (commits 1–2):
   removal is a separate, upstreamable modernization commit.
 - README documents installation as `python setup.py develop` /
   `python setup.py install`, both long deprecated.
+- Container and service identity — install path, service name,
+  entrypoint, port — is written by hand in the dockerfile, both compose
+  files, the server defaults and CLI, and the container tests, so a
+  rename or a port change has to touch every one. Resolved: filed
+  upstream as project_template#6.
 
 Found during the dev-environment cycle (poetry → PEP 621 + pixi):
 
@@ -51,6 +56,9 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
 - `example.config.yaml` does not match the `example.Config` dataclass it
   is supposed to illustrate (the file has `remote_host.api_key/url`; the
   dataclass has a single `parameter: str`).
+- The template's code does not pass current ruff defaults. A
+  modernization pass has to run the linter at its current release, not
+  at whatever version the profile it inherits happens to pin.
 - `mypy --strict` is the goal but needs a dedicated annotation pass
   first; the non-strict default is close to clean already.
 - **Template main is broken against current batconf:** `pyproject.toml`
@@ -102,10 +110,11 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
 - **Mutation testing as a pixi feature (contingent):** a `mutation` env
   (mutmut + pytest collecting the stdlib unittest suite unchanged)
   slotted in with no friction — but the slotting described is battodo's,
-  and it presumes the template adopts pixi's feature-per-tool layout
-  first. Worth upstreaming after that, once the run recipe stabilizes;
-  see [mutmut.md](mutmut.md) for the tool-side caveats the recipe has to
-  work around.
+  and it can only go upstream if the template's pixi support stays
+  optional: `[tool.pixi]` committed as metadata a non-pixi user ignores,
+  never a required toolchain. Worth upstreaming on that condition, once
+  the run recipe stabilizes; see [mutmut.md](mutmut.md) for the
+  tool-side caveats the recipe has to work around.
 - **Config lookups depend on where the schema class lives:** the
   template builds `Configuration(source_list, config_class)` with no
   `path=`, so every lookup path, environment variable name, and CLI
