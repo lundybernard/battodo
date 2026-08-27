@@ -23,7 +23,7 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from ..parser import OPEN_HEADING, Task, TodoFile, parse, parse_date
+from ..parser import OPEN_HEADING, TaskNode, TodoFile, parse, parse_date
 from ..rank import multiplier, rank
 
 
@@ -99,7 +99,7 @@ def discover_lists(directory: Path) -> list[Path]:
     )
 
 
-def visible_tasks(doc: TodoFile, today: date) -> list[Task]:
+def visible_tasks(doc: TodoFile, today: date) -> list[TaskNode]:
     """Open top-level tasks, minus suppressed future recurrences."""
     visible = []
     for task in doc.tasks:
@@ -112,7 +112,7 @@ def visible_tasks(doc: TodoFile, today: date) -> list[Task]:
     return visible
 
 
-def sort_key(task: Task, today: date) -> tuple[float, str, str]:
+def sort_key(task: TaskNode, today: date) -> tuple[float, str, str]:
     """Rank descending, then nearest due, undated last, then title."""
     return (
         -rank(task, today),
@@ -135,12 +135,12 @@ def category_order(name: str) -> tuple[int, str]:
     )
 
 
-def open_children(task: Task) -> list[Task]:
+def open_children(task: TaskNode) -> list[TaskNode]:
     """The task's incomplete children: subtasks and checklist items."""
     return [child for child in task.children if not child.done]
 
 
-def task_entry(task: Task, today: date) -> dict[str, object]:
+def task_entry(task: TaskNode, today: date) -> dict[str, object]:
     """One task as `Selection.json` records it.
 
     Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
@@ -178,7 +178,7 @@ class TodoList:
         return PARKED_MARKER in self.text
 
     @cached_property
-    def tasks(self) -> list[Task]:
+    def tasks(self) -> list[TaskNode]:
         """The open tasks, in the order a view shows them."""
         return sorted(
             visible_tasks(parse(self.text), self.today),
@@ -195,14 +195,14 @@ class Category:
     """One list's place in a view: what it shows, and what it holds back."""
 
     def __init__(
-        self, name: str, tasks: list[Task], limit: int | None
+        self, name: str, tasks: list[TaskNode], limit: int | None
     ) -> None:
         self.name = name
         self.tasks = tasks
         self.limit = limit
 
     @property
-    def shown(self) -> list[Task]:
+    def shown(self) -> list[TaskNode]:
         """The tasks that make it into the view."""
         return self.tasks if self.limit is None else self.tasks[: self.limit]
 

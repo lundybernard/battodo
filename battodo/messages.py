@@ -75,6 +75,8 @@ MESSAGES = {
     'done.help': 'for details use done --help',
     'done.selector.metavar': 'selector',
     'done.selector.help': "the task's [ID:] value, or part of its title",
+    'done.date.help': 'the day the task was completed, YYYY-MM-DD;'
+    ' default today',
     # scratch
     'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
     'scratch.help': 'for details use scratch --help',

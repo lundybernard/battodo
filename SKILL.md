@@ -53,7 +53,7 @@ btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
 btodo add <list> <title> --parent <selector>
 btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
                         [--title TITLE]
-btodo done <selector>
+btodo done <selector> [--date YYYY-MM-DD]
 btodo scratch <selector>
 ```
 
@@ -69,6 +69,9 @@ btodo scratch <selector>
 - `done` completes the task and logs it. `scratch` drops the task and
   logs it as abandoned. `completed` counts only the first, so pick the
   one that states what happened.
+- `done --date` logs the completion under the day the work finished,
+  rather than the day it is marked off. A repeating task is rescheduled
+  from that day too.
 - Checking off the last open child completes its parent.
 
 ## Selectors

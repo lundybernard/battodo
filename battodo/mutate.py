@@ -34,7 +34,7 @@ from typing import Any
 from .journal import Journal, new_task_id
 from .parser import (
     OPEN_HEADING,
-    Task,
+    TaskNode,
     TodoFile,
     append_open,
     parse,
@@ -93,14 +93,14 @@ class Match:
 
     path: Path
     doc: TodoFile
-    trail: list[Task]
+    trail: list[TaskNode]
 
     @property
-    def task(self) -> Task:
+    def task(self) -> TaskNode:
         return self.trail[-1]
 
 
-def task_snapshot(task: Task) -> dict[str, Any]:
+def task_snapshot(task: TaskNode) -> dict[str, Any]:
     """The task's full state at event time.
 
     Snapshots are what make a later authority flip replayable despite
@@ -120,7 +120,7 @@ def _set_fields(raw: str, updates: dict[str, str]) -> str:
     return raw
 
 
-def _is_checklist_item(task: Task) -> bool:
+def _is_checklist_item(task: TaskNode) -> bool:
     """A child carrying no fields: plain text, not an entity of its own.
 
     SCHEMA.md keeps these out of `completed.md`, and they must never be
@@ -131,7 +131,7 @@ def _is_checklist_item(task: Task) -> bool:
     return bool(task.indent) and not task.fields
 
 
-def _stream_task(trail: list[Task]) -> Task:
+def _stream_task(trail: list[TaskNode]) -> TaskNode:
     """The task whose event stream owns a mutation on `trail`'s target.
 
     Usually the target itself. A checklist item cannot hold an `[ID:]`,
@@ -143,7 +143,7 @@ def _stream_task(trail: list[Task]) -> Task:
     )
 
 
-def _block_indices(task: Task) -> set[int]:
+def _block_indices(task: TaskNode) -> set[int]:
     """Every line the task owns: its own, its notes, its children's."""
     indices = {task.raw_index, *task.note_indices}
     for child in task.children:
@@ -151,7 +151,7 @@ def _block_indices(task: Task) -> set[int]:
     return indices
 
 
-def _identify(task: Task, ids: dict[int, str]) -> str:
+def _identify(task: TaskNode, ids: dict[int, str]) -> str:
     """The task's `[ID:]`, allocating one on first mediated mutation."""
     return ids.setdefault(task.raw_index, task.task_id or new_task_id())
 
@@ -234,7 +234,7 @@ def _added_payload(entry: str, written: dict[str, str]) -> dict[str, Any]:
     }
 
 
-def _refuse_checklist_item(task: Task) -> None:
+def _refuse_checklist_item(task: TaskNode) -> None:
     """Reject a task that carries no field of its own.
 
     Raises
@@ -445,7 +445,10 @@ def _lists(directory: Path) -> Iterator[tuple[Path, TodoFile]]:
         yield path, parse(path.read_text())
 
 
-def _descend(tasks: list[Task], trail: list[Task]) -> Iterator[list[Task]]:
+def _descend(
+    tasks: list[TaskNode],
+    trail: list[TaskNode],
+) -> Iterator[list[TaskNode]]:
     """Every task at any depth, each with its ancestry trail."""
     for task in tasks:
         found = [*trail, task]
@@ -453,7 +456,7 @@ def _descend(tasks: list[Task], trail: list[Task]) -> Iterator[list[Task]]:
         yield from _descend(task.children, found)
 
 
-def _selects(task: Task, selector: str) -> bool:
+def _selects(task: TaskNode, selector: str) -> bool:
     return task.task_id == selector or selector.lower() in task.title.lower()
 
 
@@ -488,7 +491,7 @@ def find_task(directory: Path, selector: str) -> Match:
     return matches[0]
 
 
-def _completed_trails(match: Match) -> list[list[Task]]:
+def _completed_trails(match: Match) -> list[list[TaskNode]]:
     """Ancestry trails for the target and each ancestor it finishes.
 
     A task is complete when all its children are checked (SCHEMA.md), so
@@ -525,12 +528,17 @@ def _drop_lines(lines: list[str], drop: set[int]) -> list[str]:
     return [line for index, line in enumerate(lines) if index not in drop]
 
 
-def _ancestry(trail: list[Task]) -> str:
+def _ancestry(trail: list[TaskNode]) -> str:
     """The `Parent > Child` path SCHEMA.md logs a nested task under."""
     return ANCESTRY_SEPARATOR.join(task.title for task in trail)
 
 
-def _log_entry(path: Path, trail: list[Task], status: str, today: date) -> str:
+def _log_entry(
+    path: Path,
+    trail: list[TaskNode],
+    status: str,
+    today: date,
+) -> str:
     """One `completed.md` record: date, category, status, ancestry."""
     task = trail[-1]
     fields = ' '.join(
@@ -837,7 +845,7 @@ def update_task(
 # --- Backfill -------------------------------------------------------
 
 
-def _needs_added(task: Task) -> bool:
+def _needs_added(task: TaskNode) -> bool:
     """Open top-level tasks with no `[ADDED:]`, whose dates all parse.
 
     A task whose date fields cannot be read is never touched. Template

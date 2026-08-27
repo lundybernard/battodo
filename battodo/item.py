@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .mutate import find_task
-from .parser import Task
+from .parser import TaskNode
 from .rank import multiplier, rank
 from .view import RANK_PLACES
 
@@ -32,7 +32,7 @@ NO_VALUE = '-'
 FIELD_ROWS = (('LOE', 'loe'), ('DUE', 'due'), ('REPEAT', 'repeat'))
 
 
-def subtask_entry(task: Task) -> dict[str, Any]:
+def subtask_entry(task: TaskNode) -> dict[str, Any]:
     """One child as `item_data` records it, with its own children.
 
     Carries no rank: SCHEMA.md gives a child no `P` of its own, so a
@@ -50,7 +50,7 @@ def subtask_entry(task: Task) -> dict[str, Any]:
     }
 
 
-def item_data(path: Path, task: Task, today: date) -> dict[str, Any]:
+def item_data(path: Path, task: TaskNode, today: date) -> dict[str, Any]:
     """The machine-readable form of one item.
 
     Shaped as::
@@ -70,7 +70,7 @@ def item_data(path: Path, task: Task, today: date) -> dict[str, Any]:
     ----------
     path : Path
         The list the task lives in; its stem names the list.
-    task : Task
+    task : TaskNode
         The task itself.
     today : date
         The day the rank is computed for.

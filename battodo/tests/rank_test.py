@@ -2,7 +2,7 @@ from datetime import date
 from unittest import TestCase
 
 from ..rank import (
-    Task,
+    TaskNode,
     age_score,
     due_score,
     multiplier,
@@ -12,9 +12,9 @@ from ..rank import (
 TODAY = date(2026, 8, 8)
 
 
-def item(**fields: str) -> Task:
+def item(**fields: str) -> TaskNode:
     """An open top-level task carrying `fields`."""
-    return Task(
+    return TaskNode(
         raw_index=0,
         indent=0,
         done=False,
@@ -23,7 +23,7 @@ def item(**fields: str) -> Task:
     )
 
 
-def one(name: str, value: str | None) -> Task:
+def one(name: str, value: str | None) -> TaskNode:
     """A task carrying only `name`, or none at all when value is None."""
     return item() if value is None else item(**{name: value})
 

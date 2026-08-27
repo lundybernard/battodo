@@ -24,10 +24,10 @@ from .mutate import (
     add_subtask,
     add_task,
     backfill_all,
-    complete,
     scratch,
     update_task,
 )
+from .task import Task
 from .view import TZ, Selection, View, item_count
 
 __all__ = [
@@ -251,9 +251,11 @@ def complete_item(conf: Configuration, now: datetime) -> str:
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task.
+        The resolved configuration. `selector` names the task, and
+        `date` is the day it was completed.
     now : datetime
-        The clock, whose local day stamps the log.
+        The clock, whose local day stamps the log where the
+        configuration names no date.
 
     Returns
     -------
@@ -268,9 +270,13 @@ def complete_item(conf: Configuration, now: datetime) -> str:
     RepeatError
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
+    ValueError
+        The configured date is not an ISO date. Raised before anything
+        is written.
     """
-    entries = complete(_source(conf), conf.selector, now.date())
-    return '\n'.join(entries) if entries else 'checked off'
+    task = Task.from_config(conf, now)
+    task.complete()
+    return '\n'.join(task.completed) if task.completed else 'checked off'
 
 
 def scratch_item(conf: Configuration, now: datetime) -> str:
