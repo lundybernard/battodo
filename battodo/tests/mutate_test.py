@@ -58,9 +58,9 @@ class IsolatedTests(TestCase):
     own document, so what a test stands on stays beside the test.
     """
 
-    TARGETS: tuple[str, ...] = ('find_task', 'Journal', 'new_task_id')
+    TARGETS: tuple[str, ...] = ('TaskSelection', 'Journal', 'new_task_id')
 
-    find_task: MagicMock
+    TaskSelection: MagicMock
     Journal: MagicMock
     new_task_id: MagicMock
 
@@ -70,6 +70,7 @@ class IsolatedTests(TestCase):
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
         t.new_task_id.return_value = 'zz01ab'
+        t.lookup = t.TaskSelection.return_value
 
         t.path = Mock(spec=Path)
         t.path.name = 'work.md'
@@ -83,7 +84,7 @@ class UpdateTaskTests(IsolatedTests):
     def setUp(t) -> None:
         super().setUp()
         t.doc = parse(UPDATE_DOC)
-        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
+        t.lookup.record = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
 
     def test_update_task(t) -> None:
         path, entry = update_task(
@@ -91,7 +92,7 @@ class UpdateTaskTests(IsolatedTests):
         )
 
         with t.subTest('the selector is resolved against the directory'):
-            t.find_task.assert_called_with(t.dir, '9o71lx')
+            t.TaskSelection.assert_called_with(t.dir, '9o71lx')
 
         with t.subTest('the line carries the new field and the new title'):
             t.assertEqual(entry, '- [ ] Renamed [P:5] [LOE:8] [ID:9o71lx]')
@@ -133,7 +134,7 @@ class UpdateTaskTests(IsolatedTests):
 
     def test_update_task_stamps_an_id(t) -> None:
         doc = parse('## Open\n\n- [ ] Bare [P:2]\n')
-        t.find_task.return_value = TaskRecord(t.path, doc, [doc.tasks[0]])
+        t.lookup.record = TaskRecord(t.path, doc, [doc.tasks[0]])
 
         _, entry = update_task(t.dir, 'Bare', {'P': '5'}, TODAY)
         stream, payload = t.append.call_args[0][1:3]
@@ -150,9 +151,7 @@ class UpdateTaskTests(IsolatedTests):
     def test_update_task_reaches_a_subtask(t) -> None:
         doc = parse(SUBTASK_DOC)
         parent = doc.tasks[0]
-        t.find_task.return_value = TaskRecord(
-            t.path, doc, [parent, parent.children[0]]
-        )
+        t.lookup.record = TaskRecord(t.path, doc, [parent, parent.children[0]])
 
         _, entry = update_task(
             t.dir, 'Chip the brush', {'DUE': '2026-09-01'}, TODAY
@@ -177,7 +176,7 @@ class UpdateTaskTests(IsolatedTests):
         )
         parent = doc.tasks[0]
         child = parent.children[0]
-        t.find_task.return_value = TaskRecord(
+        t.lookup.record = TaskRecord(
             t.path, doc, [parent, child, child.children[0]]
         )
 
@@ -204,9 +203,7 @@ class UpdateTaskTests(IsolatedTests):
 
         doc = parse(SUBTASK_DOC)
         parent = doc.tasks[0]
-        t.find_task.return_value = TaskRecord(
-            t.path, doc, [parent, parent.children[0]]
-        )
+        t.lookup.record = TaskRecord(t.path, doc, [parent, parent.children[0]])
 
         with (
             t.subTest('a field the top-level task owns'),
@@ -216,7 +213,7 @@ class UpdateTaskTests(IsolatedTests):
 
         with t.subTest('a checklist item, which carries no fields'):
             item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
-            t.find_task.return_value = TaskRecord(
+            t.lookup.record = TaskRecord(
                 t.path, item, [item.tasks[0], item.tasks[0].children[0]]
             )
             with t.assertRaisesRegex(ValueError, 'checklist item'):
@@ -242,7 +239,7 @@ SUBTASK_DOC = """# Work
 class AddSubtaskTests(IsolatedTests):
     """Unit tests for battodo.mutate.add_subtask."""
 
-    TARGETS = ('discover_lists', 'find_task', 'Journal', 'new_task_id')
+    TARGETS = ('discover_lists', 'TaskSelection', 'Journal', 'new_task_id')
 
     discover_lists: MagicMock
 
@@ -251,7 +248,7 @@ class AddSubtaskTests(IsolatedTests):
         t.path.stem = 'work'
         t.discover_lists.return_value = [t.path]
         t.doc = parse(SUBTASK_DOC)
-        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
+        t.lookup.record = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
 
     def test_add_subtask(t) -> None:
         path, entry = add_subtask(
@@ -259,7 +256,7 @@ class AddSubtaskTests(IsolatedTests):
         )
 
         with t.subTest('the parent selector is resolved in the directory'):
-            t.find_task.assert_called_with(t.dir, '9o71lx')
+            t.TaskSelection.assert_called_with(t.dir, '9o71lx')
 
         with t.subTest('the line is indented one level under its parent'):
             t.assertEqual(entry, '  - [ ] Buy lumber [LOE:2] [ID:zz01ab]')
@@ -302,7 +299,7 @@ class AddSubtaskTests(IsolatedTests):
 
     def test_add_subtask_stamps_the_parent(t) -> None:
         parent = t.doc.tasks[1]
-        t.find_task.return_value = TaskRecord(t.path, t.doc, [parent])
+        t.lookup.record = TaskRecord(t.path, t.doc, [parent])
         t.new_task_id.side_effect = ['pp02cd', 'cc03ef']
 
         _, entry = add_subtask(t.dir, 'work', 'Bare', 'Get quotes', {})
@@ -357,7 +354,7 @@ class AddSubtaskTests(IsolatedTests):
 
         with t.subTest('a checklist item, which cannot hold an id'):
             item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
-            t.find_task.return_value = TaskRecord(
+            t.lookup.record = TaskRecord(
                 t.path, item, [item.tasks[0], item.tasks[0].children[0]]
             )
             with t.assertRaisesRegex(ValueError, 'checklist item'):
@@ -366,9 +363,7 @@ class AddSubtaskTests(IsolatedTests):
         with t.subTest('a parent that lives in another list'):
             other = Mock(spec=Path)
             other.name = 'chores.md'
-            t.find_task.return_value = TaskRecord(
-                other, t.doc, [t.doc.tasks[0]]
-            )
+            t.lookup.record = TaskRecord(other, t.doc, [t.doc.tasks[0]])
             with t.assertRaisesRegex(ValueError, 'a task in chores.md'):
                 add_subtask(t.dir, 'work', '9o71lx', 'X', {})
 
@@ -554,13 +549,14 @@ class FindTaskIsolationTests(FileIsolatedTests):
 class CompleteIsolationTests(FileIsolatedTests):
     """Unit tests for battodo.mutate.complete."""
 
-    TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
+    TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
 
-    find_task: MagicMock
+    TaskSelection: MagicMock
 
     def setUp(t) -> None:
         super().setUp()
         t.doc = parse(CASCADE_DOC)
+        t.lookup = t.TaskSelection.return_value
 
     def record(t, ancestry_titles: list[str]) -> TaskRecord:
         """A record for the ancestry the titles name, deepest last."""
@@ -573,7 +569,7 @@ class CompleteIsolationTests(FileIsolatedTests):
         return TaskRecord(t.path, t.doc, ancestry)
 
     def test_complete(t) -> None:
-        t.find_task.return_value = t.record(['Deck rebuild', 'Chip the brush'])
+        t.lookup.record = t.record(['Deck rebuild', 'Chip the brush'])
 
         entries = complete(t.dir, 'Chip the brush', TODAY)
 
@@ -618,9 +614,7 @@ class CompleteIsolationTests(FileIsolatedTests):
         )
         t.doc = doc
         parent = doc.tasks[0]
-        t.find_task.return_value = TaskRecord(
-            t.path, doc, [parent, parent.children[0]]
-        )
+        t.lookup.record = TaskRecord(t.path, doc, [parent, parent.children[0]])
 
         entries = complete(t.dir, 'Chip the brush', TODAY)
 
@@ -642,7 +636,7 @@ class CompleteIsolationTests(FileIsolatedTests):
     def test_complete_a_recurrence(t) -> None:
         t.doc = parse(REPEAT_DOC)
         t.path.stem = 'chores'
-        t.find_task.return_value = t.record(['Water the plants'])
+        t.lookup.record = t.record(['Water the plants'])
 
         complete(t.dir, 'rr01ab', TODAY)
 
@@ -667,17 +661,18 @@ class CompleteIsolationTests(FileIsolatedTests):
 class ScratchIsolationTests(FileIsolatedTests):
     """Unit tests for battodo.mutate.scratch."""
 
-    TARGETS = (*FileIsolatedTests.TARGETS, 'find_task')
+    TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
 
-    find_task: MagicMock
+    TaskSelection: MagicMock
 
     def setUp(t) -> None:
         super().setUp()
         t.doc = parse(CASCADE_DOC)
         t.parent = t.doc.tasks[0]
+        t.lookup = t.TaskSelection.return_value
 
     def test_scratch(t) -> None:
-        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.parent])
+        t.lookup.record = TaskRecord(t.path, t.doc, [t.parent])
 
         entries = scratch(t.dir, '9o71lx', TODAY)
 
@@ -711,7 +706,7 @@ class ScratchIsolationTests(FileIsolatedTests):
             '- [ ] Bare [P:2]\n'
         )
         t.doc = doc
-        t.find_task.return_value = TaskRecord(t.path, doc, [doc.tasks[0]])
+        t.lookup.record = TaskRecord(t.path, doc, [doc.tasks[0]])
 
         scratch(t.dir, '9o71lx', TODAY)
 
@@ -729,9 +724,7 @@ class ScratchIsolationTests(FileIsolatedTests):
         doc = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
         parent = doc.tasks[0]
         t.doc = doc
-        t.find_task.return_value = TaskRecord(
-            t.path, doc, [parent, parent.children[0]]
-        )
+        t.lookup.record = TaskRecord(t.path, doc, [parent, parent.children[0]])
 
         entries = scratch(t.dir, 'Sweep up', TODAY)
 

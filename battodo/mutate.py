@@ -43,7 +43,7 @@ from .parser import (
     set_title,
 )
 from .repeat import next_due
-from .selection import SelectionError, TaskRecord
+from .selection import SelectionError, TaskRecord, TaskSelection
 from .view import discover_lists
 
 ADDED_EVENT = 'TaskAdded'
@@ -368,7 +368,7 @@ def add_subtask(
     # `REPEAT` is refused above, so no supplied value needs a day.
     checked = _checked_values(fields)
 
-    record = find_task(directory, parent)
+    record = TaskSelection(directory, parent).record
     if record.path != path:
         raise ValueError(
             f'{parent!r} names a task in {record.path.name}, not {path.name}'
@@ -586,7 +586,7 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
         If a completed recurring task carries a `[REPEAT:]` btodo
         cannot read. Raised before anything is written.
     """
-    record = find_task(directory, selector)
+    record = TaskSelection(directory, selector).record
     ancestries = _completed_ancestries(record)
     root = record.ancestry[0]
     root_done = len(ancestries[-1]) == 1
@@ -690,7 +690,7 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
     SelectionError
         If `selector` does not name exactly one open task.
     """
-    record = find_task(directory, selector)
+    record = TaskSelection(directory, selector).record
     task = record.task
     stream = _stream_task(record.ancestry)
     stream_id = stream.task_id or new_task_id()
@@ -784,7 +784,7 @@ def update_task(
         raise ValueError('nothing to update: name a field or a title')
     checked = _checked_fields(fields, today)
 
-    record = find_task(directory, selector)
+    record = TaskSelection(directory, selector).record
     task = record.task
     nested = len(record.ancestry) > 1
     _refuse_checklist_item(task)
