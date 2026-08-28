@@ -15,18 +15,17 @@ from unittest import TestCase, skipIf
 from battodo.journal import Journal
 from battodo.mutate import (
     ListError,
-    SelectionError,
     add_subtask,
     add_task,
     backfill_all,
     backfill_file,
     complete,
-    find_task,
     parse,
     scratch,
     update_task,
 )
 from battodo.repeat import RepeatError
+from battodo.selection import SelectionError
 
 TODAY = date(2026, 8, 8)
 
@@ -566,46 +565,6 @@ def write_lists(directory: Path) -> None:
     (directory / 'chores.md').write_text(CHORES)
     (directory / 'van-trip-prep-template.md').write_text(TEMPLATE)
     (directory / 'completed.md').write_text(COMPLETED)
-
-
-class FindTaskTests(TestCase):
-    def setUp(t) -> None:
-        t.tmp = TemporaryDirectory()
-        t.addCleanup(t.tmp.cleanup)
-        t.dir = Path(t.tmp.name)
-        write_lists(t.dir)
-
-    def test_find_task(t) -> None:
-        with t.subTest('by [ID:]'):
-            match = find_task(t.dir, 'sn75q7')
-            t.assertEqual(match.task.title, 'Pay credit cards')
-            t.assertEqual(match.path.name, 'chores.md')
-
-        with t.subTest('by part of a title, case-insensitively'):
-            t.assertEqual(
-                find_task(t.dir, 'brush PILE').task.title,
-                'Chip the brush pile',
-            )
-
-        with t.subTest('a subtask, which has no id to be found by'):
-            match = find_task(t.dir, 'Power supply')
-            t.assertEqual(
-                [task.title for task in match.trail],
-                ['Trip prep', 'Prepare computer bag', 'Power supply'],
-            )
-
-        with (
-            t.subTest('checked tasks are not candidates'),
-            t.assertRaises(SelectionError),
-        ):
-            find_task(t.dir, 'Pack tools')
-
-        with t.subTest('an [ID:] wins over a title that mentions it'):
-            (t.dir / 'extra.md').write_text(
-                '## Open\n\n- [ ] Chase invoice zz01ab [P:1]\n'
-                '- [ ] File taxes [P:2] [ID:zz01ab]\n'
-            )
-            t.assertEqual(find_task(t.dir, 'zz01ab').task.title, 'File taxes')
 
 
 class MutationTests(TestCase):

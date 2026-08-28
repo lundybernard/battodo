@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, sentinel
 
 from ..render import (
     COLUMNS,
@@ -91,7 +91,7 @@ class RowTests(TestCase):
             t.assertEqual(t.r.badge, '')
 
         with t.subTest('otherwise it carries the count'):
-            t.r.children = [Mock(spec=[]), Mock(spec=[])]
+            t.r.children = [sentinel.child, sentinel.child]
             t.assertEqual(t.r.badge, ' (+2)')
 
     def test_cells(t) -> None:
@@ -112,7 +112,7 @@ class RowTests(TestCase):
             t.assertEqual(t.r.cells[2], '2')
 
         with t.subTest('the title carries its badge'):
-            t.r.children = [Mock(spec=[])]
+            t.r.children = [sentinel.child]
             t.r.__dict__.pop('cells')
             t.assertEqual(t.r.cells[3], 'A task (+1)')
 

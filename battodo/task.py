@@ -11,8 +11,9 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from .mutate import Match, complete, find_task
+from .mutate import complete
 from .parser import parse_date
+from .selection import TaskRecord, TaskSelection
 
 
 def _completion_day(given: str | None, now: datetime) -> date:
@@ -65,7 +66,7 @@ class Task:
         return self.directory.expanduser()
 
     @cached_property
-    def match(self) -> Match:
+    def record(self) -> TaskRecord:
         """The task the selector names, with the list that holds it.
 
         Raises
@@ -73,7 +74,7 @@ class Task:
         SelectionError
             The selector does not name exactly one open task.
         """
-        return find_task(self.source, self.selector)
+        return TaskSelection(self.source, self.selector).record
 
     def complete(self) -> None:
         """Log the completion under the day this task carries.

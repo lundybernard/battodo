@@ -7,8 +7,8 @@ item, not a row in a table.
 
 Values are derived, not stored: `P` reads as the 0-5 multiplier
 `view` shows, so the same task reads the same way in either command.
-`find_task` supplies the lookup, which is why this imports from
-`mutate` -- the reach of a selector is one rule, not two.
+`selection` supplies the lookup, so the reach of a selector is one
+rule, not two.
 """
 
 from datetime import date, datetime
@@ -16,9 +16,9 @@ from json import dumps
 from pathlib import Path
 from typing import Any
 
-from .mutate import find_task
 from .parser import TaskNode
 from .rank import multiplier, rank
+from .selection import TaskSelection
 from .view import RANK_PLACES
 
 INDENT = '  '
@@ -177,8 +177,8 @@ def build_item(directory: Path, selector: str, now: datetime) -> str:
     SelectionError
         If `selector` does not name exactly one open task.
     """
-    match = find_task(directory, selector)
-    return render_item(item_data(match.path, match.task, now.date()))
+    record = TaskSelection(directory, selector).record
+    return render_item(item_data(record.path, record.task, now.date()))
 
 
 def build_item_json(directory: Path, selector: str, now: datetime) -> str:
@@ -203,5 +203,5 @@ def build_item_json(directory: Path, selector: str, now: datetime) -> str:
     SelectionError
         If `selector` does not name exactly one open task.
     """
-    match = find_task(directory, selector)
-    return dumps(item_data(match.path, match.task, now.date()), indent=2)
+    record = TaskSelection(directory, selector).record
+    return dumps(item_data(record.path, record.task, now.date()), indent=2)

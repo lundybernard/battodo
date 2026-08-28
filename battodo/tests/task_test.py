@@ -17,7 +17,7 @@ class TaskTests(TestCase):
     """Unit tests for battodo.task.Task."""
 
     def setUp(t):
-        for target in ('complete', 'find_task', 'parse_date'):
+        for target in ('TaskSelection', 'complete', 'parse_date'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -69,14 +69,14 @@ class TaskTests(TestCase):
     def test_source(t):
         t.assertEqual(t.tk.source, SOURCE)
 
-    def test_match(t):
+    def test_record(t):
         with t.subTest('the selector is looked up in the source'):
-            t.assertIs(t.tk.match, t.find_task.return_value)
-            t.find_task.assert_called_once_with(SOURCE, 'brush pile')
+            t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
+            t.TaskSelection.assert_called_once_with(SOURCE, 'brush pile')
 
         with t.subTest('and a second read costs no second lookup'):
-            t.assertIs(t.tk.match, t.find_task.return_value)
-            t.find_task.assert_called_once_with(SOURCE, 'brush pile')
+            t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
+            t.TaskSelection.assert_called_once_with(SOURCE, 'brush pile')
 
     def test_complete(t):
         t.tk.complete()
