@@ -5,14 +5,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 from ..mutate import (
     ListError,
-    SelectionError,
     TaskRecord,
     add_subtask,
     add_task,
     backfill_all,
     backfill_file,
     complete,
-    find_task,
     parse,
     scratch,
     task_snapshot,
@@ -494,56 +492,6 @@ class AddTaskIsolationTests(FileIsolatedTests):
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()
             t.append.assert_not_called()
-
-
-class FindTaskIsolationTests(FileIsolatedTests):
-    """Unit tests for battodo.mutate.find_task."""
-
-    TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
-
-    discover_lists: MagicMock
-
-    def setUp(t) -> None:
-        super().setUp()
-        t.discover_lists.return_value = [t.path]
-        t.path.read_text.return_value = CASCADE_DOC
-
-    def test_find_task(t) -> None:
-        with t.subTest('an id names the task that carries it'):
-            record = find_task(t.dir, '9o71lx')
-            t.assertEqual(record.task.title, 'Deck rebuild')
-            t.assertEqual(record.path, t.path)
-
-        with t.subTest('a title reaches a child no id has been stamped on'):
-            record = find_task(t.dir, 'chip the brush')
-            t.assertEqual(record.task.title, 'Chip the brush')
-
-        with t.subTest('and the ancestry names every level above it'):
-            t.assertEqual(
-                [task.title for task in record.ancestry],
-                ['Deck rebuild', 'Chip the brush'],
-            )
-
-        with (
-            t.subTest('a completed task is not open, so it is not found'),
-            t.assertRaisesRegex(SelectionError, 'no open task'),
-        ):
-            find_task(t.dir, 'Sand it')
-
-        with (
-            t.subTest('an ambiguous title names the tasks it matched'),
-            t.assertRaisesRegex(SelectionError, "3 open tasks: 'Deck"),
-        ):
-            find_task(t.dir, 'b')
-
-    def test_find_task_prefers_an_id(t) -> None:
-        t.path.read_text.return_value = (
-            '## Open\n\n- [ ] Bare [ID:bare]\n- [ ] A bare copy [P:2]\n'
-        )
-
-        record = find_task(t.dir, 'bare')
-
-        t.assertEqual(record.task.title, 'Bare')
 
 
 class CompleteIsolationTests(FileIsolatedTests):

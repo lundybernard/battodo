@@ -25,7 +25,6 @@ the `TaskBumped` event: rank is computed from the files rather than
 accumulated in them, so btodo has nothing to write once a day.
 """
 
-from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -43,7 +42,7 @@ from .parser import (
     set_title,
 )
 from .repeat import next_due
-from .selection import SelectionError, TaskRecord, TaskSelection
+from .selection import TaskRecord, TaskSelection
 from .view import discover_lists
 
 ADDED_EVENT = 'TaskAdded'
@@ -417,57 +416,6 @@ def add_subtask(
 
 
 # --- Completion -----------------------------------------------------
-
-
-def _lists(directory: Path) -> Iterator[tuple[Path, TodoFile]]:
-    for path in discover_lists(directory):
-        yield path, parse(path.read_text())
-
-
-def _descend(
-    tasks: list[TaskNode],
-    ancestry: list[TaskNode],
-) -> Iterator[list[TaskNode]]:
-    """Every task at any depth, each with its ancestry."""
-    for task in tasks:
-        found = [*ancestry, task]
-        yield found
-        yield from _descend(task.children, found)
-
-
-def _selects(task: TaskNode, selector: str) -> bool:
-    return task.task_id == selector or selector.lower() in task.title.lower()
-
-
-def find_task(directory: Path, selector: str) -> TaskRecord:
-    """The one open task `selector` names, by `[ID:]` or title text.
-
-    Searches every discovered list, parked ones included, at every
-    depth: subtasks have no `[ID:]` until btodo first touches them, so
-    title matching is the only way to reach one.
-
-    Raises
-    ------
-    SelectionError
-        If nothing matches, or more than one task does.
-    """
-    records = [
-        TaskRecord(path, doc, ancestry)
-        for path, doc in _lists(directory)
-        for ancestry in _descend(doc.tasks, [])
-        if not ancestry[-1].done and _selects(ancestry[-1], selector)
-    ]
-    by_id = [record for record in records if record.task.task_id == selector]
-    records = by_id or records
-
-    if not records:
-        raise SelectionError(f'no open task matches {selector!r}')
-    if len(records) > 1:
-        titles = ', '.join(repr(record.task.title) for record in records)
-        raise SelectionError(
-            f'{selector!r} matches {len(records)} open tasks: {titles}'
-        )
-    return records[0]
 
 
 def _completed_ancestries(record: TaskRecord) -> list[list[TaskNode]]:
