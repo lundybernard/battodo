@@ -359,8 +359,7 @@ class AddSubtaskTests(IsolatedTests):
                 add_subtask(t.dir, 'work', 'Sweep up', 'X', {})
 
         with t.subTest('a parent that lives in another list'):
-            other = Mock(spec=Path)
-            other.name = 'chores.md'
+            other = Path('chores.md')
             t.lookup.record = TaskRecord(other, t.doc, [t.doc.tasks[0]])
             with t.assertRaisesRegex(ValueError, 'a task in chores.md'):
                 add_subtask(t.dir, 'work', '9o71lx', 'X', {})
