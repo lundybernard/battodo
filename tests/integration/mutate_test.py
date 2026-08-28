@@ -590,7 +590,7 @@ class FindTaskTests(TestCase):
         with t.subTest('a subtask, which has no id to be found by'):
             record = find_task(t.dir, 'Power supply')
             t.assertEqual(
-                [task.title for task in record.trail],
+                [task.title for task in record.ancestry],
                 ['Trip prep', 'Prepare computer bag', 'Power supply'],
             )
 

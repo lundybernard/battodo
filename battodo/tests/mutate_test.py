@@ -523,9 +523,9 @@ class FindTaskIsolationTests(FileIsolatedTests):
             record = find_task(t.dir, 'chip the brush')
             t.assertEqual(record.task.title, 'Chip the brush')
 
-        with t.subTest('and the trail names every level above it'):
+        with t.subTest('and the ancestry names every level above it'):
             t.assertEqual(
-                [task.title for task in record.trail],
+                [task.title for task in record.ancestry],
                 ['Deck rebuild', 'Chip the brush'],
             )
 
@@ -562,15 +562,15 @@ class CompleteIsolationTests(FileIsolatedTests):
         super().setUp()
         t.doc = parse(CASCADE_DOC)
 
-    def record(t, trail_titles: list[str]) -> TaskRecord:
-        """A record for the trail the titles name, deepest last."""
-        trail: list = []
+    def record(t, ancestry_titles: list[str]) -> TaskRecord:
+        """A record for the ancestry the titles name, deepest last."""
+        ancestry: list = []
         tasks = t.doc.tasks
-        for title in trail_titles:
+        for title in ancestry_titles:
             found = next(task for task in tasks if task.title == title)
-            trail.append(found)
+            ancestry.append(found)
             tasks = found.children
-        return TaskRecord(t.path, t.doc, trail)
+        return TaskRecord(t.path, t.doc, ancestry)
 
     def test_complete(t) -> None:
         t.find_task.return_value = t.record(['Deck rebuild', 'Chip the brush'])
