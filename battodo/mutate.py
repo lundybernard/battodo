@@ -26,7 +26,6 @@ accumulated in them, so btodo has nothing to write once a day.
 """
 
 from collections.abc import Iterator
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -44,6 +43,7 @@ from .parser import (
     set_title,
 )
 from .repeat import next_due
+from .selection import SelectionError, TaskRecord
 from .view import discover_lists
 
 ADDED_EVENT = 'TaskAdded'
@@ -77,27 +77,6 @@ class ListError(Exception):
     the user already keeps, and a typo that silently spawns `wrk.md`
     hides the task instead of filing it.
     """
-
-
-class SelectionError(Exception):
-    """A selector did not name exactly one open task.
-
-    Carries the record titles when more than one task answers: the
-    fix is always a longer selector or the task's `[ID:]`.
-    """
-
-
-@dataclass
-class TaskRecord:
-    """One open task, the list it lives in, and its ancestry."""
-
-    path: Path
-    doc: TodoFile
-    ancestry: list[TaskNode]
-
-    @property
-    def task(self) -> TaskNode:
-        return self.ancestry[-1]
 
 
 def task_snapshot(task: TaskNode) -> dict[str, Any]:
