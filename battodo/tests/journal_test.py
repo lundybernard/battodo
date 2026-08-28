@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, sentinel
 
 from ..journal import (
     JOURNAL_DIRNAME,
@@ -64,7 +64,7 @@ class JournalIsolationTests(TestCase):
         t.handle = t.file.open.return_value.__enter__.return_value
         t.handle.read.return_value = ''
 
-        t.journal = Journal(MagicMock(spec=Path))
+        t.journal = Journal(sentinel.source_dir)
 
     def test_path(t) -> None:
         with t.subTest('the log sits in the journal directory of the source'):

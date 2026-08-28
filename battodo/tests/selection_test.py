@@ -44,7 +44,7 @@ class TaskSelectionTests(TestCase):
 
         t.path = MagicMock(spec=Path)
         t.path.name = 'work.md'
-        t.dir = MagicMock(spec=Path)
+        t.dir = Path('/todo')
 
         # One list holding every case the lookup distinguishes: an id, a
         # child no id is stamped on, a checked task, three titles

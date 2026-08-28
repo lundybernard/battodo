@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, sentinel
 
 from battodo.lib import (
     add_item,
@@ -29,7 +29,7 @@ class GetViewTests(TestCase):
             t.addCleanup(patcher.stop)
         t.selection = t.Selection.from_config.return_value
 
-        t.now = Mock(spec=datetime)
+        t.now = sentinel.now
         # spec models batconf: an option the user did not supply is
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'format'])
@@ -69,7 +69,7 @@ class GetCompletedTests(TestCase):
             t.addCleanup(patcher.stop)
         t.digest = t.Digest.from_config.return_value
 
-        t.now = Mock(spec=datetime)
+        t.now = sentinel.now
         t.conf = Mock(spec=['view', 'format'])
         t.conf.format = 'text'
 
@@ -108,7 +108,7 @@ class GetItemTests(TestCase):
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
 
-        t.now = Mock(spec=datetime)
+        t.now = sentinel.now
         # spec models batconf: an option the user did not supply is
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'format'])
@@ -293,7 +293,7 @@ class CompleteItemTests(TestCase):
         t.task = t.Task.return_value
         t.Task.from_config.return_value = t.task
 
-        t.now = Mock(spec=datetime)
+        t.now = sentinel.now
         # The task decodes the configuration, so this call reads no
         # value off it. The spec still names what a `done` carries.
         t.conf = Mock(spec=['view', 'selector'])

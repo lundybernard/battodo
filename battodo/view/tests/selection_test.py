@@ -2,7 +2,7 @@ from datetime import date, datetime
 from json import loads
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch, sentinel
 
 from ..selection import (
     CATEGORY_ORDER,
@@ -267,7 +267,7 @@ class TaskEntryTests(TestCase):
             t.rank.assert_called_with(t.task, TODAY)
 
         with t.subTest('open children are counted, not nested'):
-            t.open_children.return_value = [Mock(spec=[]), Mock(spec=[])]
+            t.open_children.return_value = [sentinel.child, sentinel.child]
             t.assertEqual(task_entry(t.task, TODAY)['subtasks'], 2)
 
 
@@ -433,7 +433,7 @@ class SelectionTests(TestCase):
         with t.subTest('every discovered list is read, in display order'):
             # The error above left nothing cached to clear.
             t.s.__dict__.pop('lists', None)
-            paths = [Mock(spec=Path), Mock(spec=Path)]
+            paths = [Path('later.md'), Path('earlier.md')]
             t.discover_lists.return_value = paths
             later, earlier = t.todo('study'), t.todo('work')
             later.order, earlier.order = (2, 'study'), (0, 'work')

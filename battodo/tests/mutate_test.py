@@ -359,9 +359,9 @@ class AddSubtaskTests(IsolatedTests):
                 add_subtask(t.dir, 'work', 'Sweep up', 'X', {})
 
         with t.subTest('a parent that lives in another list'):
-            other = Path('chores.md')
+            other = Path('another-list.md')
             t.lookup.record = TaskRecord(other, t.doc, [t.doc.tasks[0]])
-            with t.assertRaisesRegex(ValueError, 'a task in chores.md'):
+            with t.assertRaisesRegex(ValueError, 'a task in another-list.md'):
                 add_subtask(t.dir, 'work', '9o71lx', 'X', {})
 
         with t.subTest('nothing is written and nothing is logged'):
