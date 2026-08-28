@@ -35,10 +35,10 @@ class TaskTests(TestCase):
         t.path.write_text(WORK, encoding='utf-8')
         t.tk = Task(t.source, '9o71lx', TODAY)
 
-    def test_match(t) -> None:
+    def test_record(t) -> None:
         with t.subTest('the selector reaches one task in one list'):
-            t.assertEqual(t.tk.match.task.title, 'Deck rebuild')
-            t.assertEqual(t.tk.match.path, t.path)
+            t.assertEqual(t.tk.record.task.title, 'Deck rebuild')
+            t.assertEqual(t.tk.record.path, t.path)
 
     def test_complete(t) -> None:
         t.tk.complete()

@@ -69,13 +69,13 @@ class TaskTests(TestCase):
     def test_source(t):
         t.assertEqual(t.tk.source, SOURCE)
 
-    def test_match(t):
+    def test_record(t):
         with t.subTest('the selector is looked up in the source'):
-            t.assertIs(t.tk.match, t.find_task.return_value)
+            t.assertIs(t.tk.record, t.find_task.return_value)
             t.find_task.assert_called_once_with(SOURCE, 'brush pile')
 
         with t.subTest('and a second read costs no second lookup'):
-            t.assertIs(t.tk.match, t.find_task.return_value)
+            t.assertIs(t.tk.record, t.find_task.return_value)
             t.find_task.assert_called_once_with(SOURCE, 'brush pile')
 
     def test_complete(t):

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from .mutate import Match, complete, find_task
+from .mutate import TaskRecord, complete, find_task
 from .parser import parse_date
 
 
@@ -65,7 +65,7 @@ class Task:
         return self.directory.expanduser()
 
     @cached_property
-    def match(self) -> Match:
+    def record(self) -> TaskRecord:
         """The task the selector names, with the list that holds it.
 
         Raises

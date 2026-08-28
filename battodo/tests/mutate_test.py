@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 from ..mutate import (
     ListError,
-    Match,
     SelectionError,
+    TaskRecord,
     add_subtask,
     add_task,
     backfill_all,
@@ -83,7 +83,7 @@ class UpdateTaskTests(IsolatedTests):
     def setUp(t) -> None:
         super().setUp()
         t.doc = parse(UPDATE_DOC)
-        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
+        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
 
     def test_update_task(t) -> None:
         path, entry = update_task(
@@ -133,7 +133,7 @@ class UpdateTaskTests(IsolatedTests):
 
     def test_update_task_stamps_an_id(t) -> None:
         doc = parse('## Open\n\n- [ ] Bare [P:2]\n')
-        t.find_task.return_value = Match(t.path, doc, [doc.tasks[0]])
+        t.find_task.return_value = TaskRecord(t.path, doc, [doc.tasks[0]])
 
         _, entry = update_task(t.dir, 'Bare', {'P': '5'}, TODAY)
         stream, payload = t.append.call_args[0][1:3]
@@ -150,7 +150,7 @@ class UpdateTaskTests(IsolatedTests):
     def test_update_task_reaches_a_subtask(t) -> None:
         doc = parse(SUBTASK_DOC)
         parent = doc.tasks[0]
-        t.find_task.return_value = Match(
+        t.find_task.return_value = TaskRecord(
             t.path, doc, [parent, parent.children[0]]
         )
 
@@ -177,7 +177,7 @@ class UpdateTaskTests(IsolatedTests):
         )
         parent = doc.tasks[0]
         child = parent.children[0]
-        t.find_task.return_value = Match(
+        t.find_task.return_value = TaskRecord(
             t.path, doc, [parent, child, child.children[0]]
         )
 
@@ -204,7 +204,7 @@ class UpdateTaskTests(IsolatedTests):
 
         doc = parse(SUBTASK_DOC)
         parent = doc.tasks[0]
-        t.find_task.return_value = Match(
+        t.find_task.return_value = TaskRecord(
             t.path, doc, [parent, parent.children[0]]
         )
 
@@ -216,7 +216,7 @@ class UpdateTaskTests(IsolatedTests):
 
         with t.subTest('a checklist item, which carries no fields'):
             item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
-            t.find_task.return_value = Match(
+            t.find_task.return_value = TaskRecord(
                 t.path, item, [item.tasks[0], item.tasks[0].children[0]]
             )
             with t.assertRaisesRegex(ValueError, 'checklist item'):
@@ -251,7 +251,7 @@ class AddSubtaskTests(IsolatedTests):
         t.path.stem = 'work'
         t.discover_lists.return_value = [t.path]
         t.doc = parse(SUBTASK_DOC)
-        t.find_task.return_value = Match(t.path, t.doc, [t.doc.tasks[0]])
+        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
 
     def test_add_subtask(t) -> None:
         path, entry = add_subtask(
@@ -302,7 +302,7 @@ class AddSubtaskTests(IsolatedTests):
 
     def test_add_subtask_stamps_the_parent(t) -> None:
         parent = t.doc.tasks[1]
-        t.find_task.return_value = Match(t.path, t.doc, [parent])
+        t.find_task.return_value = TaskRecord(t.path, t.doc, [parent])
         t.new_task_id.side_effect = ['pp02cd', 'cc03ef']
 
         _, entry = add_subtask(t.dir, 'work', 'Bare', 'Get quotes', {})
@@ -357,7 +357,7 @@ class AddSubtaskTests(IsolatedTests):
 
         with t.subTest('a checklist item, which cannot hold an id'):
             item = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
-            t.find_task.return_value = Match(
+            t.find_task.return_value = TaskRecord(
                 t.path, item, [item.tasks[0], item.tasks[0].children[0]]
             )
             with t.assertRaisesRegex(ValueError, 'checklist item'):
@@ -366,7 +366,9 @@ class AddSubtaskTests(IsolatedTests):
         with t.subTest('a parent that lives in another list'):
             other = Mock(spec=Path)
             other.name = 'chores.md'
-            t.find_task.return_value = Match(other, t.doc, [t.doc.tasks[0]])
+            t.find_task.return_value = TaskRecord(
+                other, t.doc, [t.doc.tasks[0]]
+            )
             with t.assertRaisesRegex(ValueError, 'a task in chores.md'):
                 add_subtask(t.dir, 'work', '9o71lx', 'X', {})
 
@@ -513,17 +515,17 @@ class FindTaskIsolationTests(FileIsolatedTests):
 
     def test_find_task(t) -> None:
         with t.subTest('an id names the task that carries it'):
-            match = find_task(t.dir, '9o71lx')
-            t.assertEqual(match.task.title, 'Deck rebuild')
-            t.assertEqual(match.path, t.path)
+            record = find_task(t.dir, '9o71lx')
+            t.assertEqual(record.task.title, 'Deck rebuild')
+            t.assertEqual(record.path, t.path)
 
         with t.subTest('a title reaches a child no id has been stamped on'):
-            match = find_task(t.dir, 'chip the brush')
-            t.assertEqual(match.task.title, 'Chip the brush')
+            record = find_task(t.dir, 'chip the brush')
+            t.assertEqual(record.task.title, 'Chip the brush')
 
         with t.subTest('and the trail names every level above it'):
             t.assertEqual(
-                [task.title for task in match.trail],
+                [task.title for task in record.trail],
                 ['Deck rebuild', 'Chip the brush'],
             )
 
@@ -544,9 +546,9 @@ class FindTaskIsolationTests(FileIsolatedTests):
             '## Open\n\n- [ ] Bare [ID:bare]\n- [ ] A bare copy [P:2]\n'
         )
 
-        match = find_task(t.dir, 'bare')
+        record = find_task(t.dir, 'bare')
 
-        t.assertEqual(match.task.title, 'Bare')
+        t.assertEqual(record.task.title, 'Bare')
 
 
 class CompleteIsolationTests(FileIsolatedTests):
@@ -560,18 +562,18 @@ class CompleteIsolationTests(FileIsolatedTests):
         super().setUp()
         t.doc = parse(CASCADE_DOC)
 
-    def match(t, trail_titles: list[str]) -> Match:
-        """A match for the trail the titles name, deepest last."""
+    def record(t, trail_titles: list[str]) -> TaskRecord:
+        """A record for the trail the titles name, deepest last."""
         trail: list = []
         tasks = t.doc.tasks
         for title in trail_titles:
             found = next(task for task in tasks if task.title == title)
             trail.append(found)
             tasks = found.children
-        return Match(t.path, t.doc, trail)
+        return TaskRecord(t.path, t.doc, trail)
 
     def test_complete(t) -> None:
-        t.find_task.return_value = t.match(['Deck rebuild', 'Chip the brush'])
+        t.find_task.return_value = t.record(['Deck rebuild', 'Chip the brush'])
 
         entries = complete(t.dir, 'Chip the brush', TODAY)
 
@@ -616,7 +618,7 @@ class CompleteIsolationTests(FileIsolatedTests):
         )
         t.doc = doc
         parent = doc.tasks[0]
-        t.find_task.return_value = Match(
+        t.find_task.return_value = TaskRecord(
             t.path, doc, [parent, parent.children[0]]
         )
 
@@ -640,7 +642,7 @@ class CompleteIsolationTests(FileIsolatedTests):
     def test_complete_a_recurrence(t) -> None:
         t.doc = parse(REPEAT_DOC)
         t.path.stem = 'chores'
-        t.find_task.return_value = t.match(['Water the plants'])
+        t.find_task.return_value = t.record(['Water the plants'])
 
         complete(t.dir, 'rr01ab', TODAY)
 
@@ -675,7 +677,7 @@ class ScratchIsolationTests(FileIsolatedTests):
         t.parent = t.doc.tasks[0]
 
     def test_scratch(t) -> None:
-        t.find_task.return_value = Match(t.path, t.doc, [t.parent])
+        t.find_task.return_value = TaskRecord(t.path, t.doc, [t.parent])
 
         entries = scratch(t.dir, '9o71lx', TODAY)
 
@@ -709,7 +711,7 @@ class ScratchIsolationTests(FileIsolatedTests):
             '- [ ] Bare [P:2]\n'
         )
         t.doc = doc
-        t.find_task.return_value = Match(t.path, doc, [doc.tasks[0]])
+        t.find_task.return_value = TaskRecord(t.path, doc, [doc.tasks[0]])
 
         scratch(t.dir, '9o71lx', TODAY)
 
@@ -727,7 +729,7 @@ class ScratchIsolationTests(FileIsolatedTests):
         doc = parse('## Open\n\n- [ ] Deck [P:4]\n  - [ ] Sweep up\n')
         parent = doc.tasks[0]
         t.doc = doc
-        t.find_task.return_value = Match(
+        t.find_task.return_value = TaskRecord(
             t.path, doc, [parent, parent.children[0]]
         )
 

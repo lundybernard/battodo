@@ -235,7 +235,7 @@ class BuildItemTests(TestCase):
             t.addCleanup(patcher.stop)
         t.directory = Path('/todo')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
-        t.match = t.find_task.return_value
+        t.record = t.find_task.return_value
 
     def test_build_item(t) -> None:
         result = build_item(t.directory, 'deck', t.now)
@@ -244,7 +244,7 @@ class BuildItemTests(TestCase):
             t.find_task.assert_called_with(t.directory, 'deck')
 
         with t.subTest('the local day of the clock decides the rank'):
-            t.item_data.assert_called_with(t.match.path, t.match.task, TODAY)
+            t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
 
         with t.subTest('the rendered text is what comes back'):
             t.render_item.assert_called_with(t.item_data.return_value)
@@ -255,7 +255,7 @@ class BuildItemTests(TestCase):
 
         with t.subTest('the same selection the text form describes'):
             t.find_task.assert_called_with(t.directory, 'deck')
-            t.item_data.assert_called_with(t.match.path, t.match.task, TODAY)
+            t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
 
         with t.subTest('serialized, indented for a person to read too'):
             t.dumps.assert_called_with(t.item_data.return_value, indent=2)

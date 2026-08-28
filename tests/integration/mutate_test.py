@@ -577,9 +577,9 @@ class FindTaskTests(TestCase):
 
     def test_find_task(t) -> None:
         with t.subTest('by [ID:]'):
-            match = find_task(t.dir, 'sn75q7')
-            t.assertEqual(match.task.title, 'Pay credit cards')
-            t.assertEqual(match.path.name, 'chores.md')
+            record = find_task(t.dir, 'sn75q7')
+            t.assertEqual(record.task.title, 'Pay credit cards')
+            t.assertEqual(record.path.name, 'chores.md')
 
         with t.subTest('by part of a title, case-insensitively'):
             t.assertEqual(
@@ -588,9 +588,9 @@ class FindTaskTests(TestCase):
             )
 
         with t.subTest('a subtask, which has no id to be found by'):
-            match = find_task(t.dir, 'Power supply')
+            record = find_task(t.dir, 'Power supply')
             t.assertEqual(
-                [task.title for task in match.trail],
+                [task.title for task in record.trail],
                 ['Trip prep', 'Prepare computer bag', 'Power supply'],
             )
 

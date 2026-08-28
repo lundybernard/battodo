@@ -177,8 +177,8 @@ def build_item(directory: Path, selector: str, now: datetime) -> str:
     SelectionError
         If `selector` does not name exactly one open task.
     """
-    match = find_task(directory, selector)
-    return render_item(item_data(match.path, match.task, now.date()))
+    record = find_task(directory, selector)
+    return render_item(item_data(record.path, record.task, now.date()))
 
 
 def build_item_json(directory: Path, selector: str, now: datetime) -> str:
@@ -203,5 +203,5 @@ def build_item_json(directory: Path, selector: str, now: datetime) -> str:
     SelectionError
         If `selector` does not name exactly one open task.
     """
-    match = find_task(directory, selector)
-    return dumps(item_data(match.path, match.task, now.date()), indent=2)
+    record = find_task(directory, selector)
+    return dumps(item_data(record.path, record.task, now.date()), indent=2)
