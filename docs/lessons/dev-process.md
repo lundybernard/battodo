@@ -179,3 +179,26 @@
   refuted by an upstream commit dated three days earlier — the report
   described a docs state that had already stopped existing, and routing
   it would have spent credibility on a fixed problem.
+- 2026-08-28: a history rewrite that edits file content in every
+  commit runs as a scripted tree rebuild, not a rebase; when the
+  final state must not move, the proof is an empty
+  `git diff <old-tip> HEAD`. Extends 2026-08-15 (plan of record) and
+  2026-08-27 (fixup-review). Rehomed: The Engineer's agent memory,
+  which carries the full procedure.
+- 2026-08-28: a noun/verb-ambiguous class name cost two renames in one
+  PR (Match → Candidate → TaskRecord), and both surfaced as reviewer
+  parse trouble rather than design review. Rehomed: software-engineering
+  naming rule (domain nouns; no noun/verb-ambiguous names) plus agent
+  memory.
+- 2026-08-28: a review comment names one instance; the follow-up
+  extracts the rule and sweeps. One comment on a single passive mock
+  yielded two durable rules — a mock must assert its calls or block a
+  side effect, and fixture values are breadcrumbs that name their role
+  in the test rather than imitate real data — an 11-site sweep in the
+  same PR, and a queued full-codebase pass (issue #48). Rehomed: agent
+  memories no-passive-mocks and breadcrumb-test-values.
+- 2026-08-28: oracle tests bracketed a conversion — pin the old
+  lookup's behavior before the rewrite, then assert the new lookup
+  answers as the old one after it. The bracket let an 11-commit
+  refactor land with the equivalence proof in-history. Rehomed: the
+  test-driven-refactor skill, which now owns the oracle-bracket process.
