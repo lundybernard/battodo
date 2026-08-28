@@ -17,8 +17,12 @@ from battodo.mutate import (
     find_task,
     parse,
 )
+from battodo.selection import TaskSelection
+from battodo.selection import _descend as new_descend
+from battodo.selection import _selects as new_selects
 
 SRC = 'battodo.mutate'
+NEW = 'battodo.selection'
 
 # One list, holding every case the lookup distinguishes: an id, a child
 # no id is stamped on, a checked task, three titles sharing a letter,
@@ -38,7 +42,7 @@ WORK = """# Work
 
 
 class TaskLookupTests(TestCase):
-    """Characterization tests for the task lookup in battodo.mutate."""
+    """Characterization tests for the task lookup, old and new."""
 
     discover_lists: MagicMock
 
@@ -51,6 +55,7 @@ class TaskLookupTests(TestCase):
         t.deck = t.doc.tasks[0]
 
         t.discover_lists = t.discovery(SRC)
+        t.discovery(NEW)
 
     def discovery(t, module: str) -> MagicMock:
         """`discover_lists` in `module`, answering with the fixture."""
@@ -60,11 +65,13 @@ class TaskLookupTests(TestCase):
         mock.return_value = [t.path]
         return mock
 
-    def message(t, selector: str) -> str:
-        """What the lookup says when the selector resolves to no task."""
-        with t.assertRaises(SelectionError) as caught:
+    def messages(t, selector: str) -> tuple[str, str]:
+        """What each implementation says when nothing resolves."""
+        with t.assertRaises(SelectionError) as old:
             find_task(t.dir, selector)
-        return str(caught.exception)
+        with t.assertRaises(SelectionError) as new:
+            _ = TaskSelection(t.dir, selector).record
+        return str(old.exception), str(new.exception)
 
     def test_lists(t) -> None:
         pairs = list(_lists(t.dir))
@@ -79,19 +86,26 @@ class TaskLookupTests(TestCase):
                 ['Deck rebuild', 'Bare', 'Chase invoice 9o71lx'],
             )
 
+        with t.subTest('TaskSelection.lists answers the same'):
+            t.assertEqual(TaskSelection(t.dir, 'b').lists, pairs)
+
     def test_descend(t) -> None:
         ancestries = list(_descend(t.doc.tasks, []))
 
-        t.assertEqual(
-            [[task.title for task in ancestry] for ancestry in ancestries],
-            [
-                ['Deck rebuild'],
-                ['Deck rebuild', 'Chip the brush'],
-                ['Deck rebuild', 'Sand it'],
-                ['Bare'],
-                ['Chase invoice 9o71lx'],
-            ],
-        )
+        with t.subTest('every task at any depth, ancestry first'):
+            t.assertEqual(
+                [[task.title for task in ancestry] for ancestry in ancestries],
+                [
+                    ['Deck rebuild'],
+                    ['Deck rebuild', 'Chip the brush'],
+                    ['Deck rebuild', 'Sand it'],
+                    ['Bare'],
+                    ['Chase invoice 9o71lx'],
+                ],
+            )
+
+        with t.subTest('selection._descend walks the same'):
+            t.assertEqual(list(new_descend(t.doc.tasks, [])), ancestries)
 
     def test_selects(t) -> None:
         cases = {
@@ -101,14 +115,16 @@ class TaskLookupTests(TestCase):
             'an id it does not carry': ('zz01ab', False),
         }
         for name, (selector, expected) in cases.items():
-            with t.subTest(name):
+            with t.subTest(f'{name}, both implementations'):
                 t.assertIs(_selects(t.deck, selector), expected)
+                t.assertIs(new_selects(t.deck, selector), expected)
 
     def test_find_task(t) -> None:
         with t.subTest('an id wins over a title that quotes it'):
             record = find_task(t.dir, '9o71lx')
             t.assertEqual(record.task.title, 'Deck rebuild')
             t.assertEqual(record.path, t.path)
+            t.assertEqual(TaskSelection(t.dir, '9o71lx').record, record)
 
         with t.subTest('a title reaches a child no id is stamped on'):
             record = find_task(t.dir, 'chip the brush')
@@ -116,15 +132,20 @@ class TaskLookupTests(TestCase):
                 [task.title for task in record.ancestry],
                 ['Deck rebuild', 'Chip the brush'],
             )
-
-        with t.subTest('a checked task is not a candidate'):
             t.assertEqual(
-                t.message('Sand it'), "no open task matches 'Sand it'"
+                TaskSelection(t.dir, 'chip the brush').record, record
             )
 
+        with t.subTest('a checked task is not a candidate'):
+            old, new = t.messages('Sand it')
+            t.assertEqual(old, "no open task matches 'Sand it'")
+            t.assertEqual(new, old)
+
         with t.subTest('an ambiguous selector names what it matched'):
+            old, new = t.messages('b')
             t.assertEqual(
-                t.message('b'),
+                old,
                 "'b' matches 3 open tasks: 'Deck rebuild', "
                 "'Chip the brush', 'Bare'",
             )
+            t.assertEqual(new, old)
