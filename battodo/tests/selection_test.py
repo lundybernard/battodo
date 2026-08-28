@@ -13,6 +13,23 @@ from ..selection import (
 SRC = 'battodo.selection'
 
 
+def task(
+    title: str,
+    done: bool = False,
+    children: list[TaskNode] | None = None,
+    **fields: str,
+) -> TaskNode:
+    """A task carrying `fields`, over the children it owns."""
+    return TaskNode(
+        raw_index=0,
+        indent=0,
+        done=done,
+        title=title,
+        fields=fields,
+        children=children or [],
+    )
+
+
 class TaskSelectionTests(TestCase):
     """Unit tests for battodo.selection.TaskSelection."""
 
@@ -32,14 +49,11 @@ class TaskSelectionTests(TestCase):
         # One list holding every case the lookup distinguishes: an id, a
         # child no id is stamped on, a checked task, three titles
         # sharing a letter, and a title that quotes another task's id.
-        t.brush = TaskNode(2, 2, False, 'Chip the brush', {'LOE': '2'})
-        t.sand = TaskNode(3, 2, True, 'Sand it', {'LOE': '1'})
-        t.deck = TaskNode(
-            1, 0, False, 'Deck rebuild', {'ID': '9o71lx'},
-            children=[t.brush, t.sand],
-        )  # fmt: skip
-        t.bare = TaskNode(4, 0, False, 'Bare', {'P': '2'})
-        t.quote = TaskNode(5, 0, False, 'Chase invoice 9o71lx', {'P': '1'})
+        t.brush = task('Chip the brush')
+        t.sand = task('Sand it', done=True)
+        t.deck = task('Deck rebuild', ID='9o71lx', children=[t.brush, t.sand])
+        t.bare = task('Bare')
+        t.quote = task('Chase invoice 9o71lx')
         t.doc = TodoFile([], [t.deck, t.bare, t.quote])
 
         t.ts = TaskSelection(t.dir, 'b')
@@ -70,18 +84,15 @@ class TaskSelectionTests(TestCase):
             t.assertEqual(lists, [(t.path, t.parse.return_value)])
 
     def test_records(t) -> None:
-        records = t.searching('b').records
-
         with t.subTest('every open task the selector reaches, any depth'):
             t.assertEqual(
-                [record.task for record in records],
-                [t.deck, t.brush, t.bare],
+                t.searching('b').records,
+                [
+                    TaskRecord(t.path, t.doc, [t.deck]),
+                    TaskRecord(t.path, t.doc, [t.deck, t.brush]),
+                    TaskRecord(t.path, t.doc, [t.bare]),
+                ],
             )
-
-        with t.subTest('each one beside its list and the ancestry above it'):
-            t.assertEqual([record.path for record in records], [t.path] * 3)
-            t.assertEqual([record.doc for record in records], [t.doc] * 3)
-            t.assertEqual(records[1].ancestry, [t.deck, t.brush])
 
         with t.subTest('a checked task is not open'):
             t.assertEqual(t.searching('Sand it').records, [])

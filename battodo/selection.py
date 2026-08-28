@@ -13,7 +13,7 @@ from functools import cached_property
 from pathlib import Path
 
 from .parser import TaskNode, TodoFile, parse
-from .view.selection import discover_lists
+from .view import discover_lists
 
 
 class SelectionError(Exception):
@@ -53,7 +53,11 @@ def _selects(task: TaskNode, selector: str) -> bool:
 
 
 class TaskSelection:
-    """The open tasks a selector reaches in a source directory."""
+    """The open tasks a selector reaches in a source directory.
+
+    `lists` caches what it read, so one instance answers from one
+    snapshot. A caller that writes a list builds a new selection.
+    """
 
     def __init__(self, directory: Path, selector: str) -> None:
         self.directory = directory
