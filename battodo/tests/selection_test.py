@@ -43,18 +43,20 @@ class TaskSelectionTests(TestCase):
             t.addCleanup(patcher.stop)
 
         t.path = MagicMock(spec=Path)
-        t.path.name = 'work.md'
-        t.dir = Path('/todo')
+        t.path.name = 'a-list.md'
+        t.dir = Path('/source-dir')
 
         # One list holding every case the lookup distinguishes: an id, a
         # child no id is stamped on, a checked task, three titles
         # sharing a letter, and a title that quotes another task's id.
-        t.brush = task('Chip the brush')
-        t.sand = task('Sand it', done=True)
-        t.deck = task('Deck rebuild', ID='9o71lx', children=[t.brush, t.sand])
-        t.bare = task('Bare')
-        t.quote = task('Chase invoice 9o71lx')
-        t.doc = TodoFile([], [t.deck, t.bare, t.quote])
+        t.child = task('Subtask below it')
+        t.checked = task('Checked subtask', done=True)
+        t.parent = task(
+            'Branch task', ID='9o71lx', children=[t.child, t.checked]
+        )
+        t.sibling = task('Bare top-level task')
+        t.quoting = task('Title quoting 9o71lx')
+        t.doc = TodoFile([], [t.parent, t.sibling, t.quoting])
 
         t.ts = TaskSelection(t.dir, 'b')
 
@@ -88,45 +90,48 @@ class TaskSelectionTests(TestCase):
             t.assertEqual(
                 t.searching('b').records,
                 [
-                    TaskRecord(t.path, t.doc, [t.deck]),
-                    TaskRecord(t.path, t.doc, [t.deck, t.brush]),
-                    TaskRecord(t.path, t.doc, [t.bare]),
+                    TaskRecord(t.path, t.doc, [t.parent]),
+                    TaskRecord(t.path, t.doc, [t.parent, t.child]),
+                    TaskRecord(t.path, t.doc, [t.sibling]),
                 ],
             )
 
         with t.subTest('a checked task is not open'):
-            t.assertEqual(t.searching('Sand it').records, [])
+            t.assertEqual(t.searching('Checked subtask').records, [])
 
         with t.subTest('a title matches whatever its case'):
             t.assertEqual(
-                [record.task for record in t.searching('DECK re').records],
-                [t.deck],
+                [record.task for record in t.searching('BRANCH ta').records],
+                [t.parent],
             )
 
         with t.subTest('an id narrows out the titles that quote it'):
             t.assertEqual(
                 [record.task for record in t.searching('9o71lx').records],
-                [t.deck],
+                [t.parent],
             )
 
     def test_record(t) -> None:
         with t.subTest('the one open task the selector names'):
-            only = TaskRecord(t.path, t.doc, [t.deck])
+            only = TaskRecord(t.path, t.doc, [t.parent])
             t.ts.records = [only]
             t.assertIs(t.ts.record, only)
 
         with t.subTest('nothing open matches'):
-            selection = TaskSelection(t.dir, 'Sand it')
+            selection = TaskSelection(t.dir, 'Checked subtask')
             selection.records = []
-            t.assertEqual(t.error(selection), "no open task matches 'Sand it'")
+            t.assertEqual(
+                t.error(selection),
+                "no open task matches 'Checked subtask'",
+            )
 
         with t.subTest('more than one does'):
             selection = TaskSelection(t.dir, 'b')
             selection.records = [
-                TaskRecord(t.path, t.doc, [t.deck]),
-                TaskRecord(t.path, t.doc, [t.deck, t.brush]),
+                TaskRecord(t.path, t.doc, [t.parent]),
+                TaskRecord(t.path, t.doc, [t.parent, t.child]),
             ]
             t.assertEqual(
                 t.error(selection),
-                "'b' matches 2 open tasks: 'Deck rebuild', 'Chip the brush'",
+                "'b' matches 2 open tasks: 'Branch task', 'Subtask below it'",
             )
