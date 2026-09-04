@@ -49,7 +49,9 @@ WORK = """# Work
 """
 
 
-class UpdateTaskTests(TestCase):
+class WorkFixtureTests(TestCase):
+    """Base: one real list in a source directory of its own."""
+
     maxDiff = None
 
     def setUp(t) -> None:
@@ -59,7 +61,11 @@ class UpdateTaskTests(TestCase):
         t.path = t.source / 'work.md'
         t.path.write_text(WORK, encoding='utf-8')
 
-    def test_update_task(t) -> None:
+
+class UpdateTaskTests(WorkFixtureTests):
+    """Contract tests for battodo.mutate.update_task."""
+
+    def test_line(t) -> None:
         path, entry = update_task(
             t.source,
             '9o71lx',
@@ -85,7 +91,7 @@ class UpdateTaskTests(TestCase):
             t.assertIn('  - [ ] Chip the brush [LOE:2]', text)
             t.assertTrue(text.endswith('## Done\n'))
 
-    def test_update_task_journal(t) -> None:
+    def test_journal(t) -> None:
         update_task(t.source, '9o71lx', {'P': '5'}, TODAY, title='Renamed')
         events = Journal(t.source).read()
 
@@ -118,7 +124,7 @@ class UpdateTaskTests(TestCase):
         with t.subTest('metadata names the source file'):
             t.assertEqual(events[0]['metadata']['source_file'], 'work.md')
 
-    def test_update_task_injects_an_id(t) -> None:
+    def test_injects_an_id(t) -> None:
         _, entry = update_task(t.source, 'Unidentified', {'P': '5'}, TODAY)
         event = Journal(t.source).read()[0]
         task_id = event['stream_id'].removeprefix('task/')
@@ -131,7 +137,7 @@ class UpdateTaskTests(TestCase):
         with t.subTest('the stamp is in the delta, so it can be undone'):
             t.assertEqual(event['payload']['delta']['ID'], [None, task_id])
 
-    def test_update_task_reaches_a_subtask(t) -> None:
+    def test_reaches_a_subtask(t) -> None:
         _, entry = update_task(
             t.source, 'Chip the brush', {'DUE': '2026-09-01'}, TODAY
         )
@@ -154,7 +160,7 @@ class UpdateTaskTests(TestCase):
                 event['payload']['ancestry'], 'Deck rebuild > Chip the brush'
             )
 
-    def test_update_task_rejected(t) -> None:
+    def test_rejected(t) -> None:
         before = t.path.read_text(encoding='utf-8')
         cases = {
             'an update that names no change': ('9o71lx', {}),
@@ -175,17 +181,10 @@ class UpdateTaskTests(TestCase):
             t.assertEqual(Journal(t.source).read(), [])
 
 
-class AddSubtaskTests(TestCase):
-    maxDiff = None
+class AddSubtaskTests(WorkFixtureTests):
+    """Contract tests for battodo.mutate.add_subtask."""
 
-    def setUp(t) -> None:
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.source = Path(tmp.name)
-        t.path = t.source / 'work.md'
-        t.path.write_text(WORK, encoding='utf-8')
-
-    def test_add_subtask(t) -> None:
+    def test_line(t) -> None:
         path, entry = add_subtask(
             t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
         )
@@ -204,7 +203,7 @@ class AddSubtaskTests(TestCase):
                 ),
             )
 
-    def test_add_subtask_journal(t) -> None:
+    def test_journal(t) -> None:
         _, entry = add_subtask(
             t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
         )
@@ -233,7 +232,7 @@ class AddSubtaskTests(TestCase):
                 },
             )
 
-    def test_add_subtask_nests_deeper(t) -> None:
+    def test_nests_deeper(t) -> None:
         """A subtask is itself a parent, as SCHEMA.md allows."""
         _, entry = add_subtask(
             t.source, 'work', 'Chip the brush', 'Rake the chips', {}
@@ -250,7 +249,7 @@ class AddSubtaskTests(TestCase):
                 t.path.read_text(encoding='utf-8'),
             )
 
-    def test_add_subtask_stamps_the_parent(t) -> None:
+    def test_stamps_the_parent(t) -> None:
         _, entry = add_subtask(
             t.source, 'work', 'Unidentified', 'Get quotes', {}
         )
@@ -271,7 +270,7 @@ class AddSubtaskTests(TestCase):
             t.assertEqual(added['stream_id'], f'task/{task_id(entry)}')
             t.assertEqual(added['payload']['parent'], parent)
 
-    def test_add_subtask_rejected(t) -> None:
+    def test_rejected(t) -> None:
         before = t.path.read_text(encoding='utf-8')
 
         with (
@@ -297,23 +296,14 @@ class AddSubtaskTests(TestCase):
             t.assertEqual(Journal(t.source).read(), [])
 
 
-class ChecklistItemTargetTests(TestCase):
+class ChecklistItemTargetTests(WorkFixtureTests):
     """`complete` and `scratch` act on a checklist item where it stands.
 
     The item can hold no `[ID:]`, so its event goes to the nearest
     ancestor that can.
     """
 
-    maxDiff = None
-
-    def setUp(t) -> None:
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.source = Path(tmp.name)
-        t.path = t.source / 'work.md'
-        t.path.write_text(WORK, encoding='utf-8')
-
-    def test_complete_a_checklist_item(t) -> None:
+    def test_complete(t) -> None:
         entries = complete(t.source, 'Sweep up', TODAY)
         (event,) = Journal(t.source).read()
         text = t.path.read_text(encoding='utf-8')
@@ -335,7 +325,7 @@ class ChecklistItemTargetTests(TestCase):
                 event['payload']['ancestry'], 'Deck rebuild > Sweep up'
             )
 
-    def test_scratch_a_checklist_item(t) -> None:
+    def test_scratch(t) -> None:
         entries = scratch(t.source, 'Sweep up', TODAY)
         (event,) = Journal(t.source).read()
         text = t.path.read_text(encoding='utf-8')
@@ -386,7 +376,7 @@ class BackfillFileTests(TestCase):
         t.path.write_text(LIST)
         t.journal = Journal(t.dir)
 
-    def test_backfill_file(t) -> None:
+    def test_stamps(t) -> None:
         stamped = backfill_file(t.path, TODAY, t.journal)
         text = t.path.read_text()
 
@@ -423,7 +413,7 @@ class BackfillFileTests(TestCase):
             t.assertTrue(text.startswith('# Work\n'))
             t.assertTrue(text.endswith('## Done\n'))
 
-    def test_backfill_file_journal(t) -> None:
+    def test_journal(t) -> None:
         backfill_file(t.path, TODAY, t.journal)
         events = t.journal.read()
 
@@ -449,13 +439,13 @@ class BackfillFileTests(TestCase):
         with t.subTest('metadata names the source file'):
             t.assertEqual(events[0]['metadata']['source_file'], 'work.md')
 
-    def test_backfill_file_runs_once(t) -> None:
+    def test_runs_once(t) -> None:
         backfill_file(t.path, TODAY, t.journal)
         first = t.path.read_text()
         t.assertEqual(backfill_file(t.path, TODAY, t.journal), [])
         t.assertEqual(t.path.read_text(), first)
 
-    def test_backfill_file_unchanged_file_not_rewritten(t) -> None:
+    def test_unchanged_file(t) -> None:
         path = t.dir / 'empty.md'
         path.write_text('## Open\n\n- [x] Done [P:1]\n')
         before = path.read_text()
@@ -578,8 +568,10 @@ class MutationTests(TestCase):
 
     def reset(t) -> None:
         """Fresh lists and an empty journal, for the next subTest."""
+        for path in t.dir.glob('*.md'):
+            path.unlink()
         write_lists(t.dir)
-        (t.dir / '.journal' / 'log.jsonl').unlink(missing_ok=True)
+        Journal(t.dir).path.unlink(missing_ok=True)
 
     def logged(t) -> list[str]:
         """The completed.md entries this run appended."""
@@ -595,7 +587,7 @@ class MutationTests(TestCase):
 
 
 class CompleteTests(MutationTests):
-    def test_complete(t) -> None:
+    def test_lists(t) -> None:
         with t.subTest('a finished top-level task loses its whole block'):
             complete(t.dir, 'Chip the brush pile', TODAY)
             text = (t.dir / 'chores.md').read_text()
@@ -678,7 +670,7 @@ class CompleteTests(MutationTests):
             t.assertIn('      Scan GitHub activity, then draft', text)
             t.assertNotIn('Draft entries', text)
 
-    def test_complete_log(t) -> None:
+    def test_log(t) -> None:
         with t.subTest('date, category, status, title, and fields'):
             t.assertEqual(
                 complete(t.dir, 'Chip the brush pile', TODAY),
@@ -756,7 +748,7 @@ class CompleteTests(MutationTests):
                 .startswith('2026-08-08 | chores | DONE |')
             )
 
-    def test_complete_journal(t) -> None:
+    def test_journal(t) -> None:
         with t.subTest('one TaskCompleted per completion, deepest first'):
             complete(t.dir, 'Buy lumber', TODAY)
             events = Journal(t.dir).read()
@@ -804,7 +796,7 @@ class CompleteTests(MutationTests):
                 t.line('work.md', 'Prepare computer bag'),
             )
 
-    def test_complete_errors(t) -> None:
+    def test_errors(t) -> None:
         before = (t.dir / 'chores.md').read_text()
 
         with t.subTest('nothing matches'):
@@ -828,7 +820,7 @@ class CompleteTests(MutationTests):
 
 
 class ScratchTests(MutationTests):
-    def test_scratch(t) -> None:
+    def test_lists(t) -> None:
         with t.subTest('the block goes, untouched lines byte-identically'):
             scratch(t.dir, 'Casablanca', TODAY)
             kept = [
@@ -868,7 +860,7 @@ class ScratchTests(MutationTests):
                 'Pay credit cards', (t.dir / 'chores.md').read_text()
             )
 
-    def test_scratch_log(t) -> None:
+    def test_log(t) -> None:
         with t.subTest('one SCRATCHED entry, with ancestry and fields'):
             t.assertEqual(
                 scratch(t.dir, 'Book hotel', TODAY),
@@ -881,7 +873,7 @@ class ScratchTests(MutationTests):
             )
             t.assertEqual(len(t.logged()), 1)
 
-    def test_scratch_journal(t) -> None:
+    def test_journal(t) -> None:
         with t.subTest('TaskScratched on the task, no cascade'):
             scratch(t.dir, 'Casablanca', TODAY)
             events = Journal(t.dir).read()
@@ -923,7 +915,7 @@ class AddTaskTests(MutationTests):
     def task_id(t, line: str) -> str:
         return parse(f'## Open\n{line}\n').tasks[0].fields['ID']
 
-    def test_add_task(t) -> None:
+    def test_line(t) -> None:
         with t.subTest('only supplied fields, plus the stamps btodo owns'):
             path, line = add_task(
                 t.dir, 'chores', 'Water it', {'P': '4'}, TODAY
@@ -979,7 +971,7 @@ class AddTaskTests(MutationTests):
             path, line = add_task(t.dir, 'backlog', 'Someday', {}, TODAY)
             t.assertIn(line, path.read_text())
 
-    def test_add_task_journal(t) -> None:
+    def test_journal(t) -> None:
         _, line = add_task(
             t.dir,
             'chores',
@@ -1023,7 +1015,7 @@ class AddTaskTests(MutationTests):
         sys.version_info < (3, 11),
         'before 3.11 fromisoformat reads only the canonical spelling',
     )
-    def test_add_task_normalises_the_due_date(t) -> None:
+    def test_normalises_the_due_date(t) -> None:
         """A line must not record which interpreter wrote it.
 
         `date.fromisoformat` accepts more spellings on newer versions,
@@ -1034,7 +1026,7 @@ class AddTaskTests(MutationTests):
         t.assertIn('[DUE:2026-09-01]', line)
         t.assertIn(line, (t.dir / 'chores.md').read_text())
 
-    def test_add_task_errors(t) -> None:
+    def test_errors(t) -> None:
         with t.subTest('an unknown list names the directory and the stems'):
             with t.assertRaises(ListError) as caught:
                 add_task(t.dir, 'wrk', 'X', {}, TODAY)

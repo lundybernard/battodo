@@ -40,8 +40,11 @@ def at(iso: str) -> datetime:
 
 
 class ActiveCategoriesTests(TestCase):
-    """Each window is half-open: it opens on its first hour and is shut
-    again on its closing hour, so the two never overlap."""
+    """Unit tests for battodo.view.selection.active_categories.
+
+    Each window is half-open: it opens on its first hour and is shut
+    again on its closing hour, so the two never overlap.
+    """
 
     def test_active_categories(t) -> None:
         always = {'study', 'career', 'events'}
@@ -80,6 +83,8 @@ def md(name: str, text: str) -> MagicMock:
 
 
 class DiscoverListsTests(TestCase):
+    """Unit tests for battodo.view.selection.discover_lists."""
+
     def setUp(t) -> None:
         t.work = md('work.md', '# W\n\n## Open\n\n- [ ] A\n')
         t.backlog = md('backlog.md', '## Open\n\n- [ ] B\n')
@@ -118,6 +123,8 @@ class DiscoverListsTests(TestCase):
 
 
 class VisibleTasksTests(TestCase):
+    """Unit tests for battodo.view.selection.visible_tasks."""
+
     def test_visible_tasks(t) -> None:
         doc = parse(
             '## Open\n'
@@ -150,6 +157,11 @@ class VisibleTasksTests(TestCase):
 
 
 class SortKeyTests(TestCase):
+    """Unit tests for battodo.view.selection.sort_key."""
+
+    def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
+
     def test_sort_key(t) -> None:
         doc = parse(
             '## Open\n'
@@ -158,6 +170,8 @@ class SortKeyTests(TestCase):
             '- [ ] Dated [P:3] [DUE:2026-09-30]\n'
             '- [ ] Higher [P:5]\n'
         )
+        ranked = {'Higher': 5.0}
+        t.rank.side_effect = lambda task, today: ranked.get(task.title, 3.0)
 
         ordered = [
             task.title
@@ -174,11 +188,18 @@ class SortKeyTests(TestCase):
             t.assertEqual(ordered[2:], ['A undated', 'B undated'])
 
         with t.subTest('the key itself is rank, then due, then title'):
+            t.rank.reset_mock()
+            t.rank.side_effect = None
+            t.rank.return_value = 3.0
             task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
+
             t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+            t.rank.assert_called_once_with(task, TODAY)
 
 
 class CategoryOrderTests(TestCase):
+    """Unit tests for battodo.view.selection.category_order."""
+
     def test_category_order(t) -> None:
         with t.subTest('the named categories lead, in their own order'):
             t.assertEqual(
@@ -194,6 +215,8 @@ class CategoryOrderTests(TestCase):
 
 
 class OpenChildrenTests(TestCase):
+    """Unit tests for battodo.view.selection.open_children."""
+
     def test_open_children(t) -> None:
         doc = parse(
             '## Open\n'
@@ -216,6 +239,8 @@ class OpenChildrenTests(TestCase):
 
 
 class TaskEntryTests(TestCase):
+    """Unit tests for battodo.view.selection.task_entry."""
+
     def setUp(t) -> None:
         t.rank = autopatch(t, 'rank')
         t.multiplier = autopatch(t, 'multiplier')
@@ -272,7 +297,10 @@ class TaskEntryTests(TestCase):
 
 
 class TodoListTests(TestCase):
+    """Unit tests for battodo.view.selection.TodoList."""
+
     def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
         t.path = Mock(spec=Path)
         t.path.stem = 'work'
         t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
@@ -300,7 +328,9 @@ class TodoListTests(TestCase):
             t.assertTrue(t.tl.parked)
 
     def test_tasks(t) -> None:
-        with t.subTest('open tasks come back in view order'):
+        with t.subTest('open tasks come back in the order rank gives'):
+            ranked = {'Low': 1.0, 'High': 5.0}
+            t.rank.side_effect = lambda task, today: ranked[task.title]
             t.tl.text = (
                 '## Open\n'
                 '- [ ] Low [P:1]\n'
@@ -330,6 +360,8 @@ class TodoListTests(TestCase):
 
 
 class CategoryTests(TestCase):
+    """Unit tests for battodo.view.selection.Category."""
+
     def setUp(t) -> None:
         t.tasks = parse(
             '## Open\n' + ''.join(f'- [ ] Item {n} [P:3]\n' for n in range(6))
@@ -366,6 +398,8 @@ class CategoryTests(TestCase):
 
 
 class SelectionTests(TestCase):
+    """Unit tests for battodo.view.selection.Selection."""
+
     def setUp(t) -> None:
         t.discover_lists = autopatch(t, 'discover_lists')
         t.active_categories = autopatch(t, 'active_categories')
@@ -589,6 +623,8 @@ class SelectionTests(TestCase):
 
 
 class ItemCountTests(TestCase):
+    """Unit tests for battodo.view.selection.item_count."""
+
     def test_item_count(t) -> None:
         with t.subTest('a configured count is read as a number'):
             t.assertEqual(item_count('2'), 2)
@@ -603,7 +639,10 @@ class ItemCountTests(TestCase):
 
 
 class SelectionFromConfigTests(TestCase):
-    """The decode from configuration strings to what a selection takes."""
+    """Unit tests for battodo.view.selection.Selection.from_config.
+
+    The decode from configuration strings to what a selection takes.
+    """
 
     def setUp(t) -> None:
         t.now = at('2026-08-05T10:30')

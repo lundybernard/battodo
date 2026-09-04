@@ -1,14 +1,14 @@
 Completed month: 2026-08-01 to 2026-08-05 — 4 done
 
-── Work ────────────────────────────────
+── Work ───────────────────────────────────────
   DATE        TASK
-  2026-08-05  Update the captain's log
+  2026-08-05  The one record of today
 
-── Chores ──────────────────────────────
+── Chores ─────────────────────────────────────
   DATE        TASK
-  2026-08-04  Deck > Chip the brush pile
-  2026-08-04  Deck
+  2026-08-04  A parent > Its child
+  2026-08-04  A record carrying no fields
 
-── Van ─────────────────────────────────
+── Van ────────────────────────────────────────
   DATE        TASK
-  2026-08-02  Rebuild the galley shelf
+  2026-08-02  The record of the ad-hoc category

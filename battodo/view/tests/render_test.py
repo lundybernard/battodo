@@ -28,6 +28,8 @@ def autopatch(case: TestCase, target: str) -> Mock:
 
 
 class DueLabelTests(TestCase):
+    """Unit tests for battodo.view.render.due_label."""
+
     def test_due_label(t) -> None:
         cases = {
             'no due date reads as nothing at all': (None, ''),
@@ -48,6 +50,8 @@ class DueLabelTests(TestCase):
 
 
 class TableWidthTests(TestCase):
+    """Unit tests for battodo.view.render.table_width."""
+
     def test_table_width(t) -> None:
         # Two of indent, the cells themselves, and a gap between each
         # neighbouring pair.
@@ -55,6 +59,8 @@ class TableWidthTests(TestCase):
 
 
 class ClipTests(TestCase):
+    """Unit tests for battodo.view.render.clip."""
+
     def test_clip(t) -> None:
         with t.subTest('text that fits is left alone'):
             t.assertEqual(clip('abc', 3), 'abc')
@@ -67,6 +73,8 @@ class ClipTests(TestCase):
 
 
 class RowTests(TestCase):
+    """Unit tests for battodo.view.render.Row."""
+
     def setUp(t) -> None:
         t.rank = autopatch(t, 'rank')
         t.multiplier = autopatch(t, 'multiplier')
@@ -133,6 +141,8 @@ def row(*cells: str) -> Row:
 
 
 class TableTests(TestCase):
+    """Unit tests for battodo.view.render.Table."""
+
     def setUp(t) -> None:
         t.rows = [row('4.2', '3.0', '2', 'A task', 'OVERDUE')]
         t.tb = Table(
@@ -222,6 +232,8 @@ def category(name: str, hidden: int = 0, shown=('task',)) -> Mock:
 
 
 class ViewTests(TestCase):
+    """Unit tests for battodo.view.render.View."""
+
     def setUp(t) -> None:
         t.Row = autopatch(t, 'Row')
         t.get_terminal_size = autopatch(t, 'get_terminal_size')

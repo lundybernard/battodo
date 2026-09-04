@@ -9,11 +9,11 @@
       "entries": [
         {
           "date": "2026-07-30",
-          "title": "Review the storage ADR"
+          "title": "Out of file order, the week's first day"
         },
         {
           "date": "2026-08-05",
-          "title": "Update the captain's log"
+          "title": "The one record of today"
         }
       ]
     },
@@ -22,11 +22,11 @@
       "entries": [
         {
           "date": "2026-08-04",
-          "title": "Deck > Chip the brush pile"
+          "title": "A parent > Its child"
         },
         {
           "date": "2026-08-04",
-          "title": "Deck"
+          "title": "A record carrying no fields"
         }
       ]
     },
@@ -35,7 +35,7 @@
       "entries": [
         {
           "date": "2026-07-31",
-          "title": "Apply for a job"
+          "title": "Inside the week, outside the month"
         }
       ]
     },
@@ -44,7 +44,7 @@
       "entries": [
         {
           "date": "2026-08-02",
-          "title": "Rebuild the galley shelf"
+          "title": "The record of the ad-hoc category"
         }
       ]
     }

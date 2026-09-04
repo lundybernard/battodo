@@ -16,31 +16,6 @@ SRC = 'battodo.item'
 TODAY = date(2026, 8, 5)
 
 
-def task(title: str, **fields: str) -> TaskNode:
-    """A top-level open task carrying `fields`."""
-    return TaskNode(
-        raw_index=0,
-        indent=0,
-        done=False,
-        title=title,
-        fields=fields,
-    )
-
-
-def entry(title: str, **overrides: object) -> dict[str, object]:
-    """One subtask as `item_data` records it."""
-    return {
-        'id': None,
-        'title': title,
-        'done': False,
-        'loe': None,
-        'due': None,
-        'tags': [],
-        'subtasks': [],
-        **overrides,
-    }
-
-
 class SubtaskEntryTests(TestCase):
     """Unit tests for battodo.item.subtask_entry."""
 
@@ -64,78 +39,150 @@ class SubtaskEntryTests(TestCase):
         with t.subTest('the stored fields, and the children below it'):
             t.assertEqual(
                 subtask_entry(child),
-                entry(
-                    'Chip the brush',
-                    id='abc123',
-                    loe=2,
-                    tags=['yard', 'summer'],
-                    subtasks=[
-                        entry('Buy the lumber', done=True, due='2026-09-01')
+                {
+                    'id': 'abc123',
+                    'title': 'Chip the brush',
+                    'done': False,
+                    'loe': 2,
+                    'due': None,
+                    'tags': ['yard', 'summer'],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Buy the lumber',
+                            'done': True,
+                            'loe': None,
+                            'due': '2026-09-01',
+                            'tags': [],
+                            'subtasks': [],
+                        }
                     ],
-                ),
+                },
             )
 
         with t.subTest('a checklist item carries no field at all'):
             plain = TaskNode(
                 raw_index=1, indent=2, done=False, title='Sweep', fields={}
             )
-            t.assertEqual(subtask_entry(plain), entry('Sweep'))
+            t.assertEqual(
+                subtask_entry(plain),
+                {
+                    'id': None,
+                    'title': 'Sweep',
+                    'done': False,
+                    'loe': None,
+                    'due': None,
+                    'tags': [],
+                    'subtasks': [],
+                },
+            )
 
 
-class ItemDataTests(TestCase):
+class IsolatedTests(TestCase):
+    """Base: the collaborators a suite names in TARGETS stand in."""
+
+    TARGETS: tuple[str, ...] = ()
+
+    def setUp(t) -> None:
+        for target in t.TARGETS:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+
+
+class ItemDataTests(IsolatedTests):
     """Unit tests for battodo.item.item_data."""
+
+    TARGETS = ('rank', 'multiplier')
+
+    rank: MagicMock
+    multiplier: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.rank.return_value = 10.006
+        t.multiplier.return_value = 4.0
 
     def test_item_data(t) -> None:
         with t.subTest('the list, the stored fields, and the children'):
-            subject = task(
-                'Deck rebuild',
-                P='4',
-                LOE='8',
-                DUE='2026-08-12',
-                REPEAT='30d',
-                TAGS='yard,summer',
-                ADDED='2026-07-06',
-                ID='9o71lx',
+            subject = TaskNode(
+                raw_index=0,
+                indent=0,
+                done=False,
+                title='Deck rebuild',
+                fields={
+                    'P': '4',
+                    'LOE': '8',
+                    'DUE': '2026-08-12',
+                    'REPEAT': '30d',
+                    'TAGS': 'yard,summer',
+                    'ADDED': '2026-07-06',
+                    'ID': '9o71lx',
+                },
+                children=[
+                    TaskNode(
+                        raw_index=1,
+                        indent=2,
+                        done=False,
+                        title='Sweep',
+                        fields={},
+                    )
+                ],
             )
-            subject.children = [
-                TaskNode(
-                    raw_index=1,
-                    indent=2,
-                    done=False,
-                    title='Sweep',
-                    fields={},
-                )
-            ]
 
             t.assertEqual(
-                item_data(Path('/todo/work.md'), subject, TODAY),
+                item_data(Path('/source-dir/a-list.md'), subject, TODAY),
                 {
-                    'list': 'work',
+                    'list': 'a-list',
                     'id': '9o71lx',
                     'title': 'Deck rebuild',
                     'done': False,
-                    # One month old and one week from due: 4 x 2.5.
-                    'rank': 10.0,
+                    # Rounded to the places the document publishes.
+                    'rank': 10.01,
                     'priority': 4.0,
                     'loe': 8,
                     'due': '2026-08-12',
                     'added': '2026-07-06',
                     'repeat': '30d',
                     'tags': ['yard', 'summer'],
-                    'subtasks': [entry('Sweep')],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Sweep',
+                            'done': False,
+                            'loe': None,
+                            'due': None,
+                            'tags': [],
+                            'subtasks': [],
+                        }
+                    ],
                 },
             )
 
+        with t.subTest('the rank is asked for against the given day'):
+            t.rank.assert_called_once_with(subject, TODAY)
+            t.multiplier.assert_called_once_with(subject)
+
         with t.subTest('an unfielded task reads as absent, not as zero'):
             t.assertEqual(
-                item_data(Path('/todo/work.md'), task('Bare'), TODAY),
+                item_data(
+                    Path('/source-dir/a-list.md'),
+                    TaskNode(
+                        raw_index=0,
+                        indent=0,
+                        done=False,
+                        title='Bare',
+                        fields={},
+                    ),
+                    TODAY,
+                ),
                 {
-                    'list': 'work',
+                    'list': 'a-list',
                     'id': None,
                     'title': 'Bare',
                     'done': False,
-                    'rank': 1.0,
-                    'priority': 1.0,
+                    'rank': 10.01,
+                    'priority': 4.0,
                     'loe': None,
                     'due': None,
                     'added': None,
@@ -153,7 +200,7 @@ class RenderItemTests(TestCase):
 
     def setUp(t) -> None:
         t.data: dict[str, object] = {
-            'list': 'work',
+            'list': 'a-list',
             'id': '9o71lx',
             'title': 'Deck rebuild',
             'done': False,
@@ -172,7 +219,7 @@ class RenderItemTests(TestCase):
             t.assertEqual(
                 render_item(t.data),
                 'Deck rebuild\n'
-                '  list    work\n'
+                '  list    a-list\n'
                 '  id      9o71lx\n'
                 '  rank    10.0\n'
                 '  P       4.0\n'
@@ -190,7 +237,7 @@ class RenderItemTests(TestCase):
             t.assertEqual(
                 render_item(t.data),
                 'Deck rebuild\n'
-                '  list  work\n'
+                '  list  a-list\n'
                 '  id    -\n'
                 '  rank  10.0\n'
                 '  P     4.0',
@@ -198,14 +245,25 @@ class RenderItemTests(TestCase):
 
         with t.subTest('children follow, indented, in SCHEMA.md markup'):
             t.data['subtasks'] = [
-                entry(
-                    'Chip the brush',
-                    id='abc123',
-                    loe=2,
-                    due='2026-09-01',
-                    tags=['yard'],
-                    subtasks=[entry('Buy the lumber', done=True)],
-                )
+                {
+                    'id': 'abc123',
+                    'title': 'Chip the brush',
+                    'done': False,
+                    'loe': 2,
+                    'due': '2026-09-01',
+                    'tags': ['yard'],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Buy the lumber',
+                            'done': True,
+                            'loe': None,
+                            'due': None,
+                            'tags': [],
+                            'subtasks': [],
+                        }
+                    ],
+                }
             ]
             t.assertEqual(
                 render_item(t.data).splitlines()[-3:],
@@ -220,8 +278,10 @@ class RenderItemTests(TestCase):
             )
 
 
-class BuildItemTests(TestCase):
-    """Unit tests for battodo.item.build_item."""
+class ItemBuildTests(IsolatedTests):
+    """Base: the selection, the data builder and the renderers stand in."""
+
+    TARGETS = ('TaskSelection', 'item_data', 'render_item', 'dumps')
 
     TaskSelection: MagicMock
     item_data: MagicMock
@@ -229,16 +289,17 @@ class BuildItemTests(TestCase):
     dumps: MagicMock
 
     def setUp(t) -> None:
-        for target in ('TaskSelection', 'item_data', 'render_item', 'dumps'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
-        t.directory = Path('/todo')
+        super().setUp()
+        t.directory = Path('/source-dir')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
         # An autospec instance specs `record` from the descriptor, not
         # from the value it yields.
         t.record = MagicMock(spec=['path', 'task'])
         t.TaskSelection.return_value.record = t.record
+
+
+class BuildItemTests(ItemBuildTests):
+    """Unit tests for battodo.item.build_item."""
 
     def test_build_item(t) -> None:
         result = build_item(t.directory, 'deck', t.now)
@@ -252,6 +313,10 @@ class BuildItemTests(TestCase):
         with t.subTest('the rendered text is what comes back'):
             t.render_item.assert_called_with(t.item_data.return_value)
             t.assertEqual(result, t.render_item.return_value)
+
+
+class BuildItemJsonTests(ItemBuildTests):
+    """Unit tests for battodo.item.build_item_json."""
 
     def test_build_item_json(t) -> None:
         result = build_item_json(t.directory, 'deck', t.now)

@@ -21,19 +21,14 @@ NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
 # period, and one abandoned. The dates are out of order on purpose.
 LOG = """\
 # Completed Tasks
-2026-06-14 | van | DONE | Install the converter [P:7]
-2026-08-05 | work | DONE | Update the log
-2026-07-30 | work | DONE | Review the ADR
-2026-08-02 | van | DONE | Rebuild the shelf
-2026-08-03 | work | SCRATCHED | Drop it
+2026-06-14 | unlisted | DONE | Outside every period [P:7]
+2026-08-05 | work | DONE | Completed today
+2026-07-30 | work | DONE | Oldest in the week
+2026-08-02 | unlisted | DONE | In the other category
+2026-08-03 | work | SCRATCHED | Abandoned, not completed
 """
 # Wide enough to lay a short record out.
 WIDTHS = [10, 20]
-
-
-def record(day: str, category: str = 'work', title: str = 'A task') -> Record:
-    """One DONE record, dated `day`."""
-    return Record(date.fromisoformat(day), category, title)
 
 
 class ReadRecordTests(TestCase):
@@ -42,8 +37,8 @@ class ReadRecordTests(TestCase):
     def test_read_record(t) -> None:
         with t.subTest('a DONE line is a record'):
             t.assertEqual(
-                read_record('2026-08-04 | chores | DONE | Wash the van'),
-                Record(date(2026, 8, 4), 'chores', 'Wash the van'),
+                read_record('2026-08-04 | chores | DONE | A completed task'),
+                Record(date(2026, 8, 4), 'chores', 'A completed task'),
             )
 
         titles = {
@@ -86,7 +81,7 @@ class RecordTests(TestCase):
     """Unit tests for battodo.completed.Record."""
 
     def setUp(t) -> None:
-        t.r = record('2026-08-04', 'chores', 'Deck > Chip it')
+        t.r = Record(date(2026, 8, 4), 'chores', 'Deck > Chip it')
 
     def test_cells(t) -> None:
         t.assertEqual(t.r.cells, ('2026-08-04', 'Deck > Chip it'))
@@ -101,14 +96,17 @@ class GroupTests(TestCase):
     """Unit tests for battodo.completed.Group."""
 
     def setUp(t) -> None:
-        t.g = Group('side-quests', [record('2026-08-04', title='Wash it')])
+        t.g = Group(
+            'side-quests',
+            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
+        )
 
     def test_title(t) -> None:
         t.assertEqual(t.g.title, 'Side quests')
 
     def test_entries(t) -> None:
         t.assertEqual(
-            t.g.entries, [{'date': '2026-08-04', 'title': 'Wash it'}]
+            t.g.entries, [{'date': '2026-08-04', 'title': 'A record'}]
         )
 
 
@@ -171,25 +169,31 @@ class DigestTests(TestCase):
         with t.subTest('the DONE records of the period, oldest first'):
             t.assertEqual(
                 [found.title for found in t.d.records],
-                ['Review the ADR', 'Rebuild the shelf', 'Update the log'],
+                [
+                    'Oldest in the week',
+                    'In the other category',
+                    'Completed today',
+                ],
             )
 
         with t.subTest('a shorter period holds fewer of them'):
             digest = Digest(t.directory, NOW, period='today')
             t.assertEqual(
-                [found.title for found in digest.records], ['Update the log']
+                [found.title for found in digest.records],
+                ['Completed today'],
             )
 
     def test_groups(t) -> None:
         with t.subTest('one group per category, in the view order'):
             t.assertEqual(
-                [group.name for group in t.d.groups], ['work', 'van']
+                [group.name for group in t.d.groups],
+                ['work', 'unlisted'],
             )
 
         with t.subTest('each holding its own records'):
             t.assertEqual(
                 [found.title for found in t.d.groups[0].records],
-                ['Review the ADR', 'Update the log'],
+                ['Oldest in the week', 'Completed today'],
             )
 
     def test_data(t) -> None:
@@ -204,16 +208,22 @@ class DigestTests(TestCase):
                     {
                         'name': 'work',
                         'entries': [
-                            {'date': '2026-07-30', 'title': 'Review the ADR'},
-                            {'date': '2026-08-05', 'title': 'Update the log'},
+                            {
+                                'date': '2026-07-30',
+                                'title': 'Oldest in the week',
+                            },
+                            {
+                                'date': '2026-08-05',
+                                'title': 'Completed today',
+                            },
                         ],
                     },
                     {
-                        'name': 'van',
+                        'name': 'unlisted',
                         'entries': [
                             {
                                 'date': '2026-08-02',
-                                'title': 'Rebuild the shelf',
+                                'title': 'In the other category',
                             }
                         ],
                     },
@@ -267,7 +277,7 @@ class TableTests(TestCase):
     """Unit tests for battodo.completed.Table."""
 
     def setUp(t) -> None:
-        t.group = Group('work', [record('2026-08-05', title='Ship it')])
+        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
         t.table = Table(t.group, WIDTHS)
 
     def test_heading(t) -> None:
@@ -300,8 +310,12 @@ class DigestViewTests(TestCase):
 
     def setUp(t) -> None:
         t.records = [
-            record('2026-07-30', title='Review the ADR'),
-            record('2026-08-02', 'van', title='Rebuild the shelf'),
+            Record(date(2026, 7, 30), 'work', 'A record of the week'),
+            Record(
+                date(2026, 8, 2),
+                'unlisted',
+                'A record of another category',
+            ),
         ]
         t.digest = Mock(spec=Digest)
         t.digest.period = 'week'
@@ -310,7 +324,7 @@ class DigestViewTests(TestCase):
         t.digest.records = t.records
         t.digest.groups = [
             Group('work', t.records[:1]),
-            Group('van', t.records[1:]),
+            Group('unlisted', t.records[1:]),
         ]
 
         t.v = DigestView(t.digest)
@@ -330,10 +344,12 @@ class DigestViewTests(TestCase):
 
     def test_widths(t) -> None:
         with t.subTest('each column as wide as its widest cell'):
-            t.assertEqual(t.v.widths, [10, len('Rebuild the shelf')])
+            t.assertEqual(
+                t.v.widths, [10, len('A record of another category')]
+            )
 
         with t.subTest('the column name counts too'):
-            t.digest.records = [record('2026-08-05', title='Go')]
+            t.digest.records = [Record(date(2026, 8, 5), 'work', 'Go')]
             t.assertEqual(DigestView(t.digest).widths, [10, len('TASK')])
 
     def test_tables(t) -> None:
@@ -347,13 +363,13 @@ class DigestViewTests(TestCase):
                 (
                     'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
                     '',
-                    '── Work ' + '─' * 23,
+                    '── Work ' + '─' * 34,
                     '  DATE        TASK',
-                    '  2026-07-30  Review the ADR',
+                    '  2026-07-30  A record of the week',
                     '',
-                    '── Van ' + '─' * 24,
+                    '── Unlisted ' + '─' * 30,
                     '  DATE        TASK',
-                    '  2026-08-02  Rebuild the shelf',
+                    '  2026-08-02  A record of another category',
                 )
             ),
         )

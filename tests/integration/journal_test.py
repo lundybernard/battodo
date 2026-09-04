@@ -29,7 +29,7 @@ class JournalTests(TestCase):
             'stream_id': 'task/abc123',
             'payload': {'delta': {'P': [1, 2]}},
             'actor': 'agent',
-            'source_file': 'work.md',
+            'source_file': 'a-list.md',
         }
         params.update(kwargs)
         return t.journal.append(**params)
@@ -52,7 +52,7 @@ class JournalTests(TestCase):
             t.assertIsNone(event['hash'])
             t.assertEqual(
                 event['metadata'],
-                {'actor': 'agent', 'source_file': 'work.md'},
+                {'actor': 'agent', 'source_file': 'a-list.md'},
             )
             t.assertEqual(event['payload'], {'delta': {'P': [1, 2]}})
 
@@ -77,27 +77,36 @@ class JournalTests(TestCase):
             t.assertEqual(t.append(stream_id='task/other')['stream_seq'], 1)
             t.assertEqual(t.append()['stream_seq'], 4)
 
-    def test_append_creates_the_whole_path(t) -> None:
-        """A source directory btodo has never written to may not exist.
+        with t.subTest('a source directory that does not exist yet'):
+            # More than one level can be missing, so the journal digs
+            # the whole way down rather than only the last directory.
+            nested = Journal(t.dir / 'new' / 'nested')
 
-        More than one level can be missing, so the journal digs the
-        whole way down rather than only the last directory.
-        """
-        nested = Journal(t.dir / 'new' / 'nested')
+            written = nested.append(
+                event_type='TaskAdded',
+                stream_id='task/abc123',
+                payload={},
+                actor='agent',
+                source_file='a-list.md',
+            )
 
-        event = nested.append(
-            event_type='TaskAdded',
-            stream_id='task/abc123',
-            payload={},
-            actor='agent',
-            source_file='work.md',
-        )
+            t.assertEqual(nested.read(), [written])
 
-        t.assertEqual(nested.read(), [event])
+        with (
+            t.subTest('the event id comes from the uuid source'),
+            patch(f'{SRC}.uuid4', autospec=True, return_value='fixed-uuid'),
+        ):
+            # A journal of its own: the counters above are absolute, so
+            # a sixth event on the shared one would move them.
+            identified = Journal(t.dir / 'ids').append(
+                event_type='TaskAdded',
+                stream_id='task/abc123',
+                payload={},
+                actor='agent',
+                source_file='a-list.md',
+            )
 
-    def test_append_event_id(t) -> None:
-        with patch(f'{SRC}.uuid4', autospec=True, return_value='fixed-uuid'):
-            t.assertEqual(t.append()['event_id'], 'fixed-uuid')
+            t.assertEqual(identified['event_id'], 'fixed-uuid')
 
     def test_read(t) -> None:
         with t.subTest('missing journal reads empty'):

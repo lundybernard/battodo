@@ -205,6 +205,18 @@ class TaskNodeTests(TestCase):
     def test_raw_index(t) -> None:
         t.assertEqual(t.tk.raw_index, 2)
 
+    def test_defaults(t) -> None:
+        task = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='T',
+            fields={},
+        )
+        t.assertEqual(task.children, [])
+        t.assertEqual(task.note_indices, [])
+        t.assertEqual(task.priority, 0)
+
 
 class ParseDateTests(TestCase):
     """Unit tests for battodo.parser.parse_date."""
@@ -220,22 +232,6 @@ class ParseDateTests(TestCase):
         for value, expected in cases.items():
             with t.subTest(str(value)):
                 t.assertEqual(parse_date(value), expected)
-
-
-class TaskNodeDataclassTests(TestCase):
-    """Unit tests for battodo.parser.TaskNode."""
-
-    def test_defaults(t) -> None:
-        task = TaskNode(
-            raw_index=0,
-            indent=0,
-            done=False,
-            title='T',
-            fields={},
-        )
-        t.assertEqual(task.children, [])
-        t.assertEqual(task.note_indices, [])
-        t.assertEqual(task.priority, 0)
 
 
 class AppendOpenTests(TestCase):
