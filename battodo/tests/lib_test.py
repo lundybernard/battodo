@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch, sentinel
 
-from battodo.lib import (
+from ..lib import (
     add_item,
     backfill_items,
     complete_item,
@@ -140,6 +140,7 @@ class GetItemTests(TestCase):
 
         with t.subTest('an unconfigured format is the human form'):
             conf = Mock(spec=['view', 'selector'])
+            conf.view = Mock(spec=['source_dir'])
             conf.view.source_dir = '~/todo'
             conf.selector = 'brush pile'
 
@@ -193,6 +194,7 @@ class AddItemTests(TestCase):
         with t.subTest('an add with no fields writes none'):
             t.add_task.reset_mock()
             conf = Mock(spec=['view', 'list', 'title'])
+            conf.view = Mock(spec=['source_dir'])
             conf.view.source_dir = '~/todo'
             conf.list = 'chores'
             conf.title = 'Water it'
@@ -205,6 +207,7 @@ class AddItemTests(TestCase):
             t.add_task.reset_mock()
             t.now.date.reset_mock()
             conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
+            conf.view = Mock(spec=['source_dir'])
             conf.view.source_dir = '~/todo'
             conf.list = 'work'
             conf.title = 'Buy lumber'
@@ -269,6 +272,7 @@ class UpdateItemTests(TestCase):
         with t.subTest('an option left off names no change to that field'):
             t.update_task.reset_mock()
             conf = Mock(spec=['view', 'selector', 'tags'])
+            conf.view = Mock(spec=['source_dir'])
             conf.view.source_dir = '~/todo'
             conf.selector = 'brush pile'
             conf.tags = 'yard,summer'
