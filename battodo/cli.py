@@ -1,9 +1,8 @@
-import argparse
-import logging
 import sys
+from argparse import ArgumentParser, ArgumentTypeError
 from datetime import datetime
+from logging import DEBUG, ERROR, INFO, getLogger
 from logging.config import dictConfig
-from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.lib import (
@@ -24,7 +23,7 @@ from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 
 dictConfig(logging_config)
-log = logging.getLogger('root')
+log = getLogger('root')
 
 
 def BATCLI(ARGS=None):
@@ -47,12 +46,12 @@ def BATCLI(ARGS=None):
     # dump is left to argparse, which owns actual usage errors.
     except Exception as exp:  # noqa: BLE001
         print(exp, file=sys.stderr)
-        exit(1)
-    exit(0)
+        sys.exit(1)
+    sys.exit(0)
 
 
 def argparser():
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         description=MESSAGES['cli.description'],
         usage=MESSAGES['cli.usage'],
     )
@@ -64,14 +63,14 @@ def argparser():
         help=MESSAGES['cli.verbose.help'],
         action='store_const',
         dest='loglevel',
-        const=logging.INFO,
+        const=INFO,
     )
     p.add_argument(
         '--debug',
         help=MESSAGES['cli.debug.help'],
         action='store_const',
         dest='loglevel',
-        const=logging.DEBUG,
+        const=DEBUG,
     )
     p.add_argument(
         '-c',
@@ -291,13 +290,13 @@ def checked_count(value: str) -> str:
 
     Raises
     ------
-    argparse.ArgumentTypeError
+    ArgumentTypeError
         The value is not a whole number of one or more.
     """
     try:
         item_count(value)
     except ValueError as exp:
-        raise argparse.ArgumentTypeError(str(exp)) from exp
+        raise ArgumentTypeError(str(exp)) from exp
     return value
 
 
@@ -342,8 +341,8 @@ class Commands:
         print(get_completed(conf, datetime.now(TZ)))
 
     @staticmethod
-    def set_log_level(conf):
-        if conf.loglevel:
-            log.setLevel(conf.loglevel)
+    def set_log_level(args):
+        if args.loglevel:
+            log.setLevel(args.loglevel)
         else:
-            log.setLevel(logging.ERROR)
+            log.setLevel(ERROR)

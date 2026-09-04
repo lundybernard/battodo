@@ -1,5 +1,5 @@
-import os
 from functools import cached_property
+from os import environ
 from pathlib import Path
 
 from batconf import (
@@ -52,12 +52,12 @@ class ConfigFile:
     @cached_property
     def named(self) -> str | None:
         """The file the user named, or None when there is none."""
-        return self._name or os.environ.get(CONFIG_FILE_ENV_VAR)
+        return self._name or environ.get(CONFIG_FILE_ENV_VAR)
 
     @cached_property
     def candidates(self) -> tuple[Path, ...]:
         """The searched locations: working directory, then user config."""
-        xdg_config_home = os.environ.get('XDG_CONFIG_HOME')
+        xdg_config_home = environ.get('XDG_CONFIG_HOME')
         user_config = (
             Path(xdg_config_home)
             if xdg_config_home

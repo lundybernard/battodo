@@ -59,7 +59,13 @@ class SubtaskCommandTests(TestCase):
             t.assertIsNone(before['id'])
 
         echoed = t.run_ok(
-            'add', 'work', 'Sand the rails', '--parent', PARENT, '--loe', '2'
+            'add',
+            'work',
+            'Sand the rails',
+            '--parent',
+            PARENT,
+            '--loe',
+            '2',
         )
 
         with t.subTest('the child line is indented under its parent'):
@@ -98,7 +104,8 @@ class SubtaskCommandTests(TestCase):
         for name, (parent, title) in cases.items():
             with t.subTest(name):
                 out, err, code = run_cli(
-                    ['add', 'work', title, '--parent', parent], t.env
+                    ['add', 'work', title, '--parent', parent],
+                    t.env,
                 )
 
                 t.assertEqual(code, 1)
@@ -112,7 +119,13 @@ class SubtaskCommandTests(TestCase):
     def add_subtask(t) -> str:
         """Add one subtask under PARENT and return its id."""
         t.run_ok(
-            'add', 'work', 'Sand the rails', '--parent', PARENT, '--loe', '2'
+            'add',
+            'work',
+            'Sand the rails',
+            '--parent',
+            PARENT,
+            '--loe',
+            '2',
         )
         return t.show(PARENT)['subtasks'][-1]['id']
 
@@ -135,7 +148,12 @@ class SubtaskCommandTests(TestCase):
         child = t.add_subtask()
 
         echoed = t.run_ok(
-            'update', child, '--due', '2026-09-01', '--title', 'Sand and seal'
+            'update',
+            child,
+            '--due',
+            '2026-09-01',
+            '--title',
+            'Sand and seal',
         )
         with t.subTest('the child line is rewritten where it stands'):
             t.assertIn('  - [ ] Sand and seal', echoed)

@@ -117,7 +117,8 @@ class JournalTests(TestCase):
             t.append(event_type='TaskCompleted')
             events = t.journal.read()
             t.assertEqual(
-                [e['type'] for e in events], ['TaskUpdated', 'TaskCompleted']
+                [e['type'] for e in events],
+                ['TaskUpdated', 'TaskCompleted'],
             )
 
         with t.subTest('blank trailing lines are skipped'):

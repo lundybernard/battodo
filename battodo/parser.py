@@ -3,10 +3,9 @@
 The parser keeps every source line verbatim and records only *indices*
 into that line list. Serializing rejoins the untouched lines, so
 parse -> serialize is byte-identical for any input. Mutations replace a
-single line via `set_field`, which edits the raw text in place
-rather than rebuilding it from parsed fields -- field order varies from
-line to line in real files, so a canonical-order serializer would
-rewrite every line it touched.
+single line via `set_field`, which edits the raw text in place. Field
+order varies from line to line, so a serializer that rebuilt a line
+from its parsed fields would rewrite every line it touched.
 """
 
 import re
@@ -30,10 +29,6 @@ class TaskNode:
     raw: str = ''
     children: list['TaskNode'] = field(default_factory=list)
     note_indices: list[int] = field(default_factory=list)
-
-    @property
-    def priority(self) -> int:
-        return int(self.fields.get('P', 0))
 
     @property
     def loe(self) -> int | None:

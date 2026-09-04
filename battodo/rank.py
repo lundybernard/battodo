@@ -1,15 +1,14 @@
 """Compute an item's rank from its dates and priority (ADR 0005).
 
-Rank replaces the stored, daily-bumped `P`: it is a pure function of the
-file and the clock, so nothing is written to keep it current.
+Rank is a pure function of the file and the clock, so nothing is
+written to keep it current.
 
     rank = multiplier x (1 + age_score + due_score)
 
 An item starts at its multiplier, gains a full multiplier's worth for
 every month it waits, ramps up over the fortnight before it comes due,
-and gains another for every week it is late. Every term is *bounded* --
-that is what the stored `P` lacked, and why an ignored overdue item used
-to grow without limit until priority stopped meaning anything.
+and gains another for every week it is late. Every term is *bounded*,
+so no item outgrows its priority.
 
 Every field is read tolerantly. These files are typed into by hand and
 carry placeholders such as `[DUE:YYYY-MM-DD]`; an unreadable field

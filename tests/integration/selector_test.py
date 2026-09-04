@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from battodo.selection import SelectionError, TaskSelection
+from battodo.selector import SelectionError, TaskSelection
 
 WORK = """# Work
 
@@ -40,7 +40,7 @@ COMPLETED = """# Completed Tasks
 
 
 class TaskSelectionTests(TestCase):
-    """Contract tests for battodo.selection.TaskSelection."""
+    """Contract tests for battodo.selector.TaskSelection."""
 
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
@@ -61,7 +61,8 @@ class TaskSelectionTests(TestCase):
 
         with t.subTest('every todo list, in name order, completed.md aside'):
             t.assertEqual(
-                [path.name for path, _ in lists], ['chores.md', 'work.md']
+                [path.name for path, _ in lists],
+                ['chores.md', 'work.md'],
             )
 
         with t.subTest('each one parsed'):
@@ -114,7 +115,8 @@ class TaskSelectionTests(TestCase):
                 [
                     task.title
                     for task in TaskSelection(
-                        t.dir, 'sand the'
+                        t.dir,
+                        'sand the',
                     ).record.ancestry
                 ],
                 ['Deck rebuild', 'Chip the brush', 'Sand the rails'],
@@ -122,7 +124,8 @@ class TaskSelectionTests(TestCase):
 
         with t.subTest('nothing open matches'):
             t.assertEqual(
-                t.error('Pack tools'), "no open task matches 'Pack tools'"
+                t.error('Pack tools'),
+                "no open task matches 'Pack tools'",
             )
 
         with t.subTest('more than one does'):

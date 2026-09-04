@@ -48,7 +48,8 @@ class RenderedDigestTests(LogDirTests):
 
         with t.subTest('the period, its span, and how much it holds'):
             t.assertIn(
-                'Completed week: 2026-07-30 to 2026-08-05 — 3 done', digest
+                'Completed week: 2026-07-30 to 2026-08-05 — 3 done',
+                digest,
             )
 
         with t.subTest('each category heads its own table'):
@@ -72,7 +73,8 @@ class RenderedDigestTests(LogDirTests):
         with t.subTest('and the month reaches back to its first day'):
             month = t.rendered(t.source, 'month')
             t.assertIn(
-                'Completed month: 2026-08-01 to 2026-08-05 — 2 done', month
+                'Completed month: 2026-08-01 to 2026-08-05 — 2 done',
+                month,
             )
 
         with (

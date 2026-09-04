@@ -18,8 +18,10 @@ from pathlib import Path
 
 from batconf import Configuration
 
+from . import TZ
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .item import build_item, build_item_json
+from .lists import item_count
 from .mutate import (
     add_subtask,
     add_task,
@@ -28,7 +30,7 @@ from .mutate import (
     update_task,
 )
 from .task import Task
-from .view import TZ, Selection, View, item_count
+from .view import Selection, View
 
 __all__ = [
     'DEFAULT_PERIOD',
@@ -200,11 +202,19 @@ def add_item(conf: Configuration, now: datetime) -> str:
     parent = getattr(conf, 'parent', None)
     if parent is None:
         path, entry = add_task(
-            source, conf.list, conf.title, fields, now.date()
+            source,
+            conf.list,
+            conf.title,
+            fields,
+            now.date(),
         )
     else:
         path, entry = add_subtask(
-            source, conf.list, parent, conf.title, fields
+            source,
+            conf.list,
+            parent,
+            conf.title,
+            fields,
         )
     return f'{entry}\n{path}'
 

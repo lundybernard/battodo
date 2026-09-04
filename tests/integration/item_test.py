@@ -11,8 +11,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from battodo import TZ
 from battodo.item import build_item, build_item_json
-from battodo.view import TZ
 
 # Chosen so the rank comes out whole: the task is one month old and one
 # week from due, so urgency is 1 + 1.0 + 0.5 and the rank is 4 x 2.5.

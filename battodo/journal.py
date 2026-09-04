@@ -1,25 +1,23 @@
 """Append-only JSONL event journal, one per source directory.
 
-Envelope follows OpenFrameKeeper's event store (its ADR 0002) so the two
-projects share a vocabulary. `prev_hash`/`hash` are reserved and null in
-v1, and the commit-boundary fields are omitted. A command can append
-several events -- a completion cascade, or a parent stamp beside the
-child that names it -- and nothing marks them as one commit, so a
-partial write is not detectable. Both are additive to add later, needing
-no schema_version bump.
+`prev_hash` and `hash` are reserved and null in v1, and the
+commit-boundary fields are omitted. A command can append several events
+-- a completion cascade, or a parent stamp beside the child that names
+it -- and nothing marks them as one commit, so a partial write is not
+detectable.
 
 While markdown remains authoritative the journal is a *partial* record:
-hand-edits bypass btodo and so bypass this log. Every payload therefore
-carries a full task snapshot, which is what lets a future authority flip
-replay state without having observed each change.
+hand-edits bypass btodo and so bypass this log. Every payload carries a
+full task snapshot, so a later authority flip replays state without
+having observed each change.
 """
 
-import fcntl
-import json
-import os
-import secrets
 from datetime import datetime, timezone
+from fcntl import LOCK_EX, LOCK_UN, flock
+from json import dumps, loads
+from os import fsync
 from pathlib import Path
+from secrets import choice
 from typing import Any
 from uuid import uuid4
 
@@ -32,7 +30,7 @@ ID_LENGTH = 6
 
 def new_task_id() -> str:
     """A short base36 identifier for lazy `[ID:...]` injection."""
-    return ''.join(secrets.choice(ID_ALPHABET) for _ in range(ID_LENGTH))
+    return ''.join(choice(ID_ALPHABET) for _ in range(ID_LENGTH))
 
 
 def _utc_now() -> str:
@@ -50,7 +48,7 @@ class Journal:
         if not self.path.exists():
             return []
         return [
-            json.loads(line)
+            loads(line)
             for line in self.path.read_text().splitlines()
             if line.strip()
         ]
@@ -75,11 +73,11 @@ class Journal:
         recorded_at = _utc_now()
 
         with self.path.open('a+', encoding='utf-8') as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            flock(handle.fileno(), LOCK_EX)
             try:
                 handle.seek(0)
                 existing = [
-                    json.loads(line)
+                    loads(line)
                     for line in handle.read().splitlines()
                     if line.strip()
                 ]
@@ -103,10 +101,10 @@ class Journal:
                     },
                     'payload': payload,
                 }
-                handle.write(json.dumps(event) + '\n')
+                handle.write(dumps(event) + '\n')
                 handle.flush()
-                os.fsync(handle.fileno())
+                fsync(handle.fileno())
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                flock(handle.fileno(), LOCK_UN)
 
         return event

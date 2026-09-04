@@ -239,7 +239,11 @@ class ViewTests(TestCase):
         t.get_terminal_size = autopatch(t, 'get_terminal_size')
         t.get_terminal_size.return_value.columns = 80
         t.Row.side_effect = lambda task, today: row(
-            '4.2', '3.0', '2', str(task), 'OVERDUE'
+            '4.2',
+            '3.0',
+            '2',
+            str(task),
+            'OVERDUE',
         )
 
         t.selection = Mock(spec=['now', 'today', 'active', 'categories'])
@@ -310,7 +314,11 @@ class ViewTests(TestCase):
         # left for titles is the terminal less that.
         long_title = 'A' * 60
         t.Row.side_effect = lambda task, today: row(
-            '4.2', '3.0', '2', long_title, 'OVERDUE'
+            '4.2',
+            '3.0',
+            '2',
+            long_title,
+            'OVERDUE',
         )
         t.v.__dict__.pop('sections')
 
