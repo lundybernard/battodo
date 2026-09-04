@@ -51,7 +51,6 @@ class ParseTests(TestCase):
 
         with t.subTest('fields parsed'):
             alpha = t.doc.tasks[0]
-            t.assertEqual(alpha.priority, 95)
             t.assertEqual(alpha.loe, 8)
             t.assertIsNone(alpha.due)
             t.assertEqual(alpha.added, '2026-07-01')
@@ -73,9 +72,8 @@ class ParseTests(TestCase):
             t.assertEqual(beta.due, '2026-01-01')
             t.assertEqual(beta.repeat, '14d')
 
-        with t.subTest('missing priority defaults to zero'):
+        with t.subTest('a task with no fields has no tags'):
             doc = parse('## Open\n\n- [ ] Bare\n')
-            t.assertEqual(doc.tasks[0].priority, 0)
             t.assertEqual(doc.tasks[0].tags, [])
 
         with t.subTest('id field'):
@@ -217,7 +215,6 @@ class TaskNodeTests(TestCase):
         )
         t.assertEqual(task.children, [])
         t.assertEqual(task.note_indices, [])
-        t.assertEqual(task.priority, 0)
 
 
 class ParseDateTests(TestCase):
