@@ -16,3 +16,4 @@ stands for; its component ADRs take the following numbers.
 | [0013](0013-cutover/) | Cutover to daily driver (requirements only) | Active |
 | [0014](0014-subtask-journal-events.md) | Subtask journal events | Proposed |
 | [0015](0015-config-file-location.md) | Config file location | Accepted |
+| [0016](0016-property-refactor/) | Property refactor (components 0017–0018) | Proposed |
