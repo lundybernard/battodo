@@ -41,6 +41,10 @@ tests, behavioral tests, the linter, and the type checker. The unit
 coverage floor never goes red, at any commit, including the
 intermediate commits inside a slice.
 
+One exception: a declared red commit in the bracket (R4, step 3). It
+fails only the tests it enumerates, each for the stated reason, and
+every other test and the coverage floor stay green.
+
 ### R4 — One bracket per slice
 
 Each slice runs one bracket: pin current behavior in an oracle,
