@@ -12,6 +12,7 @@ from unittest import TestCase
 
 from battodo.parser import (
     TaskNode,
+    TodoDocument,
     TodoFile,
     append_open,
     parse,
@@ -45,13 +46,14 @@ ROLES = """# Roles
 
 
 class ParsedListTests(TestCase):
-    """Characterization tests for the parser surface in battodo.parser."""
+    """Characterization tests for the parser surface, old and new."""
 
     maxDiff = None
 
     def setUp(t) -> None:
         t.doc = parse(ROLES)
         t.first = t.doc.tasks[0]
+        t.td = TodoDocument(ROLES)
 
     def test_parse(t) -> None:
         ret = parse(ROLES)
@@ -111,6 +113,30 @@ class ParsedListTests(TestCase):
 
             t.assertEqual(indices, [7])
 
+        with t.subTest('the object derives the same lines and tasks'):
+            td_lines = t.td.lines
+            td_tasks = t.td.tasks
+
+            t.assertEqual(td_lines, ret.lines)
+            t.assertEqual(td_tasks, ret.tasks)
+
+        with t.subTest('a line no task owns is no note, in both'):
+            cases = {
+                'a comment after a task': (
+                    '## Open\n\n- [ ] First task [P:1]\n<!-- Not a note. -->\n'
+                ),
+                'prose before any task': (
+                    '## Open\n\nProse, before any task.\n- [ ] First task\n'
+                ),
+            }
+
+            for name, text in cases.items():
+                tasks = parse(text).tasks
+                td_tasks = TodoDocument(text).tasks
+
+                t.assertEqual(tasks[0].note_indices, [], name)
+                t.assertEqual(td_tasks[0].note_indices, [], name)
+
     def test_serialize(t) -> None:
         cases = {
             'the fixture list': ROLES,
@@ -122,10 +148,14 @@ class ParsedListTests(TestCase):
         }
 
         for name, text in cases.items():
-            with t.subTest(name):
+            with t.subTest(f'{name}, both implementations'):
+                td = TodoDocument(text)
+
                 ret = serialize(parse(text))
+                td_ret = td.text
 
                 t.assertEqual(ret, text)
+                t.assertEqual(td_ret, text)
 
     def test_set_field(t) -> None:
         raw = '- [ ] First task [P:2] [LOE:1]'
@@ -145,17 +175,24 @@ class ParsedListTests(TestCase):
         }
 
         for name, (edit, expected) in cases.items():
-            with t.subTest(name):
+            with t.subTest(f'{name}, both implementations'):
+                td = TodoDocument(raw)
+
                 ret = set_field(raw, *edit)
+                td_ret = td.set_field(0, *edit)
 
                 t.assertEqual(ret, expected)
+                t.assertEqual(td_ret, expected)
 
         with t.subTest('trailing whitespace is dropped by an append'):
             spaced = '- [ ] First task [P:2]   '
+            td = TodoDocument(spaced)
 
             ret = set_field(spaced, 'ID', 'zz01ab')
+            td_ret = td.set_field(0, 'ID', 'zz01ab')
 
             t.assertEqual(ret, '- [ ] First task [P:2] [ID:zz01ab]')
+            t.assertEqual(td_ret, '- [ ] First task [P:2] [ID:zz01ab]')
 
         with t.subTest('edits chain on an already-edited line'):
             dated = set_field(raw, 'DUE', '2026-08-23')
@@ -184,18 +221,29 @@ class ParsedListTests(TestCase):
         }
 
         for name, ((raw, title), expected) in cases.items():
-            with t.subTest(name):
+            with t.subTest(f'{name}, both implementations'):
+                td = TodoDocument(raw)
+
                 ret = set_title(raw, title)
+                td_ret = td.set_title(0, title)
 
                 t.assertEqual(ret, expected)
+                t.assertEqual(td_ret, expected)
 
-        with t.subTest('a line that is not a task is rejected'):
+        with t.subTest('a line that is not a task is rejected, by both'):
             note = t.doc.lines[7]
+            td = TodoDocument(note)
 
             with t.assertRaises(ValueError) as caught:
                 set_title(note, 'Second task')
 
+            with t.assertRaises(ValueError) as td_caught:
+                td.set_title(0, 'Second task')
+
             t.assertEqual(str(caught.exception), f'not a task line: {note!r}')
+            t.assertEqual(
+                str(td_caught.exception), f'not a task line: {note!r}'
+            )
 
     def test_append_open(t) -> None:
         entry = '- [ ] Added task [P:1]'
@@ -211,21 +259,35 @@ class ParsedListTests(TestCase):
         with t.subTest('the argument list is left alone'):
             t.assertEqual(t.doc.lines, ROLES.split('\n'))
 
+        with t.subTest('the object inserts it at the same index'):
+            expected = append_open(t.doc.lines, entry)
+
+            td_ret = t.td.append_open(entry)
+
+            t.assertEqual(td_ret, 13)
+            t.assertEqual(t.td.lines, expected)
+
         with t.subTest('an empty section takes the entry under its heading'):
             empty = ['# Roles', '', '## Open', '', '## Done']
+            td = TodoDocument('\n'.join(empty))
 
             ret = append_open(empty, entry)
+            td_ret = td.append_open(entry)
 
             t.assertEqual(
                 ret,
                 ['# Roles', '', '## Open', entry, '', '## Done'],
             )
+            t.assertEqual(td_ret, 3)
 
-        with (
-            t.subTest('a file with no open section raises'),
-            t.assertRaises(StopIteration),
-        ):
-            append_open(['# Roles', '', '## Done'], entry)
+        with t.subTest('a file with no open section raises, in both'):
+            td = TodoDocument('# Roles\n\n## Done')
+
+            with t.assertRaises(StopIteration):
+                append_open(['# Roles', '', '## Done'], entry)
+
+            with t.assertRaises(StopIteration):
+                td.append_open(entry)
 
     def test_task_node(t) -> None:
         checked = t.doc.tasks[2]
@@ -252,14 +314,15 @@ class ParsedListTests(TestCase):
             t.assertTrue(child.is_subtask)
             t.assertFalse(checklist.is_subtask)
 
-        with t.subTest('#51: a non-integer effort raises, it does not read'):
-            with t.assertRaises(ValueError) as caught:
-                _ = t.doc.tasks[1].loe
+        with t.subTest('#51: a non-integer effort raises in both, unread'):
+            for task in (t.doc.tasks[1], t.td.tasks[1]):
+                with t.assertRaises(ValueError) as caught:
+                    _ = task.loe
 
-            t.assertEqual(
-                str(caught.exception),
-                "invalid literal for int() with base 10: '?'",
-            )
+                t.assertEqual(
+                    str(caught.exception),
+                    "invalid literal for int() with base 10: '?'",
+                )
 
         with t.subTest('a hand-built node has no children and no notes'):
             node = TaskNode(
@@ -285,3 +348,10 @@ class ParsedListTests(TestCase):
             ret = TodoFile(lines=[])
 
             t.assertEqual(ret.tasks, [])
+
+        with t.subTest('the object serializes from the same lines'):
+            expected = serialize(t.doc)
+
+            td_ret = t.td.text
+
+            t.assertEqual(td_ret, expected)
