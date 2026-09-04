@@ -14,11 +14,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.view import (
-    TZ,
-    Selection,
-    View,
-)
+from battodo import TZ
+from battodo.view import Selection, View
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
