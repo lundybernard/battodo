@@ -220,8 +220,12 @@ class RenderItemTests(TestCase):
             )
 
 
-class BuildItemTests(TestCase):
-    """Unit tests for battodo.item.build_item."""
+class ItemBuildTests(TestCase):
+    """Base: the selection, the data builder and the renderers stand in.
+
+    Both builders resolve the same selection and hand the same data on,
+    so the stand-ins are shared and the assertions are not.
+    """
 
     TaskSelection: MagicMock
     item_data: MagicMock
@@ -240,6 +244,10 @@ class BuildItemTests(TestCase):
         t.record = MagicMock(spec=['path', 'task'])
         t.TaskSelection.return_value.record = t.record
 
+
+class BuildItemTests(ItemBuildTests):
+    """Unit tests for battodo.item.build_item."""
+
     def test_build_item(t) -> None:
         result = build_item(t.directory, 'deck', t.now)
 
@@ -252,6 +260,10 @@ class BuildItemTests(TestCase):
         with t.subTest('the rendered text is what comes back'):
             t.render_item.assert_called_with(t.item_data.return_value)
             t.assertEqual(result, t.render_item.return_value)
+
+
+class BuildItemJsonTests(ItemBuildTests):
+    """Unit tests for battodo.item.build_item_json."""
 
     def test_build_item_json(t) -> None:
         result = build_item_json(t.directory, 'deck', t.now)
