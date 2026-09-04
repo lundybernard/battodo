@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo
 
 from .render import Row, Table, View, due_label
 from .selection import (
-    COUNT_ERROR,
     RANK_PLACES,
     TOP_N,
     Category,
@@ -21,9 +20,6 @@ from .selection import (
     SourceError,
     TodoList,
     active_categories,
-    category_order,
-    discover_lists,
-    item_count,
     open_children,
     parse,
     sort_key,

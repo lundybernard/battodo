@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import Journal, new_task_id
+from .lists import discover_lists
 from .parser import (
     OPEN_HEADING,
     TaskNode,
@@ -43,7 +44,6 @@ from .parser import (
 )
 from .repeat import next_due
 from .selection import TaskRecord, TaskSelection
-from .view import discover_lists
 
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
