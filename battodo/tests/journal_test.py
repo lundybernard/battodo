@@ -37,7 +37,7 @@ class NewTaskIdTests(TestCase):
             )
 
 
-class JournalIsolationTests(TestCase):
+class JournalTests(TestCase):
     """Unit tests for battodo.journal.Journal.
 
     The journal with its file, its lock and its clock stood in for.

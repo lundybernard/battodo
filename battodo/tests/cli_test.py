@@ -572,7 +572,7 @@ class CommandsScratchTests(ClockTests):
             t.print.assert_called_once_with(t.scratch_item.return_value)
 
 
-class CommandsTests(TestCase):
+class CommandsSetLogLevelTests(TestCase):
     """Unit tests for battodo.cli.Commands.set_log_level."""
 
     @patch(f'{SRC}.log', autospec=True)
