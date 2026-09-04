@@ -7,7 +7,7 @@ item, not a row in a table.
 
 Values are derived, not stored: `P` reads as the 0-5 multiplier
 `view` shows, so the same task reads the same way in either command.
-`selection` supplies the lookup, so the reach of a selector is one
+`selector` supplies the lookup, so the reach of a selector is one
 rule, not two.
 """
 
@@ -18,7 +18,7 @@ from typing import Any
 
 from .parser import TaskNode
 from .rank import multiplier, rank
-from .selection import TaskSelection
+from .selector import TaskSelection
 from .view import RANK_PLACES
 
 INDENT = '  '

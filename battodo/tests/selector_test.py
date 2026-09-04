@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from ..selection import (
+from ..selector import (
     SelectionError,
     TaskNode,
     TaskRecord,
@@ -10,11 +10,11 @@ from ..selection import (
     TodoFile,
 )
 
-SRC = 'battodo.selection'
+SRC = 'battodo.selector'
 
 
 class TaskSelectionTests(TestCase):
-    """Unit tests for battodo.selection.TaskSelection."""
+    """Unit tests for battodo.selector.TaskSelection."""
 
     discover_lists: MagicMock
     parse: MagicMock

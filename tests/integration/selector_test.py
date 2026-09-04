@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from battodo.selection import SelectionError, TaskSelection
+from battodo.selector import SelectionError, TaskSelection
 
 WORK = """# Work
 
@@ -40,7 +40,7 @@ COMPLETED = """# Completed Tasks
 
 
 class TaskSelectionTests(TestCase):
-    """Contract tests for battodo.selection.TaskSelection."""
+    """Contract tests for battodo.selector.TaskSelection."""
 
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()

@@ -43,7 +43,7 @@ from .parser import (
     set_title,
 )
 from .repeat import next_due
-from .selection import TaskRecord, TaskSelection
+from .selector import TaskRecord, TaskSelection
 
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
