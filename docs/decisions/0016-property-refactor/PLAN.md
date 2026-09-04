@@ -124,16 +124,14 @@ Filed as follow-ups rather than absorbed:
 - Type annotations on the CLI module, which belong upstream as
   template feedback.
 
-## Issue-tracker writes held for approval
+## Issue tracker
 
-None of these go out before the owner approves this plan:
-
-- File the tolerant-read bug: a non-integer level-of-effort value
-  raises in the parser and the whole view exits.
-- File the undeclared-configuration-inputs gap.
-- Re-scope #28 to the assertion-layer remainder.
-- Make #32 the tracking issue, carrying this slice list.
-- Note #43 and #47 as absorbed into slices 1 and 5.
+- #32 tracks the refactor and carries this slice list.
+- #51 records the tolerant-read bug: a non-integer level-of-effort
+  value raises in the parser and the whole view exits.
+- #52 records the undeclared-configuration-inputs gap.
+- #28 is re-scoped to the assertion-layer remainder (slice 0).
+- #43 rides in slice 1 and #47 in slice 5.
 
 ## Risks
 
