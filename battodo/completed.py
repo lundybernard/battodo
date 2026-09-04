@@ -23,9 +23,9 @@ from typing import Any
 
 from batconf import Configuration
 
+from .lists import category_order
 from .mutate import COMPLETED_LOG, DONE_STATUS
 from .parser import FIELD_RE, parse_date
-from .view import category_order
 
 # The field separator a completion is written with. The log's name and
 # its statuses come from `mutate`, which writes them.

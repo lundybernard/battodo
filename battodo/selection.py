@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
+from .lists import discover_lists
 from .parser import TaskNode, TodoFile, parse
-from .view import discover_lists
 
 
 class SelectionError(Exception):

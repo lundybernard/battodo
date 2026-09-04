@@ -23,6 +23,7 @@ from pathlib import Path
 
 from batconf import Configuration
 
+from ..lists import CATEGORY_ORDER, category_order, discover_lists, item_count
 from ..parser import OPEN_HEADING, TaskNode, TodoFile, parse, parse_date
 from ..rank import multiplier, rank
 
@@ -38,7 +39,6 @@ class SourceError(Exception):
 
 
 ALWAYS_ACTIVE = frozenset({'study', 'career', 'events'})
-CATEGORY_ORDER = ['work', 'chores', 'study', 'career', 'events']
 NO_DUE_SORTS_LAST = 'zzzz'
 # A list carrying this marker anywhere is parked: still discovered, so
 # mutations reach it, but never surfaced in a view (ADR 0005).
@@ -47,22 +47,6 @@ PARKED_MARKER = 'battodo:parked'
 TOP_N = 5
 # How many decimal places a published rank carries.
 RANK_PLACES = 2
-# What a rejected item count reports, wherever it was configured.
-COUNT_ERROR = 'the item count must be a whole number of 1 or more'
-
-
-def item_count(value: str) -> int:
-    """Decode a count of items, from whichever source configured it.
-
-    Raises
-    ------
-    ValueError
-        The value is not a whole number of one or more.
-    """
-    count = int(value) if value.isdecimal() else 0
-    if count < 1:
-        raise ValueError(f'{COUNT_ERROR}: {value}')
-    return count
 
 
 def active_categories(now: datetime) -> set[str]:
@@ -77,26 +61,6 @@ def active_categories(now: datetime) -> set[str]:
     if not is_weekday and 10 <= hour < 20:
         active.add('chores')
     return active
-
-
-def discover_lists(directory: Path) -> list[Path]:
-    """Every markdown file in `directory` that is a todo list.
-
-    The predicate is the presence of a `## Open` heading. This is what
-    fixes the hard-coded five-category bug: ad-hoc lists such as
-    backlog.md are picked up, while SCHEMA.md, CLAUDE.md, and the
-    differently-formatted completed.md are excluded.
-
-    Parked lists are included -- opting out of *views* is not opting out
-    of existing, and a mutation must still reach them.
-    """
-    if not directory.is_dir():
-        return []
-    return sorted(
-        path
-        for path in directory.glob('*.md')
-        if OPEN_HEADING in path.read_text()
-    )
 
 
 def visible_tasks(doc: TodoFile, today: date) -> list[TaskNode]:
@@ -118,20 +82,6 @@ def sort_key(task: TaskNode, today: date) -> tuple[float, str, str]:
         -rank(task, today),
         task.due or NO_DUE_SORTS_LAST,
         task.title,
-    )
-
-
-def category_order(name: str) -> tuple[int, str]:
-    """Where a category sorts among the others.
-
-    The named categories lead, in their own order; everything else
-    follows alphabetically, which is the only order an ad-hoc list can
-    be given.
-    """
-    known = name in CATEGORY_ORDER
-    return (
-        CATEGORY_ORDER.index(name) if known else len(CATEGORY_ORDER),
-        name,
     )
 
 
