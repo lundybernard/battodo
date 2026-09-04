@@ -3,7 +3,6 @@ from argparse import ArgumentParser, ArgumentTypeError
 from datetime import datetime
 from logging import DEBUG, ERROR, INFO, getLogger
 from logging.config import dictConfig
-from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.lib import (
@@ -47,8 +46,8 @@ def BATCLI(ARGS=None):
     # dump is left to argparse, which owns actual usage errors.
     except Exception as exp:  # noqa: BLE001
         print(exp, file=sys.stderr)
-        exit(1)
-    exit(0)
+        sys.exit(1)
+    sys.exit(0)
 
 
 def argparser():
