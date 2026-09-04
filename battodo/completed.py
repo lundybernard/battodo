@@ -205,7 +205,8 @@ class Digest:
     def groups(self) -> list[Group]:
         """The records by category, in the order a view shows them."""
         names = sorted(
-            {record.category for record in self.records}, key=category_order
+            {record.category for record in self.records},
+            key=category_order,
         )
         return [
             Group(

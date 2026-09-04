@@ -95,7 +95,8 @@ class JournalTests(TestCase):
 
         with t.subTest('the journal directory is made before the write'):
             t.file.parent.mkdir.assert_called_once_with(
-                parents=True, exist_ok=True
+                parents=True,
+                exist_ok=True,
             )
 
         with t.subTest('the envelope carries the event and its metadata'):

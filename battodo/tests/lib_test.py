@@ -99,7 +99,8 @@ class GetCompletedTests(TestCase):
         conf = Mock(spec=['view'])
 
         t.assertEqual(
-            get_completed(conf, t.now), t.DigestView.return_value.text
+            get_completed(conf, t.now),
+            t.DigestView.return_value.text,
         )
 
 

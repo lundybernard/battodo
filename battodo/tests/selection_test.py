@@ -133,7 +133,8 @@ class TaskSelectionTests(TestCase):
             selection = TaskSelection(t.dir, 'Checked subtask')
             selection.records = []
             t.assertEqual(
-                t.error(selection), "no open task matches 'Checked subtask'"
+                t.error(selection),
+                "no open task matches 'Checked subtask'",
             )
 
         with t.subTest('more than one does'):

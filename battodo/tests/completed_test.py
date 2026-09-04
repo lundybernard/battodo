@@ -58,7 +58,8 @@ class ReadRecordTests(TestCase):
         for name, (line, title) in titles.items():
             with t.subTest(name):
                 t.assertEqual(
-                    read_record(line), Record(date(2026, 8, 4), 'work', title)
+                    read_record(line),
+                    Record(date(2026, 8, 4), 'work', title),
                 )
 
     def test_skipped(t) -> None:
@@ -89,7 +90,8 @@ class RecordTests(TestCase):
 
     def test_entry(t) -> None:
         t.assertEqual(
-            t.r.entry, {'date': '2026-08-04', 'title': 'A parent > A record'}
+            t.r.entry,
+            {'date': '2026-08-04', 'title': 'A parent > A record'},
         )
 
 
@@ -107,7 +109,8 @@ class GroupTests(TestCase):
 
     def test_entries(t) -> None:
         t.assertEqual(
-            t.g.entries, [{'date': '2026-08-04', 'title': 'A record'}]
+            t.g.entries,
+            [{'date': '2026-08-04', 'title': 'A record'}],
         )
 
 
@@ -180,13 +183,15 @@ class DigestTests(TestCase):
         with t.subTest('a shorter period holds fewer of them'):
             digest = Digest(t.directory, NOW, period='today')
             t.assertEqual(
-                [found.title for found in digest.records], ['Completed today']
+                [found.title for found in digest.records],
+                ['Completed today'],
             )
 
     def test_groups(t) -> None:
         with t.subTest('one group per category, in the view order'):
             t.assertEqual(
-                [group.name for group in t.d.groups], ['work', 'unlisted']
+                [group.name for group in t.d.groups],
+                ['work', 'unlisted'],
             )
 
         with t.subTest('each holding its own records'):
@@ -308,7 +313,9 @@ class DigestViewTests(TestCase):
         t.records = [
             Record(date(2026, 7, 30), 'work', 'A record of the week'),
             Record(
-                date(2026, 8, 2), 'unlisted', 'A record of another category'
+                date(2026, 8, 2),
+                'unlisted',
+                'A record of another category',
             ),
         ]
         t.digest = Mock(spec=Digest)
@@ -333,13 +340,15 @@ class DigestViewTests(TestCase):
 
     def test_header(t) -> None:
         t.assertEqual(
-            t.v.header, 'Completed week: 2026-07-30 to 2026-08-05 — 2 done'
+            t.v.header,
+            'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
         )
 
     def test_widths(t) -> None:
         with t.subTest('each column as wide as its widest cell'):
             t.assertEqual(
-                t.v.widths, [10, len('A record of another category')]
+                t.v.widths,
+                [10, len('A record of another category')],
             )
 
         with t.subTest('the column name counts too'):

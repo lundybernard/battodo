@@ -129,7 +129,8 @@ class Table:
         """Pad and align one row's cells. Trailing space is stripped."""
         padded = list(cells)
         padded[TASK_COLUMN] = clip(
-            padded[TASK_COLUMN], self.widths[TASK_COLUMN]
+            padded[TASK_COLUMN],
+            self.widths[TASK_COLUMN],
         )
         laid = (
             f'{cell:{align}{size}}'
@@ -194,7 +195,8 @@ class View:
         ]
         room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
         widths[TASK_COLUMN] = max(
-            MIN_TASK_WIDTH, min(widths[TASK_COLUMN], room)
+            MIN_TASK_WIDTH,
+            min(widths[TASK_COLUMN], room),
         )
         return widths
 

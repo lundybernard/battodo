@@ -200,11 +200,19 @@ def add_item(conf: Configuration, now: datetime) -> str:
     parent = getattr(conf, 'parent', None)
     if parent is None:
         path, entry = add_task(
-            source, conf.list, conf.title, fields, now.date()
+            source,
+            conf.list,
+            conf.title,
+            fields,
+            now.date(),
         )
     else:
         path, entry = add_subtask(
-            source, conf.list, parent, conf.title, fields
+            source,
+            conf.list,
+            parent,
+            conf.title,
+            fields,
         )
     return f'{entry}\n{path}'
 

@@ -50,7 +50,8 @@ def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
     path = source / f'{name}.md'
     body = '\n'.join(items)
     path.write_text(
-        f'# {name}\n\n{marker}## Open\n\n{body}\n', encoding='utf-8'
+        f'# {name}\n\n{marker}## Open\n\n{body}\n',
+        encoding='utf-8',
     )
     return path
 
@@ -64,7 +65,10 @@ class DiscoverListsTests(TestCase):
     def test_lists(t) -> None:
         career = write(t.source, 'career', '- [ ] A visible task [P:2]')
         study = write(
-            t.source, 'study', '- [ ] A parked task [P:2]', parked=True
+            t.source,
+            'study',
+            '- [ ] A parked task [P:2]',
+            parked=True,
         )
 
         # Every list is found, in name order.
@@ -190,7 +194,10 @@ class RenderedViewTests(TestCase):
 
             with t.subTest('though a list that opted out stays out even then'):
                 write(
-                    source, 'backlog', '- [ ] A parked task [P:4]', parked=True
+                    source,
+                    'backlog',
+                    '- [ ] A parked task [P:4]',
+                    parked=True,
                 )
                 out = View(Selection(source, NOW, show_all=True), 80).text
                 t.assertNotIn('A parked task', out)
@@ -214,7 +221,9 @@ class SelectionDocumentTests(TestCase):
 
     def test_json(t) -> None:
         write(
-            t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
+            t.source,
+            'career',
+            *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)),
         )
         abridged = loads(Selection(t.source, NOW, show_all=False).json)
 

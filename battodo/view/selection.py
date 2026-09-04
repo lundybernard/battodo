@@ -195,7 +195,10 @@ class Category:
     """One list's place in a view: what it shows, and what it holds back."""
 
     def __init__(
-        self, name: str, tasks: list[TaskNode], limit: int | None
+        self,
+        name: str,
+        tasks: list[TaskNode],
+        limit: int | None,
     ) -> None:
         self.name = name
         self.tasks = tasks
