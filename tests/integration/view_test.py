@@ -46,6 +46,11 @@ class SourceDirTests(TestCase):
         )
         return path
 
+    def reset(t) -> None:
+        """No lists in the source directory, for the next subtest."""
+        for path in t.source.glob('*.md'):
+            path.unlink()
+
 
 class DiscoverListsTests(SourceDirTests):
     def test_discover_lists(t) -> None:
@@ -67,7 +72,9 @@ class DiscoverListsTests(SourceDirTests):
 
 
 class RenderedViewTests(SourceDirTests):
-    def test_a_parked_list_does_not_end_the_scan(t) -> None:
+    """Contract tests for battodo.view.View.text."""
+
+    def test_text(t) -> None:
         # The parked list sorts first. The scan must step over it,
         # not stop at it.
         t.write('study', '- [ ] A parked task [P:5]', parked=True)
@@ -85,8 +92,8 @@ class RenderedViewTests(SourceDirTests):
         with t.subTest('and so is the last one'):
             t.assertIn('The last task of all', out)
 
-    def test_a_list_with_nothing_to_show_is_skipped(t) -> None:
         # A list gets a table only when it has open items.
+        t.reset()
         t.write('career')
         t.write('events', '- [x] A completed task [P:3]')
         t.write('backlog', '- [ ] A visible task [P:2]')
@@ -102,7 +109,7 @@ class RenderedViewTests(SourceDirTests):
         with t.subTest('a list with something to show still renders'):
             t.assertIn('Backlog', out)
 
-    def test_top_n(t) -> None:
+        t.reset()
         t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
 
         with t.subTest('five items, and a count of what is held back'):
@@ -123,7 +130,7 @@ class RenderedViewTests(SourceDirTests):
             t.assertIn('Item 7', out)
             t.assertNotIn('… and', out)
 
-    def test_width(t) -> None:
+        t.reset()
         t.write('career', f'- [ ] {LONG_TITLE} [P:3]')
         narrow = View(Selection(t.source, NOW, show_all=False), 60).text
         wide = View(Selection(t.source, NOW, show_all=False), 120).text
@@ -149,7 +156,7 @@ class RenderedViewTests(SourceDirTests):
                     probed = View(selection).text
                 t.assertEqual(probed, expected)
 
-    def test_an_inactive_category(t) -> None:
+        t.reset()
         t.write('chores', '- [ ] An inactive category task [P:3]')
         t.write('career', '- [ ] An active category task [P:2]')
 
@@ -176,11 +183,13 @@ class RenderedViewTests(SourceDirTests):
 
 
 class SelectionDocumentTests(SourceDirTests):
+    """Contract tests for battodo.view.Selection.json."""
+
     def categories(t, **kwargs: object) -> list[dict]:
         selection = Selection(t.source, NOW, **kwargs)  # type: ignore[arg-type]
         return loads(selection.json)['categories']
 
-    def test_top_n(t) -> None:
+    def test_json(t) -> None:
         t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
         abridged = loads(Selection(t.source, NOW, show_all=False).json)
 
@@ -209,11 +218,10 @@ class SelectionDocumentTests(SourceDirTests):
         with t.subTest('and says none are when it is holding nothing back'):
             t.assertEqual(t.categories(show_all=True)[0]['hidden'], 0)
 
-    def test_rank_is_rounded(t) -> None:
         # Seven days over a 30-day scale is a repeating fraction, so
         # the raw rank has more decimals than the document publishes.
+        t.reset()
         t.write('career', '- [ ] A fractional rank task [ADDED:2026-07-29]')
-
         task = t.categories(show_all=False)[0]['tasks'][0]
 
         with t.subTest('the published rank carries two decimal places'):
@@ -222,12 +230,11 @@ class SelectionDocumentTests(SourceDirTests):
         with t.subTest('which is not the raw computation'):
             t.assertNotEqual(task['rank'], 1 + 7 / 30)
 
-    def test_the_document_is_pretty_printed(t) -> None:
+        t.reset()
         t.write('career', '- [ ] A single task [P:2]')
-
         lines = Selection(t.source, NOW, show_all=False).json.split('\n')
 
-        with t.subTest('it spans more than one line'):
+        with t.subTest('the document spans more than one line'):
             t.assertGreater(len(lines), 1)
 
         with t.subTest('and is indented two spaces to the level'):
