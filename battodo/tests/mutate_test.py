@@ -436,7 +436,7 @@ class FileIsolatedTests(TestCase):
         return t.log_handle.write.call_args[0][0]
 
 
-class AddTaskIsolationTests(FileIsolatedTests):
+class AddTaskTests(FileIsolatedTests):
     """Unit tests for battodo.mutate.add_task."""
 
     TARGETS = (*FileIsolatedTests.TARGETS, '_resolve_list')
@@ -493,7 +493,7 @@ class AddTaskIsolationTests(FileIsolatedTests):
             t.append.assert_not_called()
 
 
-class CompleteIsolationTests(FileIsolatedTests):
+class CompleteTests(FileIsolatedTests):
     """Unit tests for battodo.mutate.complete."""
 
     TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
@@ -605,7 +605,7 @@ class CompleteIsolationTests(FileIsolatedTests):
             )
 
 
-class ScratchIsolationTests(FileIsolatedTests):
+class ScratchTests(FileIsolatedTests):
     """Unit tests for battodo.mutate.scratch."""
 
     TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
