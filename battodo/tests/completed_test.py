@@ -31,11 +31,6 @@ LOG = """\
 WIDTHS = [10, 20]
 
 
-def record(day: str, category: str = 'work', title: str = 'A task') -> Record:
-    """One DONE record, dated `day`."""
-    return Record(date.fromisoformat(day), category, title)
-
-
 class ReadRecordTests(TestCase):
     """Unit tests for battodo.completed.read_record."""
 
@@ -86,7 +81,7 @@ class RecordTests(TestCase):
     """Unit tests for battodo.completed.Record."""
 
     def setUp(t) -> None:
-        t.r = record('2026-08-04', 'chores', 'Deck > Chip it')
+        t.r = Record(date(2026, 8, 4), 'chores', 'Deck > Chip it')
 
     def test_cells(t) -> None:
         t.assertEqual(t.r.cells, ('2026-08-04', 'Deck > Chip it'))
@@ -101,14 +96,17 @@ class GroupTests(TestCase):
     """Unit tests for battodo.completed.Group."""
 
     def setUp(t) -> None:
-        t.g = Group('side-quests', [record('2026-08-04', title='Wash it')])
+        t.g = Group(
+            'side-quests',
+            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
+        )
 
     def test_title(t) -> None:
         t.assertEqual(t.g.title, 'Side quests')
 
     def test_entries(t) -> None:
         t.assertEqual(
-            t.g.entries, [{'date': '2026-08-04', 'title': 'Wash it'}]
+            t.g.entries, [{'date': '2026-08-04', 'title': 'A record'}]
         )
 
 
@@ -279,7 +277,7 @@ class TableTests(TestCase):
     """Unit tests for battodo.completed.Table."""
 
     def setUp(t) -> None:
-        t.group = Group('work', [record('2026-08-05', title='Ship it')])
+        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
         t.table = Table(t.group, WIDTHS)
 
     def test_heading(t) -> None:
@@ -312,9 +310,11 @@ class DigestViewTests(TestCase):
 
     def setUp(t) -> None:
         t.records = [
-            record('2026-07-30', title='A record of the week'),
-            record(
-                '2026-08-02', 'unlisted', title='A record of another category'
+            Record(date(2026, 7, 30), 'work', 'A record of the week'),
+            Record(
+                date(2026, 8, 2),
+                'unlisted',
+                'A record of another category',
             ),
         ]
         t.digest = Mock(spec=Digest)
@@ -349,7 +349,7 @@ class DigestViewTests(TestCase):
             )
 
         with t.subTest('the column name counts too'):
-            t.digest.records = [record('2026-08-05', title='Go')]
+            t.digest.records = [Record(date(2026, 8, 5), 'work', 'Go')]
             t.assertEqual(DigestView(t.digest).widths, [10, len('TASK')])
 
     def test_tables(t) -> None:

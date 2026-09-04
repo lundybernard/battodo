@@ -16,31 +16,6 @@ SRC = 'battodo.item'
 TODAY = date(2026, 8, 5)
 
 
-def task(title: str, **fields: str) -> TaskNode:
-    """A top-level open task carrying `fields`."""
-    return TaskNode(
-        raw_index=0,
-        indent=0,
-        done=False,
-        title=title,
-        fields=fields,
-    )
-
-
-def entry(title: str, **overrides: object) -> dict[str, object]:
-    """One subtask as `item_data` records it."""
-    return {
-        'id': None,
-        'title': title,
-        'done': False,
-        'loe': None,
-        'due': None,
-        'tags': [],
-        'subtasks': [],
-        **overrides,
-    }
-
-
 class SubtaskEntryTests(TestCase):
     """Unit tests for battodo.item.subtask_entry."""
 
@@ -64,22 +39,43 @@ class SubtaskEntryTests(TestCase):
         with t.subTest('the stored fields, and the children below it'):
             t.assertEqual(
                 subtask_entry(child),
-                entry(
-                    'Chip the brush',
-                    id='abc123',
-                    loe=2,
-                    tags=['yard', 'summer'],
-                    subtasks=[
-                        entry('Buy the lumber', done=True, due='2026-09-01')
+                {
+                    'id': 'abc123',
+                    'title': 'Chip the brush',
+                    'done': False,
+                    'loe': 2,
+                    'due': None,
+                    'tags': ['yard', 'summer'],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Buy the lumber',
+                            'done': True,
+                            'loe': None,
+                            'due': '2026-09-01',
+                            'tags': [],
+                            'subtasks': [],
+                        }
                     ],
-                ),
+                },
             )
 
         with t.subTest('a checklist item carries no field at all'):
             plain = TaskNode(
                 raw_index=1, indent=2, done=False, title='Sweep', fields={}
             )
-            t.assertEqual(subtask_entry(plain), entry('Sweep'))
+            t.assertEqual(
+                subtask_entry(plain),
+                {
+                    'id': None,
+                    'title': 'Sweep',
+                    'done': False,
+                    'loe': None,
+                    'due': None,
+                    'tags': [],
+                    'subtasks': [],
+                },
+            )
 
 
 class ItemDataTests(TestCase):
@@ -87,25 +83,30 @@ class ItemDataTests(TestCase):
 
     def test_item_data(t) -> None:
         with t.subTest('the list, the stored fields, and the children'):
-            subject = task(
-                'Deck rebuild',
-                P='4',
-                LOE='8',
-                DUE='2026-08-12',
-                REPEAT='30d',
-                TAGS='yard,summer',
-                ADDED='2026-07-06',
-                ID='9o71lx',
+            subject = TaskNode(
+                raw_index=0,
+                indent=0,
+                done=False,
+                title='Deck rebuild',
+                fields={
+                    'P': '4',
+                    'LOE': '8',
+                    'DUE': '2026-08-12',
+                    'REPEAT': '30d',
+                    'TAGS': 'yard,summer',
+                    'ADDED': '2026-07-06',
+                    'ID': '9o71lx',
+                },
+                children=[
+                    TaskNode(
+                        raw_index=1,
+                        indent=2,
+                        done=False,
+                        title='Sweep',
+                        fields={},
+                    )
+                ],
             )
-            subject.children = [
-                TaskNode(
-                    raw_index=1,
-                    indent=2,
-                    done=False,
-                    title='Sweep',
-                    fields={},
-                )
-            ]
 
             t.assertEqual(
                 item_data(Path('/source-dir/a-list.md'), subject, TODAY),
@@ -122,13 +123,33 @@ class ItemDataTests(TestCase):
                     'added': '2026-07-06',
                     'repeat': '30d',
                     'tags': ['yard', 'summer'],
-                    'subtasks': [entry('Sweep')],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Sweep',
+                            'done': False,
+                            'loe': None,
+                            'due': None,
+                            'tags': [],
+                            'subtasks': [],
+                        }
+                    ],
                 },
             )
 
         with t.subTest('an unfielded task reads as absent, not as zero'):
             t.assertEqual(
-                item_data(Path('/source-dir/a-list.md'), task('Bare'), TODAY),
+                item_data(
+                    Path('/source-dir/a-list.md'),
+                    TaskNode(
+                        raw_index=0,
+                        indent=0,
+                        done=False,
+                        title='Bare',
+                        fields={},
+                    ),
+                    TODAY,
+                ),
                 {
                     'list': 'a-list',
                     'id': None,
@@ -198,14 +219,25 @@ class RenderItemTests(TestCase):
 
         with t.subTest('children follow, indented, in SCHEMA.md markup'):
             t.data['subtasks'] = [
-                entry(
-                    'Chip the brush',
-                    id='abc123',
-                    loe=2,
-                    due='2026-09-01',
-                    tags=['yard'],
-                    subtasks=[entry('Buy the lumber', done=True)],
-                )
+                {
+                    'id': 'abc123',
+                    'title': 'Chip the brush',
+                    'done': False,
+                    'loe': 2,
+                    'due': '2026-09-01',
+                    'tags': ['yard'],
+                    'subtasks': [
+                        {
+                            'id': None,
+                            'title': 'Buy the lumber',
+                            'done': True,
+                            'loe': None,
+                            'due': None,
+                            'tags': [],
+                            'subtasks': [],
+                        }
+                    ],
+                }
             ]
             t.assertEqual(
                 render_item(t.data).splitlines()[-3:],

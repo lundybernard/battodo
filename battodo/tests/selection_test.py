@@ -13,23 +13,6 @@ from ..selection import (
 SRC = 'battodo.selection'
 
 
-def task(
-    title: str,
-    done: bool = False,
-    children: list[TaskNode] | None = None,
-    **fields: str,
-) -> TaskNode:
-    """A task carrying `fields`, over the children it owns."""
-    return TaskNode(
-        raw_index=0,
-        indent=0,
-        done=done,
-        title=title,
-        fields=fields,
-        children=children or [],
-    )
-
-
 class TaskSelectionTests(TestCase):
     """Unit tests for battodo.selection.TaskSelection."""
 
@@ -49,13 +32,42 @@ class TaskSelectionTests(TestCase):
         # One list holding every case the lookup distinguishes: an id, a
         # child no id is stamped on, a checked task, three titles
         # sharing a letter, and a title that quotes another task's id.
-        t.child = task('Subtask below it')
-        t.checked = task('Checked subtask', done=True)
-        t.parent = task(
-            'Branch task', ID='9o71lx', children=[t.child, t.checked]
+        t.child = TaskNode(
+            raw_index=1,
+            indent=2,
+            done=False,
+            title='Subtask below it',
+            fields={},
         )
-        t.sibling = task('Bare top-level task')
-        t.quoting = task('Title quoting 9o71lx')
+        t.checked = TaskNode(
+            raw_index=2,
+            indent=2,
+            done=True,
+            title='Checked subtask',
+            fields={},
+        )
+        t.parent = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='Branch task',
+            fields={'ID': '9o71lx'},
+            children=[t.child, t.checked],
+        )
+        t.sibling = TaskNode(
+            raw_index=3,
+            indent=0,
+            done=False,
+            title='Bare top-level task',
+            fields={},
+        )
+        t.quoting = TaskNode(
+            raw_index=4,
+            indent=0,
+            done=False,
+            title='Title quoting 9o71lx',
+            fields={},
+        )
         t.doc = TodoFile([], [t.parent, t.sibling, t.quoting])
 
         t.ts = TaskSelection(t.dir, 'b')
