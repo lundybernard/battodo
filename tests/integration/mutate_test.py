@@ -378,6 +378,8 @@ LIST = """# Work
 
 
 class BackfillFileTests(TestCase):
+    """Contract tests for battodo.mutate.backfill_file."""
+
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -464,6 +466,8 @@ class BackfillFileTests(TestCase):
 
 
 class BackfillAllTests(TestCase):
+    """Contract tests for battodo.mutate.backfill_all."""
+
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
@@ -595,6 +599,8 @@ class MutationTests(TestCase):
 
 
 class CompleteTests(MutationTests):
+    """Contract tests for battodo.mutate.complete."""
+
     def test_complete(t) -> None:
         with t.subTest('a finished top-level task loses its whole block'):
             complete(t.dir, 'Chip the brush pile', TODAY)
@@ -828,6 +834,8 @@ class CompleteTests(MutationTests):
 
 
 class ScratchTests(MutationTests):
+    """Contract tests for battodo.mutate.scratch."""
+
     def test_scratch(t) -> None:
         with t.subTest('the block goes, untouched lines byte-identically'):
             scratch(t.dir, 'Casablanca', TODAY)
@@ -920,6 +928,8 @@ class ScratchTests(MutationTests):
 
 
 class AddTaskTests(MutationTests):
+    """Contract tests for battodo.mutate.add_task."""
+
     def task_id(t, line: str) -> str:
         return parse(f'## Open\n{line}\n').tasks[0].fields['ID']
 

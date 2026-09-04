@@ -17,6 +17,8 @@ SRC = 'battodo.journal'
 
 
 class JournalTests(TestCase):
+    """Contract tests for battodo.journal.Journal."""
+
     def setUp(t) -> None:
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)

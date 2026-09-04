@@ -48,6 +48,8 @@ class SourceDirTests(TestCase):
 
 
 class DiscoverListsTests(SourceDirTests):
+    """Contract tests for battodo.view.discover_lists."""
+
     def test_discover_lists(t) -> None:
         career = t.write('career', '- [ ] A visible task [P:2]')
         study = t.write('study', '- [ ] A parked task [P:2]', parked=True)
@@ -236,6 +238,8 @@ class SelectionDocumentTests(SourceDirTests):
 
 
 class TimezoneTests(TestCase):
+    """Contract tests for battodo.view.TZ."""
+
     def test_tz(t) -> None:
         # A named zone, not a fixed offset: the local day stays
         # stable across daylight-saving changes.

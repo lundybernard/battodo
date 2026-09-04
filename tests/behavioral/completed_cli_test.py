@@ -40,6 +40,8 @@ def golden(name: str) -> str:
 
 
 class CompletedCommandTests(TestCase):
+    """Golden tests for the output of the `completed` command."""
+
     maxDiff = None
 
     def setUp(t) -> None:

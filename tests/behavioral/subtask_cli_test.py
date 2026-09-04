@@ -29,6 +29,8 @@ PARENT = 'Legacy priority'
 
 
 class SubtaskCommandTests(TestCase):
+    """Round-trip tests for the subtask commands."""
+
     maxDiff = None
 
     def setUp(t) -> None:

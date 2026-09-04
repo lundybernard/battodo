@@ -55,6 +55,8 @@ UNDATED_TEXT = """Undated task
 
 
 class ItemReadTests(TestCase):
+    """Contract tests for battodo.item.build_item and build_item_json."""
+
     maxDiff = None
 
     def setUp(t) -> None:

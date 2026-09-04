@@ -39,6 +39,8 @@ class LogDirTests(TestCase):
 
 
 class RenderedDigestTests(LogDirTests):
+    """Contract tests for battodo.completed.DigestView.text."""
+
     def rendered(t, source: Path, period: str) -> str:
         """The digest `source` renders for `period`, at the pinned hour."""
         return DigestView(Digest(source, NOW, period=period)).text
@@ -91,6 +93,8 @@ class RenderedDigestTests(LogDirTests):
 
 
 class DigestDocumentTests(LogDirTests):
+    """Contract tests for battodo.completed.Digest.json."""
+
     def test_digest_document(t) -> None:
         data = loads(Digest(t.source, NOW, period='week').json)
 
