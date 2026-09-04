@@ -9,9 +9,18 @@ the parser distinguishes. It outlives the property refactor.
 from pathlib import Path
 from unittest import TestCase
 
-from battodo.parser import parse, serialize
+from battodo.parser import TodoDocument, parse, serialize
 
 TODO_DIR = Path(__file__).parent.parent / 'behavioral' / 'data' / 'todo'
+WORK = TODO_DIR / 'work.md'
+# The first open task of `work.md`, and the same line once btodo
+# stamps an id on it.
+OVERDUE_INDEX = 4
+OVERDUE = '- [ ] Overdue task [P:4] [LOE:2] [DUE:2026-08-01]'
+STAMPED = f'{OVERDUE} [ID:zz01ab]'
+# The line an appended entry takes: after the last open entry, and
+# before the blank run that precedes the next heading.
+APPENDED_INDEX = 15
 
 # Every construct the parser branches on, one case each. The titles
 # name the role the line plays, not any real task.
@@ -67,3 +76,113 @@ class RoundTripTests(TestCase):
         for name, text in SHAPES.items():
             with t.subTest(name):
                 t.assertEqual(round_trip(text), text)
+
+
+class TodoDocumentTests(TestCase):
+    """Contract tests for battodo.parser.TodoDocument, against a real list."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.source = WORK.read_text(encoding='utf-8')
+        t.td = TodoDocument(t.source)
+
+    def test_lines(t) -> None:
+        with t.subTest('every line of the file, verbatim and in order'):
+            t.assertEqual(t.td.lines, t.source.split('\n'))
+
+        with t.subTest('addressed by the index a task carries'):
+            t.assertEqual(t.td.lines[OVERDUE_INDEX], OVERDUE)
+
+    def test_tasks(t) -> None:
+        with t.subTest('the open section, top level in file order'):
+            t.assertEqual(
+                [task.title for task in t.td.tasks],
+                [
+                    'Overdue task',
+                    'Due today task',
+                    'Legacy priority task',
+                    (
+                        'A very long task title that the task column '
+                        'has to clip to fit'
+                    ),
+                    'Placeholder due date task',
+                    'Lowest ranked task',
+                    'Completed task',
+                    'Future recurring task',
+                ],
+            )
+
+        with t.subTest('a task addresses its own line'):
+            first = t.td.tasks[0]
+            t.assertEqual(first.raw_index, OVERDUE_INDEX)
+            t.assertEqual(first.raw, OVERDUE)
+
+        with t.subTest('children hang off the task they are indented under'):
+            t.assertEqual(
+                [task.title for task in t.td.tasks[2].children],
+                [
+                    'Open checklist item',
+                    'Open subtask',
+                    'Completed checklist item',
+                ],
+            )
+
+        with t.subTest('a section that is not Open yields no task'):
+            t.assertNotIn(
+                'Task outside the open section',
+                [task.title for task in t.td.tasks],
+            )
+
+    def test_text(t) -> None:
+        with t.subTest('the source, byte for byte, until a method writes'):
+            t.assertEqual(t.td.text, t.source)
+
+        with t.subTest('and the edited file after one'):
+            t.td.set_field(OVERDUE_INDEX, 'ID', 'zz01ab')
+            t.assertEqual(t.td.text, t.source.replace(OVERDUE, STAMPED))
+
+    def test_set_field(t) -> None:
+        with t.subTest('an absent field is appended, and the line returned'):
+            t.assertEqual(
+                t.td.set_field(OVERDUE_INDEX, 'ID', 'zz01ab'),
+                STAMPED,
+            )
+            t.assertEqual(t.td.lines[OVERDUE_INDEX], STAMPED)
+
+        with t.subTest('an existing field is replaced where it stands'):
+            t.assertEqual(
+                t.td.set_field(OVERDUE_INDEX, 'P', '2'),
+                STAMPED.replace('[P:4]', '[P:2]'),
+            )
+
+    def test_set_title(t) -> None:
+        with t.subTest('the title changes, every field keeps its place'):
+            t.assertEqual(
+                t.td.set_title(OVERDUE_INDEX, 'Renamed task'),
+                OVERDUE.replace('Overdue task', 'Renamed task'),
+            )
+            t.assertEqual(
+                t.td.lines[OVERDUE_INDEX],
+                OVERDUE.replace('Overdue task', 'Renamed task'),
+            )
+
+        with t.subTest('a line that is not a task is rejected'):
+            with t.assertRaises(ValueError) as caught:
+                t.td.set_title(0, 'Renamed task')
+            t.assertEqual(
+                str(caught.exception),
+                "not a task line: '# Work'",
+            )
+
+    def test_append_open(t) -> None:
+        entry = '- [ ] Added task [P:1]'
+
+        with t.subTest('the entry lands last in the open section'):
+            t.assertEqual(t.td.append_open(entry), APPENDED_INDEX)
+            t.assertEqual(t.td.lines[APPENDED_INDEX], entry)
+
+        with t.subTest('and every other line keeps its text and order'):
+            expected = t.source.split('\n')
+            expected.insert(APPENDED_INDEX, entry)
+            t.assertEqual(t.td.text, '\n'.join(expected))
