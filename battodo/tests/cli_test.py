@@ -231,13 +231,13 @@ class BATCLITests(TestCase):
     """Unit tests for battodo.cli.BATCLI."""
 
     def setUp(t):
-        patches = [
-            'exit',
-            'get_config',
-        ]
-        for target in patches:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
+        patches = {
+            'exit': f'{SRC}.sys.exit',
+            'get_config': f'{SRC}.get_config',
+        }
+        for name, target in patches.items():
+            patcher = patch(target, autospec=True)
+            setattr(t, name, patcher.start())
             t.addCleanup(patcher.stop)
 
     def validate_commands(t, commands):
