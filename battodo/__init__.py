@@ -1,8 +1,1 @@
-from dataclasses import dataclass
-
-from .view import Config as ViewConfig
-
-
-@dataclass
-class GlobalConfig:
-    view: ViewConfig
+"""A todo list kept in markdown files, read and changed from a CLI."""

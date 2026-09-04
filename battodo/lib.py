@@ -19,6 +19,7 @@ from pathlib import Path
 from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
+from .conf import TZ
 from .item import build_item, build_item_json
 from .lists import item_count
 from .mutate import (
@@ -29,7 +30,7 @@ from .mutate import (
     update_task,
 )
 from .task import Task
-from .view import TZ, Selection, View
+from .view import Selection, View
 
 __all__ = [
     'DEFAULT_PERIOD',
