@@ -134,37 +134,33 @@ class JournalTests(TestCase):
             t.assertEqual(taken.args[1], t.fcntl.LOCK_EX)
             t.assertEqual(released.args[1], t.fcntl.LOCK_UN)
 
-    def test_append_counts(t) -> None:
-        t.handle.read.return_value = (
-            '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
-        )
+        with t.subTest('the two counters count over different populations'):
+            t.handle.read.return_value = (
+                '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
+            )
 
-        event = t.journal.append(
-            'TaskUpdated',
-            'task/aa',
-            {},
-            actor='agent',
-            source_file='work.md',
-        )
+            event = t.journal.append(
+                'TaskUpdated',
+                'task/aa',
+                {},
+                actor='agent',
+                source_file='work.md',
+            )
 
-        with t.subTest('seq counts every event the journal holds'):
             t.assertEqual(event['seq'], 3)
-
-        with t.subTest('stream_seq counts only the events of that stream'):
             t.assertEqual(event['stream_seq'], 2)
 
-    def test_append_occurred_at(t) -> None:
-        event = t.journal.append(
-            'TaskAdded',
-            'task/zz01ab',
-            {},
-            actor='agent',
-            source_file='work.md',
-            occurred_at='2026-08-05T09:00:00+00:00',
-        )
-
         with t.subTest('a given time is when the change happened'):
-            t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
+            t.handle.read.return_value = ''
 
-        with t.subTest('and the clock says when it was recorded'):
+            event = t.journal.append(
+                'TaskAdded',
+                'task/zz01ab',
+                {},
+                actor='agent',
+                source_file='work.md',
+                occurred_at='2026-08-05T09:00:00+00:00',
+            )
+
+            t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
             t.assertEqual(event['recorded_at'], STAMP)

@@ -31,7 +31,7 @@ def one(name: str, value: str | None) -> TaskNode:
 class MultiplierTests(TestCase):
     """Unit tests for battodo.rank.multiplier."""
 
-    def test_multiplier(t) -> None:
+    def test_scale(t) -> None:
         cases = {
             # New 0-5 scale, taken as written.
             None: 1.0,
@@ -51,12 +51,15 @@ class MultiplierTests(TestCase):
             with t.subTest(f'P:{value}'):
                 t.assertAlmostEqual(multiplier(one('P', value)), expected)
 
-    def test_multiplier_is_order_preserving(t) -> None:
-        """No ordering present in the live files may be lost."""
+    def test_order(t) -> None:
         legacy = [1, 8, 33, 47, 76, 83, 95, 98]
         folded = [multiplier(item(P=str(p))) for p in legacy]
-        t.assertEqual(folded, sorted(folded))
-        t.assertEqual(len(set(folded)), len(folded))
+
+        with t.subTest('no ordering the live files hold is lost'):
+            t.assertEqual(folded, sorted(folded))
+
+        with t.subTest('and no two legacy values fold on to one'):
+            t.assertEqual(len(set(folded)), len(folded))
 
 
 class AgeScoreTests(TestCase):
