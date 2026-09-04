@@ -3,8 +3,8 @@ from zoneinfo import ZoneInfo
 
 from .view import TOP_N
 
-# The host clock runs UTC while todos are anchored to the user's local
-# day, so the zone is named rather than a fixed offset.
+# Todos are anchored to a local day, so the zone is named rather than
+# a fixed offset.
 TZ = ZoneInfo('America/Los_Angeles')
 
 
