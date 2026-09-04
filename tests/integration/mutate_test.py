@@ -25,7 +25,7 @@ from battodo.mutate import (
     update_task,
 )
 from battodo.repeat import RepeatError
-from battodo.selection import SelectionError
+from battodo.selector import SelectionError
 
 TODAY = date(2026, 8, 8)
 

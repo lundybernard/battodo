@@ -13,7 +13,7 @@ from batconf import Configuration
 
 from .mutate import complete
 from .parser import parse_date
-from .selection import TaskRecord, TaskSelection
+from .selector import TaskRecord, TaskSelection
 
 
 def _completion_day(given: str | None, now: datetime) -> date:
