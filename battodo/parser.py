@@ -32,10 +32,6 @@ class TaskNode:
     note_indices: list[int] = field(default_factory=list)
 
     @property
-    def priority(self) -> int:
-        return int(self.fields.get('P', 0))
-
-    @property
     def loe(self) -> int | None:
         value = self.fields.get('LOE')
         return int(value) if value else None
