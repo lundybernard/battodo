@@ -58,7 +58,8 @@ class ReadRecordTests(TestCase):
         for name, (line, title) in titles.items():
             with t.subTest(name):
                 t.assertEqual(
-                    read_record(line), Record(date(2026, 8, 4), 'work', title)
+                    read_record(line),
+                    Record(date(2026, 8, 4), 'work', title),
                 )
 
         skipped = {
@@ -88,7 +89,8 @@ class RecordTests(TestCase):
 
     def test_entry(t) -> None:
         t.assertEqual(
-            t.r.entry, {'date': '2026-08-04', 'title': 'Deck > Chip it'}
+            t.r.entry,
+            {'date': '2026-08-04', 'title': 'Deck > Chip it'},
         )
 
 
@@ -106,7 +108,8 @@ class GroupTests(TestCase):
 
     def test_entries(t) -> None:
         t.assertEqual(
-            t.g.entries, [{'date': '2026-08-04', 'title': 'A record'}]
+            t.g.entries,
+            [{'date': '2026-08-04', 'title': 'A record'}],
         )
 
 
@@ -339,13 +342,15 @@ class DigestViewTests(TestCase):
 
     def test_header(t) -> None:
         t.assertEqual(
-            t.v.header, 'Completed week: 2026-07-30 to 2026-08-05 — 2 done'
+            t.v.header,
+            'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
         )
 
     def test_widths(t) -> None:
         with t.subTest('each column as wide as its widest cell'):
             t.assertEqual(
-                t.v.widths, [10, len('A record of another category')]
+                t.v.widths,
+                [10, len('A record of another category')],
             )
 
         with t.subTest('the column name counts too'):

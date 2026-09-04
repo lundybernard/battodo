@@ -33,7 +33,8 @@ class NewTaskIdTests(TestCase):
 
         with t.subTest('varies between calls'):
             t.assertNotEqual(
-                {new_task_id() for _ in range(20)}, {new_task_id()}
+                {new_task_id() for _ in range(20)},
+                {new_task_id()},
             )
 
 
@@ -98,7 +99,8 @@ class JournalTests(TestCase):
 
         with t.subTest('the journal directory is made before the write'):
             t.file.parent.mkdir.assert_called_once_with(
-                parents=True, exist_ok=True
+                parents=True,
+                exist_ok=True,
             )
 
         with t.subTest('the envelope carries the event and its metadata'):

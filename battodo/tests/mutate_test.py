@@ -130,25 +130,32 @@ class UpdateTaskTests(IsolatedTests):
     def test_line(t) -> None:
         with t.subTest('the selector is resolved against the directory'):
             path, entry = update_task(
-                t.dir, '9o71lx', {'P': '5'}, TODAY, title='A new title'
+                t.dir,
+                '9o71lx',
+                {'P': '5'},
+                TODAY,
+                title='A new title',
             )
 
             t.TaskSelection.assert_called_once_with(t.dir, '9o71lx')
 
         with t.subTest('the named field is written on to the task line'):
             t.assertEqual(
-                t.set_field.call_args_list, [call(TASK_LINE, 'P', '5')]
+                t.set_field.call_args_list,
+                [call(TASK_LINE, 'P', '5')],
             )
 
         with t.subTest('and the new title over what the fields left'):
             t.set_title.assert_called_once_with(
-                t.set_field.return_value, 'A new title'
+                t.set_field.return_value,
+                'A new title',
             )
             t.assertEqual(entry, t.set_title.return_value)
 
         with t.subTest('and is the only line of the document that moves'):
             t.assertEqual(
-                t.doc.lines, [OPEN_HEADING, entry, NOTE_LINE, CHILD_LINE]
+                t.doc.lines,
+                [OPEN_HEADING, entry, NOTE_LINE, CHILD_LINE],
             )
 
         with t.subTest('and the document goes to the file it came from'):
@@ -385,7 +392,11 @@ class AddSubtaskTests(IsolatedTests):
     def test_line(t) -> None:
         with t.subTest('the list and the parent are resolved in the source'):
             path, entry = add_subtask(
-                t.dir, 'a-list', '9o71lx', 'A new subtask', {'LOE': '2'}
+                t.dir,
+                'a-list',
+                '9o71lx',
+                'A new subtask',
+                {'LOE': '2'},
             )
 
             t.discover_lists.assert_called_once_with(t.dir)
@@ -421,7 +432,11 @@ class AddSubtaskTests(IsolatedTests):
 
     def test_event(t) -> None:
         _, entry = add_subtask(
-            t.dir, 'a-list', '9o71lx', 'A new subtask', {'LOE': '2'}
+            t.dir,
+            'a-list',
+            '9o71lx',
+            'A new subtask',
+            {'LOE': '2'},
         )
 
         with t.subTest('the journal of the source directory'):
@@ -497,7 +512,8 @@ class AddSubtaskTests(IsolatedTests):
             with (
                 t.subTest(f'{name} belongs to the top-level task'),
                 t.assertRaisesRegex(
-                    ValueError, f'{name} belongs to the top-level task'
+                    ValueError,
+                    f'{name} belongs to the top-level task',
                 ),
             ):
                 add_subtask(t.dir, 'a-list', '9o71lx', 'X', {name: '3'})
@@ -627,7 +643,11 @@ class AddTaskTests(IsolatedTests):
 
     def test_event(t) -> None:
         add_task(
-            t.dir, 'a-list', 'A new task', {'TAGS': 'a-tag', 'P': '3'}, TODAY
+            t.dir,
+            'a-list',
+            'A new task',
+            {'TAGS': 'a-tag', 'P': '3'},
+            TODAY,
         )
 
         with t.subTest('the journal of the source directory'):
@@ -1234,7 +1254,8 @@ class ScratchTests(IsolatedTests):
                 children=[item],
             )
             t.doc = TodoFile(
-                lines=[OPEN_HEADING, BARE_LINE, ITEM_LINE], tasks=[parent]
+                lines=[OPEN_HEADING, BARE_LINE, ITEM_LINE],
+                tasks=[parent],
             )
             t.lookup.record = TaskRecord(t.path, t.doc, [parent, item])
 

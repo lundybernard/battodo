@@ -360,7 +360,8 @@ class CommandsViewTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_view.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -389,7 +390,8 @@ class CommandsBackfillTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.backfill_items.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -418,7 +420,8 @@ class CommandsAddTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.add_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -447,7 +450,8 @@ class CommandsShowTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -476,7 +480,8 @@ class CommandsCompletedTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_completed.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -505,7 +510,8 @@ class CommandsUpdateTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.update_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -534,7 +540,8 @@ class CommandsDoneTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.complete_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -563,7 +570,8 @@ class CommandsScratchTests(ClockTests):
 
         with t.subTest('the configuration reaches the library unread'):
             t.scratch_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

@@ -371,7 +371,8 @@ class CategoryTests(TestCase):
     def test_shown(t) -> None:
         with t.subTest('a limit takes the top of the list'):
             t.assertEqual(
-                [task.title for task in t.c.shown], ['Item 0', 'Item 1']
+                [task.title for task in t.c.shown],
+                ['Item 0', 'Item 1'],
             )
 
         with t.subTest('no limit shows every one'):

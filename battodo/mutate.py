@@ -649,7 +649,9 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
         # the ancestor's stream and the ancestor's line is the one that
         # has to carry it.
         lines[stream.raw_index] = set_field(
-            lines[stream.raw_index], 'ID', stream_id
+            lines[stream.raw_index],
+            'ID',
+            stream_id,
         )
     lines = _drop_lines(lines, _block_indices(task))
 

@@ -131,7 +131,8 @@ class UpdateTaskTests(WorkFixtureTests):
 
         with t.subTest('a task with no id of its own is given one'):
             t.assertEqual(
-                entry, f'- [ ] Unidentified task [P:5] [ID:{task_id}]'
+                entry,
+                f'- [ ] Unidentified task [P:5] [ID:{task_id}]',
             )
 
         with t.subTest('the stamp is in the delta, so it can be undone'):
@@ -139,7 +140,10 @@ class UpdateTaskTests(WorkFixtureTests):
 
     def test_reaches_a_subtask(t) -> None:
         _, entry = update_task(
-            t.source, 'Chip the brush', {'DUE': '2026-09-01'}, TODAY
+            t.source,
+            'Chip the brush',
+            {'DUE': '2026-09-01'},
+            TODAY,
         )
         child = task_id(entry)
         (event,) = Journal(t.source).read()
@@ -157,7 +161,8 @@ class UpdateTaskTests(WorkFixtureTests):
 
         with t.subTest('and records where the child sits'):
             t.assertEqual(
-                event['payload']['ancestry'], 'Deck rebuild > Chip the brush'
+                event['payload']['ancestry'],
+                'Deck rebuild > Chip the brush',
             )
 
     def test_rejected(t) -> None:
@@ -186,26 +191,36 @@ class AddSubtaskTests(WorkFixtureTests):
 
     def test_line(t) -> None:
         path, entry = add_subtask(
-            t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
+            t.source,
+            'work',
+            '9o71lx',
+            'Buy lumber',
+            {'LOE': '2'},
         )
 
         with t.subTest('the list written to, and the line as written'):
             t.assertEqual(path, t.path)
             t.assertRegex(
-                entry, r'^  - \[ \] Buy lumber \[LOE:2\] \[ID:\w{6}\]$'
+                entry,
+                r'^  - \[ \] Buy lumber \[LOE:2\] \[ID:\w{6}\]$',
             )
 
         with t.subTest('the child lands last in its parent block'):
             t.assertEqual(
                 t.path.read_text(encoding='utf-8'),
                 WORK.replace(
-                    '  - [ ] Sweep up\n', f'  - [ ] Sweep up\n{entry}\n'
+                    '  - [ ] Sweep up\n',
+                    f'  - [ ] Sweep up\n{entry}\n',
                 ),
             )
 
     def test_journal(t) -> None:
         _, entry = add_subtask(
-            t.source, 'work', '9o71lx', 'Buy lumber', {'LOE': '2'}
+            t.source,
+            'work',
+            '9o71lx',
+            'Buy lumber',
+            {'LOE': '2'},
         )
         child = task_id(entry)
         (event,) = Journal(t.source).read()
@@ -235,7 +250,11 @@ class AddSubtaskTests(WorkFixtureTests):
     def test_nests_deeper(t) -> None:
         """A subtask is itself a parent, as SCHEMA.md allows."""
         _, entry = add_subtask(
-            t.source, 'work', 'Chip the brush', 'Rake the chips', {}
+            t.source,
+            'work',
+            'Chip the brush',
+            'Rake the chips',
+            {},
         )
         stamp = Journal(t.source).read()[0]
         parent = stamp['stream_id'].removeprefix('task/')
@@ -251,7 +270,11 @@ class AddSubtaskTests(WorkFixtureTests):
 
     def test_stamps_the_parent(t) -> None:
         _, entry = add_subtask(
-            t.source, 'work', 'Unidentified', 'Get quotes', {}
+            t.source,
+            'work',
+            'Unidentified',
+            'Get quotes',
+            {},
         )
         stamp, added = Journal(t.source).read()
         parent = stamp['stream_id'].removeprefix('task/')
@@ -322,7 +345,8 @@ class ChecklistItemTargetTests(WorkFixtureTests):
 
         with t.subTest('and names the item under that ancestor'):
             t.assertEqual(
-                event['payload']['ancestry'], 'Deck rebuild > Sweep up'
+                event['payload']['ancestry'],
+                'Deck rebuild > Sweep up',
             )
 
     def test_scratch(t) -> None:
@@ -348,7 +372,8 @@ class ChecklistItemTargetTests(WorkFixtureTests):
 
         with t.subTest('and names the item under that ancestor'):
             t.assertEqual(
-                event['payload']['ancestry'], 'Deck rebuild > Sweep up'
+                event['payload']['ancestry'],
+                'Deck rebuild > Sweep up',
             )
 
 
@@ -428,7 +453,8 @@ class BackfillFileTests(TestCase):
                 if e['payload']['snapshot']['title'] == 'No added'
             )
             t.assertEqual(
-                event['payload']['delta']['ADDED'], [None, '2026-08-08']
+                event['payload']['delta']['ADDED'],
+                [None, '2026-08-08'],
             )
             t.assertEqual(event['payload']['snapshot']['fields']['P'], '4')
             t.assertTrue(event['payload']['backfilled'])
@@ -473,7 +499,8 @@ class BackfillAllTests(TestCase):
 
         with t.subTest('non-list markdown untouched'):
             t.assertEqual(
-                (t.dir / 'SCHEMA.md').read_text(), '# Schema\n\nprose\n'
+                (t.dir / 'SCHEMA.md').read_text(),
+                '# Schema\n\nprose\n',
             )
 
         with t.subTest('journal written to the source directory'):
@@ -857,7 +884,8 @@ class ScratchTests(MutationTests):
             t.reset()
             scratch(t.dir, 'Pay credit cards', TODAY)
             t.assertNotIn(
-                'Pay credit cards', (t.dir / 'chores.md').read_text()
+                'Pay credit cards',
+                (t.dir / 'chores.md').read_text(),
             )
 
     def test_log(t) -> None:
@@ -885,7 +913,8 @@ class ScratchTests(MutationTests):
                 {'actor': 'agent', 'source_file': 'work.md'},
             )
             t.assertEqual(
-                events[0]['payload']['delta'], {'removed': [False, True]}
+                events[0]['payload']['delta'],
+                {'removed': [False, True]},
             )
 
         with t.subTest('ancestry and pre-state snapshot'):
@@ -907,7 +936,8 @@ class ScratchTests(MutationTests):
             scratch(t.dir, 'Ice packs', TODAY)
             stream = Journal(t.dir).read()[0]['stream_id']
             t.assertIn(
-                stream.removeprefix('task/'), t.line('work.md', 'Pack cooler')
+                stream.removeprefix('task/'),
+                t.line('work.md', 'Pack cooler'),
             )
 
 
@@ -918,7 +948,11 @@ class AddTaskTests(MutationTests):
     def test_line(t) -> None:
         with t.subTest('only supplied fields, plus the stamps btodo owns'):
             path, line = add_task(
-                t.dir, 'chores', 'Water it', {'P': '4'}, TODAY
+                t.dir,
+                'chores',
+                'Water it',
+                {'P': '4'},
+                TODAY,
             )
             t.assertEqual(path, t.dir / 'chores.md')
             t.assertRegex(
@@ -957,7 +991,11 @@ class AddTaskTests(MutationTests):
         with t.subTest('a list ending on its Open section keeps its newline'):
             t.reset()
             path, line = add_task(
-                t.dir, 'van-trip-prep-template', 'X', {}, TODAY
+                t.dir,
+                'van-trip-prep-template',
+                'X',
+                {},
+                TODAY,
             )
             expected = TEMPLATE.split('\n')
             expected.insert(-1, line)
@@ -1033,7 +1071,8 @@ class AddTaskTests(MutationTests):
             message = str(caught.exception)
             t.assertIn(str(t.dir), message)
             t.assertIn(
-                'available: chores, van-trip-prep-template, work', message
+                'available: chores, van-trip-prep-template, work',
+                message,
             )
             t.assertFalse((t.dir / 'wrk.md').exists())
 

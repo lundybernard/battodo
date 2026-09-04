@@ -41,7 +41,8 @@ class ParseTests(TestCase):
         with t.subTest('top-level only'):
             t.assertEqual(len(t.doc.tasks), 2)
             t.assertEqual(
-                [task.title for task in t.doc.tasks], ['Alpha', 'Beta']
+                [task.title for task in t.doc.tasks],
+                ['Alpha', 'Beta'],
             )
 
         with t.subTest('done flag'):
@@ -178,7 +179,8 @@ class SetTitleTests(TestCase):
 
         with t.subTest('indent and check mark are preserved'):
             t.assertEqual(
-                set_title('  - [x] X [LOE:1]', 'Y'), '  - [x] Y [LOE:1]'
+                set_title('  - [x] X [LOE:1]', 'Y'),
+                '  - [x] Y [LOE:1]',
             )
 
         with (

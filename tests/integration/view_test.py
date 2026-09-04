@@ -42,7 +42,8 @@ class SourceDirTests(TestCase):
         path = t.source / f'{name}.md'
         body = '\n'.join(items)
         path.write_text(
-            f'# {name}\n\n{marker}## Open\n\n{body}\n', encoding='utf-8'
+            f'# {name}\n\n{marker}## Open\n\n{body}\n',
+            encoding='utf-8',
         )
         return path
 

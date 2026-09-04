@@ -66,7 +66,9 @@ class ViewCommandTests(TestCase):
         t.datetime.now.return_value = FROZEN
 
     def cli(
-        t, *args: str, env: dict[str, str] | None = None
+        t,
+        *args: str,
+        env: dict[str, str] | None = None,
     ) -> tuple[str, str, object]:
         """Run `view` with `args`, and `env` over the pinned variables."""
         pinned = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
@@ -125,7 +127,8 @@ class ViewCommandTests(TestCase):
 
         with t.subTest('the command line outranks the environment'):
             t.assertEqual(
-                t.render('--top', '5', env={TOP_VAR: '1'}), golden('view.txt')
+                t.render('--top', '5', env={TOP_VAR: '1'}),
+                golden('view.txt'),
             )
 
         out, err, code = t.cli(env={TOP_VAR: '0'})
