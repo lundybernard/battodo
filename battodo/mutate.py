@@ -2,8 +2,8 @@
 
 Every mutation edits the raw task line in place and appends an event, so
 the markdown stays authoritative while the journal accumulates history.
-Files with nothing to change are not rewritten at all, which keeps
-mtimes stable for Syncthing.
+A file with nothing to change is not rewritten at all, so file sync
+sees no change.
 
 `add_task` and `add_subtask` create rather than edit. A new top-level
 task lands as the last entry of a named list's `## Open` section,
@@ -18,11 +18,8 @@ done, and reschedule a recurring task instead of deleting it. `scratch`
 is the same plumbing for abandoning a task rather than finishing it:
 the block goes, the log records it as SCRATCHED, and nothing cascades
 or reschedules. `update_task` edits a task in place: it writes the
-fields and the title it is given and touches nothing else.
-`backfill` is the one-time `[ADDED:]` stamp that replaced
-the daily bump, which ADR 0005 retired along with the `BUMPED` field and
-the `TaskBumped` event: rank is computed from the files rather than
-accumulated in them, so btodo has nothing to write once a day.
+fields and the title it is given and touches nothing else. `backfill`
+stamps `[ADDED:]` once on every task that lacks it.
 """
 
 from datetime import date

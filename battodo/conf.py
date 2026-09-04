@@ -30,8 +30,8 @@ USER_FILE_NAME = 'config.toml'
 # The environment variable that names a file.
 CONFIG_FILE_ENV_VAR = EnvSource().env_name('config_file', CONFIG_ROOT)
 
-# The host clock runs UTC while todos are anchored to the user's local
-# day, so the zone is named rather than a fixed offset.
+# Todos are anchored to a local day, so the zone is named rather than
+# a fixed offset.
 TZ = ZoneInfo('America/Los_Angeles')
 
 

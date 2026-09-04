@@ -1,16 +1,13 @@
 """Lay a selection out as aligned text tables.
 
-Output is plain aligned text, not markdown. The pipe tables this started
-as were written for a chat client to re-render; read in a terminal --
-which is where `btodo view` actually lands -- they printed ragged,
-because a markdown table needs no column widths and so nothing computed
-any. Widths here come from the content, once for the whole view, so the
-columns line up down the page and not merely within one category.
+Output is plain aligned text, not markdown: a markdown table states no
+column widths, so it prints ragged in a terminal. Widths come from the
+content, once for the whole view, so the columns line up down the page
+and not merely within one category.
 
-Terminal width is read here rather than at the CLI boundary: the width
-is an input to the layout, and the view is the only thing that knows
-whether one was supplied. Passing `width` explicitly overrides the
-probe, which is what keeps the layout tests independent of `$COLUMNS`.
+Terminal width is read here rather than at the CLI boundary, because
+the width is an input to the layout. An explicit `width` overrides the
+probe.
 """
 
 from datetime import date

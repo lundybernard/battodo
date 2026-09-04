@@ -16,10 +16,9 @@ COUNT_ERROR = 'the item count must be a whole number of 1 or more'
 def discover_lists(directory: Path) -> list[Path]:
     """Every markdown file in `directory` that is a todo list.
 
-    The predicate is the presence of a `## Open` heading. This is what
-    fixes the hard-coded five-category bug: ad-hoc lists such as
-    backlog.md are picked up, while SCHEMA.md, CLAUDE.md, and the
-    differently-formatted completed.md are excluded.
+    The predicate is the presence of a `## Open` heading, so an ad-hoc
+    list such as backlog.md is found, while SCHEMA.md, CLAUDE.md and
+    the differently-formatted completed.md are not.
 
     Parked lists are included -- opting out of *views* is not opting out
     of existing, and a mutation must still reach them.

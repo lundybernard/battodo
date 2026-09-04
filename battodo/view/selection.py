@@ -2,18 +2,15 @@
 
 Kept apart from the table rendering so that layout has no say in what
 is chosen. The machine-readable form (R2) lives here as
-`Selection.json`, because it makes no presentation choices of its own:
-it is the selection serialized, not a rendering of it.
+`Selection.json`: it is the selection serialized, not a rendering of it.
 
-Selection matches `view_todos.py` in the live system: open items only,
-future-dated *recurring* items suppressed. Note that SCHEMA.md's prose
-is stricter than this (it would also hide future-dated non-recurring
-items); R3 and the script agree with each other, so btodo follows them.
+A view holds open items only, and suppresses future-dated *recurring*
+items. SCHEMA.md's prose is stricter -- it would also hide future-dated
+non-recurring items -- and R3 governs here.
 
-Ordering does *not* match the script any more. Items sort by the rank
-computed in `rank.py` (ADR 0005) rather than by stored priority, which
-is what lets the table show a rank at all -- the order is otherwise
-unreadable, since nothing in the file states it.
+Items sort by the rank computed in `rank.py` (ADR 0005) rather than by
+stored priority, which is what lets the table show a rank at all: the
+file states no order of its own.
 """
 
 from datetime import date, datetime
@@ -31,10 +28,9 @@ from ..rank import multiplier, rank
 class SourceError(Exception):
     """The configured source directory yields no todo lists.
 
-    Raised rather than rendering an empty view: pointed at a home
-    directory with no `todo/` in it, btodo printed a bare header and
-    exited 0, which reads as "nothing to do" instead of "I looked in the
-    wrong place". The message always carries the resolved path.
+    Raised rather than rendering an empty view, which reads as
+    "nothing to do" instead of "I looked in the wrong place". The
+    message always carries the resolved path.
     """
 
 

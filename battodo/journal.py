@@ -1,17 +1,15 @@
 """Append-only JSONL event journal, one per source directory.
 
-Envelope follows OpenFrameKeeper's event store (its ADR 0002) so the two
-projects share a vocabulary. `prev_hash`/`hash` are reserved and null in
-v1, and the commit-boundary fields are omitted. A command can append
-several events -- a completion cascade, or a parent stamp beside the
-child that names it -- and nothing marks them as one commit, so a
-partial write is not detectable. Both are additive to add later, needing
-no schema_version bump.
+`prev_hash` and `hash` are reserved and null in v1, and the
+commit-boundary fields are omitted. A command can append several events
+-- a completion cascade, or a parent stamp beside the child that names
+it -- and nothing marks them as one commit, so a partial write is not
+detectable.
 
 While markdown remains authoritative the journal is a *partial* record:
-hand-edits bypass btodo and so bypass this log. Every payload therefore
-carries a full task snapshot, which is what lets a future authority flip
-replay state without having observed each change.
+hand-edits bypass btodo and so bypass this log. Every payload carries a
+full task snapshot, so a later authority flip replays state without
+having observed each change.
 """
 
 from datetime import datetime, timezone
