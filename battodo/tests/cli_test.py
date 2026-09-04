@@ -1,3 +1,4 @@
+from argparse import Namespace, _HelpAction, _SubParsersAction
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest import TestCase
@@ -5,14 +6,16 @@ from unittest.mock import Mock, call, patch
 
 from ..cli import (
     BATCLI,
+    DEBUG,
     DEFAULT_PERIOD,
+    ERROR,
+    INFO,
     MESSAGES,
     PERIODS,
     TZ,
+    ArgumentParser,
     Commands,
-    argparse,
     argparser,
-    logging,
 )
 
 SRC = 'battodo.cli'
@@ -22,7 +25,7 @@ def subparsers(parser):
     """Every parser reachable from `parser`, keyed by its command name."""
     found = {'btodo': parser}
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
+        if isinstance(action, _SubParsersAction):
             found.update(action.choices)
     return found
 
@@ -36,9 +39,9 @@ def documented(parser):
     """
     yield 'description', parser.description
     for action in parser._actions:
-        if isinstance(action, argparse._HelpAction):
+        if isinstance(action, _HelpAction):
             continue
-        if isinstance(action, argparse._SubParsersAction):
+        if isinstance(action, _SubParsersAction):
             for choice in action._choices_actions:
                 yield f'{choice.dest} command', choice.help
             continue
@@ -164,9 +167,9 @@ class ArgparserTests(TestCase):
     def test_verbosity(t):
         cases = {
             ('view',): None,
-            ('-v', 'view'): logging.INFO,
-            ('--verbose', 'view'): logging.INFO,
-            ('--debug', 'view'): logging.DEBUG,
+            ('-v', 'view'): INFO,
+            ('--verbose', 'view'): INFO,
+            ('--debug', 'view'): DEBUG,
         }
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
@@ -286,7 +289,7 @@ class BATCLITests(TestCase):
 
         args = argparser().parse_args([])
         args.func = fail
-        parser = Mock(argparse.ArgumentParser)
+        parser = Mock(ArgumentParser)
         parser.parse_args.return_value = args
         out, err = StringIO(), StringIO()
 
@@ -587,11 +590,11 @@ class CommandsSetLogLevelTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         with t.subTest('default to ERROR'):
-            args = argparse.Namespace(loglevel=None)
+            args = Namespace(loglevel=None)
             Commands.set_log_level(args)
-            log.setLevel.assert_called_with(logging.ERROR)
+            log.setLevel.assert_called_with(ERROR)
 
         with t.subTest('set given value'):
-            args = argparse.Namespace(loglevel=logging.INFO)
+            args = Namespace(loglevel=INFO)
             Commands.set_log_level(args)
-            log.setLevel.assert_called_with(logging.INFO)
+            log.setLevel.assert_called_with(INFO)

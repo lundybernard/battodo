@@ -1,4 +1,4 @@
-import logging
+from logging import DEBUG
 
 logging_config = {
     'version': 1,
@@ -22,8 +22,8 @@ logging_config = {
         },
     },
     'loggers': {
-        'root': {'handlers': ['h'], 'level': logging.DEBUG},
-        'mod': {'handlers': ['h'], 'level': logging.DEBUG},
-        'thread': {'handlers': ['thread_handler'], 'level': logging.DEBUG},
+        'root': {'handlers': ['h'], 'level': DEBUG},
+        'mod': {'handlers': ['h'], 'level': DEBUG},
+        'thread': {'handlers': ['thread_handler'], 'level': DEBUG},
     },
 }

@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch, sentinel
 from ..journal import (
     JOURNAL_DIRNAME,
     JOURNAL_FILENAME,
+    LOCK_EX,
+    LOCK_UN,
     SCHEMA_VERSION,
     Journal,
     new_task_id,
@@ -45,13 +47,13 @@ class JournalTests(TestCase):
     """
 
     Path: MagicMock
-    fcntl: MagicMock
-    os: MagicMock
+    flock: MagicMock
+    fsync: MagicMock
     uuid4: MagicMock
     datetime: MagicMock
 
     def setUp(t) -> None:
-        for target in ('Path', 'fcntl', 'os', 'uuid4', 'datetime'):
+        for target in ('Path', 'flock', 'fsync', 'uuid4', 'datetime'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -129,12 +131,12 @@ class JournalTests(TestCase):
             t.handle.write.assert_called_once_with(json.dumps(event) + '\n')
 
         with t.subTest('the write is flushed to the disk it claims to be on'):
-            t.os.fsync.assert_called_once_with(t.handle.fileno.return_value)
+            t.fsync.assert_called_once_with(t.handle.fileno.return_value)
 
         with t.subTest('under an exclusive lock, released at the end'):
-            taken, released = t.fcntl.flock.call_args_list
-            t.assertEqual(taken.args[1], t.fcntl.LOCK_EX)
-            t.assertEqual(released.args[1], t.fcntl.LOCK_UN)
+            taken, released = t.flock.call_args_list
+            t.assertEqual(taken.args[1], LOCK_EX)
+            t.assertEqual(released.args[1], LOCK_UN)
 
         with t.subTest('the two counters count over different populations'):
             t.handle.read.return_value = (
