@@ -78,8 +78,30 @@ class SubtaskEntryTests(TestCase):
             )
 
 
-class ItemDataTests(TestCase):
+class IsolatedTests(TestCase):
+    """Base: the collaborators a suite names in TARGETS stand in."""
+
+    TARGETS: tuple[str, ...] = ()
+
+    def setUp(t) -> None:
+        for target in t.TARGETS:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+
+
+class ItemDataTests(IsolatedTests):
     """Unit tests for battodo.item.item_data."""
+
+    TARGETS = ('rank', 'multiplier')
+
+    rank: MagicMock
+    multiplier: MagicMock
+
+    def setUp(t) -> None:
+        super().setUp()
+        t.rank.return_value = 10.006
+        t.multiplier.return_value = 4.0
 
     def test_item_data(t) -> None:
         with t.subTest('the list, the stored fields, and the children'):
@@ -115,8 +137,8 @@ class ItemDataTests(TestCase):
                     'id': '9o71lx',
                     'title': 'Deck rebuild',
                     'done': False,
-                    # One month old and one week from due: 4 x 2.5.
-                    'rank': 10.0,
+                    # Rounded to the places the document publishes.
+                    'rank': 10.01,
                     'priority': 4.0,
                     'loe': 8,
                     'due': '2026-08-12',
@@ -137,6 +159,10 @@ class ItemDataTests(TestCase):
                 },
             )
 
+        with t.subTest('the rank is asked for against the given day'):
+            t.rank.assert_called_once_with(subject, TODAY)
+            t.multiplier.assert_called_once_with(subject)
+
         with t.subTest('an unfielded task reads as absent, not as zero'):
             t.assertEqual(
                 item_data(
@@ -155,8 +181,8 @@ class ItemDataTests(TestCase):
                     'id': None,
                     'title': 'Bare',
                     'done': False,
-                    'rank': 1.0,
-                    'priority': 1.0,
+                    'rank': 10.01,
+                    'priority': 4.0,
                     'loe': None,
                     'due': None,
                     'added': None,
@@ -252,12 +278,10 @@ class RenderItemTests(TestCase):
             )
 
 
-class ItemBuildTests(TestCase):
-    """Base: the selection, the data builder and the renderers stand in.
+class ItemBuildTests(IsolatedTests):
+    """Base: the selection, the data builder and the renderers stand in."""
 
-    Both builders resolve the same selection and hand the same data on,
-    so the stand-ins are shared and the assertions are not.
-    """
+    TARGETS = ('TaskSelection', 'item_data', 'render_item', 'dumps')
 
     TaskSelection: MagicMock
     item_data: MagicMock
@@ -265,10 +289,7 @@ class ItemBuildTests(TestCase):
     dumps: MagicMock
 
     def setUp(t) -> None:
-        for target in ('TaskSelection', 'item_data', 'render_item', 'dumps'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
+        super().setUp()
         t.directory = Path('/source-dir')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
         # An autospec instance specs `record` from the descriptor, not
