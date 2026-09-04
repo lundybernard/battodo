@@ -341,8 +341,8 @@ class Commands:
         print(get_completed(conf, datetime.now(TZ)))
 
     @staticmethod
-    def set_log_level(conf):
-        if conf.loglevel:
-            log.setLevel(conf.loglevel)
+    def set_log_level(args):
+        if args.loglevel:
+            log.setLevel(args.loglevel)
         else:
             log.setLevel(ERROR)
