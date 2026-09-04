@@ -11,6 +11,7 @@ from its parsed fields would rewrite every line it touched.
 import re
 from dataclasses import dataclass, field
 from datetime import date
+from functools import cached_property
 
 FIELD_RE = re.compile(r'\[(P|LOE|DUE|BUMPED|ADDED|REPEAT|TAGS|ID):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
@@ -68,6 +69,91 @@ class TaskNode:
         Children with no fields are checklist items.
         """
         return bool(self.indent) and bool(self.fields)
+
+
+class TodoDocument:
+    """One SCHEMA.md-format todo list, held as the text it was read from.
+
+    Tasks record only indices into `lines`, the document's editable
+    state, so `text` gives the source back byte for byte until a write.
+    `set_field`, `set_title` and `append_open` are the edits the
+    document performs itself, each rewriting one raw line where it
+    stands.
+    """
+
+    def __init__(self, source: str) -> None:
+        self.source = source
+
+    @cached_property
+    def lines(self) -> list[str]:
+        """The source text, split into verbatim lines."""
+        raise NotImplementedError
+
+    @cached_property
+    def tasks(self) -> list[TaskNode]:
+        """The open-section task tree, in file order."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list as it stands; the source until a method writes."""
+        raise NotImplementedError
+
+    def set_field(self, index: int, name: str, value: str) -> str:
+        """Set `name` to `value` on the line at `index`.
+
+        An existing field is replaced where it stands; a new one is
+        appended after the last field. Either way every other field
+        keeps its position, which is what the round-trip guarantee
+        rests on -- field order varies line to line in hand-edited
+        files.
+
+        Returns
+        -------
+        str
+            The edited line.
+        """
+        raise NotImplementedError
+
+    def set_title(self, index: int, title: str) -> str:
+        """Replace the title of the task line at `index`.
+
+        Only the text before the first field changes.
+
+        Returns
+        -------
+        str
+            The edited line.
+
+        Raises
+        ------
+        ValueError
+            The line is not a task line. A note or a heading carries no
+            title to set.
+        """
+        raise NotImplementedError
+
+    def append_open(self, entry: str) -> int:
+        """Insert `entry` as the last entry of the `## Open` section.
+
+        The insertion point is after the last non-blank line of the
+        section, so the entry follows whatever the previous item ended
+        with -- its notes, its children -- and the blank run before the
+        next heading stays where it is.
+
+        Returns
+        -------
+        int
+            The index `entry` now occupies.
+
+        Raises
+        ------
+        StopIteration
+            There is no `## Open` heading. Carrying one is what makes a
+            file a todo list at all, so `discover_lists` has already
+            ruled this out for every caller that goes through it.
+        """
+        raise NotImplementedError
 
 
 @dataclass
