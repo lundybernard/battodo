@@ -14,12 +14,12 @@ carries a full task snapshot, which is what lets a future authority flip
 replay state without having observed each change.
 """
 
-import fcntl
-import json
-import os
-import secrets
 from datetime import datetime, timezone
+from fcntl import LOCK_EX, LOCK_UN, flock
+from json import dumps, loads
+from os import fsync
 from pathlib import Path
+from secrets import choice
 from typing import Any
 from uuid import uuid4
 
@@ -32,7 +32,7 @@ ID_LENGTH = 6
 
 def new_task_id() -> str:
     """A short base36 identifier for lazy `[ID:...]` injection."""
-    return ''.join(secrets.choice(ID_ALPHABET) for _ in range(ID_LENGTH))
+    return ''.join(choice(ID_ALPHABET) for _ in range(ID_LENGTH))
 
 
 def _utc_now() -> str:
@@ -50,7 +50,7 @@ class Journal:
         if not self.path.exists():
             return []
         return [
-            json.loads(line)
+            loads(line)
             for line in self.path.read_text().splitlines()
             if line.strip()
         ]
@@ -75,11 +75,11 @@ class Journal:
         recorded_at = _utc_now()
 
         with self.path.open('a+', encoding='utf-8') as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            flock(handle.fileno(), LOCK_EX)
             try:
                 handle.seek(0)
                 existing = [
-                    json.loads(line)
+                    loads(line)
                     for line in handle.read().splitlines()
                     if line.strip()
                 ]
@@ -103,10 +103,10 @@ class Journal:
                     },
                     'payload': payload,
                 }
-                handle.write(json.dumps(event) + '\n')
+                handle.write(dumps(event) + '\n')
                 handle.flush()
-                os.fsync(handle.fileno())
+                fsync(handle.fileno())
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                flock(handle.fileno(), LOCK_UN)
 
         return event
