@@ -1,5 +1,5 @@
 Completed today: 2026-08-05 — 1 done
 
-── Work ──────────────────────────────
+── Work ─────────────────────────────
   DATE        TASK
-  2026-08-05  Update the captain's log
+  2026-08-05  The one record of today
