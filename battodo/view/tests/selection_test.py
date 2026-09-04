@@ -10,10 +10,10 @@ from ..selection import (
     Category,
     Selection,
     SourceError,
+    TodoDocument,
     TodoList,
     active_categories,
     open_children,
-    parse,
     sort_key,
     task_entry,
     visible_tasks,
@@ -73,7 +73,7 @@ class VisibleTasksTests(TestCase):
     """Unit tests for battodo.view.selection.visible_tasks."""
 
     def test_visible_tasks(t) -> None:
-        doc = parse(
+        doc = TodoDocument(
             '## Open\n'
             '- [ ] Open item [P:2]\n'
             '- [x] Finished item [P:2]\n'
@@ -110,7 +110,7 @@ class SortKeyTests(TestCase):
         t.rank = autopatch(t, 'rank')
 
     def test_sort_key(t) -> None:
-        doc = parse(
+        doc = TodoDocument(
             '## Open\n'
             '- [ ] B undated [P:3]\n'
             '- [ ] A undated [P:3]\n'
@@ -138,7 +138,7 @@ class SortKeyTests(TestCase):
             t.rank.reset_mock()
             t.rank.side_effect = None
             t.rank.return_value = 3.0
-            task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
+            task = TodoDocument('## Open\n- [ ] Solo [P:3]\n').tasks[0]
 
             t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
             t.rank.assert_called_once_with(task, TODAY)
@@ -148,7 +148,7 @@ class OpenChildrenTests(TestCase):
     """Unit tests for battodo.view.selection.open_children."""
 
     def test_open_children(t) -> None:
-        doc = parse(
+        doc = TodoDocument(
             '## Open\n'
             '- [ ] Parent [P:3]\n'
             '  - [ ] A subtask [LOE:1]\n'
@@ -293,7 +293,7 @@ class CategoryTests(TestCase):
     """Unit tests for battodo.view.selection.Category."""
 
     def setUp(t) -> None:
-        t.tasks = parse(
+        t.tasks = TodoDocument(
             '## Open\n' + ''.join(f'- [ ] Item {n} [P:3]\n' for n in range(6))
         ).tasks
         t.c = Category('work', t.tasks, 2)
