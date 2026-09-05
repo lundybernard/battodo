@@ -15,12 +15,12 @@ from unittest import TestCase, skipIf
 from battodo.journal import Journal
 from battodo.mutate import (
     ListError,
+    TodoDocument,
     add_subtask,
     add_task,
     backfill_all,
     backfill_file,
     complete,
-    parse,
     scratch,
     update_task,
 )
@@ -428,7 +428,7 @@ class BackfillFileTests(TestCase):
             t.assertIn('  - [ ] Child is never stamped [LOE:2]', text)
 
         with t.subTest('ids injected lazily on first mediated mutation'):
-            doc = parse(text)
+            doc = TodoDocument(text)
             touched = [x for x in doc.tasks if x.title in stamped]
             t.assertTrue(all(x.task_id for x in touched))
             untouched = next(x for x in doc.tasks if x.title == 'Placeholder')
@@ -943,7 +943,7 @@ class ScratchTests(MutationTests):
 
 class AddTaskTests(MutationTests):
     def task_id(t, line: str) -> str:
-        return parse(f'## Open\n{line}\n').tasks[0].fields['ID']
+        return TodoDocument(f'## Open\n{line}\n').tasks[0].fields['ID']
 
     def test_line(t) -> None:
         with t.subTest('only supplied fields, plus the stamps btodo owns'):
