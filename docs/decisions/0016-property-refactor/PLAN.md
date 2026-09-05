@@ -111,7 +111,10 @@ object from slice 5.
 
 Last. Its interface comes from slice 5, and its oracle builds on the
 parser and journal objects from slices 2 and 3. `mutate.py` splits into
-one command object per write operation.
+one command object per write operation. The line edits `mutate.py`
+still performs on the document's line list (insert, drop, mark done)
+move into the document object here, so every edit of a list file goes
+through one surface.
 
 ## Deferred
 
