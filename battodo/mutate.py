@@ -28,17 +28,7 @@ from typing import Any
 
 from .journal import Journal, new_task_id
 from .lists import discover_lists
-from .parser import (
-    OPEN_HEADING,
-    TaskNode,
-    TodoFile,
-    append_open,
-    parse,
-    parse_date,
-    serialize,
-    set_field,
-    set_title,
-)
+from .parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from .repeat import next_due
 from .selector import TaskRecord, TaskSelection
 
@@ -88,11 +78,15 @@ def task_snapshot(task: TaskNode) -> dict[str, Any]:
     }
 
 
-def _set_fields(raw: str, updates: dict[str, str]) -> str:
-    """Apply several field edits to one raw line, in order."""
+def _set_fields(
+    doc: TodoDocument,
+    index: int,
+    updates: dict[str, str],
+) -> str:
+    """Apply several field edits to one line of `doc`, in order."""
     for name, value in updates.items():
-        raw = set_field(raw, name, value)
-    return raw
+        doc.set_field(index, name, value)
+    return doc.lines[index]
 
 
 def _is_checklist_item(task: TaskNode) -> bool:
@@ -205,7 +199,9 @@ def _added_payload(entry: str, written: dict[str, str]) -> dict[str, Any]:
         # Post-state, unlike every other event here: an add has no
         # prior state for a snapshot to describe. Taken from the line
         # as written, so it records the file, not the intent.
-        'snapshot': task_snapshot(parse(f'{OPEN_HEADING}\n{entry}').tasks[0]),
+        'snapshot': task_snapshot(
+            TodoDocument(f'{OPEN_HEADING}\n{entry}').tasks[0]
+        ),
     }
 
 
@@ -293,13 +289,11 @@ def add_task(
         'ADDED': today.isoformat(),
         'ID': new_task_id(),
     }
+    doc = TodoDocument(path.read_text())
     # Built by the same field-append path every other mutation uses, on
     # a line that starts out carrying none.
-    entry = _set_fields(f'- [ ] {title}', written)
-
-    doc = parse(path.read_text())
-    doc.lines = append_open(doc.lines, entry)
-    path.write_text(serialize(doc))
+    entry = _set_fields(doc, doc.append_open(f'- [ ] {title}'), written)
+    path.write_text(doc.text)
 
     Journal(directory).append(
         ADDED_EVENT,
@@ -379,16 +373,16 @@ def add_subtask(
         'ID': new_task_id(),
     }
     indent = ' ' * (task.indent + SUBTASK_INDENT)
-    entry = _set_fields(f'{indent}- [ ] {title}', written)
 
-    lines = list(record.doc.lines)
+    doc = record.doc
     if stamped:
-        lines[task.raw_index] = set_field(task.raw, 'ID', parent_id)
+        doc.set_field(task.raw_index, 'ID', parent_id)
     # After every line the parent owns -- its notes, its children and
     # theirs -- which makes the new child the last of them.
-    lines.insert(max(_block_indices(task)) + 1, entry)
-    record.doc.lines = lines
-    path.write_text(serialize(record.doc))
+    index = max(_block_indices(task)) + 1
+    doc.lines.insert(index, f'{indent}- [ ] {title}')
+    entry = _set_fields(doc, index, written)
+    path.write_text(doc.text)
 
     journal = Journal(directory)
     if stamped:
@@ -543,7 +537,7 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
     streams = [
         _identify(_stream_task(ancestry), ids) for ancestry in ancestries
     ]
-    lines = list(record.doc.lines)
+    doc = record.doc
 
     if root_done:
         drop = _block_indices(root)
@@ -553,20 +547,21 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
             # writes once and never updates. Children do not carry
             # over.
             drop -= {root.raw_index, *root.note_indices}
-            lines[root.raw_index] = _set_fields(
-                root.raw,
+            _set_fields(
+                doc,
+                root.raw_index,
                 {
                     'DUE': rescheduled.isoformat(),
                     'ID': ids[root.raw_index],
                 },
             )
-        lines = _drop_lines(lines, drop)
+        doc.lines = _drop_lines(doc.lines, drop)
     else:
         for index, task_id in ids.items():
-            lines[index] = set_field(lines[index], 'ID', task_id)
+            doc.set_field(index, 'ID', task_id)
         for ancestry in ancestries:
             index = ancestry[-1].raw_index
-            lines[index] = _mark_done(lines[index])
+            doc.lines[index] = _mark_done(doc.lines[index])
 
     entries = [
         _log_entry(record.path, ancestry, DONE_STATUS, today)
@@ -574,8 +569,7 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
         if not _is_checklist_item(ancestry[-1])
     ]
 
-    record.doc.lines = lines
-    record.path.write_text(serialize(record.doc))
+    record.path.write_text(doc.text)
     _append_log(directory, entries)
 
     journal = Journal(directory)
@@ -640,17 +634,13 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
     stream = _stream_task(record.ancestry)
     stream_id = stream.task_id or new_task_id()
 
-    lines = list(record.doc.lines)
+    doc = record.doc
     if stream is not task:
         # A checklist item cannot hold an id, so the event belongs to
         # the ancestor's stream and the ancestor's line is the one that
         # has to carry it.
-        lines[stream.raw_index] = set_field(
-            lines[stream.raw_index],
-            'ID',
-            stream_id,
-        )
-    lines = _drop_lines(lines, _block_indices(task))
+        doc.set_field(stream.raw_index, 'ID', stream_id)
+    doc.lines = _drop_lines(doc.lines, _block_indices(task))
 
     entries = (
         []
@@ -660,8 +650,7 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
         ]
     )
 
-    record.doc.lines = lines
-    record.path.write_text(serialize(record.doc))
+    record.path.write_text(doc.text)
     _append_log(directory, entries)
 
     Journal(directory).append(
@@ -742,9 +731,10 @@ def update_task(
     written = dict(checked)
     if not task.task_id:
         written['ID'] = task_id
-    entry = _set_fields(task.raw, written)
+    doc = record.doc
+    entry = _set_fields(doc, task.raw_index, written)
     if title is not None:
-        entry = set_title(entry, title)
+        entry = doc.set_title(task.raw_index, title)
 
     delta: dict[str, list[Any]] = {
         name: [task.fields.get(name), value] for name, value in written.items()
@@ -763,8 +753,7 @@ def update_task(
         # title, which the snapshot already carries.
         payload['ancestry'] = _format_ancestry(record.ancestry)
 
-    record.doc.lines[task.raw_index] = entry
-    record.path.write_text(serialize(record.doc))
+    record.path.write_text(doc.text)
 
     Journal(directory).append(
         UPDATED_EVENT,
@@ -802,7 +791,7 @@ def backfill_file(path: Path, today: date, journal: Journal) -> list[str]:
     `today` is the migration date, not the real add date -- that is not
     recoverable from the files (ADR 0005). Age accrues from here.
     """
-    doc: TodoFile = parse(path.read_text())
+    doc = TodoDocument(path.read_text())
     stamped: list[str] = []
 
     for task in doc.tasks:
@@ -815,7 +804,7 @@ def backfill_file(path: Path, today: date, journal: Journal) -> list[str]:
         if not task.task_id:
             updates['ID'] = task_id
 
-        doc.lines[task.raw_index] = _set_fields(task.raw, updates)
+        _set_fields(doc, task.raw_index, updates)
         stamped.append(task.title)
 
         journal.append(
@@ -833,7 +822,7 @@ def backfill_file(path: Path, today: date, journal: Journal) -> list[str]:
         )
 
     if stamped:
-        path.write_text(serialize(doc))
+        path.write_text(doc.text)
     return stamped
 
 
