@@ -1,4 +1,4 @@
-"""Contract tests for parse-to-serialize byte identity (ADR 0004).
+"""Contract tests for round-trip byte identity (ADR 0004).
 
 The markdown files stay authoritative and hand-edited, so btodo must
 never reformat a file it did not mean to change. This suite pins that
@@ -9,7 +9,7 @@ the parser distinguishes. It outlives the property refactor.
 from pathlib import Path
 from unittest import TestCase
 
-from battodo.parser import TodoDocument, parse, serialize
+from battodo.parser import TodoDocument
 
 TODO_DIR = Path(__file__).parent.parent / 'behavioral' / 'data' / 'todo'
 WORK = TODO_DIR / 'work.md'
@@ -56,11 +56,11 @@ SHAPES = {
 
 def round_trip(text: str) -> str:
     """Return `text` as the parser gives it back."""
-    return serialize(parse(text))
+    return TodoDocument(text).text
 
 
 class RoundTripTests(TestCase):
-    """Contract tests for battodo.parser round-trip byte identity."""
+    """Contract tests for battodo.parser.TodoDocument byte identity."""
 
     maxDiff = None
 
