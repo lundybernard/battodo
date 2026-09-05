@@ -1,13 +1,13 @@
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from ..selector import (
     SelectionError,
     TaskNode,
     TaskRecord,
     TaskSelection,
-    TodoFile,
+    TodoDocument,
 )
 
 SRC = 'battodo.selector'
@@ -17,10 +17,10 @@ class TaskSelectionTests(TestCase):
     """Unit tests for battodo.selector.TaskSelection."""
 
     discover_lists: MagicMock
-    parse: MagicMock
+    TodoDocument: MagicMock
 
     def setUp(t) -> None:
-        for target in ('discover_lists', 'parse'):
+        for target in ('discover_lists', 'TodoDocument'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -68,7 +68,8 @@ class TaskSelectionTests(TestCase):
             title='Title quoting 9o71lx',
             fields={},
         )
-        t.doc = TodoFile([], [t.parent, t.sibling, t.quoting])
+        t.doc = create_autospec(TodoDocument, instance=True)
+        t.doc.tasks = [t.parent, t.sibling, t.quoting]
 
         t.ts = TaskSelection(t.dir, 'b')
 
@@ -94,8 +95,10 @@ class TaskSelectionTests(TestCase):
             t.path.read_text.assert_called_once_with()
 
         with t.subTest('and parsed, beside the path it came from'):
-            t.parse.assert_called_once_with(t.path.read_text.return_value)
-            t.assertEqual(lists, [(t.path, t.parse.return_value)])
+            t.TodoDocument.assert_called_once_with(
+                t.path.read_text.return_value
+            )
+            t.assertEqual(lists, [(t.path, t.TodoDocument.return_value)])
 
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, any depth'):
