@@ -45,6 +45,11 @@ One exception: a declared red commit in the bracket (R4, step 3). It
 fails only the tests it enumerates, each for the stated reason, and
 every other test and the coverage floor stay green.
 
+A sixth gate, `pixi run mutate`, runs once at the tip of each PR
+branch, not at every commit. It is informational: the PR verification
+line reports the count of surviving mutants, and a surviving mutant is
+a test-improvement finding, not a blocker.
+
 ### R4 — One bracket per slice
 
 Each slice runs one bracket: pin current behavior in an oracle,
