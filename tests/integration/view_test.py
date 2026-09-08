@@ -6,6 +6,8 @@ values; interaction checks stay in the isolation tests beside the
 code.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from json import loads
 from os import environ
@@ -33,6 +35,13 @@ def source_dir(t: TestCase) -> Path:
     tmp = TemporaryDirectory()
     t.addCleanup(tmp.cleanup)
     return Path(tmp.name)
+
+
+@contextmanager
+def empty_source() -> Iterator[Path]:
+    """An empty source directory of its own, for one group of subtests."""
+    with TemporaryDirectory() as tmp:
+        yield Path(tmp)
 
 
 def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
@@ -74,10 +83,12 @@ class DiscoverListsTests(TestCase):
 
 
 class RenderedViewTests(TestCase):
+    """Contract tests for battodo.view.View.text."""
+
     def setUp(t) -> None:
         t.source = source_dir(t)
 
-    def test_a_parked_list_does_not_end_the_scan(t) -> None:
+    def test_text(t) -> None:
         # The parked list sorts first. The scan must step over it,
         # not stop at it.
         write(t.source, 'study', '- [ ] A parked task [P:5]', parked=True)
@@ -95,101 +106,105 @@ class RenderedViewTests(TestCase):
         with t.subTest('and so is the last one'):
             t.assertIn('The last task of all', out)
 
-    def test_a_list_with_nothing_to_show_is_skipped(t) -> None:
         # A list gets a table only when it has open items.
-        write(t.source, 'career')
-        write(t.source, 'events', '- [x] A completed task [P:3]')
-        write(t.source, 'backlog', '- [ ] A visible task [P:2]')
+        with empty_source() as source:
+            write(source, 'career')
+            write(source, 'events', '- [x] A completed task [P:3]')
+            write(source, 'backlog', '- [ ] A visible task [P:2]')
 
-        out = View(Selection(t.source, NOW, show_all=False), 80).text
+            out = View(Selection(source, NOW, show_all=False), 80).text
 
-        with t.subTest('a list with no items has no table'):
-            t.assertNotIn('Career', out)
+            with t.subTest('a list with no items has no table'):
+                t.assertNotIn('Career', out)
 
-        with t.subTest('nor has one whose every item is finished'):
-            t.assertNotIn('Events', out)
+            with t.subTest('nor has one whose every item is finished'):
+                t.assertNotIn('Events', out)
 
-        with t.subTest('a list with something to show still renders'):
-            t.assertIn('Backlog', out)
+            with t.subTest('a list with something to show still renders'):
+                t.assertIn('Backlog', out)
 
-    def test_top_n(t) -> None:
-        write(
-            t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
-        )
-
-        with t.subTest('five items, and a count of what is held back'):
-            out = View(Selection(t.source, NOW, show_all=False), 80).text
-            t.assertIn('Item 5', out)
-            t.assertNotIn('Item 6', out)
-            t.assertIn('… and 2 more', out)
-
-        with t.subTest('an explicit top_n replaces the default'):
-            selection = Selection(t.source, NOW, show_all=False, top_n=2)
-            out = View(selection, 80).text
-            t.assertIn('Item 2', out)
-            t.assertNotIn('Item 3', out)
-            t.assertIn('… and 5 more', out)
-
-        with t.subTest('show_all keeps every item and holds back none'):
-            out = View(Selection(t.source, NOW, show_all=True), 80).text
-            t.assertIn('Item 7', out)
-            t.assertNotIn('… and', out)
-
-    def test_width(t) -> None:
-        write(t.source, 'career', f'- [ ] {LONG_TITLE} [P:3]')
-        narrow = View(Selection(t.source, NOW, show_all=False), 60).text
-        wide = View(Selection(t.source, NOW, show_all=False), 120).text
-
-        with t.subTest('an explicit width bounds the table'):
-            # The header line is prose, not columns.
-            table = narrow.split('\n')[1:]
-            t.assertLessEqual(max(len(line) for line in table), 60)
-
-        with t.subTest('a narrow table clips the title it cannot fit'):
-            t.assertNotIn(LONG_TITLE, narrow)
-            t.assertIn('…', narrow)
-
-        with t.subTest('a wide one does not have to'):
-            t.assertIn(LONG_TITLE, wide)
-
-        # With no explicit width, the layout reads COLUMNS from the
-        # environment.
-        for columns, expected in (('60', narrow), ('120', wide)):
-            with t.subTest(f'no width given probes {columns} columns'):
-                with patch.dict(environ, {'COLUMNS': columns}):
-                    selection = Selection(t.source, NOW, show_all=False)
-                    probed = View(selection).text
-                t.assertEqual(probed, expected)
-
-    def test_an_inactive_category(t) -> None:
-        write(t.source, 'chores', '- [ ] An inactive category task [P:3]')
-        write(t.source, 'career', '- [ ] An active category task [P:2]')
-
-        with t.subTest('a shut window keeps its category out of the view'):
-            out = View(Selection(t.source, NOW, show_all=False), 80).text
-            t.assertNotIn('An inactive category task', out)
-            t.assertIn('An active category task', out)
-
-        with t.subTest('asking for everything reaches past the windows'):
-            out = View(Selection(t.source, NOW, show_all=True), 80).text
-            t.assertIn('An inactive category task', out)
-            t.assertIn('An active category task', out)
-
-        with t.subTest('though a list that opted out stays out even then'):
+        with empty_source() as source:
             write(
-                t.source, 'backlog', '- [ ] A parked task [P:4]', parked=True
+                source,
+                'career',
+                *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)),
             )
-            out = View(Selection(t.source, NOW, show_all=True), 80).text
-            t.assertNotIn('A parked task', out)
 
-        with t.subTest('and the header still names only what is open now'):
-            # Which categories are active is a fact about the clock.
-            # Asking to see everything does not reopen their windows.
-            out = View(Selection(t.source, NOW, show_all=True), 80).text
-            t.assertIn('active: career, events, study, work', out)
+            with t.subTest('five items, and a count of what is held back'):
+                out = View(Selection(source, NOW, show_all=False), 80).text
+                t.assertIn('Item 5', out)
+                t.assertNotIn('Item 6', out)
+                t.assertIn('… and 2 more', out)
+
+            with t.subTest('an explicit top_n replaces the default'):
+                selection = Selection(source, NOW, show_all=False, top_n=2)
+                out = View(selection, 80).text
+                t.assertIn('Item 2', out)
+                t.assertNotIn('Item 3', out)
+                t.assertIn('… and 5 more', out)
+
+            with t.subTest('show_all keeps every item and holds back none'):
+                out = View(Selection(source, NOW, show_all=True), 80).text
+                t.assertIn('Item 7', out)
+                t.assertNotIn('… and', out)
+
+        with empty_source() as source:
+            write(source, 'career', f'- [ ] {LONG_TITLE} [P:3]')
+            narrow = View(Selection(source, NOW, show_all=False), 60).text
+            wide = View(Selection(source, NOW, show_all=False), 120).text
+
+            with t.subTest('an explicit width bounds the table'):
+                # The header line is prose, not columns.
+                table = narrow.split('\n')[1:]
+                t.assertLessEqual(max(len(line) for line in table), 60)
+
+            with t.subTest('a narrow table clips the title it cannot fit'):
+                t.assertNotIn(LONG_TITLE, narrow)
+                t.assertIn('…', narrow)
+
+            with t.subTest('a wide one does not have to'):
+                t.assertIn(LONG_TITLE, wide)
+
+            # With no explicit width, the layout reads COLUMNS from the
+            # environment.
+            for columns, expected in (('60', narrow), ('120', wide)):
+                with t.subTest(f'no width given probes {columns} columns'):
+                    with patch.dict(environ, {'COLUMNS': columns}):
+                        selection = Selection(source, NOW, show_all=False)
+                        probed = View(selection).text
+                    t.assertEqual(probed, expected)
+
+        with empty_source() as source:
+            write(source, 'chores', '- [ ] An inactive category task [P:3]')
+            write(source, 'career', '- [ ] An active category task [P:2]')
+
+            with t.subTest('a shut window keeps its category out of view'):
+                out = View(Selection(source, NOW, show_all=False), 80).text
+                t.assertNotIn('An inactive category task', out)
+                t.assertIn('An active category task', out)
+
+            with t.subTest('asking for everything reaches past the windows'):
+                out = View(Selection(source, NOW, show_all=True), 80).text
+                t.assertIn('An inactive category task', out)
+                t.assertIn('An active category task', out)
+
+            with t.subTest('though a list that opted out stays out even then'):
+                write(
+                    source, 'backlog', '- [ ] A parked task [P:4]', parked=True
+                )
+                out = View(Selection(source, NOW, show_all=True), 80).text
+                t.assertNotIn('A parked task', out)
+
+            with t.subTest('and the header names only what is open now'):
+                # Which categories are active is a fact about the clock.
+                # Asking to see everything does not reopen their windows.
+                out = View(Selection(source, NOW, show_all=True), 80).text
+                t.assertIn('active: career, events, study, work', out)
 
 
 class SelectionDocumentTests(TestCase):
+    """Contract tests for battodo.view.Selection.json."""
+
     def setUp(t) -> None:
         t.source = source_dir(t)
 
@@ -197,7 +212,7 @@ class SelectionDocumentTests(TestCase):
         selection = Selection(t.source, NOW, **kwargs)  # type: ignore[arg-type]
         return loads(selection.json)['categories']
 
-    def test_top_n(t) -> None:
+    def test_json(t) -> None:
         write(
             t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
         )
@@ -228,34 +243,33 @@ class SelectionDocumentTests(TestCase):
         with t.subTest('and says none are when it is holding nothing back'):
             t.assertEqual(t.categories(show_all=True)[0]['hidden'], 0)
 
-    def test_rank_is_rounded(t) -> None:
         # Seven days over a 30-day scale is a repeating fraction, so
         # the raw rank has more decimals than the document publishes.
-        write(
-            t.source,
-            'career',
-            '- [ ] A fractional rank task [ADDED:2026-07-29]',
-        )
+        with empty_source() as source:
+            write(
+                source,
+                'career',
+                '- [ ] A fractional rank task [ADDED:2026-07-29]',
+            )
+            document = loads(Selection(source, NOW, show_all=False).json)
+            task = document['categories'][0]['tasks'][0]
 
-        task = t.categories(show_all=False)[0]['tasks'][0]
+            with t.subTest('the published rank carries two decimals'):
+                t.assertEqual(task['rank'], 1.23)
 
-        with t.subTest('the published rank carries two decimal places'):
-            t.assertEqual(task['rank'], 1.23)
+            with t.subTest('which is not the raw computation'):
+                t.assertNotEqual(task['rank'], 1 + 7 / 30)
 
-        with t.subTest('which is not the raw computation'):
-            t.assertNotEqual(task['rank'], 1 + 7 / 30)
+        with empty_source() as source:
+            write(source, 'career', '- [ ] A single task [P:2]')
+            lines = Selection(source, NOW, show_all=False).json.split('\n')
 
-    def test_the_document_is_pretty_printed(t) -> None:
-        write(t.source, 'career', '- [ ] A single task [P:2]')
+            with t.subTest('the document spans more than one line'):
+                t.assertGreater(len(lines), 1)
 
-        lines = Selection(t.source, NOW, show_all=False).json.split('\n')
-
-        with t.subTest('it spans more than one line'):
-            t.assertGreater(len(lines), 1)
-
-        with t.subTest('and is indented two spaces to the level'):
-            t.assertTrue(lines[1].startswith('  "'))
-            t.assertFalse(lines[1].startswith('   '))
+            with t.subTest('and is indented two spaces to the level'):
+                t.assertTrue(lines[1].startswith('  "'))
+                t.assertFalse(lines[1].startswith('   '))
 
 
 class TimezoneTests(TestCase):
