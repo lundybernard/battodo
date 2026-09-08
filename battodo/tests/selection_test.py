@@ -13,23 +13,6 @@ from ..selection import (
 SRC = 'battodo.selection'
 
 
-def task(
-    title: str,
-    done: bool = False,
-    children: list[TaskNode] | None = None,
-    **fields: str,
-) -> TaskNode:
-    """A task carrying `fields`, over the children it owns."""
-    return TaskNode(
-        raw_index=0,
-        indent=0,
-        done=done,
-        title=title,
-        fields=fields,
-        children=children or [],
-    )
-
-
 class TaskSelectionTests(TestCase):
     """Unit tests for battodo.selection.TaskSelection."""
 
@@ -49,11 +32,42 @@ class TaskSelectionTests(TestCase):
         # One list holding every case the lookup distinguishes: an id, a
         # child no id is stamped on, a checked task, three titles
         # sharing a letter, and a title that quotes another task's id.
-        t.brush = task('Chip the brush')
-        t.sand = task('Sand it', done=True)
-        t.deck = task('Deck rebuild', ID='9o71lx', children=[t.brush, t.sand])
-        t.bare = task('Bare')
-        t.quote = task('Chase invoice 9o71lx')
+        t.brush = TaskNode(
+            raw_index=1,
+            indent=2,
+            done=False,
+            title='Chip the brush',
+            fields={},
+        )
+        t.sand = TaskNode(
+            raw_index=2,
+            indent=2,
+            done=True,
+            title='Sand it',
+            fields={},
+        )
+        t.deck = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='Deck rebuild',
+            fields={'ID': '9o71lx'},
+            children=[t.brush, t.sand],
+        )
+        t.bare = TaskNode(
+            raw_index=3,
+            indent=0,
+            done=False,
+            title='Bare',
+            fields={},
+        )
+        t.quote = TaskNode(
+            raw_index=4,
+            indent=0,
+            done=False,
+            title='Chase invoice 9o71lx',
+            fields={},
+        )
         t.doc = TodoFile([], [t.deck, t.bare, t.quote])
 
         t.ts = TaskSelection(t.dir, 'b')

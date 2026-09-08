@@ -24,31 +24,6 @@ def stand_in(t: TestCase, *targets: str) -> None:
         t.addCleanup(patcher.stop)
 
 
-def task(title: str, **fields: str) -> TaskNode:
-    """A top-level open task carrying `fields`."""
-    return TaskNode(
-        raw_index=0,
-        indent=0,
-        done=False,
-        title=title,
-        fields=fields,
-    )
-
-
-def entry(title: str, **overrides: object) -> dict[str, object]:
-    """One subtask as `item_data` records it."""
-    return {
-        'id': None,
-        'title': title,
-        'done': False,
-        'loe': None,
-        'due': None,
-        'tags': [],
-        'subtasks': [],
-        **overrides,
-    }
-
-
 class SubtaskEntryTests(TestCase):
     """Unit tests for battodo.item.subtask_entry."""
 
@@ -72,15 +47,25 @@ class SubtaskEntryTests(TestCase):
         # The stored fields, and the children below it.
         t.assertEqual(
             subtask_entry(child),
-            entry(
-                'Chip the brush',
-                id='abc123',
-                loe=2,
-                tags=['yard', 'summer'],
-                subtasks=[
-                    entry('Buy the lumber', done=True, due='2026-09-01')
+            {
+                'id': 'abc123',
+                'title': 'Chip the brush',
+                'done': False,
+                'loe': 2,
+                'due': None,
+                'tags': ['yard', 'summer'],
+                'subtasks': [
+                    {
+                        'id': None,
+                        'title': 'Buy the lumber',
+                        'done': True,
+                        'loe': None,
+                        'due': '2026-09-01',
+                        'tags': [],
+                        'subtasks': [],
+                    }
                 ],
-            ),
+            },
         )
 
     def test_checklist_item(t) -> None:
@@ -88,7 +73,18 @@ class SubtaskEntryTests(TestCase):
         plain = TaskNode(
             raw_index=1, indent=2, done=False, title='Sweep', fields={}
         )
-        t.assertEqual(subtask_entry(plain), entry('Sweep'))
+        t.assertEqual(
+            subtask_entry(plain),
+            {
+                'id': None,
+                'title': 'Sweep',
+                'done': False,
+                'loe': None,
+                'due': None,
+                'tags': [],
+                'subtasks': [],
+            },
+        )
 
 
 class ItemDataTests(TestCase):
@@ -96,25 +92,30 @@ class ItemDataTests(TestCase):
 
     def test_fields(t) -> None:
         # The list, the stored fields, and the children.
-        subject = task(
-            'Deck rebuild',
-            P='4',
-            LOE='8',
-            DUE='2026-08-12',
-            REPEAT='30d',
-            TAGS='yard,summer',
-            ADDED='2026-07-06',
-            ID='9o71lx',
+        subject = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='Deck rebuild',
+            fields={
+                'P': '4',
+                'LOE': '8',
+                'DUE': '2026-08-12',
+                'REPEAT': '30d',
+                'TAGS': 'yard,summer',
+                'ADDED': '2026-07-06',
+                'ID': '9o71lx',
+            },
+            children=[
+                TaskNode(
+                    raw_index=1,
+                    indent=2,
+                    done=False,
+                    title='Sweep',
+                    fields={},
+                )
+            ],
         )
-        subject.children = [
-            TaskNode(
-                raw_index=1,
-                indent=2,
-                done=False,
-                title='Sweep',
-                fields={},
-            )
-        ]
 
         t.assertEqual(
             item_data(Path('/todo/work.md'), subject, TODAY),
@@ -131,14 +132,34 @@ class ItemDataTests(TestCase):
                 'added': '2026-07-06',
                 'repeat': '30d',
                 'tags': ['yard', 'summer'],
-                'subtasks': [entry('Sweep')],
+                'subtasks': [
+                    {
+                        'id': None,
+                        'title': 'Sweep',
+                        'done': False,
+                        'loe': None,
+                        'due': None,
+                        'tags': [],
+                        'subtasks': [],
+                    }
+                ],
             },
         )
 
     def test_absent(t) -> None:
         # An unfielded task reads as absent, not as zero.
         t.assertEqual(
-            item_data(Path('/todo/work.md'), task('Bare'), TODAY),
+            item_data(
+                Path('/todo/work.md'),
+                TaskNode(
+                    raw_index=0,
+                    indent=0,
+                    done=False,
+                    title='Bare',
+                    fields={},
+                ),
+                TODAY,
+            ),
             {
                 'list': 'work',
                 'id': None,
@@ -206,14 +227,25 @@ class RenderItemTests(TestCase):
     def test_subtasks(t) -> None:
         # Children follow, indented, in SCHEMA.md markup.
         t.data['subtasks'] = [
-            entry(
-                'Chip the brush',
-                id='abc123',
-                loe=2,
-                due='2026-09-01',
-                tags=['yard'],
-                subtasks=[entry('Buy the lumber', done=True)],
-            )
+            {
+                'id': 'abc123',
+                'title': 'Chip the brush',
+                'done': False,
+                'loe': 2,
+                'due': '2026-09-01',
+                'tags': ['yard'],
+                'subtasks': [
+                    {
+                        'id': None,
+                        'title': 'Buy the lumber',
+                        'done': True,
+                        'loe': None,
+                        'due': None,
+                        'tags': [],
+                        'subtasks': [],
+                    }
+                ],
+            }
         ]
         t.assertEqual(
             render_item(t.data).splitlines()[-3:],
