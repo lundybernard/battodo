@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch, sentinel
 
-from battodo.lib import (
+from ..lib import (
     add_item,
     backfill_items,
     complete_item,
@@ -143,6 +143,7 @@ class GetItemTests(TestCase):
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view', 'selector'])
+        conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
         conf.selector = 'a selector'
 
@@ -194,6 +195,7 @@ class AddItemTests(TestCase):
 
     def test_no_fields(t):
         conf = Mock(spec=['view', 'list', 'title'])
+        conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
         conf.list = 'chores'
         conf.title = 'A task title'
@@ -204,6 +206,7 @@ class AddItemTests(TestCase):
 
     def test_subtask(t):
         conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
+        conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
         conf.list = 'work'
         conf.title = 'A subtask title'
@@ -267,6 +270,7 @@ class UpdateItemTests(TestCase):
 
     def test_option_left_off(t):
         conf = Mock(spec=['view', 'selector', 'tags'])
+        conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
         conf.selector = 'a selector'
         conf.tags = 'yard,summer'

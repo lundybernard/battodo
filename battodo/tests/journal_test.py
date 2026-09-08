@@ -1,4 +1,5 @@
 import json
+from io import TextIOWrapper
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch, sentinel
@@ -53,9 +54,11 @@ class JournalTests(TestCase):
 
         t.file = MagicMock(spec=Path)
         t.source = t.Path.return_value
-        t.journal_dir = t.source.__truediv__.return_value
+        t.journal_dir = MagicMock(spec=Path)
+        t.source.__truediv__.return_value = t.journal_dir
         t.journal_dir.__truediv__.return_value = t.file
-        t.handle = t.file.open.return_value.__enter__.return_value
+        t.handle = MagicMock(spec=TextIOWrapper)
+        t.file.open.return_value.__enter__.return_value = t.handle
         t.handle.read.return_value = ''
 
         t.journal = Journal(sentinel.source_dir)

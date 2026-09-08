@@ -1,4 +1,5 @@
 from datetime import date
+from io import TextIOWrapper
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, patch
@@ -488,8 +489,10 @@ class CompleteTests(TestCase):
         t.path.name = 'work.md'
         t.path.stem = 'work'
         t.dir = MagicMock(spec=Path)
-        t.log = t.dir.__truediv__.return_value
-        t.log_handle = t.log.open.return_value.__enter__.return_value
+        t.log = MagicMock(spec=Path)
+        t.dir.__truediv__.return_value = t.log
+        t.log_handle = MagicMock(spec=TextIOWrapper)
+        t.log.open.return_value.__enter__.return_value = t.log_handle
         t.doc = parse(CASCADE_DOC)
         t.lookup = t.TaskSelection.return_value
 
@@ -608,8 +611,10 @@ class ScratchTests(TestCase):
         t.path.name = 'work.md'
         t.path.stem = 'work'
         t.dir = MagicMock(spec=Path)
-        t.log = t.dir.__truediv__.return_value
-        t.log_handle = t.log.open.return_value.__enter__.return_value
+        t.log = MagicMock(spec=Path)
+        t.dir.__truediv__.return_value = t.log
+        t.log_handle = MagicMock(spec=TextIOWrapper)
+        t.log.open.return_value.__enter__.return_value = t.log_handle
         t.doc = parse(CASCADE_DOC)
         t.parent = t.doc.tasks[0]
         t.lookup = t.TaskSelection.return_value
