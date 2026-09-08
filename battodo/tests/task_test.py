@@ -22,7 +22,7 @@ class TaskTests(TestCase):
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
 
-        t.tk = Task(Path(CONFIGURED), 'brush pile', TODAY)
+        t.tk = Task(Path(CONFIGURED), 'a selector', TODAY)
 
         t.now = Mock(spec=datetime)
         # spec models batconf: an option the user did not supply is
@@ -30,7 +30,7 @@ class TaskTests(TestCase):
         t.conf = Mock(spec=['view', 'selector'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = CONFIGURED
-        t.conf.selector = 'brush pile'
+        t.conf.selector = 'a selector'
 
     def dated(t, value):
         """The same configuration, carrying a completion date."""
@@ -47,7 +47,7 @@ class TaskTests(TestCase):
             t.assertEqual(task.directory, Path(CONFIGURED))
 
         with t.subTest('the selector names the task'):
-            t.assertEqual(task.selector, 'brush pile')
+            t.assertEqual(task.selector, 'a selector')
 
         with t.subTest('and the clock gives the day it is logged under'):
             t.assertEqual(task.today, t.now.date.return_value)
@@ -72,16 +72,16 @@ class TaskTests(TestCase):
     def test_record(t):
         with t.subTest('the selector is looked up in the source'):
             t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
-            t.TaskSelection.assert_called_once_with(SOURCE, 'brush pile')
+            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
         with t.subTest('and a second read costs no second lookup'):
             t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
-            t.TaskSelection.assert_called_once_with(SOURCE, 'brush pile')
+            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
     def test_complete(t):
         t.tk.complete()
 
-        t.complete.assert_called_once_with(SOURCE, 'brush pile', TODAY)
+        t.complete.assert_called_once_with(SOURCE, 'a selector', TODAY)
 
     def test_completed(t):
         with t.subTest('a task that was not completed logged nothing'):

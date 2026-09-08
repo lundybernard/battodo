@@ -87,7 +87,7 @@ class JournalTests(TestCase):
             'task/zz01ab',
             {'delta': {}},
             actor='agent',
-            source_file='work.md',
+            source_file='a-list.md',
         )
 
         with t.subTest('the journal directory is made before the write'):
@@ -111,7 +111,7 @@ class JournalTests(TestCase):
                     'hash': None,
                     'metadata': {
                         'actor': 'agent',
-                        'source_file': 'work.md',
+                        'source_file': 'a-list.md',
                     },
                     'payload': {'delta': {}},
                 },
@@ -138,7 +138,7 @@ class JournalTests(TestCase):
                 'task/aa',
                 {},
                 actor='agent',
-                source_file='work.md',
+                source_file='a-list.md',
             )
 
             t.assertEqual(event['seq'], 3)
@@ -152,7 +152,7 @@ class JournalTests(TestCase):
                 'task/zz01ab',
                 {},
                 actor='agent',
-                source_file='work.md',
+                source_file='a-list.md',
                 occurred_at='2026-08-05T09:00:00+00:00',
             )
 

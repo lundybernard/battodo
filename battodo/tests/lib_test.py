@@ -15,8 +15,8 @@ from battodo.lib import (
 )
 
 SRC = 'battodo.lib'
-# The configured `~/todo` as every function resolves it.
-SOURCE = Path.home() / 'todo'
+# The configured `~/a-source-dir` as every function resolves it.
+SOURCE = Path.home() / 'a-source-dir'
 
 
 class GetViewTests(TestCase):
@@ -117,8 +117,8 @@ class GetItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'format'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
         t.conf.format = 'text'
 
     def test_text(t):
@@ -126,7 +126,7 @@ class GetItemTests(TestCase):
 
         args = t.build_item.call_args[0]
         t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], 'brush pile')
+        t.assertEqual(args[1], 'a selector')
         t.assertEqual(args[2], t.now)
         t.assertEqual(built, t.build_item.return_value)
 
@@ -135,7 +135,7 @@ class GetItemTests(TestCase):
 
         built = get_item(t.conf, t.now)
 
-        t.assertEqual(t.build_item_json.call_args[0][1], 'brush pile')
+        t.assertEqual(t.build_item_json.call_args[0][1], 'a selector')
         t.assertEqual(built, t.build_item_json.return_value)
 
         # The json builder serializes; nothing renders.
@@ -143,8 +143,8 @@ class GetItemTests(TestCase):
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view', 'selector'])
-        conf.view.source_dir = '~/todo'
-        conf.selector = 'brush pile'
+        conf.view.source_dir = '~/a-source-dir'
+        conf.selector = 'a selector'
 
         get_item(conf, t.now)
 
@@ -160,8 +160,8 @@ class AddItemTests(TestCase):
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
 
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
+        t.path = Path('~/a-source-dir/a-list.md')
+        t.entry = '- [ ] A task title [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
         t.add_task.return_value = (t.path, t.entry)
         t.add_subtask.return_value = (t.path, t.entry)
 
@@ -171,9 +171,9 @@ class AddItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
         t.conf.list = 'chores'
-        t.conf.title = 'Water it'
+        t.conf.title = 'A task title'
         t.conf.priority = '4'
         t.conf.due = '2026-09-01'
 
@@ -183,7 +183,7 @@ class AddItemTests(TestCase):
         args = t.add_task.call_args[0]
         t.assertEqual(args[0], SOURCE)
         t.assertEqual(args[1], 'chores')
-        t.assertEqual(args[2], 'Water it')
+        t.assertEqual(args[2], 'A task title')
         t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
         t.assertEqual(args[4], t.today)
 
@@ -194,9 +194,9 @@ class AddItemTests(TestCase):
 
     def test_no_fields(t):
         conf = Mock(spec=['view', 'list', 'title'])
-        conf.view.source_dir = '~/todo'
+        conf.view.source_dir = '~/a-source-dir'
         conf.list = 'chores'
-        conf.title = 'Water it'
+        conf.title = 'A task title'
 
         add_item(conf, t.now)
 
@@ -204,9 +204,9 @@ class AddItemTests(TestCase):
 
     def test_subtask(t):
         conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
-        conf.view.source_dir = '~/todo'
+        conf.view.source_dir = '~/a-source-dir'
         conf.list = 'work'
-        conf.title = 'Buy lumber'
+        conf.title = 'A subtask title'
         conf.parent = '9o71lx'
         conf.loe = '2'
 
@@ -218,7 +218,7 @@ class AddItemTests(TestCase):
             t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], 'work')
             t.assertEqual(args[2], '9o71lx')
-            t.assertEqual(args[3], 'Buy lumber')
+            t.assertEqual(args[3], 'A subtask title')
             t.assertEqual(args[4], {'LOE': '2'})
 
         with t.subTest('a subtask carries no add date, so none is derived'):
@@ -236,8 +236,8 @@ class UpdateItemTests(TestCase):
         t.update_task = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ID:ab12cd]'
+        t.path = Path('~/a-source-dir/a-list.md')
+        t.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
         t.update_task.return_value = (t.path, t.entry)
 
         t.now = Mock(spec=datetime)
@@ -246,29 +246,29 @@ class UpdateItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
         t.conf.priority = '4'
         t.conf.due = '2026-09-01'
-        t.conf.title = 'Water it'
+        t.conf.title = 'A task title'
 
     def test_forwarded(t):
         update_item(t.conf, t.now)
 
         args, kwargs = t.update_task.call_args
         t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], 'brush pile')
+        t.assertEqual(args[1], 'a selector')
         t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
         t.assertEqual(args[3], t.today)
-        t.assertEqual(kwargs['title'], 'Water it')
+        t.assertEqual(kwargs['title'], 'A task title')
 
     def test_result(t):
         t.assertEqual(update_item(t.conf, t.now), f'{t.entry}\n{t.path}')
 
     def test_option_left_off(t):
         conf = Mock(spec=['view', 'selector', 'tags'])
-        conf.view.source_dir = '~/todo'
-        conf.selector = 'brush pile'
+        conf.view.source_dir = '~/a-source-dir'
+        conf.selector = 'a selector'
         conf.tags = 'yard,summer'
 
         update_item(conf, t.now)
@@ -301,16 +301,16 @@ class CompleteItemTests(TestCase):
         # Completing the last open child completes its parent too, so
         # one call can log more than one entry.
         t.task.completed = [
-            '2026-08-08 | chores | DONE | Deck > Chip it',
-            '2026-08-08 | chores | DONE | Deck',
+            '2026-08-08 | chores | DONE | A parent > A child',
+            '2026-08-08 | chores | DONE | A parent',
         ]
 
         logged = complete_item(t.conf, t.now)
 
         t.assertEqual(
             logged,
-            '2026-08-08 | chores | DONE | Deck > Chip it\n'
-            '2026-08-08 | chores | DONE | Deck',
+            '2026-08-08 | chores | DONE | A parent > A child\n'
+            '2026-08-08 | chores | DONE | A parent',
         )
 
     def test_task(t):
@@ -342,21 +342,21 @@ class ScratchItemTests(TestCase):
         t.today = t.now.date.return_value
         t.conf = Mock(spec=['view', 'selector'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
 
     def test_result(t):
         t.scratch.return_value = [
-            '2026-08-08 | chores | SCRATCHED | Deck > Chip',
-            '2026-08-08 | chores | SCRATCHED | Deck',
+            '2026-08-08 | chores | SCRATCHED | A parent > A child',
+            '2026-08-08 | chores | SCRATCHED | A parent',
         ]
 
         logged = scratch_item(t.conf, t.now)
 
         t.assertEqual(
             logged,
-            '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
-            '2026-08-08 | chores | SCRATCHED | Deck',
+            '2026-08-08 | chores | SCRATCHED | A parent > A child\n'
+            '2026-08-08 | chores | SCRATCHED | A parent',
         )
 
     def test_forwarded(t):
@@ -366,7 +366,7 @@ class ScratchItemTests(TestCase):
 
         args = t.scratch.call_args[0]
         t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], 'brush pile')
+        t.assertEqual(args[1], 'a selector')
         t.assertEqual(args[2], t.today)
 
     def test_nothing_logged(t):
@@ -387,7 +387,7 @@ class BackfillItemsTests(TestCase):
         t.today = t.now.date.return_value
         t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
 
     def test_result(t):
         t.backfill_all.return_value = {

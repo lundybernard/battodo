@@ -31,7 +31,7 @@ class JournalTests(TestCase):
             'stream_id': 'task/abc123',
             'payload': {'delta': {'P': [1, 2]}},
             'actor': 'agent',
-            'source_file': 'work.md',
+            'source_file': 'a-list.md',
         }
         params.update(kwargs)
         return t.journal.append(**params)
@@ -54,7 +54,7 @@ class JournalTests(TestCase):
             t.assertIsNone(event['hash'])
             t.assertEqual(
                 event['metadata'],
-                {'actor': 'agent', 'source_file': 'work.md'},
+                {'actor': 'agent', 'source_file': 'a-list.md'},
             )
             t.assertEqual(event['payload'], {'delta': {'P': [1, 2]}})
 

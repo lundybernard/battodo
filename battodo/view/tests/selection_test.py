@@ -643,7 +643,7 @@ class SelectionFromConfigTests(TestCase):
         t.now = at('2026-08-05T10:30')
         t.conf = Mock(spec=['view', 'show_all'])
         t.conf.view = Mock(spec=['source_dir', 'top'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
         t.conf.show_all = True
 
@@ -651,7 +651,7 @@ class SelectionFromConfigTests(TestCase):
         selection = Selection.from_config(t.conf, t.now)
 
         with t.subTest('the source directory is left unexpanded'):
-            t.assertEqual(selection.directory, Path('~/todo'))
+            t.assertEqual(selection.directory, Path('~/a-source-dir'))
 
         with t.subTest('the clock is the one it was given'):
             t.assertEqual(selection.now, t.now)
@@ -665,7 +665,7 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('an unsupplied flag reads as off'):
             conf = Mock(spec=['view'])
             conf.view = Mock(spec=['source_dir', 'top'])
-            conf.view.source_dir = '~/todo'
+            conf.view.source_dir = '~/a-source-dir'
             conf.view.top = str(TOP_N)
 
             t.assertFalse(Selection.from_config(conf, t.now).show_all)

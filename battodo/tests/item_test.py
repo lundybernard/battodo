@@ -118,9 +118,9 @@ class ItemDataTests(TestCase):
         )
 
         t.assertEqual(
-            item_data(Path('/todo/work.md'), subject, TODAY),
+            item_data(Path('/source-dir/a-list.md'), subject, TODAY),
             {
-                'list': 'work',
+                'list': 'a-list',
                 'id': '9o71lx',
                 'title': 'Deck rebuild',
                 'done': False,
@@ -150,7 +150,7 @@ class ItemDataTests(TestCase):
         # An unfielded task reads as absent, not as zero.
         t.assertEqual(
             item_data(
-                Path('/todo/work.md'),
+                Path('/source-dir/a-list.md'),
                 TaskNode(
                     raw_index=0,
                     indent=0,
@@ -161,7 +161,7 @@ class ItemDataTests(TestCase):
                 TODAY,
             ),
             {
-                'list': 'work',
+                'list': 'a-list',
                 'id': None,
                 'title': 'Bare',
                 'done': False,
@@ -184,7 +184,7 @@ class RenderItemTests(TestCase):
 
     def setUp(t) -> None:
         t.data: dict[str, object] = {
-            'list': 'work',
+            'list': 'a-list',
             'id': '9o71lx',
             'title': 'Deck rebuild',
             'done': False,
@@ -203,7 +203,7 @@ class RenderItemTests(TestCase):
         t.assertEqual(
             render_item(t.data),
             'Deck rebuild\n'
-            '  list    work\n'
+            '  list    a-list\n'
             '  id      9o71lx\n'
             '  rank    10.0\n'
             '  P       4.0\n'
@@ -221,7 +221,7 @@ class RenderItemTests(TestCase):
         )
         t.assertEqual(
             render_item(t.data),
-            'Deck rebuild\n  list  work\n  id    -\n  rank  10.0\n  P     4.0',
+            'Deck rebuild\n  list  a-list\n  id    -\n  rank  10.0\n  P     4.0',
         )
 
     def test_subtasks(t) -> None:
@@ -269,7 +269,7 @@ class BuildItemTests(TestCase):
 
     def setUp(t) -> None:
         stand_in(t, 'TaskSelection', 'item_data', 'render_item')
-        t.directory = Path('/todo')
+        t.directory = Path('/source-dir')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
         # An autospec instance specs `record` from the descriptor, not
         # from the value it yields.
@@ -303,7 +303,7 @@ class BuildItemJsonTests(TestCase):
 
     def setUp(t) -> None:
         stand_in(t, 'TaskSelection', 'item_data', 'dumps')
-        t.directory = Path('/todo')
+        t.directory = Path('/source-dir')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
         # An autospec instance specs `record` from the descriptor, not
         # from the value it yields.
