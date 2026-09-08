@@ -162,6 +162,9 @@ class VisibleTasksTests(TestCase):
 class SortKeyTests(TestCase):
     """Unit tests for battodo.view.selection.sort_key."""
 
+    def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
+
     def test_order(t) -> None:
         doc = parse(
             '## Open\n'
@@ -170,6 +173,8 @@ class SortKeyTests(TestCase):
             '- [ ] Dated [P:3] [DUE:2026-09-30]\n'
             '- [ ] Higher [P:5]\n'
         )
+        ranked = {'Higher': 5.0}
+        t.rank.side_effect = lambda task, today: ranked.get(task.title, 3.0)
 
         ordered = [
             task.title
@@ -187,8 +192,11 @@ class SortKeyTests(TestCase):
 
     def test_key(t) -> None:
         # The key itself is rank, then due, then title.
+        t.rank.return_value = 3.0
         task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
+
         t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+        t.rank.assert_called_once_with(task, TODAY)
 
 
 class CategoryOrderTests(TestCase):
@@ -298,6 +306,7 @@ class TodoListTests(TestCase):
     """Unit tests for battodo.view.selection.TodoList."""
 
     def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
         t.path = Mock(spec=Path)
         t.path.stem = 'work'
         t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
@@ -325,7 +334,9 @@ class TodoListTests(TestCase):
             t.assertTrue(t.tl.parked)
 
     def test_tasks(t) -> None:
-        with t.subTest('open tasks come back in view order'):
+        with t.subTest('open tasks come back in the order rank gives'):
+            ranked = {'Low': 1.0, 'High': 5.0}
+            t.rank.side_effect = lambda task, today: ranked[task.title]
             t.tl.text = (
                 '## Open\n'
                 '- [ ] Low [P:1]\n'

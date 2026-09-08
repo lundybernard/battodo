@@ -90,6 +90,29 @@ class SubtaskEntryTests(TestCase):
 class ItemDataTests(TestCase):
     """Unit tests for battodo.item.item_data."""
 
+    rank: MagicMock
+    multiplier: MagicMock
+
+    def setUp(t) -> None:
+        stand_in(t, 'rank', 'multiplier')
+        t.rank.return_value = 10.006
+        t.multiplier.return_value = 4.0
+
+    def test_rank(t) -> None:
+        subject = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='Deck rebuild',
+            fields={'P': '4'},
+        )
+
+        item_data(Path('/source-dir/a-list.md'), subject, TODAY)
+
+        # Asked for against the given day, and asked for once.
+        t.rank.assert_called_once_with(subject, TODAY)
+        t.multiplier.assert_called_once_with(subject)
+
     def test_fields(t) -> None:
         # The list, the stored fields, and the children.
         subject = TaskNode(
@@ -124,8 +147,8 @@ class ItemDataTests(TestCase):
                 'id': '9o71lx',
                 'title': 'Deck rebuild',
                 'done': False,
-                # One month old and one week from due: 4 x 2.5.
-                'rank': 10.0,
+                # Rounded to the places the document publishes.
+                'rank': 10.01,
                 'priority': 4.0,
                 'loe': 8,
                 'due': '2026-08-12',
@@ -165,8 +188,8 @@ class ItemDataTests(TestCase):
                 'id': None,
                 'title': 'Bare',
                 'done': False,
-                'rank': 1.0,
-                'priority': 1.0,
+                'rank': 10.01,
+                'priority': 4.0,
                 'loe': None,
                 'due': None,
                 'added': None,
