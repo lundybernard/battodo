@@ -10,7 +10,7 @@ SATURDAY = date(2026, 8, 8)
 class NextDueTests(TestCase):
     """Unit tests for battodo.repeat.next_due."""
 
-    def test_next_due_interval(t) -> None:
+    def test_interval(t) -> None:
         cases = {
             '1d': date(2026, 8, 9),
             '15d': date(2026, 8, 23),
@@ -21,7 +21,7 @@ class NextDueTests(TestCase):
             with t.subTest(spec):
                 t.assertEqual(next_due(spec, SATURDAY), expected)
 
-    def test_next_due_weekly(t) -> None:
+    def test_weekday(t) -> None:
         cases = {
             'weekly:sun': date(2026, 8, 9),
             'weekly:fri': date(2026, 8, 14),
@@ -33,7 +33,7 @@ class NextDueTests(TestCase):
             with t.subTest(spec):
                 t.assertEqual(next_due(spec, SATURDAY), expected)
 
-    def test_next_due_monthly(t) -> None:
+    def test_day_of_month(t) -> None:
         cases = {
             # Day-of-month still ahead: this month.
             ('monthly:15', SATURDAY): date(2026, 8, 15),
@@ -49,7 +49,7 @@ class NextDueTests(TestCase):
             with t.subTest(f'{spec} on {completed}'):
                 t.assertEqual(next_due(spec, completed), expected)
 
-    def test_next_due_unreadable(t) -> None:
+    def test_unreadable(t) -> None:
         for spec in ('sometimes', '0d', '3m', 'weekly:caturday', 'monthly:0'):
             with t.subTest(spec):
                 with t.assertRaises(RepeatError) as caught:
