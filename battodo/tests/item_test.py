@@ -16,6 +16,14 @@ SRC = 'battodo.item'
 TODAY = date(2026, 8, 5)
 
 
+def stand_in(t: TestCase, *targets: str) -> None:
+    """Patch each `battodo.item` target and set its mock on `t`."""
+    for target in targets:
+        patcher = patch(f'{SRC}.{target}', autospec=True)
+        setattr(t, target, patcher.start())
+        t.addCleanup(patcher.stop)
+
+
 def task(title: str, **fields: str) -> TaskNode:
     """A top-level open task carrying `fields`."""
     return TaskNode(
@@ -226,13 +234,9 @@ class BuildItemTests(TestCase):
     TaskSelection: MagicMock
     item_data: MagicMock
     render_item: MagicMock
-    dumps: MagicMock
 
     def setUp(t) -> None:
-        for target in ('TaskSelection', 'item_data', 'render_item', 'dumps'):
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
+        stand_in(t, 'TaskSelection', 'item_data', 'render_item')
         t.directory = Path('/todo')
         t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
         # An autospec instance specs `record` from the descriptor, not
@@ -240,26 +244,50 @@ class BuildItemTests(TestCase):
         t.record = MagicMock(spec=['path', 'task'])
         t.TaskSelection.return_value.record = t.record
 
-    def test_build_item(t) -> None:
+    def test_selection(t) -> None:
+        build_item(t.directory, 'deck', t.now)
+
+        t.TaskSelection.assert_called_with(t.directory, 'deck')
+
+    def test_data(t) -> None:
+        build_item(t.directory, 'deck', t.now)
+
+        # The local day of the clock decides the rank.
+        t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
+
+    def test_text(t) -> None:
         result = build_item(t.directory, 'deck', t.now)
 
-        with t.subTest('the selector is resolved against the directory'):
-            t.TaskSelection.assert_called_with(t.directory, 'deck')
+        t.render_item.assert_called_with(t.item_data.return_value)
+        t.assertEqual(result, t.render_item.return_value)
 
-        with t.subTest('the local day of the clock decides the rank'):
-            t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
 
-        with t.subTest('the rendered text is what comes back'):
-            t.render_item.assert_called_with(t.item_data.return_value)
-            t.assertEqual(result, t.render_item.return_value)
+class BuildItemJsonTests(TestCase):
+    """Unit tests for battodo.item.build_item_json."""
 
-    def test_build_item_json(t) -> None:
+    TaskSelection: MagicMock
+    item_data: MagicMock
+    dumps: MagicMock
+
+    def setUp(t) -> None:
+        stand_in(t, 'TaskSelection', 'item_data', 'dumps')
+        t.directory = Path('/todo')
+        t.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+        # An autospec instance specs `record` from the descriptor, not
+        # from the value it yields.
+        t.record = MagicMock(spec=['path', 'task'])
+        t.TaskSelection.return_value.record = t.record
+
+    def test_selection(t) -> None:
+        build_item_json(t.directory, 'deck', t.now)
+
+        # The same selection the text form describes.
+        t.TaskSelection.assert_called_with(t.directory, 'deck')
+        t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
+
+    def test_json(t) -> None:
         result = build_item_json(t.directory, 'deck', t.now)
 
-        with t.subTest('the same selection the text form describes'):
-            t.TaskSelection.assert_called_with(t.directory, 'deck')
-            t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
-
-        with t.subTest('serialized, indented for a person to read too'):
-            t.dumps.assert_called_with(t.item_data.return_value, indent=2)
-            t.assertEqual(result, t.dumps.return_value)
+        # Serialized, indented for a person to read too.
+        t.dumps.assert_called_with(t.item_data.return_value, indent=2)
+        t.assertEqual(result, t.dumps.return_value)
