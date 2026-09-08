@@ -28,31 +28,35 @@ PARKED = '<!-- battodo:parked -->'
 LONG_TITLE = 'A very long task title that has to be clipped to fit'
 
 
-class SourceDirTests(TestCase):
-    """Base: an empty source directory, removed when the test ends."""
-
-    def setUp(t) -> None:
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.source = Path(tmp.name)
-
-    def write(t, name: str, *items: str, parked: bool = False) -> Path:
-        """Write the list `name`, holding `items` in its open section."""
-        marker = f'{PARKED}\n\n' if parked else ''
-        path = t.source / f'{name}.md'
-        body = '\n'.join(items)
-        path.write_text(
-            f'# {name}\n\n{marker}## Open\n\n{body}\n', encoding='utf-8'
-        )
-        return path
+def source_dir(t: TestCase) -> Path:
+    """An empty source directory, removed when the test ends."""
+    tmp = TemporaryDirectory()
+    t.addCleanup(tmp.cleanup)
+    return Path(tmp.name)
 
 
-class DiscoverListsTests(SourceDirTests):
+def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
+    """Write the list `name`, holding `items` in its open section."""
+    marker = f'{PARKED}\n\n' if parked else ''
+    path = source / f'{name}.md'
+    body = '\n'.join(items)
+    path.write_text(
+        f'# {name}\n\n{marker}## Open\n\n{body}\n', encoding='utf-8'
+    )
+    return path
+
+
+class DiscoverListsTests(TestCase):
     """Contract tests for battodo.view.discover_lists."""
 
+    def setUp(t) -> None:
+        t.source = source_dir(t)
+
     def test_discover_lists(t) -> None:
-        career = t.write('career', '- [ ] A visible task [P:2]')
-        study = t.write('study', '- [ ] A parked task [P:2]', parked=True)
+        career = write(t.source, 'career', '- [ ] A visible task [P:2]')
+        study = write(
+            t.source, 'study', '- [ ] A parked task [P:2]', parked=True
+        )
         loose = t.source / 'notes.md'
         loose.write_text('# Notes\n\nNothing open here.\n', encoding='utf-8')
 
@@ -68,13 +72,16 @@ class DiscoverListsTests(SourceDirTests):
             t.assertEqual(discover_lists(t.source / 'absent'), [])
 
 
-class RenderedViewTests(SourceDirTests):
+class RenderedViewTests(TestCase):
+    def setUp(t) -> None:
+        t.source = source_dir(t)
+
     def test_a_parked_list_does_not_end_the_scan(t) -> None:
         # The parked list sorts first. The scan must step over it,
         # not stop at it.
-        t.write('study', '- [ ] A parked task [P:5]', parked=True)
-        t.write('career', '- [ ] A task after the parked list [P:2]')
-        t.write('home-repair', '- [ ] The last task of all [P:2]')
+        write(t.source, 'study', '- [ ] A parked task [P:5]', parked=True)
+        write(t.source, 'career', '- [ ] A task after the parked list [P:2]')
+        write(t.source, 'home-repair', '- [ ] The last task of all [P:2]')
 
         out = View(Selection(t.source, NOW, show_all=False), 80).text
 
@@ -89,9 +96,9 @@ class RenderedViewTests(SourceDirTests):
 
     def test_a_list_with_nothing_to_show_is_skipped(t) -> None:
         # A list gets a table only when it has open items.
-        t.write('career')
-        t.write('events', '- [x] A completed task [P:3]')
-        t.write('backlog', '- [ ] A visible task [P:2]')
+        write(t.source, 'career')
+        write(t.source, 'events', '- [x] A completed task [P:3]')
+        write(t.source, 'backlog', '- [ ] A visible task [P:2]')
 
         out = View(Selection(t.source, NOW, show_all=False), 80).text
 
@@ -105,7 +112,9 @@ class RenderedViewTests(SourceDirTests):
             t.assertIn('Backlog', out)
 
     def test_top_n(t) -> None:
-        t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
+        write(
+            t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
+        )
 
         with t.subTest('five items, and a count of what is held back'):
             out = View(Selection(t.source, NOW, show_all=False), 80).text
@@ -126,7 +135,7 @@ class RenderedViewTests(SourceDirTests):
             t.assertNotIn('… and', out)
 
     def test_width(t) -> None:
-        t.write('career', f'- [ ] {LONG_TITLE} [P:3]')
+        write(t.source, 'career', f'- [ ] {LONG_TITLE} [P:3]')
         narrow = View(Selection(t.source, NOW, show_all=False), 60).text
         wide = View(Selection(t.source, NOW, show_all=False), 120).text
 
@@ -152,8 +161,8 @@ class RenderedViewTests(SourceDirTests):
                 t.assertEqual(probed, expected)
 
     def test_an_inactive_category(t) -> None:
-        t.write('chores', '- [ ] An inactive category task [P:3]')
-        t.write('career', '- [ ] An active category task [P:2]')
+        write(t.source, 'chores', '- [ ] An inactive category task [P:3]')
+        write(t.source, 'career', '- [ ] An active category task [P:2]')
 
         with t.subTest('a shut window keeps its category out of the view'):
             out = View(Selection(t.source, NOW, show_all=False), 80).text
@@ -166,7 +175,9 @@ class RenderedViewTests(SourceDirTests):
             t.assertIn('An active category task', out)
 
         with t.subTest('though a list that opted out stays out even then'):
-            t.write('backlog', '- [ ] A parked task [P:4]', parked=True)
+            write(
+                t.source, 'backlog', '- [ ] A parked task [P:4]', parked=True
+            )
             out = View(Selection(t.source, NOW, show_all=True), 80).text
             t.assertNotIn('A parked task', out)
 
@@ -177,13 +188,18 @@ class RenderedViewTests(SourceDirTests):
             t.assertIn('active: career, events, study, work', out)
 
 
-class SelectionDocumentTests(SourceDirTests):
+class SelectionDocumentTests(TestCase):
+    def setUp(t) -> None:
+        t.source = source_dir(t)
+
     def categories(t, **kwargs: object) -> list[dict]:
         selection = Selection(t.source, NOW, **kwargs)  # type: ignore[arg-type]
         return loads(selection.json)['categories']
 
     def test_top_n(t) -> None:
-        t.write('career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)))
+        write(
+            t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
+        )
         abridged = loads(Selection(t.source, NOW, show_all=False).json)
 
         with t.subTest('five tasks by default'):
@@ -214,7 +230,11 @@ class SelectionDocumentTests(SourceDirTests):
     def test_rank_is_rounded(t) -> None:
         # Seven days over a 30-day scale is a repeating fraction, so
         # the raw rank has more decimals than the document publishes.
-        t.write('career', '- [ ] A fractional rank task [ADDED:2026-07-29]')
+        write(
+            t.source,
+            'career',
+            '- [ ] A fractional rank task [ADDED:2026-07-29]',
+        )
 
         task = t.categories(show_all=False)[0]['tasks'][0]
 
@@ -225,7 +245,7 @@ class SelectionDocumentTests(SourceDirTests):
             t.assertNotEqual(task['rank'], 1 + 7 / 30)
 
     def test_the_document_is_pretty_printed(t) -> None:
-        t.write('career', '- [ ] A single task [P:2]')
+        write(t.source, 'career', '- [ ] A single task [P:2]')
 
         lines = Selection(t.source, NOW, show_all=False).json.split('\n')
 

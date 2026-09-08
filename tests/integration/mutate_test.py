@@ -7,6 +7,8 @@ in the isolation tests beside the code.
 """
 
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -571,69 +573,75 @@ def write_lists(directory: Path) -> None:
     (directory / 'completed.md').write_text(COMPLETED)
 
 
-class MutationTests(TestCase):
-    """A fixture source directory the mutation suites share."""
-
-    def setUp(t) -> None:
-        t.tmp = TemporaryDirectory()
-        t.addCleanup(t.tmp.cleanup)
-        t.dir = Path(t.tmp.name)
-        t.reset()
-
-    def reset(t) -> None:
-        """Fresh lists and an empty journal, for the next subTest."""
-        write_lists(t.dir)
-        (t.dir / '.journal' / 'log.jsonl').unlink(missing_ok=True)
-
-    def logged(t) -> list[str]:
-        """The completed.md entries this run appended."""
-        text = (t.dir / 'completed.md').read_text()
-        return text[len(COMPLETED) :].splitlines()
-
-    def line(t, name: str, needle: str) -> str:
-        return next(
-            line
-            for line in (t.dir / name).read_text().split('\n')
-            if needle in line
-        )
+@contextmanager
+def todo_lists() -> Iterator[Path]:
+    """A source directory of its own, holding the fixture lists."""
+    with TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        write_lists(directory)
+        yield directory
 
 
-class CompleteTests(MutationTests):
+def logged(directory: Path) -> list[str]:
+    """The completed.md entries a run appended in `directory`."""
+    text = (directory / 'completed.md').read_text()
+    return text[len(COMPLETED) :].splitlines()
+
+
+def task_line(directory: Path, name: str, needle: str) -> str:
+    """The line of the list `name` that holds `needle`."""
+    return next(
+        line
+        for line in (directory / name).read_text().split('\n')
+        if needle in line
+    )
+
+
+class CompleteTests(TestCase):
     """Contract tests for battodo.mutate.complete."""
 
     def test_complete(t) -> None:
-        with t.subTest('a finished top-level task loses its whole block'):
-            complete(t.dir, 'Chip the brush pile', TODAY)
-            text = (t.dir / 'chores.md').read_text()
+        with (
+            t.subTest('a finished top-level task loses its whole block'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Chip the brush pile', TODAY)
+            text = (source / 'chores.md').read_text()
             t.assertNotIn('Chip the brush pile', text)
             t.assertIn('- [ ] Water the plants', text)
 
-        with t.subTest('untouched lines survive byte-identically'):
-            t.reset()
-            complete(t.dir, 'Casablanca', TODAY)
+        with (
+            t.subTest('untouched lines survive byte-identically'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Casablanca', TODAY)
             kept = [
                 line
                 for index, line in enumerate(NESTED_WORK.split('\n'))
                 # the task, its note, and the blank the removal orphans
                 if index not in {6, 7, 8}
             ]
-            t.assertEqual((t.dir / 'work.md').read_text(), '\n'.join(kept))
+            t.assertEqual((source / 'work.md').read_text(), '\n'.join(kept))
 
-        with t.subTest('completing the last open child empties the block'):
-            t.reset()
-            complete(t.dir, 'Buy lumber', TODAY)
-            text = (t.dir / 'chores.md').read_text()
+        with (
+            t.subTest('completing the last open child empties the block'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Buy lumber', TODAY)
+            text = (source / 'chores.md').read_text()
             t.assertNotIn('Build workbench', text)
             t.assertNotIn('Buy lumber', text)
             t.assertIn('- [ ] Chip the brush pile', text)
 
-        with t.subTest('a cascade that stops checks lines off in place'):
-            t.reset()
-            complete(t.dir, 'Power supply', TODAY)
-            lines = (t.dir / 'work.md').read_text().split('\n')
+        with (
+            t.subTest('a cascade that stops checks lines off in place'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Power supply', TODAY)
+            lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Power supply', lines)
             t.assertRegex(
-                t.line('work.md', 'Prepare computer bag'),
+                task_line(source, 'work.md', 'Prepare computer bag'),
                 r'^  - \[x\] Prepare computer bag \[LOE:1\] \[ID:\w{6}\]$',
             )
             t.assertIn('  - [ ] Book hotel [LOE:2]', lines)
@@ -643,51 +651,62 @@ class CompleteTests(MutationTests):
                 lines,
             )
 
-        with t.subTest('a checklist item alone gets no [ID:], its owner does'):
-            t.reset()
-            complete(t.dir, 'Ice packs', TODAY)
-            lines = (t.dir / 'work.md').read_text().split('\n')
+        with (
+            t.subTest('a checklist item alone gets no [ID:], its owner does'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Ice packs', TODAY)
+            lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Ice packs', lines)
             t.assertIn('    - [ ] Water bottles', lines)
             t.assertRegex(
-                t.line('work.md', 'Pack cooler'),
+                task_line(source, 'work.md', 'Pack cooler'),
                 r'^  - \[ \] Pack cooler \[LOE:1\] \[ID:\w{6}\]$',
             )
 
-        with t.subTest('a recurring task is rescheduled, not removed'):
-            t.reset()
-            complete(t.dir, 'Pay credit cards', TODAY)
+        with (
+            t.subTest('a recurring task is rescheduled, not removed'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Pay credit cards', TODAY)
             t.assertEqual(
-                t.line('chores.md', 'Pay credit cards'),
+                task_line(source, 'chores.md', 'Pay credit cards'),
                 '- [ ] Pay credit cards [P:83] [BUMPED:2026-08-08] '
                 '[DUE:2026-08-23] [REPEAT:15d] [LOE:1] [TAGS:finance] '
                 '[ADDED:2026-07-01] [ID:sn75q7]',
             )
 
-        with t.subTest('a parent completed early takes its children along'):
-            t.reset()
+        with (
+            t.subTest('a parent completed early takes its children along'),
+            todo_lists() as source,
+        ):
             t.assertEqual(
-                complete(t.dir, 'Trip prep', TODAY),
+                complete(source, 'Trip prep', TODAY),
                 ['2026-08-08 | work | DONE | Trip prep [P:12] [LOE:8]'],
             )
-            text = (t.dir / 'work.md').read_text()
+            text = (source / 'work.md').read_text()
             # SCHEMA.md removes the block, parent and all; the open
             # children go with it and are not logged individually.
             t.assertNotIn('Trip prep', text)
             t.assertNotIn('Book hotel', text)
 
-        with t.subTest('a recurrence keeps its notes, drops its children'):
-            t.reset()
-            complete(t.dir, "Captain's log", TODAY)
-            text = (t.dir / 'work.md').read_text()
+        with (
+            t.subTest('a recurrence keeps its notes, drops its children'),
+            todo_lists() as source,
+        ):
+            complete(source, "Captain's log", TODAY)
+            text = (source / 'work.md').read_text()
             t.assertIn('[DUE:2026-08-14] [REPEAT:weekly:fri]', text)
             t.assertIn('      Scan GitHub activity, then draft', text)
             t.assertNotIn('Draft entries', text)
 
     def test_complete_log(t) -> None:
-        with t.subTest('date, category, status, title, and fields'):
+        with (
+            t.subTest('date, category, status, title, and fields'),
+            todo_lists() as source,
+        ):
             t.assertEqual(
-                complete(t.dir, 'Chip the brush pile', TODAY),
+                complete(source, 'Chip the brush pile', TODAY),
                 [
                     (
                         '2026-08-08 | chores | DONE | Chip the brush pile '
@@ -695,17 +714,19 @@ class CompleteTests(MutationTests):
                     )
                 ],
             )
-            t.assertEqual(len(t.logged()), 1)
+            t.assertEqual(len(logged(source)), 1)
 
-        with t.subTest('a recurrence logs the DUE it was completed against'):
-            t.reset()
+        with (
+            t.subTest('a recurrence logs the DUE it was completed against'),
+            todo_lists() as source,
+        ):
             t.assertEqual(
-                t.logged(),
+                logged(source),
                 [],
             )
-            complete(t.dir, 'Pay credit cards', TODAY)
+            complete(source, 'Pay credit cards', TODAY)
             t.assertEqual(
-                t.logged(),
+                logged(source),
                 [
                     (
                         '2026-08-08 | chores | DONE | Pay credit cards '
@@ -715,11 +736,13 @@ class CompleteTests(MutationTests):
                 ],
             )
 
-        with t.subTest('ancestry with a line per completion, deepest first'):
-            t.reset()
-            complete(t.dir, 'Buy lumber', TODAY)
+        with (
+            t.subTest('ancestry with a line per completion, deepest first'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Buy lumber', TODAY)
             t.assertEqual(
-                t.logged(),
+                logged(source),
                 [
                     (
                         '2026-08-08 | chores | DONE | Build workbench > '
@@ -732,10 +755,12 @@ class CompleteTests(MutationTests):
                 ],
             )
 
-        with t.subTest('checklist items are not logged, their parent is'):
-            t.reset()
+        with (
+            t.subTest('checklist items are not logged, their parent is'),
+            todo_lists() as source,
+        ):
             t.assertEqual(
-                complete(t.dir, 'Power supply', TODAY),
+                complete(source, 'Power supply', TODAY),
                 [
                     (
                         '2026-08-08 | work | DONE | Trip prep > '
@@ -744,112 +769,129 @@ class CompleteTests(MutationTests):
                 ],
             )
 
-        with t.subTest('appended to a log that has no trailing newline'):
-            t.reset()
-            (t.dir / 'completed.md').write_text(COMPLETED.rstrip('\n'))
-            complete(t.dir, 'Chip the brush pile', TODAY)
-            text = (t.dir / 'completed.md').read_text()
+        with (
+            t.subTest('appended to a log that has no trailing newline'),
+            todo_lists() as source,
+        ):
+            (source / 'completed.md').write_text(COMPLETED.rstrip('\n'))
+            complete(source, 'Chip the brush pile', TODAY)
+            text = (source / 'completed.md').read_text()
             t.assertTrue(text.startswith(COMPLETED))
             t.assertTrue(text.endswith('[TAGS:yard]\n'))
 
-        with t.subTest('created when there is no log yet'):
-            t.reset()
-            (t.dir / 'completed.md').unlink()
-            complete(t.dir, 'Chip the brush pile', TODAY)
+        with (
+            t.subTest('created when there is no log yet'),
+            todo_lists() as source,
+        ):
+            (source / 'completed.md').unlink()
+            complete(source, 'Chip the brush pile', TODAY)
             t.assertTrue(
-                (t.dir / 'completed.md')
+                (source / 'completed.md')
                 .read_text()
                 .startswith('2026-08-08 | chores | DONE |')
             )
 
     def test_complete_journal(t) -> None:
-        with t.subTest('one TaskCompleted per completion, deepest first'):
-            complete(t.dir, 'Buy lumber', TODAY)
-            events = Journal(t.dir).read()
-            t.assertEqual([e['type'] for e in events], ['TaskCompleted'] * 2)
-            t.assertEqual(
-                [e['payload']['ancestry'] for e in events],
-                ['Build workbench > Buy lumber', 'Build workbench'],
-            )
-            t.assertEqual(events[1]['stream_id'], 'task/vrr7m8')
-            t.assertEqual(
-                events[0]['metadata'],
-                {'actor': 'agent', 'source_file': 'chores.md'},
-            )
+        with todo_lists() as source:
+            with t.subTest('one TaskCompleted per completion, deepest first'):
+                complete(source, 'Buy lumber', TODAY)
+                events = Journal(source).read()
+                t.assertEqual(
+                    [e['type'] for e in events], ['TaskCompleted'] * 2
+                )
+                t.assertEqual(
+                    [e['payload']['ancestry'] for e in events],
+                    ['Build workbench > Buy lumber', 'Build workbench'],
+                )
+                t.assertEqual(events[1]['stream_id'], 'task/vrr7m8')
+                t.assertEqual(
+                    events[0]['metadata'],
+                    {'actor': 'agent', 'source_file': 'chores.md'},
+                )
 
-        with t.subTest('delta and pre-state snapshot'):
-            t.assertEqual(
-                Journal(t.dir).read()[0]['payload'],
-                {
-                    'delta': {'done': [False, True]},
-                    'snapshot': {
-                        'title': 'Buy lumber',
-                        'done': False,
-                        'fields': {'LOE': '2'},
+            with t.subTest('delta and pre-state snapshot'):
+                t.assertEqual(
+                    Journal(source).read()[0]['payload'],
+                    {
+                        'delta': {'done': [False, True]},
+                        'snapshot': {
+                            'title': 'Buy lumber',
+                            'done': False,
+                            'fields': {'LOE': '2'},
+                        },
+                        'ancestry': 'Build workbench > Buy lumber',
                     },
-                    'ancestry': 'Build workbench > Buy lumber',
-                },
-            )
+                )
 
-        with t.subTest('a reschedule records the due date it moved to'):
-            t.reset()
-            complete(t.dir, 'Pay credit cards', TODAY)
+        with (
+            t.subTest('a reschedule records the due date it moved to'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Pay credit cards', TODAY)
             t.assertEqual(
-                Journal(t.dir).read()[0]['payload']['delta'],
+                Journal(source).read()[0]['payload']['delta'],
                 {'done': [False, True], 'DUE': ['2026-06-24', '2026-08-23']},
             )
 
-        with t.subTest('a checklist item records on its parent stream'):
-            t.reset()
-            complete(t.dir, 'Power supply', TODAY)
-            events = Journal(t.dir).read()
+        with (
+            t.subTest('a checklist item records on its parent stream'),
+            todo_lists() as source,
+        ):
+            complete(source, 'Power supply', TODAY)
+            events = Journal(source).read()
             streams = {e['stream_id'] for e in events}
             t.assertEqual(len(streams), 1)
             t.assertIn(
                 streams.pop().removeprefix('task/'),
-                t.line('work.md', 'Prepare computer bag'),
+                task_line(source, 'work.md', 'Prepare computer bag'),
             )
 
     def test_complete_errors(t) -> None:
-        before = (t.dir / 'chores.md').read_text()
+        with todo_lists() as source:
+            before = (source / 'chores.md').read_text()
 
-        with t.subTest('nothing matches'):
-            with t.assertRaises(SelectionError) as caught:
-                complete(t.dir, 'nonexistent', TODAY)
-            t.assertIn("'nonexistent'", str(caught.exception))
+            with t.subTest('nothing matches'):
+                with t.assertRaises(SelectionError) as caught:
+                    complete(source, 'nonexistent', TODAY)
+                t.assertIn("'nonexistent'", str(caught.exception))
 
-        with t.subTest('several tasks match'):
-            with t.assertRaises(SelectionError) as caught:
-                complete(t.dir, 'the', TODAY)
-            t.assertIn('matches 3 open tasks', str(caught.exception))
+            with t.subTest('several tasks match'):
+                with t.assertRaises(SelectionError) as caught:
+                    complete(source, 'the', TODAY)
+                t.assertIn('matches 3 open tasks', str(caught.exception))
 
-        with t.subTest(
-            'an unreadable REPEAT stops before anything is written'
-        ):
-            with t.assertRaises(RepeatError):
-                complete(t.dir, 'Water the plants', TODAY)
-            t.assertEqual((t.dir / 'chores.md').read_text(), before)
-            t.assertEqual((t.dir / 'completed.md').read_text(), COMPLETED)
-            t.assertEqual(Journal(t.dir).read(), [])
+            with t.subTest(
+                'an unreadable REPEAT stops before anything is written'
+            ):
+                with t.assertRaises(RepeatError):
+                    complete(source, 'Water the plants', TODAY)
+                t.assertEqual((source / 'chores.md').read_text(), before)
+                t.assertEqual((source / 'completed.md').read_text(), COMPLETED)
+                t.assertEqual(Journal(source).read(), [])
 
 
-class ScratchTests(MutationTests):
+class ScratchTests(TestCase):
     """Contract tests for battodo.mutate.scratch."""
 
     def test_scratch(t) -> None:
-        with t.subTest('the block goes, untouched lines byte-identically'):
-            scratch(t.dir, 'Casablanca', TODAY)
+        with (
+            t.subTest('the block goes, untouched lines byte-identically'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Casablanca', TODAY)
             kept = [
                 line
                 for index, line in enumerate(NESTED_WORK.split('\n'))
                 if index not in {6, 7, 8}
             ]
-            t.assertEqual((t.dir / 'work.md').read_text(), '\n'.join(kept))
+            t.assertEqual((source / 'work.md').read_text(), '\n'.join(kept))
 
-        with t.subTest('a subtask goes without touching its parent'):
-            t.reset()
-            scratch(t.dir, 'Book hotel', TODAY)
-            text = (t.dir / 'work.md').read_text()
+        with (
+            t.subTest('a subtask goes without touching its parent'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Book hotel', TODAY)
+            text = (source / 'work.md').read_text()
             t.assertNotIn('Book hotel', text)
             t.assertIn(
                 '- [ ] Trip prep [P:12] [LOE:8] [ADDED:2026-07-01] '
@@ -858,28 +900,35 @@ class ScratchTests(MutationTests):
             )
             t.assertIn('  - [ ] Prepare computer bag [LOE:1]\n', text)
 
-        with t.subTest('a checklist item goes, its owner gains an [ID:]'):
-            t.reset()
-            scratch(t.dir, 'Ice packs', TODAY)
-            text = (t.dir / 'work.md').read_text()
+        with (
+            t.subTest('a checklist item goes, its owner gains an [ID:]'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Ice packs', TODAY)
+            text = (source / 'work.md').read_text()
             t.assertNotIn('Ice packs', text)
             t.assertIn('    - [ ] Water bottles', text)
             t.assertRegex(
-                t.line('work.md', 'Pack cooler'),
+                task_line(source, 'work.md', 'Pack cooler'),
                 r'^  - \[ \] Pack cooler \[LOE:1\] \[ID:\w{6}\]$',
             )
 
-        with t.subTest('a recurring task is abandoned, not rescheduled'):
-            t.reset()
-            scratch(t.dir, 'Pay credit cards', TODAY)
+        with (
+            t.subTest('a recurring task is abandoned, not rescheduled'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Pay credit cards', TODAY)
             t.assertNotIn(
-                'Pay credit cards', (t.dir / 'chores.md').read_text()
+                'Pay credit cards', (source / 'chores.md').read_text()
             )
 
     def test_scratch_log(t) -> None:
-        with t.subTest('one SCRATCHED entry, with ancestry and fields'):
+        with (
+            t.subTest('one SCRATCHED entry, with ancestry and fields'),
+            todo_lists() as source,
+        ):
             t.assertEqual(
-                scratch(t.dir, 'Book hotel', TODAY),
+                scratch(source, 'Book hotel', TODAY),
                 [
                     (
                         '2026-08-08 | work | SCRATCHED | Trip prep > '
@@ -887,12 +936,15 @@ class ScratchTests(MutationTests):
                     )
                 ],
             )
-            t.assertEqual(len(t.logged()), 1)
+            t.assertEqual(len(logged(source)), 1)
 
     def test_scratch_journal(t) -> None:
-        with t.subTest('TaskScratched on the task, no cascade'):
-            scratch(t.dir, 'Casablanca', TODAY)
-            events = Journal(t.dir).read()
+        with (
+            t.subTest('TaskScratched on the task, no cascade'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Casablanca', TODAY)
+            events = Journal(source).read()
             t.assertEqual(len(events), 1)
             t.assertEqual(events[0]['type'], 'TaskScratched')
             t.assertEqual(events[0]['stream_id'], 'task/9o71lx')
@@ -904,10 +956,12 @@ class ScratchTests(MutationTests):
                 events[0]['payload']['delta'], {'removed': [False, True]}
             )
 
-        with t.subTest('ancestry and pre-state snapshot'):
-            t.reset()
-            scratch(t.dir, 'Book hotel', TODAY)
-            payload = Journal(t.dir).read()[0]['payload']
+        with (
+            t.subTest('ancestry and pre-state snapshot'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Book hotel', TODAY)
+            payload = Journal(source).read()[0]['payload']
             t.assertEqual(payload['ancestry'], 'Trip prep > Book hotel')
             t.assertEqual(
                 payload['snapshot'],
@@ -918,42 +972,48 @@ class ScratchTests(MutationTests):
                 },
             )
 
-        with t.subTest('a checklist item records on its parent stream'):
-            t.reset()
-            scratch(t.dir, 'Ice packs', TODAY)
-            stream = Journal(t.dir).read()[0]['stream_id']
+        with (
+            t.subTest('a checklist item records on its parent stream'),
+            todo_lists() as source,
+        ):
+            scratch(source, 'Ice packs', TODAY)
+            stream = Journal(source).read()[0]['stream_id']
             t.assertIn(
-                stream.removeprefix('task/'), t.line('work.md', 'Pack cooler')
+                stream.removeprefix('task/'),
+                task_line(source, 'work.md', 'Pack cooler'),
             )
 
 
-class AddTaskTests(MutationTests):
+class AddTaskTests(TestCase):
     """Contract tests for battodo.mutate.add_task."""
 
     def task_id(t, line: str) -> str:
         return parse(f'## Open\n{line}\n').tasks[0].fields['ID']
 
     def test_add_task(t) -> None:
-        with t.subTest('only supplied fields, plus the stamps btodo owns'):
-            path, line = add_task(
-                t.dir, 'chores', 'Water it', {'P': '4'}, TODAY
-            )
-            t.assertEqual(path, t.dir / 'chores.md')
-            t.assertRegex(
-                line,
-                r'^- \[ \] Water it \[P:4\] \[ADDED:2026-08-08\] '
-                r'\[ID:\w{6}\]$',
-            )
+        with todo_lists() as source:
+            with t.subTest('only supplied fields, plus the stamps btodo owns'):
+                path, line = add_task(
+                    source, 'chores', 'Water it', {'P': '4'}, TODAY
+                )
+                t.assertEqual(path, source / 'chores.md')
+                t.assertRegex(
+                    line,
+                    r'^- \[ \] Water it \[P:4\] \[ADDED:2026-08-08\] '
+                    r'\[ID:\w{6}\]$',
+                )
 
-        with t.subTest('appended to Open, every other line byte-identical'):
-            expected = CHORES.split('\n')
-            expected.insert(expected.index('## Done') - 1, line)
-            t.assertEqual(path.read_text(), '\n'.join(expected))
+            with t.subTest('appended to Open, every other line is the same'):
+                expected = CHORES.split('\n')
+                expected.insert(expected.index('## Done') - 1, line)
+                t.assertEqual(path.read_text(), '\n'.join(expected))
 
-        with t.subTest('fields are written in SCHEMA.md order'):
-            t.reset()
+        with (
+            t.subTest('fields are written in SCHEMA.md order'),
+            todo_lists() as source,
+        ):
             _, line = add_task(
-                t.dir,
+                source,
                 'chores',
                 'Water it',
                 {
@@ -972,62 +1032,68 @@ class AddTaskTests(MutationTests):
                 r'\[ID:\w{6}\]$',
             )
 
-        with t.subTest('a list ending on its Open section keeps its newline'):
-            t.reset()
+        with (
+            t.subTest('a list ending on its Open section keeps its newline'),
+            todo_lists() as source,
+        ):
             path, line = add_task(
-                t.dir, 'van-trip-prep-template', 'X', {}, TODAY
+                source, 'van-trip-prep-template', 'X', {}, TODAY
             )
             expected = TEMPLATE.split('\n')
             expected.insert(-1, line)
             t.assertEqual(path.read_text(), '\n'.join(expected))
 
-        with t.subTest('a parked list is a valid target'):
-            t.reset()
-            (t.dir / 'backlog.md').write_text(
+        with (
+            t.subTest('a parked list is a valid target'),
+            todo_lists() as source,
+        ):
+            (source / 'backlog.md').write_text(
                 '<!-- battodo:parked -->\n\n## Open\n\n- [ ] B [P:1]\n'
             )
-            path, line = add_task(t.dir, 'backlog', 'Someday', {}, TODAY)
+            path, line = add_task(source, 'backlog', 'Someday', {}, TODAY)
             t.assertIn(line, path.read_text())
 
     def test_add_task_journal(t) -> None:
-        _, line = add_task(
-            t.dir,
-            'chores',
-            'Water it',
-            {'P': '4', 'DUE': '2026-09-01'},
-            TODAY,
-        )
-        task_id = t.task_id(line)
-        (event,) = Journal(t.dir).read()
-
-        with t.subTest('one TaskAdded on the new task stream'):
-            t.assertEqual(event['type'], 'TaskAdded')
-            t.assertEqual(event['stream_id'], f'task/{task_id}')
-            t.assertEqual(
-                event['metadata'],
-                {'actor': 'agent', 'source_file': 'chores.md'},
+        with todo_lists() as source:
+            _, line = add_task(
+                source,
+                'chores',
+                'Water it',
+                {'P': '4', 'DUE': '2026-09-01'},
+                TODAY,
             )
+            task_id = t.task_id(line)
+            (event,) = Journal(source).read()
 
-        with t.subTest('every written field, against nothing'):
-            fields = {
-                'P': '4',
-                'DUE': '2026-09-01',
-                'ADDED': '2026-08-08',
-                'ID': task_id,
-            }
-            t.assertEqual(
-                event['payload'],
-                {
-                    'delta': {
-                        name: [None, value] for name, value in fields.items()
+            with t.subTest('one TaskAdded on the new task stream'):
+                t.assertEqual(event['type'], 'TaskAdded')
+                t.assertEqual(event['stream_id'], f'task/{task_id}')
+                t.assertEqual(
+                    event['metadata'],
+                    {'actor': 'agent', 'source_file': 'chores.md'},
+                )
+
+            with t.subTest('every written field, against nothing'):
+                fields = {
+                    'P': '4',
+                    'DUE': '2026-09-01',
+                    'ADDED': '2026-08-08',
+                    'ID': task_id,
+                }
+                t.assertEqual(
+                    event['payload'],
+                    {
+                        'delta': {
+                            name: [None, value]
+                            for name, value in fields.items()
+                        },
+                        'snapshot': {
+                            'title': 'Water it',
+                            'done': False,
+                            'fields': fields,
+                        },
                     },
-                    'snapshot': {
-                        'title': 'Water it',
-                        'done': False,
-                        'fields': fields,
-                    },
-                },
-            )
+                )
 
     @skipIf(
         sys.version_info < (3, 11),
@@ -1039,38 +1105,47 @@ class AddTaskTests(MutationTests):
         `date.fromisoformat` accepts more spellings on newer versions,
         so what the user typed is re-rendered rather than passed on.
         """
-        _, line = add_task(t.dir, 'chores', 'X', {'DUE': '20260901'}, TODAY)
+        with todo_lists() as source:
+            _, line = add_task(
+                source, 'chores', 'X', {'DUE': '20260901'}, TODAY
+            )
 
-        t.assertIn('[DUE:2026-09-01]', line)
-        t.assertIn(line, (t.dir / 'chores.md').read_text())
+            t.assertIn('[DUE:2026-09-01]', line)
+            t.assertIn(line, (source / 'chores.md').read_text())
 
     def test_add_task_errors(t) -> None:
-        with t.subTest('an unknown list names the directory and the stems'):
-            with t.assertRaises(ListError) as caught:
-                add_task(t.dir, 'wrk', 'X', {}, TODAY)
-            message = str(caught.exception)
-            t.assertIn(str(t.dir), message)
-            t.assertIn(
-                'available: chores, van-trip-prep-template, work', message
-            )
-            t.assertFalse((t.dir / 'wrk.md').exists())
-
-        # Each message must name the field, the rule it broke, and the
-        # value that broke it: the fix is always a re-typed argument.
-        bad = (
-            ({'DUE': 'tomorrow'}, r"DUE must be an ISO date, not 'tomorrow'"),
-            ({'REPEAT': 'sometimes'}, r"REPEAT value: 'sometimes'"),
-            ({'LOE': '4'}, r"LOE must be one of 1, 2, 3, 5, 8, not '4'"),
-            ({'P': 'high'}, r"P must be a whole number, not 'high'"),
-        )
-        for fields, expected in bad:
-            name = next(iter(fields))
-            with (
-                t.subTest(f'{name} is rejected'),
-                t.assertRaisesRegex(ValueError, expected),
+        with todo_lists() as source:
+            with t.subTest(
+                'an unknown list names the directory and the stems'
             ):
-                add_task(t.dir, 'chores', 'X', fields, TODAY)
+                with t.assertRaises(ListError) as caught:
+                    add_task(source, 'wrk', 'X', {}, TODAY)
+                message = str(caught.exception)
+                t.assertIn(str(source), message)
+                t.assertIn(
+                    'available: chores, van-trip-prep-template, work', message
+                )
+                t.assertFalse((source / 'wrk.md').exists())
 
-        with t.subTest('a rejected add writes nothing at all'):
-            t.assertEqual((t.dir / 'chores.md').read_text(), CHORES)
-            t.assertEqual(Journal(t.dir).read(), [])
+            # Each message must name the field, the rule it broke, and the
+            # value that broke it: the fix is always a re-typed argument.
+            bad = (
+                (
+                    {'DUE': 'tomorrow'},
+                    r"DUE must be an ISO date, not 'tomorrow'",
+                ),
+                ({'REPEAT': 'sometimes'}, r"REPEAT value: 'sometimes'"),
+                ({'LOE': '4'}, r"LOE must be one of 1, 2, 3, 5, 8, not '4'"),
+                ({'P': 'high'}, r"P must be a whole number, not 'high'"),
+            )
+            for fields, expected in bad:
+                name = next(iter(fields))
+                with (
+                    t.subTest(f'{name} is rejected'),
+                    t.assertRaisesRegex(ValueError, expected),
+                ):
+                    add_task(source, 'chores', 'X', fields, TODAY)
+
+            with t.subTest('a rejected add writes nothing at all'):
+                t.assertEqual((source / 'chores.md').read_text(), CHORES)
+                t.assertEqual(Journal(source).read(), [])

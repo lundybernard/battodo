@@ -23,6 +23,24 @@ SRC = 'battodo.mutate'
 TODAY = date(2026, 8, 8)
 
 
+def stand_in(t: TestCase, *targets: str) -> None:
+    """Patch each `battodo.mutate` target and set its mock on `t`."""
+    for target in targets:
+        patcher = patch(f'{SRC}.{target}', autospec=True)
+        setattr(t, target, patcher.start())
+        t.addCleanup(patcher.stop)
+
+
+def written(path: MagicMock) -> list[str]:
+    """The lines of the document handed to `write_text`."""
+    return path.write_text.call_args[0][0].split('\n')
+
+
+def logged(handle: MagicMock) -> str:
+    """What the completed log was asked to append."""
+    return handle.write.call_args[0][0]
+
+
 class TaskSnapshotTests(TestCase):
     """Unit tests for battodo.mutate.task_snapshot."""
 
@@ -49,38 +67,21 @@ UPDATE_DOC = """# Work
 """
 
 
-class IsolatedTests(TestCase):
-    """Isolation tests: the lookup, the file and the journal are mocked.
-
-    Each suite names the targets it needs in `TARGETS` and builds its
-    own document, so what a test stands on stays beside the test.
-    """
-
-    TARGETS: tuple[str, ...] = ('TaskSelection', 'Journal', 'new_task_id')
+class UpdateTaskTests(TestCase):
+    """Unit tests for battodo.mutate.update_task."""
 
     TaskSelection: MagicMock
     Journal: MagicMock
     new_task_id: MagicMock
 
     def setUp(t) -> None:
-        for target in t.TARGETS:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
+        stand_in(t, 'TaskSelection', 'Journal', 'new_task_id')
         t.new_task_id.return_value = 'zz01ab'
         t.lookup = t.TaskSelection.return_value
-
+        t.append = t.Journal.return_value.append
         t.path = Mock(spec=Path)
         t.path.name = 'work.md'
         t.dir = Path('/todo')
-        t.append = t.Journal.return_value.append
-
-
-class UpdateTaskTests(IsolatedTests):
-    """Unit tests for battodo.mutate.update_task."""
-
-    def setUp(t) -> None:
-        super().setUp()
         t.doc = parse(UPDATE_DOC)
         t.lookup.record = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
 
@@ -234,16 +235,25 @@ SUBTASK_DOC = """# Work
 """
 
 
-class AddSubtaskTests(IsolatedTests):
+class AddSubtaskTests(TestCase):
     """Unit tests for battodo.mutate.add_subtask."""
 
-    TARGETS = ('discover_lists', 'TaskSelection', 'Journal', 'new_task_id')
-
     discover_lists: MagicMock
+    TaskSelection: MagicMock
+    Journal: MagicMock
+    new_task_id: MagicMock
 
     def setUp(t) -> None:
-        super().setUp()
+        stand_in(
+            t, 'discover_lists', 'TaskSelection', 'Journal', 'new_task_id'
+        )
+        t.new_task_id.return_value = 'zz01ab'
+        t.lookup = t.TaskSelection.return_value
+        t.append = t.Journal.return_value.append
+        t.path = Mock(spec=Path)
+        t.path.name = 'work.md'
         t.path.stem = 'work'
+        t.dir = Path('/todo')
         t.discover_lists.return_value = [t.path]
         t.doc = parse(SUBTASK_DOC)
         t.lookup.record = TaskRecord(t.path, t.doc, [t.doc.tasks[0]])
@@ -400,51 +410,21 @@ REPEAT_DOC = """# Chores
 """
 
 
-class FileIsolatedTests(TestCase):
-    """Base: the list file, the directory and the journal stand in.
-
-    The document is real, parsed from the suite's own fixture, so what
-    a test stands on stays beside the test. Nothing reaches a disk.
-    """
-
-    TARGETS: tuple[str, ...] = ('Journal', 'new_task_id')
+class AddTaskTests(TestCase):
+    """Unit tests for battodo.mutate.add_task."""
 
     Journal: MagicMock
     new_task_id: MagicMock
+    _resolve_list: MagicMock
 
     def setUp(t) -> None:
-        for target in t.TARGETS:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
+        stand_in(t, 'Journal', 'new_task_id', '_resolve_list')
         t.new_task_id.return_value = 'zz01ab'
         t.append = t.Journal.return_value.append
-
         t.path = MagicMock(spec=Path)
         t.path.name = 'work.md'
         t.path.stem = 'work'
         t.dir = MagicMock(spec=Path)
-        t.log = t.dir.__truediv__.return_value
-        t.log_handle = t.log.open.return_value.__enter__.return_value
-
-    def written(t) -> list[str]:
-        """The lines of the document handed to `write_text`."""
-        return t.path.write_text.call_args[0][0].split('\n')
-
-    def logged(t) -> str:
-        """What the completed log was asked to append."""
-        return t.log_handle.write.call_args[0][0]
-
-
-class AddTaskTests(FileIsolatedTests):
-    """Unit tests for battodo.mutate.add_task."""
-
-    TARGETS = (*FileIsolatedTests.TARGETS, '_resolve_list')
-
-    _resolve_list: MagicMock
-
-    def setUp(t) -> None:
-        super().setUp()
         t._resolve_list.return_value = t.path
         t.path.read_text.return_value = OPEN_DOC
 
@@ -463,7 +443,7 @@ class AddTaskTests(FileIsolatedTests):
             )
 
         with t.subTest('and lands last in the open section'):
-            lines = t.written()
+            lines = written(t.path)
             t.assertEqual(lines[lines.index('## Done') - 2], entry)
 
         with t.subTest('one TaskAdded, on the new task stream'):
@@ -493,15 +473,23 @@ class AddTaskTests(FileIsolatedTests):
             t.append.assert_not_called()
 
 
-class CompleteTests(FileIsolatedTests):
+class CompleteTests(TestCase):
     """Unit tests for battodo.mutate.complete."""
 
-    TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
-
+    Journal: MagicMock
+    new_task_id: MagicMock
     TaskSelection: MagicMock
 
     def setUp(t) -> None:
-        super().setUp()
+        stand_in(t, 'Journal', 'new_task_id', 'TaskSelection')
+        t.new_task_id.return_value = 'zz01ab'
+        t.append = t.Journal.return_value.append
+        t.path = MagicMock(spec=Path)
+        t.path.name = 'work.md'
+        t.path.stem = 'work'
+        t.dir = MagicMock(spec=Path)
+        t.log = t.dir.__truediv__.return_value
+        t.log_handle = t.log.open.return_value.__enter__.return_value
         t.doc = parse(CASCADE_DOC)
         t.lookup = t.TaskSelection.return_value
 
@@ -521,12 +509,12 @@ class CompleteTests(FileIsolatedTests):
         entries = complete(t.dir, 'Chip the brush', TODAY)
 
         with t.subTest('the finished block leaves the open section'):
-            written = t.written()
-            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', written)
-            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
+            lines = written(t.path)
+            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', lines)
+            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', lines)
 
         with t.subTest('and the task that followed it stays'):
-            t.assertIn('- [ ] Bare [P:2]', written)
+            t.assertIn('- [ ] Bare [P:2]', lines)
 
         with t.subTest('the log records the child under its ancestry'):
             t.assertEqual(
@@ -542,7 +530,7 @@ class CompleteTests(FileIsolatedTests):
             )
 
         with t.subTest('which is what the completed log is handed'):
-            t.assertEqual(t.logged(), '\n'.join(entries) + '\n')
+            t.assertEqual(logged(t.log_handle), '\n'.join(entries) + '\n')
 
         with t.subTest('one event a completion, deepest first'):
             child, parent = t.append.call_args_list
@@ -566,11 +554,11 @@ class CompleteTests(FileIsolatedTests):
         entries = complete(t.dir, 'Chip the brush', TODAY)
 
         with t.subTest('the child box is checked, and the child stamped'):
-            written = t.written()
-            t.assertIn('  - [x] Chip the brush [LOE:2] [ID:zz01ab]', written)
+            lines = written(t.path)
+            t.assertIn('  - [x] Chip the brush [LOE:2] [ID:zz01ab]', lines)
 
         with t.subTest('the parent it did not finish stays open'):
-            t.assertIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
+            t.assertIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', lines)
 
         with t.subTest('the parent it did not finish stays out of the log'):
             t.assertEqual(len(entries), 1)
@@ -589,7 +577,7 @@ class CompleteTests(FileIsolatedTests):
 
         with t.subTest('the task stays open, rescheduled to its next due'):
             line = next(
-                line for line in t.written() if 'Water the plants' in line
+                line for line in written(t.path) if 'Water the plants' in line
             )
             t.assertIn('- [ ] Water the plants', line)
             t.assertIn('[DUE:2026-08-15]', line)
@@ -605,15 +593,23 @@ class CompleteTests(FileIsolatedTests):
             )
 
 
-class ScratchTests(FileIsolatedTests):
+class ScratchTests(TestCase):
     """Unit tests for battodo.mutate.scratch."""
 
-    TARGETS = (*FileIsolatedTests.TARGETS, 'TaskSelection')
-
+    Journal: MagicMock
+    new_task_id: MagicMock
     TaskSelection: MagicMock
 
     def setUp(t) -> None:
-        super().setUp()
+        stand_in(t, 'Journal', 'new_task_id', 'TaskSelection')
+        t.new_task_id.return_value = 'zz01ab'
+        t.append = t.Journal.return_value.append
+        t.path = MagicMock(spec=Path)
+        t.path.name = 'work.md'
+        t.path.stem = 'work'
+        t.dir = MagicMock(spec=Path)
+        t.log = t.dir.__truediv__.return_value
+        t.log_handle = t.log.open.return_value.__enter__.return_value
         t.doc = parse(CASCADE_DOC)
         t.parent = t.doc.tasks[0]
         t.lookup = t.TaskSelection.return_value
@@ -624,19 +620,19 @@ class ScratchTests(FileIsolatedTests):
         entries = scratch(t.dir, '9o71lx', TODAY)
 
         with t.subTest('the task and everything under it are removed'):
-            written = t.written()
-            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', written)
-            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', written)
+            lines = written(t.path)
+            t.assertNotIn('- [ ] Deck rebuild [P:4] [ID:9o71lx]', lines)
+            t.assertNotIn('  - [ ] Chip the brush [LOE:2]', lines)
 
         with t.subTest('the task that followed it stays'):
-            t.assertIn('- [ ] Bare [P:2]', written)
+            t.assertIn('- [ ] Bare [P:2]', lines)
 
         with t.subTest('the log records the abandonment'):
-            logged = (
+            entry = (
                 f'{TODAY.isoformat()} | work | SCRATCHED | Deck rebuild [P:4]'
             )
-            t.assertEqual(entries, [logged])
-            t.assertEqual(t.logged(), logged + '\n')
+            t.assertEqual(entries, [entry])
+            t.assertEqual(logged(t.log_handle), entry + '\n')
 
         with t.subTest('one SCRATCHED event, on the task stream'):
             t.append.assert_called_once()
@@ -658,12 +654,11 @@ class ScratchTests(FileIsolatedTests):
         scratch(t.dir, '9o71lx', TODAY)
 
         with t.subTest('no pair of blank lines is left behind'):
-            written = t.written()
+            lines = written(t.path)
             pairs = [
                 index
-                for index in range(len(written) - 1)
-                if not written[index].strip()
-                and not written[index + 1].strip()
+                for index in range(len(lines) - 1)
+                if not lines[index].strip() and not lines[index + 1].strip()
             ]
             t.assertEqual(pairs, [])
 
@@ -683,18 +678,24 @@ class ScratchTests(FileIsolatedTests):
             t.assertEqual(t.append.call_args[0][1], 'task/zz01ab')
 
         with t.subTest('whose line is stamped, since it carries the id'):
-            t.assertIn('- [ ] Deck [P:4] [ID:zz01ab]', t.written())
+            t.assertIn('- [ ] Deck [P:4] [ID:zz01ab]', written(t.path))
 
 
-class BackfillIsolationTests(FileIsolatedTests):
+class BackfillIsolationTests(TestCase):
     """Unit tests for battodo.mutate.backfill_all."""
 
-    TARGETS = (*FileIsolatedTests.TARGETS, 'discover_lists')
-
+    Journal: MagicMock
+    new_task_id: MagicMock
     discover_lists: MagicMock
 
     def setUp(t) -> None:
-        super().setUp()
+        stand_in(t, 'Journal', 'new_task_id', 'discover_lists')
+        t.new_task_id.return_value = 'zz01ab'
+        t.append = t.Journal.return_value.append
+        t.path = MagicMock(spec=Path)
+        t.path.name = 'work.md'
+        t.path.stem = 'work'
+        t.dir = MagicMock(spec=Path)
         t.discover_lists.return_value = [t.path]
         t.journal = t.Journal.return_value
         t.path.read_text.return_value = (
@@ -715,11 +716,13 @@ class BackfillIsolationTests(FileIsolatedTests):
         with t.subTest('which gains the date and an id'):
             t.assertIn(
                 f'- [ ] No date [P:4] [ADDED:{TODAY.isoformat()}] [ID:zz01ab]',
-                t.written(),
+                written(t.path),
             )
 
         with t.subTest('a line btodo cannot read is left alone'):
-            t.assertIn('- [ ] Placeholder [P:6] [DUE:YYYY-MM-DD]', t.written())
+            t.assertIn(
+                '- [ ] Placeholder [P:6] [DUE:YYYY-MM-DD]', written(t.path)
+            )
 
         with t.subTest('the event says the date is the migration date'):
             payload = t.journal.append.call_args[0][2]
