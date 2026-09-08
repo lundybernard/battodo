@@ -16,7 +16,7 @@ class LoggingConfigTests(TestCase):
         t.addCleanup(root.handlers.extend, handlers)
         t.addCleanup(root.handlers.clear)
 
-    def test_logging_config(t):
+    def test_existing_loggers(t):
         """Applying the config must not silence loggers it does not name.
 
         Libraries create their loggers at import time, before the CLI

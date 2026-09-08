@@ -39,13 +39,13 @@ def record(day: str, category: str = 'work', title: str = 'A task') -> Record:
 class ReadRecordTests(TestCase):
     """Unit tests for battodo.completed.read_record."""
 
-    def test_read_record(t) -> None:
-        with t.subTest('a DONE line is a record'):
-            t.assertEqual(
-                read_record('2026-08-04 | chores | DONE | Wash the van'),
-                Record(date(2026, 8, 4), 'chores', 'Wash the van'),
-            )
+    def test_record(t) -> None:
+        t.assertEqual(
+            read_record('2026-08-04 | chores | DONE | Wash the van'),
+            Record(date(2026, 8, 4), 'chores', 'Wash the van'),
+        )
 
+    def test_title(t) -> None:
         titles = {
             'the title keeps its ancestry, and loses its fields': (
                 '2026-08-04 | work | DONE | Deck > Chip [LOE:2] [P:4]',
@@ -66,6 +66,7 @@ class ReadRecordTests(TestCase):
                     read_record(line), Record(date(2026, 8, 4), 'work', title)
                 )
 
+    def test_skipped(t) -> None:
         skipped = {
             'an abandoned task is no completion': (
                 '2026-08-04 | work | SCRATCHED | Drop it'

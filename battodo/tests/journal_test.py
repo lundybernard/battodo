@@ -19,22 +19,16 @@ STAMP = '2026-08-05T17:30:00+00:00'
 class NewTaskIdTests(TestCase):
     """Unit tests for battodo.journal.new_task_id."""
 
-    def test_new_task_id(t) -> None:
-        with t.subTest('six base36 characters'):
-            for _ in range(20):
-                value = new_task_id()
-                t.assertEqual(len(value), 6)
-                t.assertTrue(
-                    all(
-                        c in '0123456789abcdefghijklmnopqrstuvwxyz'
-                        for c in value
-                    )
-                )
-
-        with t.subTest('varies between calls'):
-            t.assertNotEqual(
-                {new_task_id() for _ in range(20)}, {new_task_id()}
+    def test_shape(t) -> None:
+        for _ in range(20):
+            value = new_task_id()
+            t.assertEqual(len(value), 6)
+            t.assertTrue(
+                all(c in '0123456789abcdefghijklmnopqrstuvwxyz' for c in value)
             )
+
+    def test_varies(t) -> None:
+        t.assertNotEqual({new_task_id() for _ in range(20)}, {new_task_id()})
 
 
 class JournalTests(TestCase):

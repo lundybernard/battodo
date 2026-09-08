@@ -47,7 +47,7 @@ class RenderedDigestTests(TestCase):
         """The digest `source` renders for `period`, at the pinned hour."""
         return DigestView(Digest(source, NOW, period=period)).text
 
-    def test_rendered_digest(t) -> None:
+    def test_text(t) -> None:
         digest = t.rendered(t.source, 'week')
 
         with t.subTest('the period, its span, and how much it holds'):
@@ -100,7 +100,7 @@ class DigestDocumentTests(TestCase):
     def setUp(t) -> None:
         t.source = source_dir(t)
 
-    def test_digest_document(t) -> None:
+    def test_json(t) -> None:
         data = loads(Digest(t.source, NOW, period='week').json)
 
         with t.subTest('the period and its span'):

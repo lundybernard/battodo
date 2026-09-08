@@ -474,17 +474,16 @@ class BackfillAllTests(TestCase):
         t.tmp = TemporaryDirectory()
         t.addCleanup(t.tmp.cleanup)
         t.dir = Path(t.tmp.name)
-
-    def test_backfill_all(t) -> None:
         (t.dir / 'work.md').write_text('## Open\n\n- [ ] W [P:1]\n')
         (t.dir / 'backlog.md').write_text(
             '<!-- battodo:parked -->\n\n## Open\n\n- [ ] B [P:1]\n'
         )
         (t.dir / 'SCHEMA.md').write_text('# Schema\n\nprose\n')
 
+    def test_lists(t) -> None:
         result = backfill_all(t.dir, TODAY)
 
-        with t.subTest('covers every discovered list, parked ones included'):
+        with t.subTest('every discovered list, parked ones included'):
             t.assertEqual(result, {'backlog.md': ['B'], 'work.md': ['W']})
 
         with t.subTest('non-list markdown untouched'):
@@ -492,11 +491,16 @@ class BackfillAllTests(TestCase):
                 (t.dir / 'SCHEMA.md').read_text(), '# Schema\n\nprose\n'
             )
 
-        with t.subTest('journal written to the source directory'):
-            t.assertEqual(len(Journal(t.dir).read()), 2)
+    def test_journal(t) -> None:
+        backfill_all(t.dir, TODAY)
 
-        with t.subTest('a second run is a no-op'):
-            t.assertEqual(backfill_all(t.dir, TODAY), {})
+        # Written to the source directory.
+        t.assertEqual(len(Journal(t.dir).read()), 2)
+
+    def test_runs_once(t) -> None:
+        backfill_all(t.dir, TODAY)
+
+        t.assertEqual(backfill_all(t.dir, TODAY), {})
 
 
 # Shapes taken from the live lists: legacy inflated P, retired BUMPED,

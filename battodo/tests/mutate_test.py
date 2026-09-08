@@ -44,7 +44,7 @@ def logged(handle: MagicMock) -> str:
 class TaskSnapshotTests(TestCase):
     """Unit tests for battodo.mutate.task_snapshot."""
 
-    def test_task_snapshot(t) -> None:
+    def test_shape(t) -> None:
         task = parse('## Open\n\n- [ ] X [P:2] [TAGS:a]\n').tasks[0]
         t.assertEqual(
             task_snapshot(task),

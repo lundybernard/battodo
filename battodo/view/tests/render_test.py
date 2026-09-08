@@ -30,7 +30,7 @@ def autopatch(case: TestCase, target: str) -> Mock:
 class DueLabelTests(TestCase):
     """Unit tests for battodo.view.render.due_label."""
 
-    def test_due_label(t) -> None:
+    def test_dates(t) -> None:
         cases = {
             'no due date reads as nothing at all': (None, ''),
             'a date already past is called out': ('2026-08-04', 'OVERDUE'),
@@ -52,7 +52,7 @@ class DueLabelTests(TestCase):
 class TableWidthTests(TestCase):
     """Unit tests for battodo.view.render.table_width."""
 
-    def test_table_width(t) -> None:
+    def test_columns(t) -> None:
         # Two of indent, the cells themselves, and a gap between each
         # neighbouring pair.
         t.assertEqual(table_width([1, 1, 1, 1, 1]), 2 + 5 + 8)
@@ -61,11 +61,11 @@ class TableWidthTests(TestCase):
 class ClipTests(TestCase):
     """Unit tests for battodo.view.render.clip."""
 
-    def test_clip(t) -> None:
-        with t.subTest('text that fits is left alone'):
-            t.assertEqual(clip('abc', 3), 'abc')
+    def test_fits(t) -> None:
+        t.assertEqual(clip('abc', 3), 'abc')
 
-        with t.subTest('text that does not is cut, and says so'):
+    def test_cut(t) -> None:
+        with t.subTest('text too long is cut, and says so'):
             t.assertEqual(clip('abcdef', 3), 'ab…')
 
         with t.subTest('the mark counts towards the width'):

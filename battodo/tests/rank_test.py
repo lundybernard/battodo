@@ -62,7 +62,7 @@ class MultiplierTests(TestCase):
 class AgeScoreTests(TestCase):
     """Unit tests for battodo.rank.age_score."""
 
-    def test_age_score(t) -> None:
+    def test_scale(t) -> None:
         cases = {
             # No ADDED: the whole legacy corpus, and every hand-added item.
             None: 0.0,
@@ -89,7 +89,7 @@ class AgeScoreTests(TestCase):
 class DueScoreTests(TestCase):
     """Unit tests for battodo.rank.due_score."""
 
-    def test_due_score(t) -> None:
+    def test_scale(t) -> None:
         cases = {
             None: 0.0,
             # Beyond the fortnight horizon: no contribution yet.
@@ -114,29 +114,34 @@ class DueScoreTests(TestCase):
 class RankTests(TestCase):
     """Unit tests for battodo.rank.rank."""
 
-    def test_rank(t) -> None:
-        with t.subTest('a fresh undated item ranks at its multiplier'):
-            t.assertAlmostEqual(rank(item(P='3'), TODAY), 3.0)
+    def test_multiplier(t) -> None:
+        # A fresh undated item ranks at its multiplier.
+        t.assertAlmostEqual(rank(item(P='3'), TODAY), 3.0)
 
-        with t.subTest('waiting multiplies: the same task at three ages'):
-            fresh = item(P='3', ADDED='2026-08-08')
-            month = item(P='3', ADDED='2026-07-09')
-            quarter = item(P='3', ADDED='2026-05-10')
-            t.assertAlmostEqual(rank(fresh, TODAY), 3.0)
-            t.assertAlmostEqual(rank(month, TODAY), 6.0)
-            t.assertAlmostEqual(rank(quarter, TODAY), 9.0)
+    def test_age(t) -> None:
+        ages = {'2026-08-08': 3.0, '2026-07-09': 6.0, '2026-05-10': 9.0}
+        for added, expected in ages.items():
+            with t.subTest(f'ADDED:{added}'):
+                t.assertAlmostEqual(
+                    rank(item(P='3', ADDED=added), TODAY), expected
+                )
 
-        with t.subTest('age and lateness compound'):
-            task = item(P='2', ADDED='2026-07-09', DUE='2026-08-01')
-            t.assertAlmostEqual(rank(task, TODAY), 8.0)
+    def test_compound(t) -> None:
+        # Age and lateness compound.
+        task = item(P='2', ADDED='2026-07-09', DUE='2026-08-01')
+        t.assertAlmostEqual(rank(task, TODAY), 8.0)
 
-        with t.subTest('a parked item ranks zero whatever its dates'):
-            task = item(P='0', ADDED='2020-01-01', DUE='2020-01-01')
-            t.assertAlmostEqual(rank(task, TODAY), 0.0)
+    def test_parked(t) -> None:
+        task = item(P='0', ADDED='2020-01-01', DUE='2020-01-01')
+        t.assertAlmostEqual(rank(task, TODAY), 0.0)
 
-        with t.subTest('urgency is bounded, so the multiplier still rules'):
-            worst = item(P='1', ADDED='2020-01-01', DUE='2020-01-01')
+    def test_bounded(t) -> None:
+        worst = item(P='1', ADDED='2020-01-01', DUE='2020-01-01')
+
+        with t.subTest('urgency alone cannot reach past its cap'):
             t.assertAlmostEqual(rank(worst, TODAY), 6.0)
+
+        with t.subTest('so the multiplier still rules'):
             t.assertLess(
                 rank(worst, TODAY),
                 rank(item(P='5', ADDED='2026-05-10'), TODAY),
