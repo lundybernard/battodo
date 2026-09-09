@@ -27,6 +27,8 @@ WIDTH = '80'
 
 
 class UserConfigFileTests(TestCase):
+    """Golden test for the `view` command run from a config file."""
+
     maxDiff = None
 
     def setUp(t) -> None:

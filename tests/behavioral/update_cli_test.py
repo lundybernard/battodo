@@ -29,6 +29,8 @@ SELECTOR = 'Legacy priority'
 
 
 class UpdateCommandTests(TestCase):
+    """Round-trip tests for the `update` command."""
+
     maxDiff = None
 
     def setUp(t) -> None:

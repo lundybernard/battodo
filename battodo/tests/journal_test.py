@@ -1,4 +1,5 @@
 import json
+from io import TextIOWrapper
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch, sentinel
@@ -19,25 +20,19 @@ STAMP = '2026-08-05T17:30:00+00:00'
 class NewTaskIdTests(TestCase):
     """Unit tests for battodo.journal.new_task_id."""
 
-    def test_new_task_id(t) -> None:
-        with t.subTest('six base36 characters'):
-            for _ in range(20):
-                value = new_task_id()
-                t.assertEqual(len(value), 6)
-                t.assertTrue(
-                    all(
-                        c in '0123456789abcdefghijklmnopqrstuvwxyz'
-                        for c in value
-                    )
-                )
-
-        with t.subTest('varies between calls'):
-            t.assertNotEqual(
-                {new_task_id() for _ in range(20)}, {new_task_id()}
+    def test_shape(t) -> None:
+        for _ in range(20):
+            value = new_task_id()
+            t.assertEqual(len(value), 6)
+            t.assertTrue(
+                all(c in '0123456789abcdefghijklmnopqrstuvwxyz' for c in value)
             )
 
+    def test_varies(t) -> None:
+        t.assertNotEqual({new_task_id() for _ in range(20)}, {new_task_id()})
 
-class JournalIsolationTests(TestCase):
+
+class JournalTests(TestCase):
     """Unit tests for battodo.journal.Journal.
 
     The journal with its file, its lock and its clock stood in for.
@@ -59,9 +54,11 @@ class JournalIsolationTests(TestCase):
 
         t.file = MagicMock(spec=Path)
         t.source = t.Path.return_value
-        t.journal_dir = t.source.__truediv__.return_value
+        t.journal_dir = MagicMock(spec=Path)
+        t.source.__truediv__.return_value = t.journal_dir
         t.journal_dir.__truediv__.return_value = t.file
-        t.handle = t.file.open.return_value.__enter__.return_value
+        t.handle = MagicMock(spec=TextIOWrapper)
+        t.file.open.return_value.__enter__.return_value = t.handle
         t.handle.read.return_value = ''
 
         t.journal = Journal(sentinel.source_dir)
@@ -93,7 +90,7 @@ class JournalIsolationTests(TestCase):
             'task/zz01ab',
             {'delta': {}},
             actor='agent',
-            source_file='work.md',
+            source_file='a-list.md',
         )
 
         with t.subTest('the journal directory is made before the write'):
@@ -117,7 +114,7 @@ class JournalIsolationTests(TestCase):
                     'hash': None,
                     'metadata': {
                         'actor': 'agent',
-                        'source_file': 'work.md',
+                        'source_file': 'a-list.md',
                     },
                     'payload': {'delta': {}},
                 },
@@ -134,37 +131,33 @@ class JournalIsolationTests(TestCase):
             t.assertEqual(taken.args[1], t.fcntl.LOCK_EX)
             t.assertEqual(released.args[1], t.fcntl.LOCK_UN)
 
-    def test_append_counts(t) -> None:
-        t.handle.read.return_value = (
-            '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
-        )
+        with t.subTest('the two counters count over different populations'):
+            t.handle.read.return_value = (
+                '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
+            )
 
-        event = t.journal.append(
-            'TaskUpdated',
-            'task/aa',
-            {},
-            actor='agent',
-            source_file='work.md',
-        )
+            event = t.journal.append(
+                'TaskUpdated',
+                'task/aa',
+                {},
+                actor='agent',
+                source_file='a-list.md',
+            )
 
-        with t.subTest('seq counts every event the journal holds'):
             t.assertEqual(event['seq'], 3)
-
-        with t.subTest('stream_seq counts only the events of that stream'):
             t.assertEqual(event['stream_seq'], 2)
 
-    def test_append_occurred_at(t) -> None:
-        event = t.journal.append(
-            'TaskAdded',
-            'task/zz01ab',
-            {},
-            actor='agent',
-            source_file='work.md',
-            occurred_at='2026-08-05T09:00:00+00:00',
-        )
-
         with t.subTest('a given time is when the change happened'):
-            t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
+            t.handle.read.return_value = ''
 
-        with t.subTest('and the clock says when it was recorded'):
+            event = t.journal.append(
+                'TaskAdded',
+                'task/zz01ab',
+                {},
+                actor='agent',
+                source_file='a-list.md',
+                occurred_at='2026-08-05T09:00:00+00:00',
+            )
+
+            t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
             t.assertEqual(event['recorded_at'], STAMP)

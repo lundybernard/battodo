@@ -25,6 +25,8 @@ WORK = """# Work
 
 
 class TaskTests(TestCase):
+    """Contract tests for battodo.task.Task."""
+
     maxDiff = None
 
     def setUp(t) -> None:

@@ -28,22 +28,26 @@ LOG = """\
 """
 
 
-class LogDirTests(TestCase):
-    """Base: a source directory holding the log, removed at the end."""
+def source_dir(t: TestCase) -> Path:
+    """A source directory holding the log, removed when the test ends."""
+    tmp = TemporaryDirectory()
+    t.addCleanup(tmp.cleanup)
+    source = Path(tmp.name)
+    (source / 'completed.md').write_text(LOG, encoding='utf-8')
+    return source
+
+
+class RenderedDigestTests(TestCase):
+    """Contract tests for battodo.completed.DigestView.text."""
 
     def setUp(t) -> None:
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.source = Path(tmp.name)
-        (t.source / 'completed.md').write_text(LOG, encoding='utf-8')
+        t.source = source_dir(t)
 
-
-class RenderedDigestTests(LogDirTests):
     def rendered(t, source: Path, period: str) -> str:
         """The digest `source` renders for `period`, at the pinned hour."""
         return DigestView(Digest(source, NOW, period=period)).text
 
-    def test_rendered_digest(t) -> None:
+    def test_text(t) -> None:
         digest = t.rendered(t.source, 'week')
 
         with t.subTest('the period, its span, and how much it holds'):
@@ -90,8 +94,13 @@ class RenderedDigestTests(LogDirTests):
             t.rendered(t.source, 'fortnight')
 
 
-class DigestDocumentTests(LogDirTests):
-    def test_digest_document(t) -> None:
+class DigestDocumentTests(TestCase):
+    """Contract tests for battodo.completed.Digest.json."""
+
+    def setUp(t) -> None:
+        t.source = source_dir(t)
+
+    def test_json(t) -> None:
         data = loads(Digest(t.source, NOW, period='week').json)
 
         with t.subTest('the period and its span'):

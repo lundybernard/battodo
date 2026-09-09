@@ -118,7 +118,7 @@ class ParseTests(TestCase):
 class SerializeTests(TestCase):
     """Unit tests for battodo.parser.serialize."""
 
-    def test_serialize(t) -> None:
+    def test_round_trip(t) -> None:
         cases = {
             'full document': OPEN_DOC,
             'no trailing newline': '## Open\n\n- [ ] X [P:1]',
@@ -135,38 +135,39 @@ class SerializeTests(TestCase):
 class SetFieldTests(TestCase):
     """Unit tests for battodo.parser.set_field."""
 
-    def test_set_field(t) -> None:
+    def test_replace(t) -> None:
         raw = '- [ ] X [P:2] [LOE:1]'
 
-        with t.subTest('existing field replaced in place'):
+        with t.subTest('an existing field is replaced in place'):
             t.assertEqual(set_field(raw, 'P', '3'), '- [ ] X [P:3] [LOE:1]')
 
         with t.subTest('other fields keep their position'):
             t.assertEqual(set_field(raw, 'LOE', '5'), '- [ ] X [P:2] [LOE:5]')
 
-        with t.subTest('absent field appended at the end'):
-            t.assertEqual(
-                set_field(raw, 'ID', 'zz01ab'),
-                '- [ ] X [P:2] [LOE:1] [ID:zz01ab]',
-            )
+    def test_append(t) -> None:
+        t.assertEqual(
+            set_field('- [ ] X [P:2] [LOE:1]', 'ID', 'zz01ab'),
+            '- [ ] X [P:2] [LOE:1] [ID:zz01ab]',
+        )
 
-        with t.subTest('edits chain onto an already-edited line'):
-            t.assertEqual(
-                set_field(set_field(raw, 'DUE', '2026-08-23'), 'ID', 'zz01ab'),
-                '- [ ] X [P:2] [LOE:1] [DUE:2026-08-23] [ID:zz01ab]',
-            )
+    def test_chained(t) -> None:
+        raw = '- [ ] X [P:2] [LOE:1]'
+        t.assertEqual(
+            set_field(set_field(raw, 'DUE', '2026-08-23'), 'ID', 'zz01ab'),
+            '- [ ] X [P:2] [LOE:1] [DUE:2026-08-23] [ID:zz01ab]',
+        )
 
-        with t.subTest('a trailing-whitespace line does not gain a gap'):
-            t.assertEqual(
-                set_field('- [ ] X [P:2]   ', 'ID', 'zz01ab'),
-                '- [ ] X [P:2] [ID:zz01ab]',
-            )
+    def test_trailing_whitespace(t) -> None:
+        t.assertEqual(
+            set_field('- [ ] X [P:2]   ', 'ID', 'zz01ab'),
+            '- [ ] X [P:2] [ID:zz01ab]',
+        )
 
 
 class SetTitleTests(TestCase):
     """Unit tests for battodo.parser.set_title."""
 
-    def test_set_title(t) -> None:
+    def test_replace(t) -> None:
         with t.subTest('the title changes, every field keeps its place'):
             t.assertEqual(
                 set_title('- [ ] X [P:2] [LOE:1]', 'Y'),
@@ -176,15 +177,12 @@ class SetTitleTests(TestCase):
         with t.subTest('a fieldless line is the title alone'):
             t.assertEqual(set_title('- [ ] X', 'Y'), '- [ ] Y')
 
-        with t.subTest('indent and check mark are preserved'):
-            t.assertEqual(
-                set_title('  - [x] X [LOE:1]', 'Y'), '  - [x] Y [LOE:1]'
-            )
+    def test_markup(t) -> None:
+        # Indent and check mark are preserved.
+        t.assertEqual(set_title('  - [x] X [LOE:1]', 'Y'), '  - [x] Y [LOE:1]')
 
-        with (
-            t.subTest('a line that is not a task is rejected'),
-            t.assertRaises(ValueError),
-        ):
+    def test_rejected(t) -> None:
+        with t.assertRaises(ValueError):
             set_title('      A note line', 'Y')
 
 
@@ -205,26 +203,6 @@ class TaskNodeTests(TestCase):
     def test_raw_index(t) -> None:
         t.assertEqual(t.tk.raw_index, 2)
 
-
-class ParseDateTests(TestCase):
-    """Unit tests for battodo.parser.parse_date."""
-
-    def test_parse_date(t) -> None:
-        cases = {
-            '2026-08-08': date(2026, 8, 8),
-            'YYYY-MM-DD': None,
-            'not a date': None,
-            '': None,
-            None: None,
-        }
-        for value, expected in cases.items():
-            with t.subTest(str(value)):
-                t.assertEqual(parse_date(value), expected)
-
-
-class TaskNodeDataclassTests(TestCase):
-    """Unit tests for battodo.parser.TaskNode."""
-
     def test_defaults(t) -> None:
         task = TaskNode(
             raw_index=0,
@@ -238,10 +216,22 @@ class TaskNodeDataclassTests(TestCase):
         t.assertEqual(task.priority, 0)
 
 
+class ParseDateTests(TestCase):
+    """Unit tests for battodo.parser.parse_date."""
+
+    def test_date(t) -> None:
+        t.assertEqual(parse_date('2026-08-08'), date(2026, 8, 8))
+
+    def test_unreadable(t) -> None:
+        for value in ('YYYY-MM-DD', 'not a date', '', None):
+            with t.subTest(str(value)):
+                t.assertIsNone(parse_date(value))
+
+
 class AppendOpenTests(TestCase):
     """Unit tests for battodo.parser.append_open."""
 
-    def test_append_open(t) -> None:
+    def test_position(t) -> None:
         entry = '- [ ] New [P:1]'
 
         with t.subTest('lands after the last entry of the Open section'):
@@ -249,9 +239,6 @@ class AppendOpenTests(TestCase):
             expected = OPEN_DOC.split('\n')
             expected.insert(expected.index('## Done') - 1, entry)
             t.assertEqual(lines, expected)
-
-        with t.subTest('the source list is left alone'):
-            t.assertEqual(len(OPEN_DOC.split('\n')), len(lines) - 1)
 
         with t.subTest('a note or child line is still the last entry'):
             doc = '## Open\n\n- [ ] A [P:1]\n  - [ ] Child [LOE:1]\n'
@@ -267,9 +254,17 @@ class AppendOpenTests(TestCase):
                 ],
             )
 
-        with t.subTest('an empty Open section takes the first entry'):
-            doc = '# Work\n\n## Open\n\n## Done\n'
-            t.assertEqual(
-                append_open(doc.split('\n'), entry),
-                ['# Work', '', '## Open', entry, '', '## Done', ''],
-            )
+    def test_source_kept(t) -> None:
+        source = OPEN_DOC.split('\n')
+
+        lines = append_open(source, '- [ ] New [P:1]')
+
+        t.assertEqual(len(source), len(lines) - 1)
+
+    def test_empty_section(t) -> None:
+        entry = '- [ ] New [P:1]'
+        doc = '# Work\n\n## Open\n\n## Done\n'
+        t.assertEqual(
+            append_open(doc.split('\n'), entry),
+            ['# Work', '', '## Open', entry, '', '## Done', ''],
+        )

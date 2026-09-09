@@ -12,26 +12,24 @@ from ..rank import (
 TODAY = date(2026, 8, 8)
 
 
-def item(**fields: str) -> TaskNode:
-    """An open top-level task carrying `fields`."""
+def ranked_task() -> TaskNode:
+    """One open top-level task, its fields set per test."""
     return TaskNode(
         raw_index=0,
         indent=0,
         done=False,
-        title='X',
-        fields=fields,
+        title='A ranked task',
+        fields={},
     )
-
-
-def one(name: str, value: str | None) -> TaskNode:
-    """A task carrying only `name`, or none at all when value is None."""
-    return item() if value is None else item(**{name: value})
 
 
 class MultiplierTests(TestCase):
     """Unit tests for battodo.rank.multiplier."""
 
-    def test_multiplier(t) -> None:
+    def setUp(t) -> None:
+        t.tk = ranked_task()
+
+    def test_scale(t) -> None:
         cases = {
             # New 0-5 scale, taken as written.
             None: 1.0,
@@ -49,20 +47,29 @@ class MultiplierTests(TestCase):
         }
         for value, expected in cases.items():
             with t.subTest(f'P:{value}'):
-                t.assertAlmostEqual(multiplier(one('P', value)), expected)
+                t.tk.fields = {} if value is None else {'P': value}
+                t.assertAlmostEqual(multiplier(t.tk), expected)
 
-    def test_multiplier_is_order_preserving(t) -> None:
-        """No ordering present in the live files may be lost."""
-        legacy = [1, 8, 33, 47, 76, 83, 95, 98]
-        folded = [multiplier(item(P=str(p))) for p in legacy]
-        t.assertEqual(folded, sorted(folded))
-        t.assertEqual(len(set(folded)), len(folded))
+    def test_order(t) -> None:
+        folded = []
+        for priority in (1, 8, 33, 47, 76, 83, 95, 98):
+            t.tk.fields = {'P': str(priority)}
+            folded.append(multiplier(t.tk))
+
+        with t.subTest('no ordering the live files hold is lost'):
+            t.assertEqual(folded, sorted(folded))
+
+        with t.subTest('and no two legacy values fold on to one'):
+            t.assertEqual(len(set(folded)), len(folded))
 
 
 class AgeScoreTests(TestCase):
     """Unit tests for battodo.rank.age_score."""
 
-    def test_age_score(t) -> None:
+    def setUp(t) -> None:
+        t.tk = ranked_task()
+
+    def test_scale(t) -> None:
         cases = {
             # No ADDED: the whole legacy corpus, and every hand-added item.
             None: 0.0,
@@ -81,15 +88,17 @@ class AgeScoreTests(TestCase):
         }
         for value, expected in cases.items():
             with t.subTest(f'ADDED:{value}'):
-                t.assertAlmostEqual(
-                    age_score(one('ADDED', value), TODAY), expected
-                )
+                t.tk.fields = {} if value is None else {'ADDED': value}
+                t.assertAlmostEqual(age_score(t.tk, TODAY), expected)
 
 
 class DueScoreTests(TestCase):
     """Unit tests for battodo.rank.due_score."""
 
-    def test_due_score(t) -> None:
+    def setUp(t) -> None:
+        t.tk = ranked_task()
+
+    def test_scale(t) -> None:
         cases = {
             None: 0.0,
             # Beyond the fortnight horizon: no contribution yet.
@@ -106,38 +115,44 @@ class DueScoreTests(TestCase):
         }
         for value, expected in cases.items():
             with t.subTest(f'DUE:{value}'):
-                t.assertAlmostEqual(
-                    due_score(one('DUE', value), TODAY), expected
-                )
+                t.tk.fields = {} if value is None else {'DUE': value}
+                t.assertAlmostEqual(due_score(t.tk, TODAY), expected)
 
 
 class RankTests(TestCase):
     """Unit tests for battodo.rank.rank."""
 
-    def test_rank(t) -> None:
-        with t.subTest('a fresh undated item ranks at its multiplier'):
-            t.assertAlmostEqual(rank(item(P='3'), TODAY), 3.0)
+    def setUp(t) -> None:
+        t.tk = ranked_task()
 
-        with t.subTest('waiting multiplies: the same task at three ages'):
-            fresh = item(P='3', ADDED='2026-08-08')
-            month = item(P='3', ADDED='2026-07-09')
-            quarter = item(P='3', ADDED='2026-05-10')
-            t.assertAlmostEqual(rank(fresh, TODAY), 3.0)
-            t.assertAlmostEqual(rank(month, TODAY), 6.0)
-            t.assertAlmostEqual(rank(quarter, TODAY), 9.0)
+    def test_multiplier(t) -> None:
+        # A fresh undated item ranks at its multiplier.
+        t.tk.fields = {'P': '3'}
+        t.assertAlmostEqual(rank(t.tk, TODAY), 3.0)
 
-        with t.subTest('age and lateness compound'):
-            task = item(P='2', ADDED='2026-07-09', DUE='2026-08-01')
-            t.assertAlmostEqual(rank(task, TODAY), 8.0)
+    def test_age(t) -> None:
+        ages = {'2026-08-08': 3.0, '2026-07-09': 6.0, '2026-05-10': 9.0}
+        for added, expected in ages.items():
+            with t.subTest(f'ADDED:{added}'):
+                t.tk.fields = {'P': '3', 'ADDED': added}
+                t.assertAlmostEqual(rank(t.tk, TODAY), expected)
 
-        with t.subTest('a parked item ranks zero whatever its dates'):
-            task = item(P='0', ADDED='2020-01-01', DUE='2020-01-01')
-            t.assertAlmostEqual(rank(task, TODAY), 0.0)
+    def test_compound(t) -> None:
+        # Age and lateness compound.
+        t.tk.fields = {'P': '2', 'ADDED': '2026-07-09', 'DUE': '2026-08-01'}
+        t.assertAlmostEqual(rank(t.tk, TODAY), 8.0)
 
-        with t.subTest('urgency is bounded, so the multiplier still rules'):
-            worst = item(P='1', ADDED='2020-01-01', DUE='2020-01-01')
-            t.assertAlmostEqual(rank(worst, TODAY), 6.0)
-            t.assertLess(
-                rank(worst, TODAY),
-                rank(item(P='5', ADDED='2026-05-10'), TODAY),
-            )
+    def test_parked(t) -> None:
+        t.tk.fields = {'P': '0', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
+        t.assertAlmostEqual(rank(t.tk, TODAY), 0.0)
+
+    def test_bounded(t) -> None:
+        t.tk.fields = {'P': '1', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
+        worst = rank(t.tk, TODAY)
+
+        with t.subTest('urgency alone cannot reach past its cap'):
+            t.assertAlmostEqual(worst, 6.0)
+
+        with t.subTest('so the multiplier still rules'):
+            t.tk.fields = {'P': '5', 'ADDED': '2026-05-10'}
+            t.assertLess(worst, rank(t.tk, TODAY))

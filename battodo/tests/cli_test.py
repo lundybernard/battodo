@@ -18,6 +18,18 @@ from ..cli import (
 SRC = 'battodo.cli'
 
 
+def clock(t: TestCase) -> Mock:
+    """A stand-in for the clock the commands read.
+
+    It stands in rather than being compared against a real one: a
+    real-value assertion would only catch a zoneless `now()` during the
+    hours when the host's date and the app timezone's disagree.
+    """
+    patcher = patch(f'{SRC}.datetime', autospec=True)
+    t.addCleanup(patcher.stop)
+    return patcher.start()
+
+
 def subparsers(parser):
     """Every parser reachable from `parser`, keyed by its command name."""
     found = {'btodo': parser}
@@ -95,55 +107,56 @@ class ArgparserTests(TestCase):
     def setUp(t):
         t.parser = argparser()
 
-    def test_argparser(t):
-        p = t.parser
-
-        with t.subTest('view renders for a human by default'):
-            args = p.parse_args(['view'])
+    def test_format(t):
+        with t.subTest('view holds text when the flag is not given'):
+            args = t.parser.parse_args(['view'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        with t.subTest('view takes a machine-readable format'):
-            args = p.parse_args(['view', '--format', 'json'])
+        with t.subTest('view holds json when json is asked for'):
+            args = t.parser.parse_args(['view', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
-        with t.subTest('the default is also a format one may ask for'):
-            args = p.parse_args(['view', '--format', 'text'])
+        with t.subTest('the default is accepted by name too'):
+            args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
         with (
-            t.subTest('an unknown format is a usage error'),
+            t.subTest('an unknown format exits with a usage error'),
             redirect_stderr(StringIO()),
             t.assertRaises(SystemExit),
         ):
-            p.parse_args(['view', '--format', 'xml'])
+            t.parser.parse_args(['view', '--format', 'xml'])
 
-        with t.subTest('view leaves the count to the configuration'):
-            args = p.parse_args(['view'])
+        with t.subTest('show holds the same two values'):
+            args = t.parser.parse_args(['show', 'brush pile'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            args = t.parser.parse_args(
+                ['show', 'brush pile', '--format', 'json']
+            )
+            t.assertEqual(getattr(args, 'battodo.format'), 'json')
+
+        with t.subTest('and so does completed'):
+            args = t.parser.parse_args(['completed'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            args = t.parser.parse_args(['completed', '--format', 'json'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'json')
+
+    def test_top(t):
+        with t.subTest('None when the flag is not given'):
+            args = t.parser.parse_args(['view'])
             t.assertIsNone(getattr(args, 'battodo.view.top'))
 
-        with t.subTest('view takes a count of its own, as a string'):
-            args = p.parse_args(['view', '--top', '2'])
+        with t.subTest('the string as typed when it is'):
+            args = t.parser.parse_args(['view', '--top', '2'])
             t.assertEqual(getattr(args, 'battodo.view.top'), '2')
 
         for value in ('0', '-1', 'five'):
             with (
-                t.subTest(f'a top of {value} is a usage error'),
+                t.subTest(f'a top of {value} exits with a usage error'),
                 redirect_stderr(StringIO()),
                 t.assertRaises(SystemExit),
             ):
-                p.parse_args(['view', '--top', value])
-
-        with t.subTest('show offers the same two formats, human first'):
-            args = p.parse_args(['show', 'brush pile'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
-            args = p.parse_args(['show', 'brush pile', '--format', 'json'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'json')
-
-        with t.subTest('and so does completed'):
-            args = p.parse_args(['completed'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
-            args = p.parse_args(['completed', '--format', 'json'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'json')
+                t.parser.parse_args(['view', '--top', value])
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
@@ -325,26 +338,11 @@ class BATCLITests(TestCase):
         t.assertEqual(kwargs['config_env'], 'prod')
 
 
-class ClockTests(TestCase):
-    """Base for the commands that read the clock.
-
-    It is mocked rather than compared against a real one: a real-value
-    assertion would only catch a zoneless `now()` during the hours when
-    the host's date and the app timezone's disagree.
-    """
-
-    def setUp(t):
-        patcher = patch(f'{SRC}.datetime', autospec=True)
-        t.datetime = patcher.start()
-        t.addCleanup(patcher.stop)
-        t.today = t.datetime.now.return_value.date.return_value
-
-
-class CommandsViewTests(ClockTests):
+class CommandsViewTests(TestCase):
     """Unit tests for battodo.cli.Commands.view."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.get_view', autospec=True)
         t.get_view = patcher.start()
         t.addCleanup(patcher.stop)
@@ -369,11 +367,11 @@ class CommandsViewTests(ClockTests):
             t.print.assert_called_once_with(t.get_view.return_value)
 
 
-class CommandsBackfillTests(ClockTests):
+class CommandsBackfillTests(TestCase):
     """Unit tests for battodo.cli.Commands.backfill."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.backfill_items', autospec=True)
         t.backfill_items = patcher.start()
         t.addCleanup(patcher.stop)
@@ -398,11 +396,11 @@ class CommandsBackfillTests(ClockTests):
             t.print.assert_called_once_with(t.backfill_items.return_value)
 
 
-class CommandsAddTests(ClockTests):
+class CommandsAddTests(TestCase):
     """Unit tests for battodo.cli.Commands.add."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.add_item', autospec=True)
         t.add_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -427,11 +425,11 @@ class CommandsAddTests(ClockTests):
             t.print.assert_called_once_with(t.add_item.return_value)
 
 
-class CommandsShowTests(ClockTests):
+class CommandsShowTests(TestCase):
     """Unit tests for battodo.cli.Commands.show."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.get_item', autospec=True)
         t.get_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -456,11 +454,11 @@ class CommandsShowTests(ClockTests):
             t.print.assert_called_once_with(t.get_item.return_value)
 
 
-class CommandsCompletedTests(ClockTests):
+class CommandsCompletedTests(TestCase):
     """Unit tests for battodo.cli.Commands.completed."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.get_completed', autospec=True)
         t.get_completed = patcher.start()
         t.addCleanup(patcher.stop)
@@ -485,11 +483,11 @@ class CommandsCompletedTests(ClockTests):
             t.print.assert_called_once_with(t.get_completed.return_value)
 
 
-class CommandsUpdateTests(ClockTests):
+class CommandsUpdateTests(TestCase):
     """Unit tests for battodo.cli.Commands.update."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.update_item', autospec=True)
         t.update_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -514,11 +512,11 @@ class CommandsUpdateTests(ClockTests):
             t.print.assert_called_once_with(t.update_item.return_value)
 
 
-class CommandsDoneTests(ClockTests):
+class CommandsDoneTests(TestCase):
     """Unit tests for battodo.cli.Commands.done."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.complete_item', autospec=True)
         t.complete_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -543,11 +541,11 @@ class CommandsDoneTests(ClockTests):
             t.print.assert_called_once_with(t.complete_item.return_value)
 
 
-class CommandsScratchTests(ClockTests):
+class CommandsScratchTests(TestCase):
     """Unit tests for battodo.cli.Commands.scratch."""
 
     def setUp(t):
-        super().setUp()
+        t.datetime = clock(t)
         patcher = patch(f'{SRC}.scratch_item', autospec=True)
         t.scratch_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -572,7 +570,7 @@ class CommandsScratchTests(ClockTests):
             t.print.assert_called_once_with(t.scratch_item.return_value)
 
 
-class CommandsTests(TestCase):
+class CommandsSetLogLevelTests(TestCase):
     """Unit tests for battodo.cli.Commands.set_log_level."""
 
     @patch(f'{SRC}.log', autospec=True)

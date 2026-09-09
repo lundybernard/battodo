@@ -29,6 +29,8 @@ BACKDATE = '2026-07-20'
 
 
 class DoneCommandTests(TestCase):
+    """Round-trip tests for the `done` command."""
+
     maxDiff = None
 
     def setUp(t) -> None:

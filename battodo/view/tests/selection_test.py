@@ -40,10 +40,13 @@ def at(iso: str) -> datetime:
 
 
 class ActiveCategoriesTests(TestCase):
-    """Each window is half-open: it opens on its first hour and is shut
-    again on its closing hour, so the two never overlap."""
+    """Unit tests for battodo.view.selection.active_categories.
 
-    def test_active_categories(t) -> None:
+    Each window is half-open: it opens on its first hour and is shut
+    again on its closing hour, so the two never overlap.
+    """
+
+    def test_windows(t) -> None:
         always = {'study', 'career', 'events'}
         work = always | {'work'}
         chores = always | {'chores'}
@@ -80,6 +83,8 @@ def md(name: str, text: str) -> MagicMock:
 
 
 class DiscoverListsTests(TestCase):
+    """Unit tests for battodo.view.selection.discover_lists."""
+
     def setUp(t) -> None:
         t.work = md('work.md', '# W\n\n## Open\n\n- [ ] A\n')
         t.backlog = md('backlog.md', '## Open\n\n- [ ] B\n')
@@ -88,7 +93,7 @@ class DiscoverListsTests(TestCase):
         t.dir.is_dir.return_value = True
         t.dir.glob.return_value = [t.work, t.prose, t.backlog]
 
-    def test_discover_lists(t) -> None:
+    def test_open_section(t) -> None:
         with t.subTest('a list is a file carrying an open section'):
             t.assertEqual(discover_lists(t.dir), [t.backlog, t.work])
 
@@ -98,27 +103,32 @@ class DiscoverListsTests(TestCase):
         with t.subTest('prose without one is not a list'):
             t.assertNotIn(t.prose, discover_lists(t.dir))
 
-        with t.subTest('they come back in name order'):
-            t.assertEqual(
-                [path.name for path in discover_lists(t.dir)],
-                ['backlog.md', 'work.md'],
-            )
+    def test_order(t) -> None:
+        t.assertEqual(
+            [path.name for path in discover_lists(t.dir)],
+            ['backlog.md', 'work.md'],
+        )
 
-        with t.subTest('and only markdown is ever considered'):
-            t.dir.glob.assert_called_with('*.md')
+    def test_markdown(t) -> None:
+        discover_lists(t.dir)
+
+        # Only markdown is ever considered.
+        t.dir.glob.assert_called_with('*.md')
+
+    def test_absent(t) -> None:
+        t.dir.is_dir.return_value = False
 
         with t.subTest('a directory that is not there yields nothing'):
-            t.dir.is_dir.return_value = False
             t.assertEqual(discover_lists(t.dir), [])
 
         with t.subTest('and is not searched at all'):
-            t.dir.glob.reset_mock()
-            discover_lists(t.dir)
             t.dir.glob.assert_not_called()
 
 
 class VisibleTasksTests(TestCase):
-    def test_visible_tasks(t) -> None:
+    """Unit tests for battodo.view.selection.visible_tasks."""
+
+    def test_shown(t) -> None:
         doc = parse(
             '## Open\n'
             '- [ ] Open item [P:2]\n'
@@ -150,7 +160,12 @@ class VisibleTasksTests(TestCase):
 
 
 class SortKeyTests(TestCase):
-    def test_sort_key(t) -> None:
+    """Unit tests for battodo.view.selection.sort_key."""
+
+    def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
+
+    def test_order(t) -> None:
         doc = parse(
             '## Open\n'
             '- [ ] B undated [P:3]\n'
@@ -158,6 +173,8 @@ class SortKeyTests(TestCase):
             '- [ ] Dated [P:3] [DUE:2026-09-30]\n'
             '- [ ] Higher [P:5]\n'
         )
+        ranked = {'Higher': 5.0}
+        t.rank.side_effect = lambda task, today: ranked.get(task.title, 3.0)
 
         ordered = [
             task.title
@@ -173,28 +190,37 @@ class SortKeyTests(TestCase):
         with t.subTest('the title breaks what is left'):
             t.assertEqual(ordered[2:], ['A undated', 'B undated'])
 
-        with t.subTest('the key itself is rank, then due, then title'):
-            task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
-            t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+    def test_key(t) -> None:
+        # The key itself is rank, then due, then title.
+        t.rank.return_value = 3.0
+        task = parse('## Open\n- [ ] Solo [P:3]\n').tasks[0]
+
+        t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+        t.rank.assert_called_once_with(task, TODAY)
 
 
 class CategoryOrderTests(TestCase):
-    def test_category_order(t) -> None:
-        with t.subTest('the named categories lead, in their own order'):
-            t.assertEqual(
-                sorted(['career', 'work', 'chores'], key=category_order),
-                ['work', 'chores', 'career'],
-            )
+    """Unit tests for battodo.view.selection.category_order."""
 
-        with t.subTest('an ad-hoc name follows them, alphabetically'):
-            t.assertEqual(
-                sorted(['van', 'career', 'arts'], key=category_order),
-                ['career', 'arts', 'van'],
-            )
+    def test_named(t) -> None:
+        # The named categories lead, in their own order.
+        t.assertEqual(
+            sorted(['career', 'work', 'chores'], key=category_order),
+            ['work', 'chores', 'career'],
+        )
+
+    def test_ad_hoc(t) -> None:
+        # An ad-hoc name follows the named ones, alphabetically.
+        t.assertEqual(
+            sorted(['van', 'career', 'arts'], key=category_order),
+            ['career', 'arts', 'van'],
+        )
 
 
 class OpenChildrenTests(TestCase):
-    def test_open_children(t) -> None:
+    """Unit tests for battodo.view.selection.open_children."""
+
+    def test_children(t) -> None:
         doc = parse(
             '## Open\n'
             '- [ ] Parent [P:3]\n'
@@ -205,17 +231,17 @@ class OpenChildrenTests(TestCase):
         )
         parent, childless = doc.tasks
 
-        with t.subTest('subtasks and checklist items both count'):
-            t.assertEqual(
-                [child.title for child in open_children(parent)],
-                ['A subtask', 'A checklist item'],
-            )
-
-        with t.subTest('a task with no children has none open'):
-            t.assertEqual(open_children(childless), [])
+        # Subtasks and checklist items both count.
+        t.assertEqual(
+            [child.title for child in open_children(parent)],
+            ['A subtask', 'A checklist item'],
+        )
+        t.assertEqual(open_children(childless), [])
 
 
 class TaskEntryTests(TestCase):
+    """Unit tests for battodo.view.selection.task_entry."""
+
     def setUp(t) -> None:
         t.rank = autopatch(t, 'rank')
         t.multiplier = autopatch(t, 'multiplier')
@@ -235,7 +261,7 @@ class TaskEntryTests(TestCase):
         t.task.repeat = None
         t.task.tags = ['home']
 
-    def test_task_entry(t) -> None:
+    def test_fields(t) -> None:
         with t.subTest('stored fields are carried through verbatim'):
             t.assertEqual(
                 task_entry(t.task, TODAY),
@@ -257,22 +283,30 @@ class TaskEntryTests(TestCase):
             t.task.due = '2026-08-04'
             t.assertEqual(task_entry(t.task, TODAY)['due'], '2026-08-04')
 
+    def test_rank(t) -> None:
+        t.rank.return_value = 1 + 7 / 30
+
+        entry = task_entry(t.task, TODAY)
+
         with t.subTest('a rank is published to two decimal places'):
-            t.rank.return_value = 1 + 7 / 30
-            entry = task_entry(t.task, TODAY)
             t.assertEqual(entry['rank'], 1.23)
             t.assertNotEqual(entry['rank'], t.rank.return_value)
 
         with t.subTest('the clock reaches the rank'):
             t.rank.assert_called_with(t.task, TODAY)
 
-        with t.subTest('open children are counted, not nested'):
-            t.open_children.return_value = [sentinel.child, sentinel.child]
-            t.assertEqual(task_entry(t.task, TODAY)['subtasks'], 2)
+    def test_children(t) -> None:
+        t.open_children.return_value = [sentinel.child, sentinel.child]
+
+        # Open children are counted, not nested.
+        t.assertEqual(task_entry(t.task, TODAY)['subtasks'], 2)
 
 
 class TodoListTests(TestCase):
+    """Unit tests for battodo.view.selection.TodoList."""
+
     def setUp(t) -> None:
+        t.rank = autopatch(t, 'rank')
         t.path = Mock(spec=Path)
         t.path.stem = 'work'
         t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
@@ -300,7 +334,9 @@ class TodoListTests(TestCase):
             t.assertTrue(t.tl.parked)
 
     def test_tasks(t) -> None:
-        with t.subTest('open tasks come back in view order'):
+        with t.subTest('open tasks come back in the order rank gives'):
+            ranked = {'Low': 1.0, 'High': 5.0}
+            t.rank.side_effect = lambda task, today: ranked[task.title]
             t.tl.text = (
                 '## Open\n'
                 '- [ ] Low [P:1]\n'
@@ -330,6 +366,8 @@ class TodoListTests(TestCase):
 
 
 class CategoryTests(TestCase):
+    """Unit tests for battodo.view.selection.Category."""
+
     def setUp(t) -> None:
         t.tasks = parse(
             '## Open\n' + ''.join(f'- [ ] Item {n} [P:3]\n' for n in range(6))
@@ -366,6 +404,8 @@ class CategoryTests(TestCase):
 
 
 class SelectionTests(TestCase):
+    """Unit tests for battodo.view.selection.Selection."""
+
     def setUp(t) -> None:
         t.discover_lists = autopatch(t, 'discover_lists')
         t.active_categories = autopatch(t, 'active_categories')
@@ -589,10 +629,12 @@ class SelectionTests(TestCase):
 
 
 class ItemCountTests(TestCase):
-    def test_item_count(t) -> None:
-        with t.subTest('a configured count is read as a number'):
-            t.assertEqual(item_count('2'), 2)
+    """Unit tests for battodo.view.selection.item_count."""
 
+    def test_number(t) -> None:
+        t.assertEqual(item_count('2'), 2)
+
+    def test_rejected(t) -> None:
         for value in ('0', '-1', 'five', ''):
             with (
                 t.subTest(f'{value!r} is not a count'),
@@ -603,13 +645,16 @@ class ItemCountTests(TestCase):
 
 
 class SelectionFromConfigTests(TestCase):
-    """The decode from configuration strings to what a selection takes."""
+    """Unit tests for battodo.view.selection.Selection.from_config.
+
+    The decode from configuration strings to what a selection takes.
+    """
 
     def setUp(t) -> None:
         t.now = at('2026-08-05T10:30')
         t.conf = Mock(spec=['view', 'show_all'])
         t.conf.view = Mock(spec=['source_dir', 'top'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
         t.conf.show_all = True
 
@@ -617,7 +662,7 @@ class SelectionFromConfigTests(TestCase):
         selection = Selection.from_config(t.conf, t.now)
 
         with t.subTest('the source directory is left unexpanded'):
-            t.assertEqual(selection.directory, Path('~/todo'))
+            t.assertEqual(selection.directory, Path('~/a-source-dir'))
 
         with t.subTest('the clock is the one it was given'):
             t.assertEqual(selection.now, t.now)
@@ -631,7 +676,7 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('an unsupplied flag reads as off'):
             conf = Mock(spec=['view'])
             conf.view = Mock(spec=['source_dir', 'top'])
-            conf.view.source_dir = '~/todo'
+            conf.view.source_dir = '~/a-source-dir'
             conf.view.top = str(TOP_N)
 
             t.assertFalse(Selection.from_config(conf, t.now).show_all)

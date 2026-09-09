@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch, sentinel
 
-from battodo.lib import (
+from ..lib import (
     add_item,
     backfill_items,
     complete_item,
@@ -15,8 +15,8 @@ from battodo.lib import (
 )
 
 SRC = 'battodo.lib'
-# The configured `~/todo` as every function resolves it.
-SOURCE = Path.home() / 'todo'
+# The configured `~/a-source-dir` as every function resolves it.
+SOURCE = Path.home() / 'a-source-dir'
 
 
 class GetViewTests(TestCase):
@@ -35,28 +35,30 @@ class GetViewTests(TestCase):
         t.conf = Mock(spec=['view', 'format'])
         t.conf.format = 'text'
 
-    def test_get_view(t):
-        with t.subTest('the configuration is decoded once, by the selection'):
-            rendered = get_view(t.conf, t.now)
+    def test_selection(t):
+        get_view(t.conf, t.now)
 
-            t.Selection.from_config.assert_called_once_with(t.conf, t.now)
+        # The configuration is decoded once, by the selection.
+        t.Selection.from_config.assert_called_once_with(t.conf, t.now)
 
-        with t.subTest('which a human reads as a rendered view'):
-            t.View.assert_called_once_with(t.selection)
-            t.assertEqual(rendered, t.View.return_value.text)
+    def test_text(t):
+        rendered = get_view(t.conf, t.now)
 
-        with t.subTest('and a machine reads as the same selection, as JSON'):
-            t.conf.format = 'json'
+        t.View.assert_called_once_with(t.selection)
+        t.assertEqual(rendered, t.View.return_value.text)
 
-            t.assertEqual(get_view(t.conf, t.now), t.selection.json)
+    def test_json(t):
+        t.conf.format = 'json'
 
-        with t.subTest('which is serialized, never rendered'):
-            t.View.assert_called_once()
+        t.assertEqual(get_view(t.conf, t.now), t.selection.json)
 
-        with t.subTest('an unconfigured format is the human view'):
-            conf = Mock(spec=['view'])
+        # The selection serializes itself; nothing renders it.
+        t.View.assert_not_called()
 
-            t.assertEqual(get_view(conf, t.now), t.View.return_value.text)
+    def test_unconfigured_format(t):
+        conf = Mock(spec=['view'])
+
+        t.assertEqual(get_view(conf, t.now), t.View.return_value.text)
 
 
 class GetCompletedTests(TestCase):
@@ -73,30 +75,32 @@ class GetCompletedTests(TestCase):
         t.conf = Mock(spec=['view', 'format'])
         t.conf.format = 'text'
 
-    def test_get_completed(t):
-        with t.subTest('the configuration is decoded once, by the digest'):
-            rendered = get_completed(t.conf, t.now)
+    def test_digest(t):
+        get_completed(t.conf, t.now)
 
-            t.Digest.from_config.assert_called_once_with(t.conf, t.now)
+        # The configuration is decoded once, by the digest.
+        t.Digest.from_config.assert_called_once_with(t.conf, t.now)
 
-        with t.subTest('which a human reads as a rendered digest'):
-            t.DigestView.assert_called_once_with(t.digest)
-            t.assertEqual(rendered, t.DigestView.return_value.text)
+    def test_text(t):
+        rendered = get_completed(t.conf, t.now)
 
-        with t.subTest('and a machine reads as the same digest, as JSON'):
-            t.conf.format = 'json'
+        t.DigestView.assert_called_once_with(t.digest)
+        t.assertEqual(rendered, t.DigestView.return_value.text)
 
-            t.assertEqual(get_completed(t.conf, t.now), t.digest.json)
+    def test_json(t):
+        t.conf.format = 'json'
 
-        with t.subTest('which is serialized, never rendered'):
-            t.DigestView.assert_called_once()
+        t.assertEqual(get_completed(t.conf, t.now), t.digest.json)
 
-        with t.subTest('an unconfigured format is the human digest'):
-            conf = Mock(spec=['view'])
+        # The digest serializes itself; nothing renders it.
+        t.DigestView.assert_not_called()
 
-            t.assertEqual(
-                get_completed(conf, t.now), t.DigestView.return_value.text
-            )
+    def test_unconfigured_format(t):
+        conf = Mock(spec=['view'])
+
+        t.assertEqual(
+            get_completed(conf, t.now), t.DigestView.return_value.text
+        )
 
 
 class GetItemTests(TestCase):
@@ -113,39 +117,39 @@ class GetItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'format'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
         t.conf.format = 'text'
 
-    def test_get_item(t):
-        with t.subTest('the human form is the default'):
-            built = get_item(t.conf, t.now)
+    def test_text(t):
+        built = get_item(t.conf, t.now)
 
-            args = t.build_item.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.now)
-            t.assertEqual(built, t.build_item.return_value)
+        args = t.build_item.call_args[0]
+        t.assertEqual(args[0], SOURCE)
+        t.assertEqual(args[1], 'a selector')
+        t.assertEqual(args[2], t.now)
+        t.assertEqual(built, t.build_item.return_value)
 
-        with t.subTest('json format is serialized instead'):
-            t.conf.format = 'json'
+    def test_json(t):
+        t.conf.format = 'json'
 
-            built = get_item(t.conf, t.now)
+        built = get_item(t.conf, t.now)
 
-            t.assertEqual(t.build_item_json.call_args[0][1], 'brush pile')
-            t.assertEqual(built, t.build_item_json.return_value)
+        t.assertEqual(t.build_item_json.call_args[0][1], 'a selector')
+        t.assertEqual(built, t.build_item_json.return_value)
 
-        with t.subTest('which is serialized, never rendered'):
-            t.build_item.assert_called_once()
+        # The json builder serializes; nothing renders.
+        t.build_item.assert_not_called()
 
-        with t.subTest('an unconfigured format is the human form'):
-            conf = Mock(spec=['view', 'selector'])
-            conf.view.source_dir = '~/todo'
-            conf.selector = 'brush pile'
+    def test_unconfigured_format(t):
+        conf = Mock(spec=['view', 'selector'])
+        conf.view = Mock(spec=['source_dir'])
+        conf.view.source_dir = '~/a-source-dir'
+        conf.selector = 'a selector'
 
-            get_item(conf, t.now)
+        get_item(conf, t.now)
 
-            t.assertEqual(t.build_item.call_count, 2)
+        t.build_item.assert_called_once()
 
 
 class AddItemTests(TestCase):
@@ -157,8 +161,8 @@ class AddItemTests(TestCase):
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
 
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
+        t.path = Path('~/a-source-dir/a-list.md')
+        t.entry = '- [ ] A task title [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
         t.add_task.return_value = (t.path, t.entry)
         t.add_subtask.return_value = (t.path, t.entry)
 
@@ -168,57 +172,56 @@ class AddItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
         t.conf.list = 'chores'
-        t.conf.title = 'Water it'
+        t.conf.title = 'A task title'
         t.conf.priority = '4'
         t.conf.due = '2026-09-01'
 
-    def test_add_item(t):
-        with t.subTest('list, title and supplied fields are forwarded'):
-            written = add_item(t.conf, t.now)
+    def test_forwarded(t):
+        add_item(t.conf, t.now)
 
-            args = t.add_task.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'chores')
-            t.assertEqual(args[2], 'Water it')
-            t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
-            t.assertEqual(args[4], t.today)
+        args = t.add_task.call_args[0]
+        t.assertEqual(args[0], SOURCE)
+        t.assertEqual(args[1], 'chores')
+        t.assertEqual(args[2], 'A task title')
+        t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
+        t.assertEqual(args[4], t.today)
 
-        with t.subTest('the created line and its file come back'):
-            # A P-less add ranks near 0 and will not show in a view, so
-            # this is the only confirmation of the write.
-            t.assertEqual(written, f'{t.entry}\n{t.path}')
+    def test_result(t):
+        # A P-less add ranks near 0 and will not show in a view, so
+        # this is the only confirmation of the write.
+        t.assertEqual(add_item(t.conf, t.now), f'{t.entry}\n{t.path}')
 
-        with t.subTest('an add with no fields writes none'):
-            t.add_task.reset_mock()
-            conf = Mock(spec=['view', 'list', 'title'])
-            conf.view.source_dir = '~/todo'
-            conf.list = 'chores'
-            conf.title = 'Water it'
+    def test_no_fields(t):
+        conf = Mock(spec=['view', 'list', 'title'])
+        conf.view = Mock(spec=['source_dir'])
+        conf.view.source_dir = '~/a-source-dir'
+        conf.list = 'chores'
+        conf.title = 'A task title'
 
-            add_item(conf, t.now)
+        add_item(conf, t.now)
 
-            t.assertEqual(t.add_task.call_args[0][3], {})
+        t.assertEqual(t.add_task.call_args[0][3], {})
+
+    def test_subtask(t):
+        conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
+        conf.view = Mock(spec=['source_dir'])
+        conf.view.source_dir = '~/a-source-dir'
+        conf.list = 'work'
+        conf.title = 'A subtask title'
+        conf.parent = '9o71lx'
+        conf.loe = '2'
+
+        written = add_item(conf, t.now)
 
         with t.subTest('a parent sends the add to the subtask path'):
-            t.add_task.reset_mock()
-            t.now.date.reset_mock()
-            conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
-            conf.view.source_dir = '~/todo'
-            conf.list = 'work'
-            conf.title = 'Buy lumber'
-            conf.parent = '9o71lx'
-            conf.loe = '2'
-
-            written = add_item(conf, t.now)
-
             t.add_task.assert_not_called()
             args = t.add_subtask.call_args[0]
             t.assertEqual(args[0], SOURCE)
             t.assertEqual(args[1], 'work')
             t.assertEqual(args[2], '9o71lx')
-            t.assertEqual(args[3], 'Buy lumber')
+            t.assertEqual(args[3], 'A subtask title')
             t.assertEqual(args[4], {'LOE': '2'})
 
         with t.subTest('a subtask carries no add date, so none is derived'):
@@ -236,8 +239,8 @@ class UpdateItemTests(TestCase):
         t.update_task = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.path = Path('~/todo/chores.md')
-        t.entry = '- [ ] Water it [P:4] [ID:ab12cd]'
+        t.path = Path('~/a-source-dir/a-list.md')
+        t.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
         t.update_task.return_value = (t.path, t.entry)
 
         t.now = Mock(spec=datetime)
@@ -246,38 +249,38 @@ class UpdateItemTests(TestCase):
         # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
         t.conf.priority = '4'
         t.conf.due = '2026-09-01'
-        t.conf.title = 'Water it'
+        t.conf.title = 'A task title'
 
-    def test_update_item(t):
-        with t.subTest('selector, supplied fields and title are forwarded'):
-            written = update_item(t.conf, t.now)
+    def test_forwarded(t):
+        update_item(t.conf, t.now)
 
-            args, kwargs = t.update_task.call_args
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
-            t.assertEqual(args[3], t.today)
-            t.assertEqual(kwargs['title'], 'Water it')
+        args, kwargs = t.update_task.call_args
+        t.assertEqual(args[0], SOURCE)
+        t.assertEqual(args[1], 'a selector')
+        t.assertEqual(args[2], {'P': '4', 'DUE': '2026-09-01'})
+        t.assertEqual(args[3], t.today)
+        t.assertEqual(kwargs['title'], 'A task title')
 
-        with t.subTest('the written line and its file come back'):
-            t.assertEqual(written, f'{t.entry}\n{t.path}')
+    def test_result(t):
+        t.assertEqual(update_item(t.conf, t.now), f'{t.entry}\n{t.path}')
 
-        with t.subTest('an option left off names no change to that field'):
-            t.update_task.reset_mock()
-            conf = Mock(spec=['view', 'selector', 'tags'])
-            conf.view.source_dir = '~/todo'
-            conf.selector = 'brush pile'
-            conf.tags = 'yard,summer'
+    def test_option_left_off(t):
+        conf = Mock(spec=['view', 'selector', 'tags'])
+        conf.view = Mock(spec=['source_dir'])
+        conf.view.source_dir = '~/a-source-dir'
+        conf.selector = 'a selector'
+        conf.tags = 'yard,summer'
 
-            update_item(conf, t.now)
+        update_item(conf, t.now)
 
-            args, kwargs = t.update_task.call_args
-            t.assertEqual(args[2], {'TAGS': 'yard,summer'})
-            t.assertIsNone(kwargs['title'])
+        # An option left off names no change to that field.
+        args, kwargs = t.update_task.call_args
+        t.assertEqual(args[2], {'TAGS': 'yard,summer'})
+        t.assertIsNone(kwargs['title'])
 
 
 class CompleteItemTests(TestCase):
@@ -298,22 +301,26 @@ class CompleteItemTests(TestCase):
         # value off it. The spec still names what a `done` carries.
         t.conf = Mock(spec=['view', 'selector'])
 
-    def test_complete_item(t):
-        with t.subTest('the completed.md entries come back, one per line'):
-            # Completing the last open child completes its parent too,
-            # so one call can log more than one entry.
-            t.task.completed = [
-                '2026-08-08 | chores | DONE | Deck > Chip it',
-                '2026-08-08 | chores | DONE | Deck',
-            ]
+    def test_result(t):
+        # Completing the last open child completes its parent too, so
+        # one call can log more than one entry.
+        t.task.completed = [
+            '2026-08-08 | chores | DONE | A parent > A child',
+            '2026-08-08 | chores | DONE | A parent',
+        ]
 
-            logged = complete_item(t.conf, t.now)
+        logged = complete_item(t.conf, t.now)
 
-            t.assertEqual(
-                logged,
-                '2026-08-08 | chores | DONE | Deck > Chip it\n'
-                '2026-08-08 | chores | DONE | Deck',
-            )
+        t.assertEqual(
+            logged,
+            '2026-08-08 | chores | DONE | A parent > A child\n'
+            '2026-08-08 | chores | DONE | A parent',
+        )
+
+    def test_task(t):
+        t.task.completed = []
+
+        complete_item(t.conf, t.now)
 
         with t.subTest('the configuration is decoded once, by the task'):
             t.Task.from_config.assert_called_once_with(t.conf, t.now)
@@ -321,10 +328,10 @@ class CompleteItemTests(TestCase):
         with t.subTest('which the call then completes'):
             t.task.complete.assert_called_once_with()
 
-        with t.subTest('an item that is not logged says so'):
-            t.task.completed = []
+    def test_nothing_logged(t):
+        t.task.completed = []
 
-            t.assertEqual(complete_item(t.conf, t.now), 'checked off')
+        t.assertEqual(complete_item(t.conf, t.now), 'checked off')
 
 
 class ScratchItemTests(TestCase):
@@ -339,34 +346,37 @@ class ScratchItemTests(TestCase):
         t.today = t.now.date.return_value
         t.conf = Mock(spec=['view', 'selector'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
-        t.conf.selector = 'brush pile'
+        t.conf.view.source_dir = '~/a-source-dir'
+        t.conf.selector = 'a selector'
 
-    def test_scratch_item(t):
-        with t.subTest('the completed.md entries come back, one per line'):
-            t.scratch.return_value = [
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip',
-                '2026-08-08 | chores | SCRATCHED | Deck',
-            ]
+    def test_result(t):
+        t.scratch.return_value = [
+            '2026-08-08 | chores | SCRATCHED | A parent > A child',
+            '2026-08-08 | chores | SCRATCHED | A parent',
+        ]
 
-            logged = scratch_item(t.conf, t.now)
+        logged = scratch_item(t.conf, t.now)
 
-            t.assertEqual(
-                logged,
-                '2026-08-08 | chores | SCRATCHED | Deck > Chip\n'
-                '2026-08-08 | chores | SCRATCHED | Deck',
-            )
+        t.assertEqual(
+            logged,
+            '2026-08-08 | chores | SCRATCHED | A parent > A child\n'
+            '2026-08-08 | chores | SCRATCHED | A parent',
+        )
 
-        with t.subTest('selector, source dir and local day are forwarded'):
-            args = t.scratch.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], 'brush pile')
-            t.assertEqual(args[2], t.today)
+    def test_forwarded(t):
+        t.scratch.return_value = []
 
-        with t.subTest('an item that is not logged says so'):
-            t.scratch.return_value = []
+        scratch_item(t.conf, t.now)
 
-            t.assertEqual(scratch_item(t.conf, t.now), 'dropped')
+        args = t.scratch.call_args[0]
+        t.assertEqual(args[0], SOURCE)
+        t.assertEqual(args[1], 'a selector')
+        t.assertEqual(args[2], t.today)
+
+    def test_nothing_logged(t):
+        t.scratch.return_value = []
+
+        t.assertEqual(scratch_item(t.conf, t.now), 'dropped')
 
 
 class BackfillItemsTests(TestCase):
@@ -381,25 +391,29 @@ class BackfillItemsTests(TestCase):
         t.today = t.now.date.return_value
         t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/todo'
+        t.conf.view.source_dir = '~/a-source-dir'
 
-    def test_backfill_items(t):
-        with t.subTest('a count comes back per changed list, in order'):
-            t.backfill_all.return_value = {
-                'work.md': ['a', 'b'],
-                'chores.md': ['c'],
-            }
+    def test_result(t):
+        t.backfill_all.return_value = {
+            'work.md': ['a', 'b'],
+            'chores.md': ['c'],
+        }
 
-            stamped = backfill_items(t.conf, t.now)
+        stamped = backfill_items(t.conf, t.now)
 
-            t.assertEqual(stamped, 'chores.md: stamped 1\nwork.md: stamped 2')
+        # A count per changed list, in name order.
+        t.assertEqual(stamped, 'chores.md: stamped 1\nwork.md: stamped 2')
 
-        with t.subTest('the source dir and the local day are forwarded'):
-            args = t.backfill_all.call_args[0]
-            t.assertEqual(args[0], SOURCE)
-            t.assertEqual(args[1], t.today)
+    def test_forwarded(t):
+        t.backfill_all.return_value = {}
 
-        with t.subTest('a run that stamped nothing says so'):
-            t.backfill_all.return_value = {}
+        backfill_items(t.conf, t.now)
 
-            t.assertEqual(backfill_items(t.conf, t.now), 'nothing to backfill')
+        args = t.backfill_all.call_args[0]
+        t.assertEqual(args[0], SOURCE)
+        t.assertEqual(args[1], t.today)
+
+    def test_nothing_stamped(t):
+        t.backfill_all.return_value = {}
+
+        t.assertEqual(backfill_items(t.conf, t.now), 'nothing to backfill')

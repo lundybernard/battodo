@@ -37,6 +37,8 @@ def golden(name: str) -> str:
 
 
 class ShowCommandTests(TestCase):
+    """Golden tests for the output of the `show` command."""
+
     maxDiff = None
 
     def setUp(t) -> None:

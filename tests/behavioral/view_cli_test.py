@@ -56,6 +56,8 @@ def golden(name: str) -> str:
 
 
 class ViewCommandTests(TestCase):
+    """Golden tests for the output of the `view` command."""
+
     maxDiff = None
 
     def setUp(t) -> None:
