@@ -1,15 +1,13 @@
-from argparse import Namespace, _HelpAction, _SubParsersAction
+from argparse import _HelpAction, _SubParsersAction
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, patch, sentinel
 
 from ..cli import (
     BATCLI,
-    DEBUG,
     DEFAULT_PERIOD,
-    ERROR,
-    INFO,
     MESSAGES,
     PERIODS,
     TZ,
@@ -179,14 +177,14 @@ class ArgparserTests(TestCase):
     def test_verbosity(t):
         cases = {
             ('view',): None,
-            ('-v', 'view'): INFO,
-            ('--verbose', 'view'): INFO,
-            ('--debug', 'view'): DEBUG,
+            ('-v', 'view'): 'INFO',
+            ('--verbose', 'view'): 'INFO',
+            ('--debug', 'view'): 'DEBUG',
         }
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
                 args = t.parser.parse_args(list(argv))
-                t.assertEqual(args.loglevel, expected)
+                t.assertEqual(getattr(args, 'battodo.loglevel'), expected)
 
     def test_add_priority_spellings(t):
         for flag in ('-p', '--priority'):
@@ -243,9 +241,12 @@ class BATCLITests(TestCase):
     """Unit tests for battodo.cli.BATCLI."""
 
     def setUp(t):
+        # The entry point sets a level on the real logger. Patched, so
+        # a run leaves the level of the test process alone.
         patches = {
             'exit': f'{SRC}.sys.exit',
             'get_config': f'{SRC}.get_config',
+            'log': f'{SRC}.log',
         }
         for name, target in patches.items():
             patcher = patch(target, autospec=True)
@@ -277,7 +278,7 @@ class BATCLITests(TestCase):
             'view',
         ]
         BATCLI(args)
-        set_log_level.assert_called_with(argparser().parse_args(args))
+        set_log_level.assert_called_with(t.get_config.return_value)
         t.exit.assert_called_with(0)
 
     def test_missing_command(t):
@@ -586,12 +587,8 @@ class CommandsSetLogLevelTests(TestCase):
 
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
-        with t.subTest('default to ERROR'):
-            args = Namespace(loglevel=None)
-            Commands.set_log_level(args)
-            log.setLevel.assert_called_with(ERROR)
+        conf = SimpleNamespace(loglevel=sentinel.loglevel)
 
-        with t.subTest('set given value'):
-            args = Namespace(loglevel=INFO)
-            Commands.set_log_level(args)
-            log.setLevel.assert_called_with(INFO)
+        Commands.set_log_level(conf)
+
+        log.setLevel.assert_called_once_with(sentinel.loglevel)
