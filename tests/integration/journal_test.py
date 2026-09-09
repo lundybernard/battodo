@@ -50,8 +50,6 @@ class JournalTests(TestCase):
             t.assertEqual(event['stream_seq'], 1)
             t.assertEqual(event['type'], 'TaskUpdated')
             t.assertEqual(event['schema_version'], SCHEMA_VERSION)
-            t.assertIsNone(event['prev_hash'])
-            t.assertIsNone(event['hash'])
             t.assertEqual(
                 event['metadata'],
                 {'actor': 'agent', 'source_file': 'a-list.md'},
@@ -156,3 +154,12 @@ class JournalTests(TestCase):
             ret = t.journal.events
 
             t.assertEqual(len(ret), 2)
+
+        with t.subTest('an entry carrying the retired hash fields reads'):
+            legacy = {'type': 'TaskAdded', 'prev_hash': None, 'hash': None}
+            with t.journal.path.open('a') as handle:
+                handle.write(json.dumps(legacy) + '\n')
+
+            ret = Journal(t.dir).events
+
+            t.assertEqual(ret[-1], legacy)

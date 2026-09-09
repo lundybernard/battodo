@@ -1,10 +1,9 @@
 """Append-only JSONL event journal, one per source directory.
 
-`prev_hash` and `hash` are reserved and null in v1, and the
-commit-boundary fields are omitted. A command can append several events
--- a completion cascade, or a parent stamp beside the child that names
-it -- and nothing marks them as one commit, so a partial write is not
-detectable.
+The commit-boundary fields are omitted. A command can append several
+events -- a completion cascade, or a parent stamp beside the child that
+names it -- and nothing marks them as one commit, so a partial write is
+not detectable.
 
 While markdown remains authoritative the journal is a *partial* record:
 hand-edits bypass btodo and so bypass this log. Every payload carries a
@@ -105,8 +104,6 @@ class Journal:
                     'schema_version': SCHEMA_VERSION,
                     'occurred_at': occurred_at or recorded_at,
                     'recorded_at': recorded_at,
-                    'prev_hash': None,
-                    'hash': None,
                     'metadata': {
                         'actor': actor,
                         'source_file': source_file,

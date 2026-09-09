@@ -135,8 +135,6 @@ class JournalTests(TestCase):
                     'schema_version': SCHEMA_VERSION,
                     'occurred_at': STAMP,
                     'recorded_at': STAMP,
-                    'prev_hash': None,
-                    'hash': None,
                     'metadata': {
                         'actor': 'agent',
                         'source_file': 'a-list.md',
