@@ -49,10 +49,28 @@ class JournalTests(TestCase):
             ret = t.journal.read()
             t.assertEqual(ret, [])
 
+        with t.subTest('the property chain derives the same from no file'):
+            read_events = t.journal.read()
+            text = t.journal.text
+            events = t.journal.events
+
+            t.assertEqual(text, '')
+            t.assertEqual(events, read_events)
+
         with t.subTest('every non-blank line is one event, in order'):
             t.fill()
             ret = t.journal.read()
             t.assertEqual(ret, EVENTS)
+
+        with t.subTest('the property chain derives the same from the file'):
+            fresh = Journal(t.dir)
+
+            read_events = t.journal.read()
+            text = fresh.text
+            events = fresh.events
+
+            t.assertEqual(text, LOG)
+            t.assertEqual(events, read_events)
 
     def test_append(t) -> None:
         with t.subTest('the first event of a journal that has none'):
@@ -84,3 +102,11 @@ class JournalTests(TestCase):
         with t.subTest('the text before the write is kept, byte for byte'):
             ret = t.journal.path.read_text()
             t.assertEqual(ret, LOG + json.dumps(event) + '\n')
+
+        with t.subTest('and the property chain answers as the read path'):
+            read_events = t.journal.read()
+            text = t.journal.text
+            events = t.journal.events
+
+            t.assertEqual(text, t.journal.path.read_text())
+            t.assertEqual(events, read_events)
