@@ -66,12 +66,15 @@ class JournalTests(TestCase):
         t.journal = Journal(sentinel.source_dir)
 
     def test_path(t) -> None:
+        with t.subTest('the constructor derives nothing'):
+            t.Path.assert_not_called()
+
         with t.subTest('the log sits in the journal directory of the source'):
+            ret = t.journal.path
+
+            t.assertEqual(ret, t.file)
             t.source.__truediv__.assert_called_once_with(JOURNAL_DIRNAME)
             t.journal_dir.__truediv__.assert_called_once_with(JOURNAL_FILENAME)
-
-        with t.subTest('and is what the journal reads and writes'):
-            t.assertEqual(t.journal.path, t.file)
 
     def test_text(t) -> None:
         with t.subTest('a journal that is not there is empty text'):
@@ -90,6 +93,7 @@ class JournalTests(TestCase):
             ret = t.journal.text
 
             t.assertEqual(ret, sentinel.text)
+            t.file.read_text.assert_called_once_with(encoding='utf-8')
 
     def test_events(t) -> None:
         with t.subTest('every non-blank line is one event, in order'):

@@ -39,20 +39,35 @@ def _utc_now() -> str:
 
 
 class Journal:
-    """The event log for one source directory."""
+    """The event log for one source directory.
+
+    Another writer may have appended since this object last read.
+    """
 
     def __init__(self, source_dir: Path) -> None:
-        self.path = Path(source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+        self.source_dir = source_dir
+
+    @cached_property
+    def path(self) -> Path:
+        """The log file inside the journal directory of the source."""
+        return Path(self.source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
 
     @cached_property
     def text(self) -> str:
         """The journal file. A journal that is not there is empty text."""
-        raise NotImplementedError
+        return (
+            self.path.read_text(encoding='utf-8') if self.path.exists() else ''
+        )
 
     @cached_property
     def events(self) -> list[dict[str, Any]]:
         """Every event the text holds, in order."""
-        raise NotImplementedError
+        return [loads(line) for line in self.text.splitlines() if line.strip()]
+
+    def _forget(self) -> None:
+        """Drop the cached text and the events parsed from it."""
+        self.__dict__.pop('text', None)
+        self.__dict__.pop('events', None)
 
     def read(self) -> list[dict[str, Any]]:
         """Every event in order. Missing journal reads as empty."""
@@ -78,7 +93,8 @@ class Journal:
 
         Holds an advisory exclusive `flock` for the read-then-append, so
         `seq` and `stream_seq` cannot race a second writer, and fsyncs
-        before releasing.
+        before releasing. The write leaves the cached text and events
+        behind the file, so it drops them.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         recorded_at = _utc_now()
@@ -116,6 +132,7 @@ class Journal:
                 handle.flush()
                 fsync(handle.fileno())
             finally:
+                self._forget()
                 flock(handle.fileno(), LOCK_UN)
 
         return event
