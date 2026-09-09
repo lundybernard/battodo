@@ -93,21 +93,16 @@ class Journal:
 
         Holds an advisory exclusive `flock` for the read-then-append, so
         `seq` and `stream_seq` cannot race a second writer, and fsyncs
-        before releasing. The write leaves the cached text and events
-        behind the file, so it drops them.
+        before releasing.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         recorded_at = _utc_now()
 
-        with self.path.open('a+', encoding='utf-8') as handle:
+        with self.path.open('a', encoding='utf-8') as handle:
             flock(handle.fileno(), LOCK_EX)
             try:
-                handle.seek(0)
-                existing = [
-                    loads(line)
-                    for line in handle.read().splitlines()
-                    if line.strip()
-                ]
+                self._forget()
+                existing = self.events
                 event = {
                     'seq': len(existing) + 1,
                     'event_id': str(uuid4()),

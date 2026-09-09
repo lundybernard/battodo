@@ -61,7 +61,6 @@ class JournalTests(TestCase):
         t.journal_dir.__truediv__.return_value = t.file
         t.handle = MagicMock(spec=TextIOWrapper)
         t.file.open.return_value.__enter__.return_value = t.handle
-        t.handle.read.return_value = ''
 
         t.journal = Journal(sentinel.source_dir)
 
@@ -171,7 +170,8 @@ class JournalTests(TestCase):
             t.assertEqual(released.args[1], LOCK_UN)
 
         with t.subTest('the two counters count over different populations'):
-            t.handle.read.return_value = (
+            t.file.exists.return_value = True
+            t.file.read_text.return_value = (
                 '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
             )
 
@@ -187,7 +187,7 @@ class JournalTests(TestCase):
             t.assertEqual(event['stream_seq'], 2)
 
         with t.subTest('a given time is when the change happened'):
-            t.handle.read.return_value = ''
+            t.file.read_text.return_value = ''
 
             event = t.journal.append(
                 'TaskAdded',
@@ -203,19 +203,28 @@ class JournalTests(TestCase):
 
         with t.subTest('a write drops the text and events it invalidates'):
             t.file.exists.return_value = True
-            t.file.read_text.return_value = '{"seq": 1}\n'
+            t.file.read_text.return_value = '{"stream_id": "task/aa"}\n'
             primed = t.journal.events
-            t.assertEqual(primed, [{'seq': 1}])
+            t.assertEqual(primed, [{'stream_id': 'task/aa'}])
+            t.file.read_text.return_value = (
+                '{"stream_id": "task/aa"}\n{"stream_id": "task/aa"}\n'
+            )
 
-            t.journal.append(
+            written = t.journal.append(
                 'TaskAdded',
-                'task/zz01ab',
+                'task/aa',
                 {},
                 actor='agent',
                 source_file='a-list.md',
             )
-            t.file.read_text.return_value = '{"seq": 1}\n{"seq": 2}\n'
+            t.file.read_text.return_value = (
+                '{"stream_id": "task/aa"}\n'
+                '{"stream_id": "task/aa"}\n'
+                '{"stream_id": "task/bb"}\n'
+            )
 
-            ret = t.journal.events
+            events = t.journal.events
 
-            t.assertEqual(ret, [{'seq': 1}, {'seq': 2}])
+            t.assertEqual(written['seq'], 3)
+            t.assertEqual(written['stream_seq'], 3)
+            t.assertEqual(len(events), 3)

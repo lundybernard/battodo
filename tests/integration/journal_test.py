@@ -92,7 +92,7 @@ class JournalTests(TestCase):
                 source_file='a-list.md',
             )
 
-            t.assertEqual(nested.read(), [written])
+            t.assertEqual(nested.events, [written])
 
         with (
             t.subTest('the event id comes from the uuid source'),
