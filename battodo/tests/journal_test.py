@@ -73,6 +73,38 @@ class JournalTests(TestCase):
         with t.subTest('and is what the journal reads and writes'):
             t.assertEqual(t.journal.path, t.file)
 
+    def test_text(t) -> None:
+        with t.subTest('a journal that is not there is empty text'):
+            t.file.exists.return_value = False
+
+            ret = t.journal.text
+
+            t.assertEqual(ret, '')
+            t.file.read_text.assert_not_called()
+
+        with t.subTest('otherwise the file it points at'):
+            t.journal.__dict__.pop('text', None)
+            t.file.exists.return_value = True
+            t.file.read_text.return_value = sentinel.text
+
+            ret = t.journal.text
+
+            t.assertEqual(ret, sentinel.text)
+
+    def test_events(t) -> None:
+        with t.subTest('every non-blank line is one event, in order'):
+            t.journal.text = '{"seq": 1}\n\n{"seq": 2}\n'
+            ret = t.journal.events
+            t.assertEqual(ret, [{'seq': 1}, {'seq': 2}])
+
+        with t.subTest('empty text holds no events'):
+            t.journal.__dict__.pop('events', None)
+            t.journal.text = ''
+
+            ret = t.journal.events
+
+            t.assertEqual(ret, [])
+
     def test_read(t) -> None:
         with t.subTest('a journal that is not there reads as empty'):
             t.file.exists.return_value = False
@@ -164,3 +196,22 @@ class JournalTests(TestCase):
 
             t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
             t.assertEqual(event['recorded_at'], STAMP)
+
+        with t.subTest('a write drops the text and events it invalidates'):
+            t.file.exists.return_value = True
+            t.file.read_text.return_value = '{"seq": 1}\n'
+            primed = t.journal.events
+            t.assertEqual(primed, [{'seq': 1}])
+
+            t.journal.append(
+                'TaskAdded',
+                'task/zz01ab',
+                {},
+                actor='agent',
+                source_file='a-list.md',
+            )
+            t.file.read_text.return_value = '{"seq": 1}\n{"seq": 2}\n'
+
+            ret = t.journal.events
+
+            t.assertEqual(ret, [{'seq': 1}, {'seq': 2}])

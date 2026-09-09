@@ -14,6 +14,7 @@ having observed each change.
 
 from datetime import datetime, timezone
 from fcntl import LOCK_EX, LOCK_UN, flock
+from functools import cached_property
 from json import dumps, loads
 from os import fsync
 from pathlib import Path
@@ -42,6 +43,16 @@ class Journal:
 
     def __init__(self, source_dir: Path) -> None:
         self.path = Path(source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+
+    @cached_property
+    def text(self) -> str:
+        """The journal file. A journal that is not there is empty text."""
+        raise NotImplementedError
+
+    @cached_property
+    def events(self) -> list[dict[str, Any]]:
+        """Every event the text holds, in order."""
+        raise NotImplementedError
 
     def read(self) -> list[dict[str, Any]]:
         """Every event in order. Missing journal reads as empty."""
