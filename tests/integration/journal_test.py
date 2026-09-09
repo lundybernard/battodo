@@ -156,21 +156,3 @@ class JournalTests(TestCase):
             ret = t.journal.events
 
             t.assertEqual(len(ret), 2)
-
-    def test_read(t) -> None:
-        with t.subTest('missing journal reads empty'):
-            t.assertEqual(t.journal.read(), [])
-
-        with t.subTest('round-trips appended events'):
-            t.append()
-            t.append(event_type='TaskCompleted')
-            events = t.journal.read()
-            t.assertEqual(
-                [e['type'] for e in events],
-                ['TaskUpdated', 'TaskCompleted'],
-            )
-
-        with t.subTest('blank trailing lines are skipped'):
-            with t.journal.path.open('a') as handle:
-                handle.write('\n')
-            t.assertEqual(len(t.journal.read()), 2)

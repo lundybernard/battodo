@@ -108,19 +108,6 @@ class JournalTests(TestCase):
 
             t.assertEqual(ret, [])
 
-    def test_read(t) -> None:
-        with t.subTest('a journal that is not there reads as empty'):
-            t.file.exists.return_value = False
-
-            t.assertEqual(t.journal.read(), [])
-            t.file.read_text.assert_not_called()
-
-        with t.subTest('every line is one event, in order'):
-            t.file.exists.return_value = True
-            t.file.read_text.return_value = '{"seq": 1}\n\n{"seq": 2}\n'
-
-            t.assertEqual(t.journal.read(), [{'seq': 1}, {'seq': 2}])
-
     def test_append(t) -> None:
         event = t.journal.append(
             'TaskAdded',

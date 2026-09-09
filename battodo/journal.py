@@ -69,16 +69,6 @@ class Journal:
         self.__dict__.pop('text', None)
         self.__dict__.pop('events', None)
 
-    def read(self) -> list[dict[str, Any]]:
-        """Every event in order. Missing journal reads as empty."""
-        if not self.path.exists():
-            return []
-        return [
-            loads(line)
-            for line in self.path.read_text().splitlines()
-            if line.strip()
-        ]
-
     def append(
         self,
         event_type: str,
