@@ -1,7 +1,9 @@
+from argparse import _HelpAction, _SubParsersAction
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, patch, sentinel
 
 from ..cli import (
     BATCLI,
@@ -9,10 +11,9 @@ from ..cli import (
     MESSAGES,
     PERIODS,
     TZ,
+    ArgumentParser,
     Commands,
-    argparse,
     argparser,
-    logging,
 )
 
 SRC = 'battodo.cli'
@@ -34,7 +35,7 @@ def subparsers(parser):
     """Every parser reachable from `parser`, keyed by its command name."""
     found = {'btodo': parser}
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
+        if isinstance(action, _SubParsersAction):
             found.update(action.choices)
     return found
 
@@ -48,9 +49,9 @@ def documented(parser):
     """
     yield 'description', parser.description
     for action in parser._actions:
-        if isinstance(action, argparse._HelpAction):
+        if isinstance(action, _HelpAction):
             continue
-        if isinstance(action, argparse._SubParsersAction):
+        if isinstance(action, _SubParsersAction):
             for choice in action._choices_actions:
                 yield f'{choice.dest} command', choice.help
             continue
@@ -176,14 +177,14 @@ class ArgparserTests(TestCase):
     def test_verbosity(t):
         cases = {
             ('view',): None,
-            ('-v', 'view'): logging.INFO,
-            ('--verbose', 'view'): logging.INFO,
-            ('--debug', 'view'): logging.DEBUG,
+            ('-v', 'view'): 'INFO',
+            ('--verbose', 'view'): 'INFO',
+            ('--debug', 'view'): 'DEBUG',
         }
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
                 args = t.parser.parse_args(list(argv))
-                t.assertEqual(args.loglevel, expected)
+                t.assertEqual(getattr(args, 'battodo.loglevel'), expected)
 
     def test_add_priority_spellings(t):
         for flag in ('-p', '--priority'):
@@ -240,13 +241,16 @@ class BATCLITests(TestCase):
     """Unit tests for battodo.cli.BATCLI."""
 
     def setUp(t):
-        patches = [
-            'exit',
-            'get_config',
-        ]
-        for target in patches:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
+        # The entry point sets a level on the real logger. Patched, so
+        # a run leaves the level of the test process alone.
+        patches = {
+            'exit': f'{SRC}.sys.exit',
+            'get_config': f'{SRC}.get_config',
+            'log': f'{SRC}.log',
+        }
+        for name, target in patches.items():
+            patcher = patch(target, autospec=True)
+            setattr(t, name, patcher.start())
             t.addCleanup(patcher.stop)
 
     def validate_commands(t, commands):
@@ -274,7 +278,7 @@ class BATCLITests(TestCase):
             'view',
         ]
         BATCLI(args)
-        set_log_level.assert_called_with(argparser().parse_args(args))
+        set_log_level.assert_called_with(t.get_config.return_value)
         t.exit.assert_called_with(0)
 
     def test_missing_command(t):
@@ -298,7 +302,7 @@ class BATCLITests(TestCase):
 
         args = argparser().parse_args([])
         args.func = fail
-        parser = Mock(argparse.ArgumentParser)
+        parser = Mock(ArgumentParser)
         parser.parse_args.return_value = args
         out, err = StringIO(), StringIO()
 
@@ -357,7 +361,8 @@ class CommandsViewTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_view.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -386,7 +391,8 @@ class CommandsBackfillTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.backfill_items.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -415,7 +421,8 @@ class CommandsAddTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.add_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -444,7 +451,8 @@ class CommandsShowTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -473,7 +481,8 @@ class CommandsCompletedTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_completed.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -502,7 +511,8 @@ class CommandsUpdateTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.update_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -531,7 +541,8 @@ class CommandsDoneTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.complete_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -560,7 +571,8 @@ class CommandsScratchTests(TestCase):
 
         with t.subTest('the configuration reaches the library unread'):
             t.scratch_item.assert_called_once_with(
-                t.conf, t.datetime.now.return_value
+                t.conf,
+                t.datetime.now.return_value,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -575,12 +587,8 @@ class CommandsSetLogLevelTests(TestCase):
 
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
-        with t.subTest('default to ERROR'):
-            args = argparse.Namespace(loglevel=None)
-            Commands.set_log_level(args)
-            log.setLevel.assert_called_with(logging.ERROR)
+        conf = SimpleNamespace(loglevel=sentinel.loglevel)
 
-        with t.subTest('set given value'):
-            args = argparse.Namespace(loglevel=logging.INFO)
-            Commands.set_log_level(args)
-            log.setLevel.assert_called_with(logging.INFO)
+        Commands.set_log_level(conf)
+
+        log.setLevel.assert_called_once_with(sentinel.loglevel)

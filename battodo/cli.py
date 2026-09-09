@@ -1,9 +1,8 @@
-import argparse
-import logging
 import sys
+from argparse import ArgumentParser, ArgumentTypeError
 from datetime import datetime
+from logging import getLogger
 from logging.config import dictConfig
-from sys import exit
 
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.lib import (
@@ -24,7 +23,7 @@ from battodo.logconf import logging_config
 from battodo.messages import MESSAGES
 
 dictConfig(logging_config)
-log = logging.getLogger('root')
+log = getLogger('root')
 
 
 def BATCLI(ARGS=None):
@@ -37,7 +36,7 @@ def BATCLI(ARGS=None):
         config_file_name=args.config_file,
         config_env=args.config_env,
     )
-    Commands.set_log_level(args)
+    Commands.set_log_level(conf)
     # execute function set for parsed command
     try:
         args.func(conf)
@@ -47,12 +46,12 @@ def BATCLI(ARGS=None):
     # dump is left to argparse, which owns actual usage errors.
     except Exception as exp:  # noqa: BLE001
         print(exp, file=sys.stderr)
-        exit(1)
-    exit(0)
+        sys.exit(1)
+    sys.exit(0)
 
 
 def argparser():
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         description=MESSAGES['cli.description'],
         usage=MESSAGES['cli.usage'],
     )
@@ -63,15 +62,15 @@ def argparser():
         '--verbose',
         help=MESSAGES['cli.verbose.help'],
         action='store_const',
-        dest='loglevel',
-        const=logging.INFO,
+        dest=f'{CONFIG_ROOT}.loglevel',
+        const='INFO',
     )
     p.add_argument(
         '--debug',
         help=MESSAGES['cli.debug.help'],
         action='store_const',
-        dest='loglevel',
-        const=logging.DEBUG,
+        dest=f'{CONFIG_ROOT}.loglevel',
+        const='DEBUG',
     )
     p.add_argument(
         '-c',
@@ -291,13 +290,13 @@ def checked_count(value: str) -> str:
 
     Raises
     ------
-    argparse.ArgumentTypeError
+    ArgumentTypeError
         The value is not a whole number of one or more.
     """
     try:
         item_count(value)
     except ValueError as exp:
-        raise argparse.ArgumentTypeError(str(exp)) from exp
+        raise ArgumentTypeError(str(exp)) from exp
     return value
 
 
@@ -343,7 +342,4 @@ class Commands:
 
     @staticmethod
     def set_log_level(conf):
-        if conf.loglevel:
-            log.setLevel(conf.loglevel)
-        else:
-            log.setLevel(logging.ERROR)
+        log.setLevel(conf.loglevel)

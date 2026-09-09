@@ -23,9 +23,9 @@ from typing import Any
 
 from batconf import Configuration
 
+from .lists import category_order
 from .mutate import COMPLETED_LOG, DONE_STATUS
 from .parser import FIELD_RE, parse_date
-from .view import category_order
 
 # The field separator a completion is written with. The log's name and
 # its statuses come from `mutate`, which writes them.
@@ -205,7 +205,8 @@ class Digest:
     def groups(self) -> list[Group]:
         """The records by category, in the order a view shows them."""
         names = sorted(
-            {record.category for record in self.records}, key=category_order
+            {record.category for record in self.records},
+            key=category_order,
         )
         return [
             Group(

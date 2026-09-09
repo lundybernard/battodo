@@ -2,8 +2,8 @@
 
 Every mutation edits the raw task line in place and appends an event, so
 the markdown stays authoritative while the journal accumulates history.
-Files with nothing to change are not rewritten at all, which keeps
-mtimes stable for Syncthing.
+A file with nothing to change is not rewritten at all, so file sync
+sees no change.
 
 `add_task` and `add_subtask` create rather than edit. A new top-level
 task lands as the last entry of a named list's `## Open` section,
@@ -18,11 +18,8 @@ done, and reschedule a recurring task instead of deleting it. `scratch`
 is the same plumbing for abandoning a task rather than finishing it:
 the block goes, the log records it as SCRATCHED, and nothing cascades
 or reschedules. `update_task` edits a task in place: it writes the
-fields and the title it is given and touches nothing else.
-`backfill` is the one-time `[ADDED:]` stamp that replaced
-the daily bump, which ADR 0005 retired along with the `BUMPED` field and
-the `TaskBumped` event: rank is computed from the files rather than
-accumulated in them, so btodo has nothing to write once a day.
+fields and the title it is given and touches nothing else. `backfill`
+stamps `[ADDED:]` once on every task that lacks it.
 """
 
 from datetime import date
@@ -30,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from .journal import Journal, new_task_id
+from .lists import discover_lists
 from .parser import (
     OPEN_HEADING,
     TaskNode,
@@ -42,8 +40,7 @@ from .parser import (
     set_title,
 )
 from .repeat import next_due
-from .selection import TaskRecord, TaskSelection
-from .view import discover_lists
+from .selector import TaskRecord, TaskSelection
 
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
@@ -649,7 +646,9 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
         # the ancestor's stream and the ancestor's line is the one that
         # has to carry it.
         lines[stream.raw_index] = set_field(
-            lines[stream.raw_index], 'ID', stream_id
+            lines[stream.raw_index],
+            'ID',
+            stream_id,
         )
     lines = _drop_lines(lines, _block_indices(task))
 

@@ -1,6 +1,8 @@
-import os
+from dataclasses import dataclass
 from functools import cached_property
+from os import environ
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from batconf import (
     Configuration,
@@ -12,7 +14,7 @@ from batconf import (
 )
 from batconf.types import ConfigP, SourceInterfaceP
 
-from battodo import GlobalConfig
+from battodo.view import TOP_N
 
 # Root of the config tree: the path every lookup is namespaced under, and
 # so the prefix CLI arguments must carry to be resolvable as config.
@@ -27,6 +29,38 @@ PROJECT_FILE_NAME = 'battodo.toml'
 USER_FILE_NAME = 'config.toml'
 # The environment variable that names a file.
 CONFIG_FILE_ENV_VAR = EnvSource().env_name('config_file', CONFIG_ROOT)
+
+# Todos are anchored to a local day, so the zone is named rather than
+# a fixed offset.
+TZ = ZoneInfo('America/Los_Angeles')
+
+
+@dataclass
+class ViewConfig:
+    """What a view reads, and how much of it a view shows.
+
+    One source for now; R6 turns `source_dir` into a list of sources
+    once the discovery/merge semantics in ADR 0004 are settled.
+
+    Every value is a string: the environment source carries nothing
+    else, so a consumer decodes what it needs. `top` is read as an
+    integer by the view command.
+    """
+
+    source_dir: str = '~/todo'
+    top: str = str(TOP_N)
+
+
+@dataclass
+class GlobalConfig:
+    """What the application reads outside any one command.
+
+    `loglevel` names a level for the standard library logger. Its
+    default silences every record below an error.
+    """
+
+    view: ViewConfig
+    loglevel: str = 'ERROR'
 
 
 class ConfigFile:
@@ -52,12 +86,12 @@ class ConfigFile:
     @cached_property
     def named(self) -> str | None:
         """The file the user named, or None when there is none."""
-        return self._name or os.environ.get(CONFIG_FILE_ENV_VAR)
+        return self._name or environ.get(CONFIG_FILE_ENV_VAR)
 
     @cached_property
     def candidates(self) -> tuple[Path, ...]:
         """The searched locations: working directory, then user config."""
-        xdg_config_home = os.environ.get('XDG_CONFIG_HOME')
+        xdg_config_home = environ.get('XDG_CONFIG_HOME')
         user_config = (
             Path(xdg_config_home)
             if xdg_config_home

@@ -41,16 +41,27 @@ class CliArgsResolutionTests(TestCase):
     def test_cli_args(t):
         with t.subTest('a positional reaches the command'):
             t.assertEqual(
-                t.resolve(['done', 'brush pile']).selector, 'brush pile'
+                t.resolve(['done', 'brush pile']).selector,
+                'brush pile',
             )
 
         with t.subTest('an option reaches the command'):
             t.assertEqual(
-                t.resolve(['view', '--format', 'json']).format, 'json'
+                t.resolve(['view', '--format', 'json']).format,
+                'json',
             )
 
         with t.subTest('a flag reaches the command'):
             t.assertTrue(t.resolve(['view', '--all']).show_all)
+
+        with t.subTest('the log level reaches the command'):
+            t.assertEqual(
+                t.resolve(['--debug', 'view']).loglevel,
+                'DEBUG',
+            )
+
+        with t.subTest('and the schema answers when no flag is given'):
+            t.assertEqual(t.resolve(['view']).loglevel, 'ERROR')
 
         with t.subTest('a count reaches the command as a string'):
             t.assertEqual(t.resolve(['view', '--top', '2']).view.top, '2')

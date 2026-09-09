@@ -16,12 +16,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.view import (
-    TZ,
-    Selection,
-    View,
-    discover_lists,
-)
+from battodo.conf import TZ
+from battodo.view import Selection, View
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
@@ -50,36 +46,10 @@ def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
     path = source / f'{name}.md'
     body = '\n'.join(items)
     path.write_text(
-        f'# {name}\n\n{marker}## Open\n\n{body}\n', encoding='utf-8'
+        f'# {name}\n\n{marker}## Open\n\n{body}\n',
+        encoding='utf-8',
     )
     return path
-
-
-class DiscoverListsTests(TestCase):
-    """Contract tests for battodo.view.discover_lists."""
-
-    def setUp(t) -> None:
-        t.source = source_dir(t)
-
-    def test_lists(t) -> None:
-        career = write(t.source, 'career', '- [ ] A visible task [P:2]')
-        study = write(
-            t.source, 'study', '- [ ] A parked task [P:2]', parked=True
-        )
-
-        # Every list is found, in name order.
-        t.assertEqual(discover_lists(t.source), [career, study])
-
-    def test_open_section(t) -> None:
-        write(t.source, 'career', '- [ ] A visible task [P:2]')
-        loose = t.source / 'notes.md'
-        loose.write_text('# Notes\n\nNothing open here.\n', encoding='utf-8')
-
-        # A file with no open section is not a list.
-        t.assertNotIn(loose, discover_lists(t.source))
-
-    def test_absent(t) -> None:
-        t.assertEqual(discover_lists(t.source / 'absent'), [])
 
 
 class RenderedViewTests(TestCase):
@@ -190,7 +160,10 @@ class RenderedViewTests(TestCase):
 
             with t.subTest('though a list that opted out stays out even then'):
                 write(
-                    source, 'backlog', '- [ ] A parked task [P:4]', parked=True
+                    source,
+                    'backlog',
+                    '- [ ] A parked task [P:4]',
+                    parked=True,
                 )
                 out = View(Selection(source, NOW, show_all=True), 80).text
                 t.assertNotIn('A parked task', out)
@@ -214,7 +187,9 @@ class SelectionDocumentTests(TestCase):
 
     def test_json(t) -> None:
         write(
-            t.source, 'career', *(f'- [ ] Item {n} [P:3]' for n in range(1, 8))
+            t.source,
+            'career',
+            *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)),
         )
         abridged = loads(Selection(t.source, NOW, show_all=False).json)
 

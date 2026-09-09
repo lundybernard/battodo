@@ -71,7 +71,11 @@ class SubtaskEntryTests(TestCase):
     def test_checklist_item(t) -> None:
         # A checklist item carries no field at all.
         plain = TaskNode(
-            raw_index=1, indent=2, done=False, title='Sweep', fields={}
+            raw_index=1,
+            indent=2,
+            done=False,
+            title='Sweep',
+            fields={},
         )
         t.assertEqual(
             subtask_entry(plain),
@@ -240,7 +244,12 @@ class RenderItemTests(TestCase):
     def test_absent(t) -> None:
         # An absent field has no row, an absent id a dash.
         t.data.update(
-            id=None, loe=None, due=None, repeat=None, tags=[], added=None
+            id=None,
+            loe=None,
+            due=None,
+            repeat=None,
+            tags=[],
+            added=None,
         )
         t.assertEqual(
             render_item(t.data),

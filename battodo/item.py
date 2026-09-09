@@ -2,13 +2,11 @@
 
 The two forms mirror `view`: text for a terminal, JSON for an agent.
 Both describe a *single* task, so `subtasks` here is the nested list of
-children rather than the count `view` publishes -- the shape is the
-item, not a row in a table.
+children rather than the count `view` publishes.
 
-Values are derived, not stored: `P` reads as the 0-5 multiplier
-`view` shows, so the same task reads the same way in either command.
-`selection` supplies the lookup, so the reach of a selector is one
-rule, not two.
+Values are derived, not stored: `P` reads as the 0-5 multiplier `view`
+shows. `selector` supplies the lookup, so a selector reaches the same
+task in every command.
 """
 
 from datetime import date, datetime
@@ -18,7 +16,7 @@ from typing import Any
 
 from .parser import TaskNode
 from .rank import multiplier, rank
-from .selection import TaskSelection
+from .selector import TaskSelection
 from .view import RANK_PLACES
 
 INDENT = '  '

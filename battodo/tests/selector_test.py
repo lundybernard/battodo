@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from ..selection import (
+from ..selector import (
     SelectionError,
     TaskNode,
     TaskRecord,
@@ -10,11 +10,11 @@ from ..selection import (
     TodoFile,
 )
 
-SRC = 'battodo.selection'
+SRC = 'battodo.selector'
 
 
 class TaskSelectionTests(TestCase):
-    """Unit tests for battodo.selection.TaskSelection."""
+    """Unit tests for battodo.selector.TaskSelection."""
 
     discover_lists: MagicMock
     parse: MagicMock
@@ -133,7 +133,8 @@ class TaskSelectionTests(TestCase):
             selection = TaskSelection(t.dir, 'Checked subtask')
             selection.records = []
             t.assertEqual(
-                t.error(selection), "no open task matches 'Checked subtask'"
+                t.error(selection),
+                "no open task matches 'Checked subtask'",
             )
 
         with t.subTest('more than one does'):
