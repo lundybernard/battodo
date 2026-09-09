@@ -95,6 +95,8 @@ can hold; the command that reads one decodes it.
 - `view.source_dir` — the directory the lists are read from. `~/todo`.
 - `view.top` — how many items a category shows. `5`, and `--top` on the
   command line overrides it.
+- `loglevel` — the level records are logged at. `ERROR`, and
+  `--verbose` or `--debug` on the command line overrides it.
 
 An environment variable is the config path in caps:
 

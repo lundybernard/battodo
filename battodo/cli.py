@@ -1,7 +1,7 @@
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from datetime import datetime
-from logging import DEBUG, ERROR, INFO, getLogger
+from logging import getLogger
 from logging.config import dictConfig
 
 from battodo.conf import CONFIG_ROOT, get_config
@@ -36,7 +36,7 @@ def BATCLI(ARGS=None):
         config_file_name=args.config_file,
         config_env=args.config_env,
     )
-    Commands.set_log_level(args)
+    Commands.set_log_level(conf)
     # execute function set for parsed command
     try:
         args.func(conf)
@@ -62,15 +62,15 @@ def argparser():
         '--verbose',
         help=MESSAGES['cli.verbose.help'],
         action='store_const',
-        dest='loglevel',
-        const=INFO,
+        dest=f'{CONFIG_ROOT}.loglevel',
+        const='INFO',
     )
     p.add_argument(
         '--debug',
         help=MESSAGES['cli.debug.help'],
         action='store_const',
-        dest='loglevel',
-        const=DEBUG,
+        dest=f'{CONFIG_ROOT}.loglevel',
+        const='DEBUG',
     )
     p.add_argument(
         '-c',
@@ -342,7 +342,4 @@ class Commands:
 
     @staticmethod
     def set_log_level(conf):
-        if conf.loglevel:
-            log.setLevel(conf.loglevel)
-        else:
-            log.setLevel(ERROR)
+        log.setLevel(conf.loglevel)

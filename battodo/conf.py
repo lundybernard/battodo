@@ -53,7 +53,14 @@ class ViewConfig:
 
 @dataclass
 class GlobalConfig:
+    """What the application reads outside any one command.
+
+    `loglevel` names a level for the standard library logger. Its
+    default silences every record below an error.
+    """
+
     view: ViewConfig
+    loglevel: str = 'ERROR'
 
 
 class ConfigFile:
