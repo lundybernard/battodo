@@ -56,22 +56,26 @@ class ConfigFileSearchTests(TestCase):
     def test_get_config(t) -> None:
         """Each case adds a location above the last one."""
         with t.subTest('no file: the dataclass default answers'):
-            t.assertEqual(get_config().view.source_dir, '~/todo')
+            conf = get_config()
+            t.assertEqual(conf.view.source_dir, '~/todo')
 
         write_config(t.config_home / 'battodo' / 'config.toml', '/user')
         with t.subTest('the user config file'):
-            t.assertEqual(get_config().view.source_dir, '/user')
+            conf = get_config()
+            t.assertEqual(conf.view.source_dir, '/user')
 
         write_config(t.project / 'battodo.toml', '/project')
         with t.subTest('the working directory outranks the user file'):
-            t.assertEqual(get_config().view.source_dir, '/project')
+            conf = get_config()
+            t.assertEqual(conf.view.source_dir, '/project')
 
         named = write_config(t.root / 'named.toml', '/named')
         with (
             t.subTest('the environment names a file above both'),
             patch.dict(environ, {ENV_VAR: named}),
         ):
-            t.assertEqual(get_config().view.source_dir, '/named')
+            conf = get_config()
+            t.assertEqual(conf.view.source_dir, '/named')
 
         given = write_config(t.root / 'given.toml', '/given')
         with (
@@ -145,5 +149,4 @@ class TomlBackendTests(TestCase):
 
         with t.subTest('the searched locations are optional'):
             conf = get_config()
-
             t.assertEqual(conf.view.source_dir, '~/todo')
