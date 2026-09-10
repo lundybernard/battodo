@@ -13,7 +13,7 @@ from functools import cached_property
 from pathlib import Path
 
 from .lists import discover_lists
-from .parser import TaskNode, TodoFile, parse
+from .parser import TaskNode, TodoDocument
 
 
 class SelectionError(Exception):
@@ -29,7 +29,7 @@ class TaskRecord:
     """One open task, the list it lives in, and its ancestry."""
 
     path: Path
-    doc: TodoFile
+    doc: TodoDocument
     ancestry: list[TaskNode]
 
     @property
@@ -64,10 +64,10 @@ class TaskSelection:
         self.selector = selector
 
     @cached_property
-    def lists(self) -> list[tuple[Path, TodoFile]]:
+    def lists(self) -> list[tuple[Path, TodoDocument]]:
         """Every discovered list, parsed, beside the path it came from."""
         return [
-            (path, parse(path.read_text()))
+            (path, TodoDocument(path.read_text()))
             for path in discover_lists(self.directory)
         ]
 

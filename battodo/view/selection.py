@@ -21,7 +21,7 @@ from pathlib import Path
 from batconf import Configuration
 
 from ..lists import CATEGORY_ORDER, category_order, discover_lists, item_count
-from ..parser import OPEN_HEADING, TaskNode, TodoFile, parse, parse_date
+from ..parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from ..rank import multiplier, rank
 
 
@@ -59,7 +59,7 @@ def active_categories(now: datetime) -> set[str]:
     return active
 
 
-def visible_tasks(doc: TodoFile, today: date) -> list[TaskNode]:
+def visible_tasks(doc: TodoDocument, today: date) -> list[TaskNode]:
     """Open top-level tasks, minus suppressed future recurrences."""
     visible = []
     for task in doc.tasks:
@@ -127,7 +127,7 @@ class TodoList:
     def tasks(self) -> list[TaskNode]:
         """The open tasks, in the order a view shows them."""
         return sorted(
-            visible_tasks(parse(self.text), self.today),
+            visible_tasks(TodoDocument(self.text), self.today),
             key=lambda task: sort_key(task, self.today),
         )
 
