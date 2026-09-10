@@ -65,6 +65,7 @@ class GetConfigTests(TestCase):
     def test_arg_config_file(t, TomlSource):
         """The given config_file parameter is used for attribute lookups"""
         config_file = TomlSource.return_value
+
         conf = get_config(t.GlobalConfig, config_file=config_file)
 
         t.assertEqual(conf.AModule.arg_1, config_file.get.return_value)
@@ -88,6 +89,7 @@ class GetConfigTests(TestCase):
     def test_arg_config_env(t):
         """The given config_env name is passed to ConfigFile"""
         config_env = 'configuration file environment'
+
         get_config(t.GlobalConfig, config_env=config_env)
 
         t.ConfigFile.assert_called_with(name=None, config_env=config_env)
@@ -98,6 +100,7 @@ class GetConfigTests(TestCase):
         EnvSource.return_value = None
 
         conf = get_config(t.GlobalConfig)
+
         with t.assertRaises(AttributeError):
             _ = conf._sir_not_appearing_in_this_film
 
@@ -121,17 +124,21 @@ class ConfigFileTests(TestCase):
 
     def test_named(t):
         with t.subTest('nothing names a file'):
-            t.assertIsNone(t.cf.named)
+            ret = t.cf.named
+            t.assertIsNone(ret)
 
         with t.subTest('the given name'):
-            t.assertEqual(t.cf_named.named, '/given.toml')
+            ret = t.cf_named.named
+            t.assertEqual(ret, '/given.toml')
 
         with patch.dict('os.environ', {CONFIG_FILE_ENV_VAR: '/env.toml'}):
             with t.subTest('the environment names one'):
-                t.assertEqual(ConfigFile().named, '/env.toml')
+                ret = ConfigFile().named
+                t.assertEqual(ret, '/env.toml')
 
             with t.subTest('the given name outranks the environment'):
-                t.assertEqual(ConfigFile('/given.toml').named, '/given.toml')
+                ret = ConfigFile('/given.toml').named
+                t.assertEqual(ret, '/given.toml')
 
     @patch(f'{SRC}.Path', autospec=True)
     def test_candidates(t, Path_):
@@ -143,8 +150,10 @@ class ConfigFileTests(TestCase):
         Path_.cwd.return_value = Path('/work')
 
         with t.subTest('the user config directory is the XDG default'):
+            ret = t.cf.candidates
+
             t.assertEqual(
-                t.cf.candidates,
+                ret,
                 (
                     Path('/work/battodo.toml'),
                     Path('/user/.config/battodo/config.toml'),
@@ -155,8 +164,10 @@ class ConfigFileTests(TestCase):
             t.subTest('XDG_CONFIG_HOME names the user config directory'),
             patch.dict('os.environ', {'XDG_CONFIG_HOME': '/xdg'}),
         ):
+            ret = ConfigFile().candidates
+
             t.assertEqual(
-                ConfigFile().candidates,
+                ret,
                 (
                     Path('/work/battodo.toml'),
                     Path('/xdg/battodo/config.toml'),
@@ -171,20 +182,26 @@ class ConfigFileTests(TestCase):
             project.is_file.return_value = False
             user.is_file.return_value = False
 
-            t.assertIsNone(t.cf.path)
+            ret = t.cf.path
+
+            t.assertIsNone(ret)
 
         with t.subTest('the first candidate that exists wins'):
             user.is_file.return_value = True
             cf = ConfigFile()
             cf.candidates = (project, user)
 
-            t.assertEqual(cf.path, str(user))
+            ret = cf.path
+
+            t.assertEqual(ret, str(user))
 
         with t.subTest('a named file is never searched for'):
             project.is_file.reset_mock()
             user.is_file.reset_mock()
 
-            t.assertEqual(t.cf_named.path, '/given.toml')
+            ret = t.cf_named.path
+
+            t.assertEqual(ret, '/given.toml')
             project.is_file.assert_not_called()
             user.is_file.assert_not_called()
 
@@ -192,14 +209,19 @@ class ConfigFileTests(TestCase):
     def test_source(t, TomlSource):
         with t.subTest('no file, no source'):
             t.cf.path = None
-            t.assertIsNone(t.cf.source)
+
+            ret = t.cf.source
+
+            t.assertIsNone(ret)
             TomlSource.assert_not_called()
 
         with t.subTest('a file the search found is optional'):
             cf = ConfigFile()
             cf.path = '/work/battodo.toml'
 
-            t.assertEqual(cf.source, TomlSource.return_value)
+            ret = cf.source
+
+            t.assertEqual(ret, TomlSource.return_value)
             TomlSource.assert_called_with(
                 '/work/battodo.toml',
                 config_env=None,
@@ -209,7 +231,9 @@ class ConfigFileTests(TestCase):
         with t.subTest('a file the user named must exist'):
             cf = ConfigFile('/given.toml', config_env='test')
 
-            t.assertEqual(cf.source, TomlSource.return_value)
+            ret = cf.source
+
+            t.assertEqual(ret, TomlSource.return_value)
             TomlSource.assert_called_with(
                 '/given.toml',
                 config_env='test',
