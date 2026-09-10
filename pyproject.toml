@@ -152,9 +152,11 @@ mutmut = ">=3.6"
 # belongs to another user. Pre-delete them: the
 # do_not_mutate set plus pyproject.toml and the top-level tests/, both
 # of which mutmut always copies.
+# Test directories are swept by name rather than listed one by one, so
+# a new test package needs no update here.
 # The mutated sources under mutants/battodo are skipped if they already
 # exist, so they stay put as the incremental cache.
-_mutate = "rm -rf mutants/pyproject.toml mutants/tests mutants/battodo/tests mutants/battodo/_version.py mutants/battodo/messages.py && mutmut run"
+_mutate = "rm -rf mutants/pyproject.toml mutants/tests mutants/battodo/_version.py mutants/battodo/messages.py && find mutants/battodo -type d -name tests -prune -exec rm -rf {} + 2>/dev/null; mutmut run"
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.
