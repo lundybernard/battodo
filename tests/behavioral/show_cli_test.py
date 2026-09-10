@@ -65,9 +65,11 @@ class ShowCommandTests(TestCase):
                 'show_json.json',
             ),
         }
+
         for name, (args, recorded) in cases.items():
             with t.subTest(name):
-                t.assertEqual(t.render(SELECTOR, *args), golden(recorded))
+                out = t.render(SELECTOR, *args)
+                t.assertEqual(out, golden(recorded))
 
     def test_show_unknown_item(t) -> None:
         """An unmatched selector is an error a consumer can branch on."""
