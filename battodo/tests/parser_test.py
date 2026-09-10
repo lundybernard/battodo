@@ -48,14 +48,11 @@ class TaskNodeTests(TestCase):
     def test_loe(t) -> None:
         with t.subTest('an integer value reads as a number'):
             ret = t.tk.loe
-
             t.assertEqual(ret, 1)
 
         with t.subTest('an absent field reads as absent'):
             t.tk.fields = {}
-
             ret = t.tk.loe
-
             t.assertIsNone(ret)
 
         with t.subTest('#51: a value that is not an integer raises'):
@@ -72,118 +69,88 @@ class TaskNodeTests(TestCase):
     def test_due(t) -> None:
         with t.subTest('the field reads back as it stands'):
             t.tk.fields = {'DUE': '2026-01-01'}
-
             ret = t.tk.due
-
             t.assertEqual(ret, '2026-01-01')
 
         with t.subTest('an absent field reads as absent'):
             t.tk.fields = {}
-
             ret = t.tk.due
-
             t.assertIsNone(ret)
 
     def test_added(t) -> None:
         with t.subTest('the field reads back as it stands'):
             t.tk.fields = {'ADDED': '2026-07-01'}
-
             ret = t.tk.added
-
             t.assertEqual(ret, '2026-07-01')
 
         with t.subTest('a hand-written task carries none'):
             t.tk.fields = {}
-
             ret = t.tk.added
-
             t.assertIsNone(ret)
 
     def test_repeat(t) -> None:
         with t.subTest('the field reads back as it stands'):
             t.tk.fields = {'REPEAT': '14d'}
-
             ret = t.tk.repeat
-
             t.assertEqual(ret, '14d')
 
         with t.subTest('an absent field reads as absent'):
             t.tk.fields = {}
-
             ret = t.tk.repeat
-
             t.assertIsNone(ret)
 
     def test_task_id(t) -> None:
         with t.subTest('the field reads back as it stands'):
             t.tk.fields = {'ID': 'zz01ab'}
-
             ret = t.tk.task_id
-
             t.assertEqual(ret, 'zz01ab')
 
         with t.subTest('a task btodo has never touched carries none'):
             t.tk.fields = {}
-
             ret = t.tk.task_id
-
             t.assertIsNone(ret)
 
     def test_tags(t) -> None:
         with t.subTest('a comma-separated value splits'):
             t.tk.fields = {'TAGS': 'first,second'}
-
             ret = t.tk.tags
-
             t.assertEqual(ret, ['first', 'second'])
 
         with t.subTest('an empty entry is dropped'):
             t.tk.fields = {'TAGS': 'first,,second,'}
-
             ret = t.tk.tags
-
             t.assertEqual(ret, ['first', 'second'])
 
         with t.subTest('an absent field gives no tags'):
             t.tk.fields = {}
-
             ret = t.tk.tags
-
             t.assertEqual(ret, [])
 
     def test_is_subtask(t) -> None:
         with t.subTest('a top-level task is not a subtask'):
             ret = t.tk.is_subtask
-
             t.assertFalse(ret)
 
         with t.subTest('an indented task carrying a field is'):
             t.tk.indent = 2
-
             ret = t.tk.is_subtask
-
             t.assertTrue(ret)
 
         with t.subTest('one carrying none is a checklist item'):
             t.tk.fields = {}
-
             ret = t.tk.is_subtask
-
             t.assertFalse(ret)
 
     def test_raw_index(t) -> None:
         ret = t.tk.raw_index
-
         t.assertEqual(ret, 2)
 
     def test_children(t) -> None:
         ret = t.tk.children
-
         t.assertEqual(ret, [])
 
     def test_note_indices(t) -> None:
         ret = t.tk.note_indices
-
         t.assertEqual(ret, [])
 
 
@@ -191,12 +158,14 @@ class ParseDateTests(TestCase):
     """Unit tests for battodo.parser.parse_date."""
 
     def test_date(t) -> None:
-        t.assertEqual(parse_date('2026-08-08'), date(2026, 8, 8))
+        ret = parse_date('2026-08-08')
+        t.assertEqual(ret, date(2026, 8, 8))
 
     def test_unreadable(t) -> None:
         for value in ('YYYY-MM-DD', 'not a date', '', None):
             with t.subTest(str(value)):
-                t.assertIsNone(parse_date(value))
+                ret = parse_date(value)
+                t.assertIsNone(ret)
 
 
 class TodoDocumentTests(TestCase):
@@ -221,12 +190,10 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('the open section, top level in file order'):
             titles = [task.title for task in ret]
-
             t.assertEqual(titles, ['Alpha', 'Beta'])
 
         with t.subTest('the check mark decides done'):
             flags = [task.done for task in ret]
-
             t.assertEqual(flags, [False, True])
 
         with t.subTest('fields parse off the line, and leave the title'):
@@ -270,7 +237,6 @@ class TodoDocumentTests(TestCase):
     def test_text(t) -> None:
         with t.subTest('the source, byte for byte, until a method writes'):
             ret = t.td.text
-
             t.assertEqual(ret, OPEN_DOC)
 
         with t.subTest('and the lines as they stand after one'):
@@ -288,7 +254,6 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('an existing field is replaced where it stands'):
             ret = t.td.set_field(BETA_INDEX, 'P', '2')
-
             t.assertEqual(ret, bumped)
 
         with t.subTest('the edited line is stored, not only returned'):
@@ -296,14 +261,11 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('an absent field is appended after the last'):
             ret = t.td.set_field(BETA_INDEX, 'ID', 'zz01ab')
-
             t.assertEqual(ret, f'{bumped} [ID:zz01ab]')
 
         with t.subTest('a trailing-whitespace line does not gain a gap'):
             spaced = TodoDocument('## Open\n- [ ] X [P:2]   \n')
-
             ret = spaced.set_field(1, 'ID', 'zz01ab')
-
             t.assertEqual(ret, '- [ ] X [P:2] [ID:zz01ab]')
 
     def test_set_title(t) -> None:
@@ -311,7 +273,6 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('the title changes, every field keeps its place'):
             ret = t.td.set_title(BETA_INDEX, 'Gamma')
-
             t.assertEqual(ret, renamed)
 
         with t.subTest('the edited line is stored, not only returned'):
@@ -319,9 +280,7 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('a fieldless line is the title alone, indent kept'):
             bare = TodoDocument('## Open\n  - [ ] X\n')
-
             ret = bare.set_title(1, 'Y')
-
             t.assertEqual(ret, '  - [ ] Y')
 
         with t.subTest('a line that is not a task is rejected'):
@@ -360,6 +319,5 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('a file with no open section raises'):
             headless = TodoDocument('# Work\n\n## Done\n')
-
             with t.assertRaises(StopIteration):
                 headless.append_open(entry)
