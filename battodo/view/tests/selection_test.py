@@ -64,9 +64,11 @@ class ActiveCategoriesTests(TestCase):
             'weekend chores last hour': ('2026-08-08T19:00', chores),
             'weekend chores close': ('2026-08-08T20:00', always),
         }
+
         for name, (stamp, expected) in cases.items():
             with t.subTest(name):
-                t.assertEqual(active_categories(at(stamp)), expected)
+                ret = active_categories(at(stamp))
+                t.assertEqual(ret, expected)
 
 
 class VisibleTasksTests(TestCase):
@@ -139,7 +141,9 @@ class SortKeyTests(TestCase):
         t.rank.return_value = 3.0
         task = TodoDocument('## Open\n- [ ] Solo [P:3]\n').tasks[0]
 
-        t.assertEqual(sort_key(task, TODAY), (-3.0, 'zzzz', 'Solo'))
+        ret = sort_key(task, TODAY)
+
+        t.assertEqual(ret, (-3.0, 'zzzz', 'Solo'))
         t.rank.assert_called_once_with(task, TODAY)
 
 
@@ -157,12 +161,15 @@ class OpenChildrenTests(TestCase):
         )
         parent, childless = doc.tasks
 
+        children = open_children(parent)
+        empty = open_children(childless)
+
         # Subtasks and checklist items both count.
         t.assertEqual(
-            [child.title for child in open_children(parent)],
+            [child.title for child in children],
             ['A subtask', 'A checklist item'],
         )
-        t.assertEqual(open_children(childless), [])
+        t.assertEqual(empty, [])
 
 
 class TaskEntryTests(TestCase):
@@ -189,8 +196,10 @@ class TaskEntryTests(TestCase):
 
     def test_fields(t) -> None:
         with t.subTest('stored fields are carried through verbatim'):
+            ret = task_entry(t.task, TODAY)
+
             t.assertEqual(
-                task_entry(t.task, TODAY),
+                ret,
                 {
                     'id': 'ab12cd',
                     'title': 'A task',
@@ -207,7 +216,8 @@ class TaskEntryTests(TestCase):
 
         with t.subTest('the due date keeps its stored form, unlabelled'):
             t.task.due = '2026-08-04'
-            t.assertEqual(task_entry(t.task, TODAY)['due'], '2026-08-04')
+            ret = task_entry(t.task, TODAY)
+            t.assertEqual(ret['due'], '2026-08-04')
 
     def test_rank(t) -> None:
         t.rank.return_value = 1 + 7 / 30
@@ -224,8 +234,10 @@ class TaskEntryTests(TestCase):
     def test_children(t) -> None:
         t.open_children.return_value = [sentinel.child, sentinel.child]
 
+        ret = task_entry(t.task, TODAY)
+
         # Open children are counted, not nested.
-        t.assertEqual(task_entry(t.task, TODAY)['subtasks'], 2)
+        t.assertEqual(ret['subtasks'], 2)
 
 
 class TodoListTests(TestCase):
@@ -239,11 +251,13 @@ class TodoListTests(TestCase):
         t.tl = TodoList(t.path, TODAY)
 
     def test_category(t) -> None:
-        t.assertEqual(t.tl.category, 'work')
+        ret = t.tl.category
+        t.assertEqual(ret, 'work')
 
     def test_text(t) -> None:
         with t.subTest('the file is read through'):
-            t.assertEqual(t.tl.text, '## Open\n\n- [ ] A task [P:3]\n')
+            ret = t.tl.text
+            t.assertEqual(ret, '## Open\n\n- [ ] A task [P:3]\n')
 
         with t.subTest('and read only the once'):
             again = t.tl.text
@@ -252,12 +266,16 @@ class TodoListTests(TestCase):
 
     def test_parked(t) -> None:
         with t.subTest('a list with no marker is not parked'):
-            t.assertFalse(t.tl.parked)
+            ret = t.tl.parked
+            t.assertFalse(ret)
 
         with t.subTest('the marker anywhere in the file parks it'):
             t.tl.__dict__.pop('parked')
             t.tl.text = '<!-- battodo:parked -->\n## Open\n\n- [ ] A [P:1]\n'
-            t.assertTrue(t.tl.parked)
+
+            ret = t.tl.parked
+
+            t.assertTrue(ret)
 
     def test_tasks(t) -> None:
         with t.subTest('open tasks come back in the order rank gives'):
@@ -269,26 +287,37 @@ class TodoListTests(TestCase):
                 '- [ ] High [P:5]\n'
                 '- [x] Gone [P:9]\n'
             )
-            t.assertEqual([task.title for task in t.tl.tasks], ['High', 'Low'])
+
+            ret = t.tl.tasks
+
+            t.assertEqual([task.title for task in ret], ['High', 'Low'])
 
         with t.subTest('a list with nothing open comes back empty'):
             t.tl.__dict__.pop('tasks')
             t.tl.text = '## Open\n\n- [x] Gone [P:9]\n'
-            t.assertEqual(t.tl.tasks, [])
+
+            ret = t.tl.tasks
+
+            t.assertEqual(ret, [])
 
     def test_order(t) -> None:
         with t.subTest('a named category sorts by its place in the order'):
-            t.assertEqual(t.tl.order, (CATEGORY_ORDER.index('work'), 'work'))
+            ret = t.tl.order
+            t.assertEqual(ret, (CATEGORY_ORDER.index('work'), 'work'))
 
         with t.subTest('an unknown name sorts after every named one'):
             t.tl.category = 'side-quests'
-            t.assertEqual(t.tl.order, (len(CATEGORY_ORDER), 'side-quests'))
+            ret = t.tl.order
+            t.assertEqual(ret, (len(CATEGORY_ORDER), 'side-quests'))
 
         with t.subTest('and unknown names sort among themselves by name'):
             t.tl.category = 'backlog'
             first = t.tl.order
             t.tl.category = 'side-quests'
-            t.assertLess(first, t.tl.order)
+
+            ret = t.tl.order
+
+            t.assertLess(first, ret)
 
 
 class CategoryTests(TestCase):
@@ -302,32 +331,36 @@ class CategoryTests(TestCase):
 
     def test_shown(t) -> None:
         with t.subTest('a limit takes the top of the list'):
-            t.assertEqual(
-                [task.title for task in t.c.shown],
-                ['Item 0', 'Item 1'],
-            )
+            ret = t.c.shown
+            t.assertEqual([task.title for task in ret], ['Item 0', 'Item 1'])
 
         with t.subTest('no limit shows every one'):
             t.c.limit = None
-            t.assertEqual(t.c.shown, t.tasks)
+            ret = t.c.shown
+            t.assertEqual(ret, t.tasks)
 
         with t.subTest('a limit past the end shows every one too'):
             t.c.limit = 99
-            t.assertEqual(t.c.shown, t.tasks)
+            ret = t.c.shown
+            t.assertEqual(ret, t.tasks)
 
     def test_hidden(t) -> None:
         with t.subTest('what the limit held back is counted'):
-            t.assertEqual(t.c.hidden, 4)
+            ret = t.c.hidden
+            t.assertEqual(ret, 4)
 
         with t.subTest('nothing is held back without a limit'):
             t.c.limit = None
-            t.assertEqual(t.c.hidden, 0)
+            ret = t.c.hidden
+            t.assertEqual(ret, 0)
 
     def test_name(t) -> None:
-        t.assertEqual(t.c.name, 'work')
+        ret = t.c.name
+        t.assertEqual(ret, 'work')
 
     def test_tasks(t) -> None:
-        t.assertEqual(t.c.tasks, t.tasks)
+        ret = t.c.tasks
+        t.assertEqual(ret, t.tasks)
 
 
 class SelectionTests(TestCase):
@@ -359,41 +392,51 @@ class SelectionTests(TestCase):
         return found
 
     def test_today(t) -> None:
-        t.assertEqual(t.s.today, TODAY)
+        ret = t.s.today
+        t.assertEqual(ret, TODAY)
 
     def test_limit(t) -> None:
         with t.subTest('an abridged view stops at the top few'):
-            t.assertEqual(t.s.limit, TOP_N)
+            ret = t.s.limit
+            t.assertEqual(ret, TOP_N)
 
         with t.subTest('an explicit count replaces the default'):
             t.s.top_n = 2
-            t.assertEqual(t.s.limit, 2)
+            ret = t.s.limit
+            t.assertEqual(ret, 2)
 
         with t.subTest('asking for everything lifts the limit'):
             t.s.show_all = True
-            t.assertIsNone(t.s.limit)
+            ret = t.s.limit
+            t.assertIsNone(ret)
 
     def test_source(t) -> None:
         with t.subTest('the path is expanded and resolved'):
-            t.assertEqual(t.s.source, t.resolved)
+            ret = t.s.source
+            t.assertEqual(ret, t.resolved)
             t.directory.expanduser.assert_called_once_with()
 
         with t.subTest('a directory that is not there is an error'):
             t.s.__dict__.pop('source')
             t.resolved.is_dir.return_value = False
+
             with t.assertRaises(SourceError) as caught:
                 _ = t.s.source
+
             t.assertIn(str(t.resolved), str(caught.exception))
 
     def test_active(t) -> None:
-        t.assertEqual(t.s.active, t.active_categories.return_value)
+        ret = t.s.active
+        t.assertEqual(ret, t.active_categories.return_value)
         t.active_categories.assert_called_once_with(t.s.now)
 
     def test_lists(t) -> None:
         with t.subTest('a source holding no lists at all is an error'):
             t.discover_lists.return_value = []
+
             with t.assertRaises(SourceError) as caught:
                 _ = t.s.lists
+
             t.assertIn(str(t.resolved), str(caught.exception))
             t.assertIn('## Open', str(caught.exception))
 
@@ -406,7 +449,9 @@ class SelectionTests(TestCase):
             later.order, earlier.order = (2, 'study'), (0, 'work')
             with patch(f'{SRC}.TodoList', autospec=True) as todo_list:
                 todo_list.side_effect = [later, earlier]
-                t.assertEqual(t.s.lists, [earlier, later])
+                ret = t.s.lists
+
+            t.assertEqual(ret, [earlier, later])
             t.discover_lists.assert_called_with(t.resolved)
 
     def test_shows(t) -> None:
@@ -436,7 +481,8 @@ class SelectionTests(TestCase):
         }
         for name, (found, expected) in cases.items():
             with t.subTest(name):
-                t.assertEqual(t.s.shows(found), expected)
+                ret = t.s.shows(found)
+                t.assertEqual(ret, expected)
 
         t.s.show_all = True
         everything = {
@@ -455,7 +501,8 @@ class SelectionTests(TestCase):
         }
         for name, (found, expected) in everything.items():
             with t.subTest(name):
-                t.assertEqual(t.s.shows(found), expected)
+                ret = t.s.shows(found)
+                t.assertEqual(ret, expected)
 
     def test_categories(t) -> None:
         t.active_categories.return_value = {'work', 'study'}
@@ -501,15 +548,17 @@ class SelectionTests(TestCase):
     def test_data(t) -> None:
         task_entry_double = t.setUpData()
 
+        ret = t.s.data
+
         with t.subTest('the day is recorded in its stored form'):
-            t.assertEqual(t.s.data['date'], '2026-08-05')
+            t.assertEqual(ret['date'], '2026-08-05')
 
         with t.subTest('the active set reads in a settled order'):
-            t.assertEqual(t.s.data['active'], ['career', 'work'])
+            t.assertEqual(ret['active'], ['career', 'work'])
 
         with t.subTest('a category carries its name and its tasks'):
             t.assertEqual(
-                t.s.data['categories'],
+                ret['categories'],
                 [
                     {
                         'name': 'work',
@@ -528,8 +577,11 @@ class SelectionTests(TestCase):
             # the rest.
             t.s.categories = [t.category('work', hidden=4)]
             t.s.__dict__.pop('data')
+
+            abridged = t.s.data
+
             t.assertEqual(
-                t.s.data['categories'],
+                abridged['categories'],
                 [
                     {
                         'name': 'work',
@@ -545,11 +597,14 @@ class SelectionTests(TestCase):
     def test_json(t) -> None:
         t.setUpData()
 
+        ret = t.s.json
+
         with t.subTest('the document is the serialized data'):
-            t.assertEqual(loads(t.s.json), t.s.data)
+            t.assertEqual(loads(ret), t.s.data)
 
         with t.subTest('laid out for a person to read as well'):
-            lines = t.s.json.split('\n')
+            lines = ret.split('\n')
+
             t.assertGreater(len(lines), 1)
             t.assertTrue(lines[1].startswith('  "'))
             t.assertFalse(lines[1].startswith('   '))
@@ -590,10 +645,11 @@ class SelectionFromConfigTests(TestCase):
             conf.view.source_dir = '~/a-source-dir'
             conf.view.top = str(TOP_N)
 
-            t.assertFalse(Selection.from_config(conf, t.now).show_all)
+            ret = Selection.from_config(conf, t.now)
+
+            t.assertFalse(ret.show_all)
 
         with t.subTest('a count below one is refused'):
             t.conf.view.top = '0'
-
             with t.assertRaises(ValueError):
                 Selection.from_config(t.conf, t.now)
