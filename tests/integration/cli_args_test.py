@@ -40,34 +40,32 @@ class CliArgsResolutionTests(TestCase):
 
     def test_cli_args(t):
         with t.subTest('a positional reaches the command'):
-            t.assertEqual(
-                t.resolve(['done', 'brush pile']).selector,
-                'brush pile',
-            )
+            conf = t.resolve(['done', 'brush pile'])
+            t.assertEqual(conf.selector, 'brush pile')
 
         with t.subTest('an option reaches the command'):
-            t.assertEqual(
-                t.resolve(['view', '--format', 'json']).format,
-                'json',
-            )
+            conf = t.resolve(['view', '--format', 'json'])
+            t.assertEqual(conf.format, 'json')
 
         with t.subTest('a flag reaches the command'):
-            t.assertTrue(t.resolve(['view', '--all']).show_all)
+            conf = t.resolve(['view', '--all'])
+            t.assertTrue(conf.show_all)
 
         with t.subTest('the log level reaches the command'):
-            t.assertEqual(
-                t.resolve(['--debug', 'view']).loglevel,
-                'DEBUG',
-            )
+            conf = t.resolve(['--debug', 'view'])
+            t.assertEqual(conf.loglevel, 'DEBUG')
 
         with t.subTest('and the schema answers when no flag is given'):
-            t.assertEqual(t.resolve(['view']).loglevel, 'ERROR')
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.loglevel, 'ERROR')
 
         with t.subTest('a count reaches the command as a string'):
-            t.assertEqual(t.resolve(['view', '--top', '2']).view.top, '2')
+            conf = t.resolve(['view', '--top', '2'])
+            t.assertEqual(conf.view.top, '2')
 
         with t.subTest('and the schema answers when no source does'):
-            t.assertEqual(t.resolve(['view']).view.top, str(TOP_N))
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.view.top, str(TOP_N))
 
         with t.subTest('both add positionals reach the command'):
             conf = t.resolve(['add', 'chores', 'Water it'])
@@ -92,6 +90,7 @@ class CliArgsResolutionTests(TestCase):
                     'yard,summer',
                 ]
             )
+
             t.assertEqual(conf.priority, '4')
             t.assertEqual(conf.loe, '2')
             t.assertEqual(conf.due, '2026-09-01')
@@ -103,8 +102,12 @@ class CliArgsResolutionTests(TestCase):
             t.assertIsNone(getattr(conf, 'due', None))
 
         with t.subTest('an optional positional reaches the command'):
-            t.assertEqual(t.resolve(['completed', 'month']).period, 'month')
-            t.assertEqual(t.resolve(['completed']).period, DEFAULT_PERIOD)
+            conf = t.resolve(['completed', 'month'])
+            t.assertEqual(conf.period, 'month')
+
+        with t.subTest('and an omitted one falls back to the default'):
+            conf = t.resolve(['completed'])
+            t.assertEqual(conf.period, DEFAULT_PERIOD)
 
         with t.subTest('a completion date reaches the command'):
             conf = t.resolve(['done', 'brush pile', '--date', '2026-08-15'])
