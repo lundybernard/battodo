@@ -26,32 +26,37 @@ class DiscoverListsTests(TestCase):
         t.dir.glob.return_value = [t.work, t.prose, t.backlog]
 
     def test_open_section(t) -> None:
+        ret = discover_lists(t.dir)
+
         with t.subTest('a list is a file carrying an open section'):
-            t.assertEqual(discover_lists(t.dir), [t.backlog, t.work])
+            t.assertEqual(ret, [t.backlog, t.work])
 
         with t.subTest('which is what an ad-hoc name is admitted on'):
-            t.assertIn(t.backlog, discover_lists(t.dir))
+            t.assertIn(t.backlog, ret)
 
         with t.subTest('prose without one is not a list'):
-            t.assertNotIn(t.prose, discover_lists(t.dir))
+            t.assertNotIn(t.prose, ret)
 
     def test_order(t) -> None:
+        ret = discover_lists(t.dir)
+
         t.assertEqual(
-            [path.name for path in discover_lists(t.dir)],
+            [path.name for path in ret],
             ['backlog.md', 'work.md'],
         )
 
     def test_markdown(t) -> None:
         discover_lists(t.dir)
-
         # Only markdown is ever considered.
         t.dir.glob.assert_called_with('*.md')
 
     def test_absent(t) -> None:
         t.dir.is_dir.return_value = False
 
+        ret = discover_lists(t.dir)
+
         with t.subTest('a directory that is not there yields nothing'):
-            t.assertEqual(discover_lists(t.dir), [])
+            t.assertEqual(ret, [])
 
         with t.subTest('and is not searched at all'):
             t.dir.glob.assert_not_called()
@@ -61,25 +66,22 @@ class CategoryOrderTests(TestCase):
     """Unit tests for battodo.lists.category_order."""
 
     def test_named(t) -> None:
+        ret = sorted(['career', 'work', 'chores'], key=category_order)
         # The named categories lead, in their own order.
-        t.assertEqual(
-            sorted(['career', 'work', 'chores'], key=category_order),
-            ['work', 'chores', 'career'],
-        )
+        t.assertEqual(ret, ['work', 'chores', 'career'])
 
     def test_ad_hoc(t) -> None:
+        ret = sorted(['van', 'career', 'arts'], key=category_order)
         # An ad-hoc name follows the named ones, alphabetically.
-        t.assertEqual(
-            sorted(['van', 'career', 'arts'], key=category_order),
-            ['career', 'arts', 'van'],
-        )
+        t.assertEqual(ret, ['career', 'arts', 'van'])
 
 
 class ItemCountTests(TestCase):
     """Unit tests for battodo.lists.item_count."""
 
     def test_number(t) -> None:
-        t.assertEqual(item_count('2'), 2)
+        ret = item_count('2')
+        t.assertEqual(ret, 2)
 
     def test_rejected(t) -> None:
         for value in ('0', '-1', 'five', ''):
@@ -88,4 +90,5 @@ class ItemCountTests(TestCase):
                 t.assertRaises(ValueError) as caught,
             ):
                 item_count(value)
+
             t.assertIn(COUNT_ERROR, str(caught.exception))
