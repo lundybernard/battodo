@@ -57,6 +57,7 @@ class SubtaskCommandTests(TestCase):
 
     def test_add_subtask(t) -> None:
         before = t.show(PARENT)
+
         with t.subTest('the parent starts with no id of its own'):
             t.assertIsNone(before['id'])
 
@@ -89,8 +90,10 @@ class SubtaskCommandTests(TestCase):
             )
 
         child = after['subtasks'][-1]
+
         with t.subTest('and reads back by the id the add stamped'):
-            t.assertEqual(t.show(child['id'])['title'], 'Sand the rails')
+            shown = t.show(child['id'])
+            t.assertEqual(shown['title'], 'Sand the rails')
 
     def test_add_subtask_rejected(t) -> None:
         """A rejected add reports on stderr and writes nothing."""
@@ -157,10 +160,12 @@ class SubtaskCommandTests(TestCase):
             '--title',
             'Sand and seal',
         )
+
         with t.subTest('the child line is rewritten where it stands'):
             t.assertIn('  - [ ] Sand and seal', echoed)
 
         after = t.show(child)
+
         with t.subTest('the change reads back by the same id'):
             t.assertEqual(after['title'], 'Sand and seal')
             t.assertEqual(after['due'], '2026-09-01')
@@ -169,6 +174,7 @@ class SubtaskCommandTests(TestCase):
             t.assertEqual(after['loe'], 2)
 
         logged = t.run_ok('done', child)
+
         with t.subTest('done logs the child under its ancestry'):
             t.assertIn('Legacy priority task > Sand and seal', logged)
 
@@ -181,7 +187,9 @@ class SubtaskCommandTests(TestCase):
             t.assertIn('Legacy priority task > Sand the rails', logged)
 
         with t.subTest('and the line is gone'):
+            after = t.show(PARENT)
+
             t.assertNotIn(
                 'Sand the rails',
-                [child['title'] for child in t.show(PARENT)['subtasks']],
+                [child['title'] for child in after['subtasks']],
             )
