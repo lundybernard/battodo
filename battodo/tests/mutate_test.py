@@ -92,8 +92,10 @@ class TaskSnapshotTests(TestCase):
             raw=TASK_LINE,
         )
 
+        ret = task_snapshot(task)
+
         t.assertEqual(
-            task_snapshot(task),
+            ret,
             {
                 'title': 'A task',
                 'done': False,
@@ -822,7 +824,9 @@ class BackfillFileTests(TestCase):
         with t.subTest('a file with nothing missing is not rewritten'):
             t.TodoDocument.return_value = dated_list()
 
-            t.assertEqual(backfill_file(t.path, TODAY, t.journal), [])
+            ret = backfill_file(t.path, TODAY, t.journal)
+
+            t.assertEqual(ret, [])
             t.path.write_text.assert_not_called()
             t.append.assert_not_called()
 
@@ -860,7 +864,6 @@ class BackfillAllTests(TestCase):
     def test_lists(t) -> None:
         with t.subTest('every discovered list is stamped'):
             result = backfill_all(t.dir, TODAY)
-
             t.discover_lists.assert_called_once_with(t.dir)
 
         with t.subTest('and the stamped titles come back by file name'):
@@ -872,8 +875,8 @@ class BackfillAllTests(TestCase):
     def test_nothing_missing(t) -> None:
         with t.subTest('a list with nothing missing is left out'):
             t.TodoDocument.return_value = dated_list()
-
-            t.assertEqual(backfill_all(t.dir, TODAY), {})
+            ret = backfill_all(t.dir, TODAY)
+            t.assertEqual(ret, {})
 
 
 class CompleteTests(TestCase):
@@ -940,7 +943,6 @@ class CompleteTests(TestCase):
     def test_cascade(t) -> None:
         with t.subTest('the finished block leaves the document'):
             entries = complete(t.dir, 'subtask', TODAY)
-
             t.TaskSelection.assert_called_once_with(t.dir, 'subtask')
             t.assertEqual(t.doc.lines, [OPEN_HEADING, BARE_LINE])
 
@@ -1082,7 +1084,9 @@ class CompleteTests(TestCase):
             t.doc.tasks = [parent]
             t.lookup.record = TaskRecord(t.path, t.doc, [parent, item])
 
-            t.assertEqual(complete(t.dir, 'checklist', TODAY), [])
+            ret = complete(t.dir, 'checklist', TODAY)
+
+            t.assertEqual(ret, [])
             t.log.open.assert_not_called()
 
         with t.subTest('its box is checked where it stands'):
@@ -1150,7 +1154,6 @@ class ScratchTests(TestCase):
     def test_block(t) -> None:
         with t.subTest('the task and everything under it are removed'):
             entries = scratch(t.dir, '9o71lx', TODAY)
-
             t.TaskSelection.assert_called_once_with(t.dir, '9o71lx')
             t.assertEqual(t.doc.lines, [OPEN_HEADING, '', BARE_LINE])
 
@@ -1183,17 +1186,17 @@ class ScratchTests(TestCase):
         with t.subTest('a task carrying no SCHEMA field logs none'):
             t.task.fields = {'ID': '9o71lx'}
 
+            ret = scratch(t.dir, '9o71lx', TODAY)
+
             t.assertEqual(
-                scratch(t.dir, '9o71lx', TODAY),
+                ret,
                 ['2026-08-08 | a-list | SCRATCHED | A task'],
             )
 
     def test_log_newline(t) -> None:
         with t.subTest('a log with no trailing newline gains one first'):
             t.log.read_text.return_value = '# Completed Tasks'
-
             entries = scratch(t.dir, '9o71lx', TODAY)
-
             t.assertEqual(logged(t.log_handle), '\n' + entries[0] + '\n')
 
     def test_log_absent(t) -> None:
@@ -1228,7 +1231,9 @@ class ScratchTests(TestCase):
             t.doc.tasks = [parent]
             t.lookup.record = TaskRecord(t.path, t.doc, [parent, item])
 
-            t.assertEqual(scratch(t.dir, 'checklist', TODAY), [])
+            ret = scratch(t.dir, 'checklist', TODAY)
+
+            t.assertEqual(ret, [])
             t.log.open.assert_not_called()
 
         with t.subTest('the ancestor that carries the stream is stamped'):
