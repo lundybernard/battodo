@@ -17,9 +17,11 @@ class NextDueTests(TestCase):
             '1w': date(2026, 8, 15),
             '2w': date(2026, 8, 22),
         }
+
         for spec, expected in cases.items():
             with t.subTest(spec):
-                t.assertEqual(next_due(spec, SATURDAY), expected)
+                ret = next_due(spec, SATURDAY)
+                t.assertEqual(ret, expected)
 
     def test_weekday(t) -> None:
         cases = {
@@ -29,9 +31,11 @@ class NextDueTests(TestCase):
             'weekly:sat': date(2026, 8, 15),
             'WEEKLY:SUN': date(2026, 8, 9),
         }
+
         for spec, expected in cases.items():
             with t.subTest(spec):
-                t.assertEqual(next_due(spec, SATURDAY), expected)
+                ret = next_due(spec, SATURDAY)
+                t.assertEqual(ret, expected)
 
     def test_day_of_month(t) -> None:
         cases = {
@@ -45,9 +49,11 @@ class NextDueTests(TestCase):
             # Short month clamps to its last day.
             ('monthly:31', date(2026, 1, 31)): date(2026, 2, 28),
         }
+
         for (spec, completed), expected in cases.items():
             with t.subTest(f'{spec} on {completed}'):
-                t.assertEqual(next_due(spec, completed), expected)
+                ret = next_due(spec, completed)
+                t.assertEqual(ret, expected)
 
     def test_unreadable(t) -> None:
         for spec in ('sometimes', '0d', '3m', 'weekly:caturday', 'monthly:0'):
