@@ -99,6 +99,7 @@ class MessageCatalogTests(TestCase):
             for text in displayed(parser)
             if text is not None
         }
+
         t.assertEqual(set(MESSAGES.values()) - shown, set())
 
 
@@ -129,16 +130,20 @@ class ArgparserTests(TestCase):
             t.parser.parse_args(['view', '--format', 'xml'])
 
         with t.subTest('show holds the same two values'):
+            # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['show', 'brush pile'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
+
             args = t.parser.parse_args(
                 ['show', 'brush pile', '--format', 'json']
             )
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
         with t.subTest('and so does completed'):
+            # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['completed'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
+
             args = t.parser.parse_args(['completed', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
@@ -172,7 +177,8 @@ class ArgparserTests(TestCase):
         ]
         for argv, command in cases:
             with t.subTest(argv[0]):
-                t.assertIs(t.parser.parse_args(argv).func, command)
+                args = t.parser.parse_args(argv)
+                t.assertIs(args.func, command)
 
     def test_verbosity(t):
         cases = {
@@ -181,6 +187,7 @@ class ArgparserTests(TestCase):
             ('--verbose', 'view'): 'INFO',
             ('--debug', 'view'): 'DEBUG',
         }
+
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
                 args = t.parser.parse_args(list(argv))
@@ -260,7 +267,9 @@ class BATCLITests(TestCase):
                 with patch(f'{SRC}.Commands.{func}', autospec=True) as m_cmd:
                     m_cmd.__name__ = func
                     ARGS = cmd.split()
+
                     BATCLI(ARGS)
+
                     args = argparser().parse_args(ARGS)
                     t.get_config.assert_called_with(
                         cli_args=args,
@@ -277,7 +286,9 @@ class BATCLITests(TestCase):
             '--debug',
             'view',
         ]
+
         BATCLI(args)
+
         set_log_level.assert_called_with(t.get_config.return_value)
         t.exit.assert_called_with(0)
 
@@ -588,7 +599,5 @@ class CommandsSetLogLevelTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         conf = SimpleNamespace(loglevel=sentinel.loglevel)
-
         Commands.set_log_level(conf)
-
         log.setLevel.assert_called_once_with(sentinel.loglevel)
