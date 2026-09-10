@@ -25,13 +25,16 @@ class NewTaskIdTests(TestCase):
     def test_shape(t) -> None:
         for _ in range(20):
             value = new_task_id()
+
             t.assertEqual(len(value), 6)
             t.assertTrue(
                 all(c in '0123456789abcdefghijklmnopqrstuvwxyz' for c in value)
             )
 
     def test_varies(t) -> None:
-        t.assertNotEqual({new_task_id() for _ in range(20)}, {new_task_id()})
+        ids = {new_task_id() for _ in range(20)}
+        another = {new_task_id()}
+        t.assertNotEqual(ids, another)
 
 
 class JournalTests(TestCase):
@@ -189,8 +192,11 @@ class JournalTests(TestCase):
         with t.subTest('a write drops the text and events it invalidates'):
             t.file.exists.return_value = True
             t.file.read_text.return_value = '{"stream_id": "task/aa"}\n'
+
             primed = t.journal.events
+
             t.assertEqual(primed, [{'stream_id': 'task/aa'}])
+
             t.file.read_text.return_value = (
                 '{"stream_id": "task/aa"}\n{"stream_id": "task/aa"}\n'
             )
