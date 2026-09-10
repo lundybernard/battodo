@@ -71,16 +71,13 @@ class RoundTripTests(TestCase):
         for path in paths:
             with t.subTest(path.name):
                 text = path.read_text(encoding='utf-8')
-
                 ret = round_trip(text)
-
                 t.assertEqual(ret, text)
 
     def test_parsed_shapes(t) -> None:
         for name, text in SHAPES.items():
             with t.subTest(name):
                 ret = round_trip(text)
-
                 t.assertEqual(ret, text)
 
 
@@ -127,7 +124,6 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('a task addresses its own line'):
             first = ret[0]
-
             t.assertEqual(first.raw_index, OVERDUE_INDEX)
             t.assertEqual(first.raw, OVERDUE)
 
@@ -145,32 +141,26 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('a section that is not Open yields no task'):
             titles = [task.title for task in ret]
-
             t.assertNotIn('Task outside the open section', titles)
 
     def test_text(t) -> None:
         with t.subTest('the source, byte for byte, until a method writes'):
             ret = t.td.text
-
             t.assertEqual(ret, t.source)
 
         with t.subTest('and the edited file after one'):
             t.td.set_field(OVERDUE_INDEX, 'ID', 'zz01ab')
-
             ret = t.td.text
-
             t.assertEqual(ret, t.source.replace(OVERDUE, STAMPED))
 
     def test_set_field(t) -> None:
         with t.subTest('an absent field is appended, and the line returned'):
             ret = t.td.set_field(OVERDUE_INDEX, 'ID', 'zz01ab')
-
             t.assertEqual(ret, STAMPED)
             t.assertEqual(t.td.lines[OVERDUE_INDEX], STAMPED)
 
         with t.subTest('an existing field is replaced where it stands'):
             ret = t.td.set_field(OVERDUE_INDEX, 'P', '2')
-
             t.assertEqual(ret, STAMPED.replace('[P:4]', '[P:2]'))
 
     def test_set_title(t) -> None:
@@ -178,7 +168,6 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('the title changes, every field keeps its place'):
             ret = t.td.set_title(OVERDUE_INDEX, 'Renamed task')
-
             t.assertEqual(ret, renamed)
             t.assertEqual(t.td.lines[OVERDUE_INDEX], renamed)
 
