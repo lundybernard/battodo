@@ -135,7 +135,7 @@ class SubtaskCommandTests(TestCase):
         """The journal carries the relation the file states by indent."""
         child = t.add_subtask()
         parent = t.show(PARENT)['id']
-        stamp, added = Journal(t.source).read()
+        stamp, added = Journal(t.source).events
 
         with t.subTest('the parent is stamped first, on its own stream'):
             t.assertEqual(stamp['type'], 'TaskUpdated')

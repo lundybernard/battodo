@@ -97,7 +97,7 @@ class UpdateTaskTests(TestCase):
 
     def test_journal(t) -> None:
         update_task(t.source, '9o71lx', {'P': '5'}, TODAY, title='Renamed')
-        events = Journal(t.source).read()
+        events = Journal(t.source).events
 
         with t.subTest('one event, on the task stream'):
             t.assertEqual(len(events), 1)
@@ -130,7 +130,7 @@ class UpdateTaskTests(TestCase):
 
     def test_injects_an_id(t) -> None:
         _, entry = update_task(t.source, 'Unidentified', {'P': '5'}, TODAY)
-        event = Journal(t.source).read()[0]
+        event = Journal(t.source).events[0]
         task_id = event['stream_id'].removeprefix('task/')
 
         with t.subTest('a task with no id of its own is given one'):
@@ -150,7 +150,7 @@ class UpdateTaskTests(TestCase):
             TODAY,
         )
         child = task_id(entry)
-        (event,) = Journal(t.source).read()
+        (event,) = Journal(t.source).events
 
         with t.subTest('the child keeps its indent and gains an id'):
             t.assertEqual(
@@ -187,7 +187,7 @@ class UpdateTaskTests(TestCase):
 
         with t.subTest('a rejected update writes nothing at all'):
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
-            t.assertEqual(Journal(t.source).read(), [])
+            t.assertEqual(Journal(t.source).events, [])
 
 
 class AddSubtaskTests(TestCase):
@@ -233,7 +233,7 @@ class AddSubtaskTests(TestCase):
             {'LOE': '2'},
         )
         child = task_id(entry)
-        (event,) = Journal(t.source).read()
+        (event,) = Journal(t.source).events
 
         with t.subTest('one TaskAdded on the new subtask stream'):
             t.assertEqual(event['type'], 'TaskAdded')
@@ -266,7 +266,7 @@ class AddSubtaskTests(TestCase):
             'Rake the chips',
             {},
         )
-        stamp = Journal(t.source).read()[0]
+        stamp = Journal(t.source).events[0]
         parent = stamp['stream_id'].removeprefix('task/')
 
         with t.subTest('the child indents one level under its parent'):
@@ -286,7 +286,7 @@ class AddSubtaskTests(TestCase):
             'Get quotes',
             {},
         )
-        stamp, added = Journal(t.source).read()
+        stamp, added = Journal(t.source).events
         parent = stamp['stream_id'].removeprefix('task/')
 
         with t.subTest('a parent with no id of its own is given one'):
@@ -326,7 +326,7 @@ class AddSubtaskTests(TestCase):
 
         with t.subTest('a rejected add writes nothing at all'):
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
-            t.assertEqual(Journal(t.source).read(), [])
+            t.assertEqual(Journal(t.source).events, [])
 
 
 LIST = """# Work
@@ -394,7 +394,7 @@ class BackfillFileTests(TestCase):
 
     def test_journal(t) -> None:
         backfill_file(t.path, TODAY, t.journal)
-        events = t.journal.read()
+        events = t.journal.events
 
         with t.subTest('one event per stamped task'):
             t.assertEqual(len(events), 2)
@@ -462,7 +462,7 @@ class BackfillAllTests(TestCase):
         backfill_all(t.dir, TODAY)
 
         # Written to the source directory.
-        t.assertEqual(len(Journal(t.dir).read()), 2)
+        t.assertEqual(len(Journal(t.dir).events), 2)
 
     def test_runs_once(t) -> None:
         backfill_all(t.dir, TODAY)
@@ -766,7 +766,7 @@ class CompleteTests(TestCase):
         with todo_lists() as source:
             with t.subTest('one TaskCompleted per completion, deepest first'):
                 complete(source, 'Buy lumber', TODAY)
-                events = Journal(source).read()
+                events = Journal(source).events
                 t.assertEqual(
                     [e['type'] for e in events],
                     ['TaskCompleted'] * 2,
@@ -783,7 +783,7 @@ class CompleteTests(TestCase):
 
             with t.subTest('delta and pre-state snapshot'):
                 t.assertEqual(
-                    Journal(source).read()[0]['payload'],
+                    Journal(source).events[0]['payload'],
                     {
                         'delta': {'done': [False, True]},
                         'snapshot': {
@@ -801,7 +801,7 @@ class CompleteTests(TestCase):
         ):
             complete(source, 'Pay credit cards', TODAY)
             t.assertEqual(
-                Journal(source).read()[0]['payload']['delta'],
+                Journal(source).events[0]['payload']['delta'],
                 {'done': [False, True], 'DUE': ['2026-06-24', '2026-08-23']},
             )
 
@@ -810,7 +810,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Power supply', TODAY)
-            events = Journal(source).read()
+            events = Journal(source).events
             streams = {e['stream_id'] for e in events}
             t.assertEqual(len(streams), 1)
             t.assertIn(
@@ -828,7 +828,7 @@ class CompleteTests(TestCase):
         path = source / 'work.md'
 
         entries = complete(source, 'Sweep up', TODAY)
-        (event,) = Journal(source).read()
+        (event,) = Journal(source).events
         text = path.read_text(encoding='utf-8')
 
         with t.subTest('the item is checked off, gaining no id'):
@@ -870,7 +870,7 @@ class CompleteTests(TestCase):
                     complete(source, 'Water the plants', TODAY)
                 t.assertEqual((source / 'chores.md').read_text(), before)
                 t.assertEqual((source / 'completed.md').read_text(), COMPLETED)
-                t.assertEqual(Journal(source).read(), [])
+                t.assertEqual(Journal(source).events, [])
 
 
 class ScratchTests(TestCase):
@@ -948,7 +948,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Casablanca', TODAY)
-            events = Journal(source).read()
+            events = Journal(source).events
             t.assertEqual(len(events), 1)
             t.assertEqual(events[0]['type'], 'TaskScratched')
             t.assertEqual(events[0]['stream_id'], 'task/9o71lx')
@@ -966,7 +966,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Book hotel', TODAY)
-            payload = Journal(source).read()[0]['payload']
+            payload = Journal(source).events[0]['payload']
             t.assertEqual(payload['ancestry'], 'Trip prep > Book hotel')
             t.assertEqual(
                 payload['snapshot'],
@@ -982,7 +982,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Ice packs', TODAY)
-            stream = Journal(source).read()[0]['stream_id']
+            stream = Journal(source).events[0]['stream_id']
             t.assertIn(
                 stream.removeprefix('task/'),
                 task_line(source, 'work.md', 'Pack cooler'),
@@ -998,7 +998,7 @@ class ScratchTests(TestCase):
         path = source / 'work.md'
 
         entries = scratch(source, 'Sweep up', TODAY)
-        (event,) = Journal(source).read()
+        (event,) = Journal(source).events
         text = path.read_text(encoding='utf-8')
 
         with t.subTest('the line goes, its ancestor stays as it was'):
@@ -1111,7 +1111,7 @@ class AddTaskTests(TestCase):
                 TODAY,
             )
             task_id = t.task_id(line)
-            (event,) = Journal(source).read()
+            (event,) = Journal(source).events
 
             with t.subTest('one TaskAdded on the new task stream'):
                 t.assertEqual(event['type'], 'TaskAdded')
@@ -1201,4 +1201,4 @@ class AddTaskTests(TestCase):
 
             with t.subTest('a rejected add writes nothing at all'):
                 t.assertEqual((source / 'chores.md').read_text(), CHORES)
-                t.assertEqual(Journal(source).read(), [])
+                t.assertEqual(Journal(source).events, [])

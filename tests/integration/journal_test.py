@@ -50,8 +50,6 @@ class JournalTests(TestCase):
             t.assertEqual(event['stream_seq'], 1)
             t.assertEqual(event['type'], 'TaskUpdated')
             t.assertEqual(event['schema_version'], SCHEMA_VERSION)
-            t.assertIsNone(event['prev_hash'])
-            t.assertIsNone(event['hash'])
             t.assertEqual(
                 event['metadata'],
                 {'actor': 'agent', 'source_file': 'a-list.md'},
@@ -92,7 +90,7 @@ class JournalTests(TestCase):
                 source_file='a-list.md',
             )
 
-            t.assertEqual(nested.read(), [written])
+            t.assertEqual(nested.events, [written])
 
         with (
             t.subTest('the event id comes from the uuid source'),
@@ -110,20 +108,58 @@ class JournalTests(TestCase):
 
             t.assertEqual(identified['event_id'], 'fixed-uuid')
 
-    def test_read(t) -> None:
-        with t.subTest('missing journal reads empty'):
-            t.assertEqual(t.journal.read(), [])
+    def test_text(t) -> None:
+        with t.subTest('a journal that is not there is empty text'):
+            ret = t.journal.text
+            t.assertEqual(ret, '')
 
-        with t.subTest('round-trips appended events'):
+        with t.subTest('otherwise the file, byte for byte'):
+            t.append()
+            ret = t.journal.text
+            t.assertEqual(ret, t.journal.path.read_text())
+
+    def test_events(t) -> None:
+        with t.subTest('a journal that is not there holds no events'):
+            ret = t.journal.events
+            t.assertEqual(ret, [])
+
+        with t.subTest('appended events come back in order'):
             t.append()
             t.append(event_type='TaskCompleted')
-            events = t.journal.read()
+
+            ret = t.journal.events
+
             t.assertEqual(
-                [e['type'] for e in events],
+                [event['type'] for event in ret],
                 ['TaskUpdated', 'TaskCompleted'],
             )
 
-        with t.subTest('blank trailing lines are skipped'):
+        with t.subTest('a blank line is not an event'):
             with t.journal.path.open('a') as handle:
                 handle.write('\n')
-            t.assertEqual(len(t.journal.read()), 2)
+
+            ret = Journal(t.dir).events
+
+            t.assertEqual(len(ret), 2)
+
+        with t.subTest('a write from elsewhere does not reach a read object'):
+            Journal(t.dir).append(
+                event_type='TaskAdded',
+                stream_id='task/abc123',
+                payload={},
+                actor='agent',
+                source_file='a-list.md',
+            )
+
+            ret = t.journal.events
+
+            t.assertEqual(len(ret), 2)
+
+        with t.subTest('an entry carrying the retired hash fields reads'):
+            legacy = {'type': 'TaskAdded', 'prev_hash': None, 'hash': None}
+            with t.journal.path.open('a') as handle:
+                handle.write(json.dumps(legacy) + '\n')
+
+            ret = Journal(t.dir).events
+
+            t.assertEqual(ret[-1], legacy)

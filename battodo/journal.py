@@ -1,10 +1,9 @@
 """Append-only JSONL event journal, one per source directory.
 
-`prev_hash` and `hash` are reserved and null in v1, and the
-commit-boundary fields are omitted. A command can append several events
--- a completion cascade, or a parent stamp beside the child that names
-it -- and nothing marks them as one commit, so a partial write is not
-detectable.
+The commit-boundary fields are omitted. A command can append several
+events -- a completion cascade, or a parent stamp beside the child that
+names it -- and nothing marks them as one commit, so a partial write is
+not detectable.
 
 While markdown remains authoritative the journal is a *partial* record:
 hand-edits bypass btodo and so bypass this log. Every payload carries a
@@ -14,6 +13,7 @@ having observed each change.
 
 from datetime import datetime, timezone
 from fcntl import LOCK_EX, LOCK_UN, flock
+from functools import cached_property
 from json import dumps, loads
 from os import fsync
 from pathlib import Path
@@ -38,20 +38,35 @@ def _utc_now() -> str:
 
 
 class Journal:
-    """The event log for one source directory."""
+    """The event log for one source directory.
+
+    Another writer may have appended since this object last read.
+    """
 
     def __init__(self, source_dir: Path) -> None:
-        self.path = Path(source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+        self.source_dir = source_dir
 
-    def read(self) -> list[dict[str, Any]]:
-        """Every event in order. Missing journal reads as empty."""
-        if not self.path.exists():
-            return []
-        return [
-            loads(line)
-            for line in self.path.read_text().splitlines()
-            if line.strip()
-        ]
+    @cached_property
+    def path(self) -> Path:
+        """The log file inside the journal directory of the source."""
+        return Path(self.source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+
+    @cached_property
+    def text(self) -> str:
+        """The journal file. A journal that is not there is empty text."""
+        return (
+            self.path.read_text(encoding='utf-8') if self.path.exists() else ''
+        )
+
+    @cached_property
+    def events(self) -> list[dict[str, Any]]:
+        """Every event the text holds, in order."""
+        return [loads(line) for line in self.text.splitlines() if line.strip()]
+
+    def _forget(self) -> None:
+        """Drop the cached text and the events parsed from it."""
+        self.__dict__.pop('text', None)
+        self.__dict__.pop('events', None)
 
     def append(
         self,
@@ -72,15 +87,11 @@ class Journal:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         recorded_at = _utc_now()
 
-        with self.path.open('a+', encoding='utf-8') as handle:
+        with self.path.open('a', encoding='utf-8') as handle:
             flock(handle.fileno(), LOCK_EX)
             try:
-                handle.seek(0)
-                existing = [
-                    loads(line)
-                    for line in handle.read().splitlines()
-                    if line.strip()
-                ]
+                self._forget()
+                existing = self.events
                 event = {
                     'seq': len(existing) + 1,
                     'event_id': str(uuid4()),
@@ -93,8 +104,6 @@ class Journal:
                     'schema_version': SCHEMA_VERSION,
                     'occurred_at': occurred_at or recorded_at,
                     'recorded_at': recorded_at,
-                    'prev_hash': None,
-                    'hash': None,
                     'metadata': {
                         'actor': actor,
                         'source_file': source_file,
@@ -105,6 +114,7 @@ class Journal:
                 handle.flush()
                 fsync(handle.fileno())
             finally:
+                self._forget()
                 flock(handle.fileno(), LOCK_UN)
 
         return event

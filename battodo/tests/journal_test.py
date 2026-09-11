@@ -61,30 +61,52 @@ class JournalTests(TestCase):
         t.journal_dir.__truediv__.return_value = t.file
         t.handle = MagicMock(spec=TextIOWrapper)
         t.file.open.return_value.__enter__.return_value = t.handle
-        t.handle.read.return_value = ''
 
         t.journal = Journal(sentinel.source_dir)
 
     def test_path(t) -> None:
+        with t.subTest('the constructor derives nothing'):
+            t.Path.assert_not_called()
+
         with t.subTest('the log sits in the journal directory of the source'):
+            ret = t.journal.path
+
+            t.assertEqual(ret, t.file)
             t.source.__truediv__.assert_called_once_with(JOURNAL_DIRNAME)
             t.journal_dir.__truediv__.assert_called_once_with(JOURNAL_FILENAME)
 
-        with t.subTest('and is what the journal reads and writes'):
-            t.assertEqual(t.journal.path, t.file)
-
-    def test_read(t) -> None:
-        with t.subTest('a journal that is not there reads as empty'):
+    def test_text(t) -> None:
+        with t.subTest('a journal that is not there is empty text'):
             t.file.exists.return_value = False
 
-            t.assertEqual(t.journal.read(), [])
+            ret = t.journal.text
+
+            t.assertEqual(ret, '')
             t.file.read_text.assert_not_called()
 
-        with t.subTest('every line is one event, in order'):
+        with t.subTest('otherwise the file it points at'):
+            t.journal.__dict__.pop('text', None)
             t.file.exists.return_value = True
-            t.file.read_text.return_value = '{"seq": 1}\n\n{"seq": 2}\n'
+            t.file.read_text.return_value = sentinel.text
 
-            t.assertEqual(t.journal.read(), [{'seq': 1}, {'seq': 2}])
+            ret = t.journal.text
+
+            t.assertEqual(ret, sentinel.text)
+            t.file.read_text.assert_called_once_with(encoding='utf-8')
+
+    def test_events(t) -> None:
+        with t.subTest('every non-blank line is one event, in order'):
+            t.journal.text = '{"seq": 1}\n\n{"seq": 2}\n'
+            ret = t.journal.events
+            t.assertEqual(ret, [{'seq': 1}, {'seq': 2}])
+
+        with t.subTest('empty text holds no events'):
+            t.journal.__dict__.pop('events', None)
+            t.journal.text = ''
+
+            ret = t.journal.events
+
+            t.assertEqual(ret, [])
 
     def test_append(t) -> None:
         event = t.journal.append(
@@ -113,8 +135,6 @@ class JournalTests(TestCase):
                     'schema_version': SCHEMA_VERSION,
                     'occurred_at': STAMP,
                     'recorded_at': STAMP,
-                    'prev_hash': None,
-                    'hash': None,
                     'metadata': {
                         'actor': 'agent',
                         'source_file': 'a-list.md',
@@ -135,7 +155,8 @@ class JournalTests(TestCase):
             t.assertEqual(released.args[1], LOCK_UN)
 
         with t.subTest('the two counters count over different populations'):
-            t.handle.read.return_value = (
+            t.file.exists.return_value = True
+            t.file.read_text.return_value = (
                 '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
             )
 
@@ -151,7 +172,7 @@ class JournalTests(TestCase):
             t.assertEqual(event['stream_seq'], 2)
 
         with t.subTest('a given time is when the change happened'):
-            t.handle.read.return_value = ''
+            t.file.read_text.return_value = ''
 
             event = t.journal.append(
                 'TaskAdded',
@@ -164,3 +185,31 @@ class JournalTests(TestCase):
 
             t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
             t.assertEqual(event['recorded_at'], STAMP)
+
+        with t.subTest('a write drops the text and events it invalidates'):
+            t.file.exists.return_value = True
+            t.file.read_text.return_value = '{"stream_id": "task/aa"}\n'
+            primed = t.journal.events
+            t.assertEqual(primed, [{'stream_id': 'task/aa'}])
+            t.file.read_text.return_value = (
+                '{"stream_id": "task/aa"}\n{"stream_id": "task/aa"}\n'
+            )
+
+            written = t.journal.append(
+                'TaskAdded',
+                'task/aa',
+                {},
+                actor='agent',
+                source_file='a-list.md',
+            )
+            t.file.read_text.return_value = (
+                '{"stream_id": "task/aa"}\n'
+                '{"stream_id": "task/aa"}\n'
+                '{"stream_id": "task/bb"}\n'
+            )
+
+            events = t.journal.events
+
+            t.assertEqual(written['seq'], 3)
+            t.assertEqual(written['stream_seq'], 3)
+            t.assertEqual(len(events), 3)
