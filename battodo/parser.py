@@ -12,7 +12,17 @@ from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
 
-FIELD_RE = re.compile(r'\[(P|LOE|DUE|BUMPED|ADDED|REPEAT|TAGS|ID):([^\]]*)\]')
+FIELD_NAMES: tuple[str, ...] = (
+    'P',
+    'LOE',
+    'DUE',
+    'BUMPED',
+    'ADDED',
+    'REPEAT',
+    'TAGS',
+    'ID',
+)
+FIELD_RE = re.compile(rf'\[({"|".join(FIELD_NAMES)}):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
 OPEN_HEADING = '## Open'
 
