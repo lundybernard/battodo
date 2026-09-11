@@ -38,8 +38,8 @@ class LogLevelTests(TestCase):
                 INFO,
             ),
         }
+
         for name, (args, env, expected) in cases.items():
             with t.subTest(name):
                 run_cli(args, env)
-
                 t.assertEqual(getLogger('root').level, expected)

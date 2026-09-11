@@ -45,10 +45,12 @@ class MultiplierTests(TestCase):
             'N': 1.0,
             '': 1.0,
         }
+
         for value, expected in cases.items():
             with t.subTest(f'P:{value}'):
                 t.tk.fields = {} if value is None else {'P': value}
-                t.assertAlmostEqual(multiplier(t.tk), expected)
+                ret = multiplier(t.tk)
+                t.assertAlmostEqual(ret, expected)
 
     def test_order(t) -> None:
         folded = []
@@ -86,10 +88,12 @@ class AgeScoreTests(TestCase):
             'YYYY-MM-DD': 0.0,
             '2026-09-01': 0.0,
         }
+
         for value, expected in cases.items():
             with t.subTest(f'ADDED:{value}'):
                 t.tk.fields = {} if value is None else {'ADDED': value}
-                t.assertAlmostEqual(age_score(t.tk, TODAY), expected)
+                ret = age_score(t.tk, TODAY)
+                t.assertAlmostEqual(ret, expected)
 
 
 class DueScoreTests(TestCase):
@@ -113,10 +117,12 @@ class DueScoreTests(TestCase):
             '2026-01-01': 3.0,
             'YYYY-MM-DD': 0.0,
         }
+
         for value, expected in cases.items():
             with t.subTest(f'DUE:{value}'):
                 t.tk.fields = {} if value is None else {'DUE': value}
-                t.assertAlmostEqual(due_score(t.tk, TODAY), expected)
+                ret = due_score(t.tk, TODAY)
+                t.assertAlmostEqual(ret, expected)
 
 
 class RankTests(TestCase):
@@ -128,23 +134,28 @@ class RankTests(TestCase):
     def test_multiplier(t) -> None:
         # A fresh undated item ranks at its multiplier.
         t.tk.fields = {'P': '3'}
-        t.assertAlmostEqual(rank(t.tk, TODAY), 3.0)
+        ret = rank(t.tk, TODAY)
+        t.assertAlmostEqual(ret, 3.0)
 
     def test_age(t) -> None:
         ages = {'2026-08-08': 3.0, '2026-07-09': 6.0, '2026-05-10': 9.0}
+
         for added, expected in ages.items():
             with t.subTest(f'ADDED:{added}'):
                 t.tk.fields = {'P': '3', 'ADDED': added}
-                t.assertAlmostEqual(rank(t.tk, TODAY), expected)
+                ret = rank(t.tk, TODAY)
+                t.assertAlmostEqual(ret, expected)
 
     def test_compound(t) -> None:
         # Age and lateness compound.
         t.tk.fields = {'P': '2', 'ADDED': '2026-07-09', 'DUE': '2026-08-01'}
-        t.assertAlmostEqual(rank(t.tk, TODAY), 8.0)
+        ret = rank(t.tk, TODAY)
+        t.assertAlmostEqual(ret, 8.0)
 
     def test_parked(t) -> None:
         t.tk.fields = {'P': '0', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
-        t.assertAlmostEqual(rank(t.tk, TODAY), 0.0)
+        ret = rank(t.tk, TODAY)
+        t.assertAlmostEqual(ret, 0.0)
 
     def test_bounded(t) -> None:
         t.tk.fields = {'P': '1', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
@@ -155,4 +166,5 @@ class RankTests(TestCase):
 
         with t.subTest('so the multiplier still rules'):
             t.tk.fields = {'P': '5', 'ADDED': '2026-05-10'}
-            t.assertLess(worst, rank(t.tk, TODAY))
+            ret = rank(t.tk, TODAY)
+            t.assertLess(worst, ret)

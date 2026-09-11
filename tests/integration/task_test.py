@@ -39,21 +39,24 @@ class TaskTests(TestCase):
 
     def test_record(t) -> None:
         with t.subTest('the selector reaches one task in one list'):
-            t.assertEqual(t.tk.record.task.title, 'Deck rebuild')
-            t.assertEqual(t.tk.record.path, t.path)
+            record = t.tk.record
+            t.assertEqual(record.task.title, 'Deck rebuild')
+            t.assertEqual(record.path, t.path)
 
     def test_complete(t) -> None:
         t.tk.complete()
 
+        logged = t.tk.completed
+
         with t.subTest('the entry is logged under the day it was given'):
             t.assertEqual(
-                t.tk.completed,
+                logged,
                 ['2026-08-08 | work | DONE | Deck rebuild [P:4] [LOE:8]'],
             )
 
         with t.subTest('the log on disk holds it'):
             log = (t.source / 'completed.md').read_text(encoding='utf-8')
-            t.assertIn(t.tk.completed[0], log)
+            t.assertIn(logged[0], log)
 
         with t.subTest('the block is gone from the list'):
             text = t.path.read_text(encoding='utf-8')

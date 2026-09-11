@@ -44,32 +44,39 @@ class DueLabelTests(TestCase):
                 'YYYY-MM-DD',
             ),
         }
+
         for name, (due, expected) in cases.items():
             with t.subTest(name):
-                t.assertEqual(due_label(due, TODAY), expected)
+                ret = due_label(due, TODAY)
+                t.assertEqual(ret, expected)
 
 
 class TableWidthTests(TestCase):
     """Unit tests for battodo.view.render.table_width."""
 
     def test_columns(t) -> None:
+        ret = table_width([1, 1, 1, 1, 1])
+
         # Two of indent, the cells themselves, and a gap between each
         # neighbouring pair.
-        t.assertEqual(table_width([1, 1, 1, 1, 1]), 2 + 5 + 8)
+        t.assertEqual(ret, 2 + 5 + 8)
 
 
 class ClipTests(TestCase):
     """Unit tests for battodo.view.render.clip."""
 
     def test_fits(t) -> None:
-        t.assertEqual(clip('abc', 3), 'abc')
+        ret = clip('abc', 3)
+        t.assertEqual(ret, 'abc')
 
     def test_cut(t) -> None:
+        ret = clip('abcdef', 3)
+
         with t.subTest('text too long is cut, and says so'):
-            t.assertEqual(clip('abcdef', 3), 'ab…')
+            t.assertEqual(ret, 'ab…')
 
         with t.subTest('the mark counts towards the width'):
-            t.assertEqual(len(clip('abcdef', 3)), 3)
+            t.assertEqual(len(ret), 3)
 
 
 class RowTests(TestCase):
@@ -91,20 +98,24 @@ class RowTests(TestCase):
         t.r = Row(t.task, TODAY)
 
     def test_children(t) -> None:
-        t.assertEqual(t.r.children, t.open_children.return_value)
+        ret = t.r.children
+        t.assertEqual(ret, t.open_children.return_value)
         t.open_children.assert_called_once_with(t.task)
 
     def test_badge(t) -> None:
         with t.subTest('a task with nothing outstanding wears no badge'):
-            t.assertEqual(t.r.badge, '')
+            ret = t.r.badge
+            t.assertEqual(ret, '')
 
         with t.subTest('otherwise it carries the count'):
             t.r.children = [sentinel.child, sentinel.child]
-            t.assertEqual(t.r.badge, ' (+2)')
+            ret = t.r.badge
+            t.assertEqual(ret, ' (+2)')
 
     def test_cells(t) -> None:
         with t.subTest('rank and priority are shown to one decimal'):
-            t.assertEqual(t.r.cells[:2], ('4.2', '3.0'))
+            ret = t.r.cells
+            t.assertEqual(ret[:2], ('4.2', '3.0'))
 
         with t.subTest('the clock reaches the rank'):
             t.rank.assert_called_once_with(t.task, TODAY)
@@ -112,25 +123,38 @@ class RowTests(TestCase):
         with t.subTest('an unestimated task leaves its column empty'):
             t.task.loe = None
             t.r.__dict__.pop('cells')
-            t.assertEqual(t.r.cells[2], '')
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[2], '')
 
         with t.subTest('a level of effort is shown when there is one'):
             t.task.loe = 2
             t.r.__dict__.pop('cells')
-            t.assertEqual(t.r.cells[2], '2')
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[2], '2')
 
         with t.subTest('the title carries its badge'):
             t.r.children = [sentinel.child]
             t.r.__dict__.pop('cells')
-            t.assertEqual(t.r.cells[3], 'A task (+1)')
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[3], 'A task (+1)')
 
         with t.subTest('and the due date its label'):
             t.task.due = '2026-08-04'
             t.r.__dict__.pop('cells')
-            t.assertEqual(t.r.cells[4], 'OVERDUE')
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[4], 'OVERDUE')
 
         with t.subTest('there is one cell per column'):
-            t.assertEqual(len(t.r.cells), len(COLUMNS))
+            ret = t.r.cells
+            t.assertEqual(len(ret), len(COLUMNS))
 
 
 def row(*cells: str) -> Row:
@@ -154,18 +178,22 @@ class TableTests(TestCase):
 
     def test_title(t) -> None:
         with t.subTest('a plain name is capitalized'):
-            t.assertEqual(t.tb.title, 'Work')
+            ret = t.tb.title
+            t.assertEqual(ret, 'Work')
 
         with t.subTest('a hyphen reads as the space it stands in for'):
             t.tb.name = 'side-quests'
-            t.assertEqual(t.tb.title, 'Side quests')
+            ret = t.tb.title
+            t.assertEqual(ret, 'Side quests')
 
     def test_heading(t) -> None:
         with t.subTest('the title sits in a rule spanning the table'):
-            t.assertEqual(t.tb.heading, '── Work ' + '─' * 42)
+            ret = t.tb.heading
+            t.assertEqual(ret, '── Work ' + '─' * 42)
 
         with t.subTest('which is as wide as the table itself'):
-            t.assertEqual(len(t.tb.heading), table_width(WIDTHS))
+            ret = t.tb.heading
+            t.assertEqual(len(ret), table_width(WIDTHS))
 
         with t.subTest('a table too narrow for the title is not padded'):
             # The rule would have to run backwards to fit. A heading
@@ -173,29 +201,33 @@ class TableTests(TestCase):
             # and a negative count must not eat the title.
             t.tb.name = 'a-very-long-category-name-indeed'
             t.tb.widths = [1, 1, 1, 1, 1]
-            t.assertEqual(t.tb.heading, '── A very long category name indeed ')
+
+            ret = t.tb.heading
+
+            t.assertEqual(ret, '── A very long category name indeed ')
 
     def test_line(t) -> None:
         with t.subTest('cells are padded and aligned to the widths'):
+            ret = t.tb.line(('4.2', '3.0', '2', 'A task', 'OVERDUE'))
+
             t.assertEqual(
-                t.tb.line(('4.2', '3.0', '2', 'A task', 'OVERDUE')),
-                '   4.2  3.0    2  A task                OVERDUE',
+                ret, '   4.2  3.0    2  A task                OVERDUE'
             )
 
         with t.subTest('trailing space is not left on the line'):
-            t.assertEqual(
-                t.tb.line(('4.2', '3.0', '2', 'A task', '')),
-                '   4.2  3.0    2  A task',
-            )
+            ret = t.tb.line(('4.2', '3.0', '2', 'A task', ''))
+            t.assertEqual(ret, '   4.2  3.0    2  A task')
 
         with t.subTest('a title too wide for its column is clipped'):
-            line = t.tb.line(('4.2', '3.0', '2', 'A' * 40, ''))
-            t.assertTrue(line.endswith('…'))
+            ret = t.tb.line(('4.2', '3.0', '2', 'A' * 40, ''))
+            t.assertTrue(ret.endswith('…'))
 
     def test_lines(t) -> None:
         with t.subTest('the column names lead, then a line per row'):
+            ret = t.tb.lines
+
             t.assertEqual(
-                t.tb.lines,
+                ret,
                 [
                     t.tb.line(COLUMNS),
                     '   4.2  3.0    2  A task                OVERDUE',
@@ -203,23 +235,29 @@ class TableTests(TestCase):
             )
 
         with t.subTest('a complete table says nothing about hiding'):
-            t.assertNotIn('more', '\n'.join(t.tb.lines))
+            ret = t.tb.lines
+            t.assertNotIn('more', '\n'.join(ret))
 
         with t.subTest('an abridged one says how much it holds back'):
             t.tb.hidden = 3
-            t.assertEqual(t.tb.lines[-1], '  … and 3 more')
+            ret = t.tb.lines
+            t.assertEqual(ret[-1], '  … and 3 more')
 
     def test_rows(t) -> None:
-        t.assertEqual(t.tb.rows, t.rows)
+        ret = t.tb.rows
+        t.assertEqual(ret, t.rows)
 
     def test_name(t) -> None:
-        t.assertEqual(t.tb.name, 'work')
+        ret = t.tb.name
+        t.assertEqual(ret, 'work')
 
     def test_widths(t) -> None:
-        t.assertEqual(t.tb.widths, WIDTHS)
+        ret = t.tb.widths
+        t.assertEqual(ret, WIDTHS)
 
     def test_hidden(t) -> None:
-        t.assertEqual(t.tb.hidden, 0)
+        ret = t.tb.hidden
+        t.assertEqual(ret, 0)
 
 
 def category(name: str, hidden: int = 0, shown=('task',)) -> Mock:
@@ -258,24 +296,28 @@ class ViewTests(TestCase):
         )
 
     def test_today(t) -> None:
-        t.assertEqual(t.v.today, TODAY)
+        ret = t.v.today
+        t.assertEqual(ret, TODAY)
 
     def test_header(t) -> None:
         with t.subTest('the day, the date, the time, then what is open'):
+            ret = t.v.header
+
             t.assertEqual(
-                t.v.header,
-                'Wednesday 2026-08-05 10:30 — active: study, work',
+                ret, 'Wednesday 2026-08-05 10:30 — active: study, work'
             )
 
         with t.subTest('the active set reads in a settled order'):
             # Given in the wrong order on purpose: a set would iterate
             # in whatever order it liked, which is no test of sorting.
             t.selection.active = ['work', 'study', 'career']
-            t.assertTrue(t.v.header.endswith('career, study, work'))
+            ret = t.v.header
+            t.assertTrue(ret.endswith('career, study, work'))
 
     def test_sections(t) -> None:
+        ((found, rows),) = t.v.sections
+
         with t.subTest('each category is paired with a row per task shown'):
-            ((found, rows),) = t.v.sections
             t.assertEqual(found, t.selection.categories[0])
             t.assertEqual(len(rows), 1)
 
@@ -285,15 +327,20 @@ class ViewTests(TestCase):
     def test_columns(t) -> None:
         with t.subTest('a width that was asked for is used as given'):
             t.v.width = 100
-            t.assertEqual(t.v.columns, 100)
+            ret = t.v.columns
+            t.assertEqual(ret, 100)
 
         with t.subTest('otherwise the terminal is asked'):
             t.v.width = 0
             t.v.__dict__.pop('columns')
-            t.assertEqual(t.v.columns, 80)
+
+            ret = t.v.columns
+
+            t.assertEqual(ret, 80)
 
         with t.subTest('and a view built without one asks by default'):
-            t.assertEqual(View(t.selection).columns, 80)
+            ret = View(t.selection).columns
+            t.assertEqual(ret, 80)
 
     def resize(t, width: int) -> list[int]:
         """The widths this view settles on at `width` columns."""
@@ -304,11 +351,13 @@ class ViewTests(TestCase):
 
     def test_widths(t) -> None:
         with t.subTest('a column is as wide as its widest cell or name'):
+            ret = t.v.widths
             # RANK is held open by its own name, P and LOE by theirs.
-            t.assertEqual(t.v.widths[:3], [4, 3, 3])
+            t.assertEqual(ret[:3], [4, 3, 3])
 
         with t.subTest('a table claims no more of the terminal than it needs'):
-            t.assertLessEqual(sum(t.v.widths) + 2 + 8, 80)
+            ret = t.v.widths
+            t.assertLessEqual(sum(ret) + 2 + 8, 80)
 
         # The other columns take 27 of the line between them, so what is
         # left for titles is the terminal less that.
@@ -323,13 +372,16 @@ class ViewTests(TestCase):
         t.v.__dict__.pop('sections')
 
         with t.subTest('titles take the room left over when they need it'):
-            t.assertEqual(t.resize(80)[3], 80 - 27)
+            ret = t.resize(80)
+            t.assertEqual(ret[3], 80 - 27)
 
         with t.subTest('and only as much as they need when there is more'):
-            t.assertEqual(t.resize(200)[3], len(long_title))
+            ret = t.resize(200)
+            t.assertEqual(ret[3], len(long_title))
 
         with t.subTest('but the column never shrinks past readable'):
-            t.assertEqual(t.resize(10)[3], MIN_TASK_WIDTH)
+            ret = t.resize(10)
+            t.assertEqual(ret[3], MIN_TASK_WIDTH)
 
     def test_tables(t) -> None:
         with t.subTest('one table per category, sharing the view widths'):
@@ -341,7 +393,10 @@ class ViewTests(TestCase):
             t.selection.categories = [category('work', hidden=4)]
             t.v.__dict__.pop('sections')
             t.v.__dict__.pop('tables')
-            t.assertEqual(t.v.tables[0].hidden, 4)
+
+            ret = t.v.tables
+
+            t.assertEqual(ret[0].hidden, 4)
 
     def test_text(t) -> None:
         lines = t.v.text.split('\n')
@@ -357,4 +412,5 @@ class ViewTests(TestCase):
             t.assertEqual(lines[3:], t.v.tables[0].lines)
 
     def test___str__(t) -> None:
-        t.assertEqual(str(t.v), t.v.text)
+        ret = str(t.v)
+        t.assertEqual(ret, t.v.text)

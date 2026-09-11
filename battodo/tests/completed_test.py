@@ -35,8 +35,10 @@ class ReadRecordTests(TestCase):
     """Unit tests for battodo.completed.read_record."""
 
     def test_record(t) -> None:
+        ret = read_record('2026-08-04 | chores | DONE | A completed task')
+
         t.assertEqual(
-            read_record('2026-08-04 | chores | DONE | A completed task'),
+            ret,
             Record(date(2026, 8, 4), 'chores', 'A completed task'),
         )
 
@@ -55,10 +57,13 @@ class ReadRecordTests(TestCase):
                 'Ship it | today',
             ),
         }
+
         for name, (line, title) in titles.items():
             with t.subTest(name):
+                ret = read_record(line)
+
                 t.assertEqual(
-                    read_record(line),
+                    ret,
                     Record(date(2026, 8, 4), 'work', title),
                 )
 
@@ -74,9 +79,11 @@ class ReadRecordTests(TestCase):
             'a blank line holds nothing': '',
             'and neither does prose': 'this line is not a record',
         }
+
         for name, line in skipped.items():
             with t.subTest(name):
-                t.assertIsNone(read_record(line))
+                ret = read_record(line)
+                t.assertIsNone(ret)
 
 
 class RecordTests(TestCase):
@@ -86,11 +93,14 @@ class RecordTests(TestCase):
         t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
 
     def test_cells(t) -> None:
-        t.assertEqual(t.r.cells, ('2026-08-04', 'A parent > A record'))
+        ret = t.r.cells
+        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
 
     def test_entry(t) -> None:
+        ret = t.r.entry
+
         t.assertEqual(
-            t.r.entry,
+            ret,
             {'date': '2026-08-04', 'title': 'A parent > A record'},
         )
 
@@ -105,11 +115,14 @@ class GroupTests(TestCase):
         )
 
     def test_title(t) -> None:
-        t.assertEqual(t.g.title, 'Side quests')
+        ret = t.g.title
+        t.assertEqual(ret, 'Side quests')
 
     def test_entries(t) -> None:
+        ret = t.g.entries
+
         t.assertEqual(
-            t.g.entries,
+            ret,
             [{'date': '2026-08-04', 'title': 'A record'}],
         )
 
@@ -127,7 +140,8 @@ class DigestTests(TestCase):
         t.d = Digest(t.directory, NOW, period='week')
 
     def test_today(t) -> None:
-        t.assertEqual(t.d.today, TODAY)
+        ret = t.d.today
+        t.assertEqual(ret, TODAY)
 
     def test_start(t) -> None:
         cases = {
@@ -138,10 +152,12 @@ class DigestTests(TestCase):
             ),
             'and the month to its first day': ('month', date(2026, 8, 1)),
         }
+
         for name, (period, expected) in cases.items():
             with t.subTest(name):
                 digest = Digest(t.directory, NOW, period=period)
-                t.assertEqual(digest.start, expected)
+                ret = digest.start
+                t.assertEqual(ret, expected)
 
         with (
             t.subTest('a period with no definition is an error'),
@@ -150,29 +166,37 @@ class DigestTests(TestCase):
             _ = Digest(t.directory, NOW, period='fortnight').start
 
     def test_end(t) -> None:
-        t.assertEqual(t.d.end, TODAY)
+        ret = t.d.end
+        t.assertEqual(ret, TODAY)
 
     def test_path(t) -> None:
         with t.subTest('the log sits beside the lists'):
-            t.assertIs(t.d.path, t.log)
+            ret = t.d.path
+
+            t.assertIs(ret, t.log)
             t.directory.expanduser.return_value.__truediv__.assert_called_with(
                 'completed.md'
             )
 
         with t.subTest('a source with no log is an error, not an empty day'):
             t.log.is_file.return_value = False
+
             with t.assertRaises(CompletedError) as caught:
                 _ = Digest(t.directory, NOW, period='week').path
+
             t.assertIn('completed log not found', str(caught.exception))
 
     def test_text(t) -> None:
-        t.assertEqual(t.d.text, LOG)
+        ret = t.d.text
+        t.assertEqual(ret, LOG)
         t.log.read_text.assert_called_once_with(encoding='utf-8')
 
     def test_records(t) -> None:
         with t.subTest('the DONE records of the period, oldest first'):
+            ret = t.d.records
+
             t.assertEqual(
-                [found.title for found in t.d.records],
+                [found.title for found in ret],
                 [
                     'Oldest in the week',
                     'In the other category',
@@ -182,27 +206,34 @@ class DigestTests(TestCase):
 
         with t.subTest('a shorter period holds fewer of them'):
             digest = Digest(t.directory, NOW, period='today')
+
+            ret = digest.records
+
             t.assertEqual(
-                [found.title for found in digest.records],
+                [found.title for found in ret],
                 ['Completed today'],
             )
 
     def test_groups(t) -> None:
+        ret = t.d.groups
+
         with t.subTest('one group per category, in the view order'):
             t.assertEqual(
-                [group.name for group in t.d.groups],
+                [group.name for group in ret],
                 ['work', 'unlisted'],
             )
 
         with t.subTest('each holding its own records'):
             t.assertEqual(
-                [found.title for found in t.d.groups[0].records],
+                [found.title for found in ret[0].records],
                 ['Oldest in the week', 'Completed today'],
             )
 
     def test_data(t) -> None:
+        ret = t.d.data
+
         t.assertEqual(
-            t.d.data,
+            ret,
             {
                 'period': 'week',
                 'start': '2026-07-30',
@@ -233,11 +264,13 @@ class DigestTests(TestCase):
         )
 
     def test_json(t) -> None:
+        ret = t.d.json
+
         with t.subTest('what comes back is the digest, serialized'):
-            t.assertEqual(loads(t.d.json), t.d.data)
+            t.assertEqual(loads(ret), t.d.data)
 
         with t.subTest('indented for a person to read as well'):
-            t.assertIn('\n  "period": "week"', t.d.json)
+            t.assertIn('\n  "period": "week"', ret)
 
 
 class DigestFromConfigTests(TestCase):
@@ -271,7 +304,9 @@ class DigestFromConfigTests(TestCase):
             conf.view = Mock(spec=['source_dir'])
             conf.view.source_dir = '~/a-source-dir'
 
-            t.assertEqual(Digest.from_config(conf, NOW).period, DEFAULT_PERIOD)
+            ret = Digest.from_config(conf, NOW)
+
+            t.assertEqual(ret.period, DEFAULT_PERIOD)
 
 
 class TableTests(TestCase):
@@ -283,22 +318,28 @@ class TableTests(TestCase):
 
     def test_heading(t) -> None:
         with t.subTest('a titled rule spanning the table'):
-            t.assertEqual(t.table.heading, '── Work ' + '─' * 26)
+            ret = t.table.heading
+            t.assertEqual(ret, '── Work ' + '─' * 26)
 
         with t.subTest('a title of its own length rules no further'):
             wide = Table(Group('a' * 40, []), WIDTHS)
-            t.assertEqual(wide.heading, f'── {"A" + "a" * 39} ')
+            ret = wide.heading
+            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
 
     def test_line(t) -> None:
         with t.subTest('each cell padded to its column'):
-            t.assertEqual(t.table.line(('a', 'b')), '  a' + ' ' * 11 + 'b')
+            ret = t.table.line(('a', 'b'))
+            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
 
         with t.subTest('trailing space is stripped'):
-            t.assertEqual(t.table.line(('', '')), '')
+            ret = t.table.line(('', ''))
+            t.assertEqual(ret, '')
 
     def test_lines(t) -> None:
+        ret = t.table.lines
+
         t.assertEqual(
-            t.table.lines,
+            ret,
             [
                 '  DATE        TASK',
                 '  2026-08-05  Ship it',
@@ -332,36 +373,42 @@ class DigestViewTests(TestCase):
 
     def test_span(t) -> None:
         with t.subTest('the first day and the last'):
-            t.assertEqual(t.v.span, '2026-07-30 to 2026-08-05')
+            ret = t.v.span
+            t.assertEqual(ret, '2026-07-30 to 2026-08-05')
 
         with t.subTest('a single day reads as one date'):
             t.digest.start = TODAY
-            t.assertEqual(t.v.span, '2026-08-05')
+            ret = t.v.span
+            t.assertEqual(ret, '2026-08-05')
 
     def test_header(t) -> None:
+        ret = t.v.header
+
         t.assertEqual(
-            t.v.header,
+            ret,
             'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
         )
 
     def test_widths(t) -> None:
         with t.subTest('each column as wide as its widest cell'):
-            t.assertEqual(
-                t.v.widths,
-                [10, len('A record of another category')],
-            )
+            ret = t.v.widths
+            t.assertEqual(ret, [10, len('A record of another category')])
 
         with t.subTest('the column name counts too'):
             t.digest.records = [Record(date(2026, 8, 5), 'work', 'Go')]
-            t.assertEqual(DigestView(t.digest).widths, [10, len('TASK')])
+            ret = DigestView(t.digest).widths
+            t.assertEqual(ret, [10, len('TASK')])
 
     def test_tables(t) -> None:
-        t.assertEqual([table.group for table in t.v.tables], t.digest.groups)
-        t.assertEqual([table.widths for table in t.v.tables], [t.v.widths] * 2)
+        ret = t.v.tables
+        t.assertEqual([table.group for table in ret], t.digest.groups)
+        t.assertEqual([table.widths for table in ret], [t.v.widths] * 2)
 
     def test_text(t) -> None:
+        ret = t.v.text
+
         t.assertEqual(
-            t.v.text,
+            ret,
             '\n'.join(
                 (
                     'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
@@ -378,4 +425,5 @@ class DigestViewTests(TestCase):
         )
 
     def test___str__(t) -> None:
-        t.assertEqual(str(t.v), t.v.text)
+        ret = str(t.v)
+        t.assertEqual(ret, t.v.text)

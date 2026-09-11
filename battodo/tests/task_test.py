@@ -62,34 +62,37 @@ class TaskTests(TestCase):
 
         with t.subTest('a date btodo cannot read is refused'):
             t.parse_date.return_value = None
-
             with t.assertRaises(ValueError):
                 Task.from_config(t.dated('yesterday'), t.now)
 
     def test_source(t):
-        t.assertEqual(t.tk.source, SOURCE)
+        ret = t.tk.source
+        t.assertEqual(ret, SOURCE)
 
     def test_record(t):
         with t.subTest('the selector is looked up in the source'):
-            t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
+            ret = t.tk.record
+            t.assertIs(ret, t.TaskSelection.return_value.record)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
         with t.subTest('and a second read costs no second lookup'):
-            t.assertIs(t.tk.record, t.TaskSelection.return_value.record)
+            ret = t.tk.record
+            t.assertIs(ret, t.TaskSelection.return_value.record)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
     def test_complete(t):
         t.tk.complete()
-
         t.complete.assert_called_once_with(SOURCE, 'a selector', TODAY)
 
     def test_completed(t):
         with t.subTest('a task that was not completed logged nothing'):
-            t.assertEqual(t.tk.completed, [])
+            ret = t.tk.completed
+            t.assertEqual(ret, [])
 
         with t.subTest('the entries the write returned'):
             t.complete.return_value = ['2026-08-05 | work | DONE | Deck']
-
             t.tk.complete()
 
-            t.assertEqual(t.tk.completed, ['2026-08-05 | work | DONE | Deck'])
+            ret = t.tk.completed
+
+            t.assertEqual(ret, ['2026-08-05 | work | DONE | Deck'])

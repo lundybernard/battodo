@@ -69,13 +69,12 @@ class RenderedDigestTests(TestCase):
             t.assertNotIn('Rewrite the formula again', digest)
 
         with t.subTest('a shorter period reads as one day'):
-            t.assertIn(
-                'Completed today: 2026-08-05 — 1 done',
-                t.rendered(t.source, 'today'),
-            )
+            today = t.rendered(t.source, 'today')
+            t.assertIn('Completed today: 2026-08-05 — 1 done', today)
 
         with t.subTest('and the month reaches back to its first day'):
             month = t.rendered(t.source, 'month')
+
             t.assertIn(
                 'Completed month: 2026-08-01 to 2026-08-05 — 2 done',
                 month,

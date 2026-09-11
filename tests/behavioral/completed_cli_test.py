@@ -70,9 +70,11 @@ class CompletedCommandTests(TestCase):
                 'completed_json.json',
             ),
         }
+
         for name, (args, recorded) in cases.items():
             with t.subTest(name):
-                t.assertEqual(t.render(*args), golden(recorded))
+                out = t.render(*args)
+                t.assertEqual(out, golden(recorded))
 
     def test_completed_without_a_log(t) -> None:
         """A source with no log is an error a consumer can branch on."""

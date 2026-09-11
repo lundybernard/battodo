@@ -37,7 +37,8 @@ class JournalTests(TestCase):
         return t.journal.append(**params)
 
     def test_path(t) -> None:
-        t.assertEqual(t.journal.path, t.dir / '.journal' / 'log.jsonl')
+        ret = t.journal.path
+        t.assertEqual(ret, t.dir / '.journal' / 'log.jsonl')
 
     def test_append(t) -> None:
         with t.subTest('creates the journal directory and file'):
@@ -71,11 +72,15 @@ class JournalTests(TestCase):
             t.assertEqual(json.loads(lines[0])['seq'], 1)
 
         with t.subTest('seq follows line number'):
-            t.assertEqual(t.append()['seq'], 3)
+            third = t.append()
+            t.assertEqual(third['seq'], 3)
 
         with t.subTest('stream_seq counts within one stream'):
-            t.assertEqual(t.append(stream_id='task/other')['stream_seq'], 1)
-            t.assertEqual(t.append()['stream_seq'], 4)
+            other = t.append(stream_id='task/other')
+            same = t.append()
+
+            t.assertEqual(other['stream_seq'], 1)
+            t.assertEqual(same['stream_seq'], 4)
 
         with t.subTest('a source directory that does not exist yet'):
             # More than one level can be missing, so the journal digs

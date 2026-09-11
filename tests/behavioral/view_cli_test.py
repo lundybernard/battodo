@@ -109,9 +109,11 @@ class ViewCommandTests(TestCase):
                 'view_all.txt',
             ),
         }
+
         for name, (args, recorded) in cases.items():
             with t.subTest(name):
-                t.assertEqual(t.render(*args), golden(recorded))
+                out = t.render(*args)
+                t.assertEqual(out, golden(recorded))
 
         out, err, code = t.cli('--top', '0')
 
@@ -125,13 +127,12 @@ class ViewCommandTests(TestCase):
 
     def test_view_top_is_configured(t) -> None:
         with t.subTest('the environment sets the count'):
-            t.assertEqual(t.render(env={TOP_VAR: '1'}), golden('view_top.txt'))
+            out = t.render(env={TOP_VAR: '1'})
+            t.assertEqual(out, golden('view_top.txt'))
 
         with t.subTest('the command line outranks the environment'):
-            t.assertEqual(
-                t.render('--top', '5', env={TOP_VAR: '1'}),
-                golden('view.txt'),
-            )
+            out = t.render('--top', '5', env={TOP_VAR: '1'})
+            t.assertEqual(out, golden('view.txt'))
 
         out, err, code = t.cli(env={TOP_VAR: '0'})
 

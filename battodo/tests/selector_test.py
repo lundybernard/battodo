@@ -102,8 +102,10 @@ class TaskSelectionTests(TestCase):
 
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, any depth'):
+            ret = t.searching('b').records
+
             t.assertEqual(
-                t.searching('b').records,
+                ret,
                 [
                     TaskRecord(t.path, t.doc, [t.parent]),
                     TaskRecord(t.path, t.doc, [t.parent, t.child]),
@@ -112,33 +114,33 @@ class TaskSelectionTests(TestCase):
             )
 
         with t.subTest('a checked task is not open'):
-            t.assertEqual(t.searching('Checked subtask').records, [])
+            ret = t.searching('Checked subtask').records
+            t.assertEqual(ret, [])
 
         with t.subTest('a title matches whatever its case'):
-            t.assertEqual(
-                [record.task for record in t.searching('BRANCH ta').records],
-                [t.parent],
-            )
+            ret = t.searching('BRANCH ta').records
+            t.assertEqual([record.task for record in ret], [t.parent])
 
         with t.subTest('an id narrows out the titles that quote it'):
-            t.assertEqual(
-                [record.task for record in t.searching('9o71lx').records],
-                [t.parent],
-            )
+            ret = t.searching('9o71lx').records
+            t.assertEqual([record.task for record in ret], [t.parent])
 
     def test_record(t) -> None:
         with t.subTest('the one open task the selector names'):
             only = TaskRecord(t.path, t.doc, [t.parent])
             t.ts.records = [only]
-            t.assertIs(t.ts.record, only)
+
+            ret = t.ts.record
+
+            t.assertIs(ret, only)
 
         with t.subTest('nothing open matches'):
             selection = TaskSelection(t.dir, 'Checked subtask')
             selection.records = []
-            t.assertEqual(
-                t.error(selection),
-                "no open task matches 'Checked subtask'",
-            )
+
+            message = t.error(selection)
+
+            t.assertEqual(message, "no open task matches 'Checked subtask'")
 
         with t.subTest('more than one does'):
             selection = TaskSelection(t.dir, 'b')
@@ -146,7 +148,10 @@ class TaskSelectionTests(TestCase):
                 TaskRecord(t.path, t.doc, [t.parent]),
                 TaskRecord(t.path, t.doc, [t.parent, t.child]),
             ]
+
+            message = t.error(selection)
+
             t.assertEqual(
-                t.error(selection),
+                message,
                 "'b' matches 2 open tasks: 'Branch task', 'Subtask below it'",
             )

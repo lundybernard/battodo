@@ -37,28 +37,27 @@ class GetViewTests(TestCase):
 
     def test_selection(t):
         get_view(t.conf, t.now)
-
         # The configuration is decoded once, by the selection.
         t.Selection.from_config.assert_called_once_with(t.conf, t.now)
 
     def test_text(t):
         rendered = get_view(t.conf, t.now)
-
         t.View.assert_called_once_with(t.selection)
         t.assertEqual(rendered, t.View.return_value.text)
 
     def test_json(t):
         t.conf.format = 'json'
 
-        t.assertEqual(get_view(t.conf, t.now), t.selection.json)
+        rendered = get_view(t.conf, t.now)
 
+        t.assertEqual(rendered, t.selection.json)
         # The selection serializes itself; nothing renders it.
         t.View.assert_not_called()
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view'])
-
-        t.assertEqual(get_view(conf, t.now), t.View.return_value.text)
+        rendered = get_view(conf, t.now)
+        t.assertEqual(rendered, t.View.return_value.text)
 
 
 class GetCompletedTests(TestCase):
@@ -77,31 +76,27 @@ class GetCompletedTests(TestCase):
 
     def test_digest(t):
         get_completed(t.conf, t.now)
-
         # The configuration is decoded once, by the digest.
         t.Digest.from_config.assert_called_once_with(t.conf, t.now)
 
     def test_text(t):
         rendered = get_completed(t.conf, t.now)
-
         t.DigestView.assert_called_once_with(t.digest)
         t.assertEqual(rendered, t.DigestView.return_value.text)
 
     def test_json(t):
         t.conf.format = 'json'
 
-        t.assertEqual(get_completed(t.conf, t.now), t.digest.json)
+        rendered = get_completed(t.conf, t.now)
 
+        t.assertEqual(rendered, t.digest.json)
         # The digest serializes itself; nothing renders it.
         t.DigestView.assert_not_called()
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view'])
-
-        t.assertEqual(
-            get_completed(conf, t.now),
-            t.DigestView.return_value.text,
-        )
+        rendered = get_completed(conf, t.now)
+        t.assertEqual(rendered, t.DigestView.return_value.text)
 
 
 class GetItemTests(TestCase):
@@ -190,9 +185,11 @@ class AddItemTests(TestCase):
         t.assertEqual(args[4], t.today)
 
     def test_result(t):
+        written = add_item(t.conf, t.now)
+
         # A P-less add ranks near 0 and will not show in a view, so
         # this is the only confirmation of the write.
-        t.assertEqual(add_item(t.conf, t.now), f'{t.entry}\n{t.path}')
+        t.assertEqual(written, f'{t.entry}\n{t.path}')
 
     def test_no_fields(t):
         conf = Mock(spec=['view', 'list', 'title'])
@@ -267,7 +264,8 @@ class UpdateItemTests(TestCase):
         t.assertEqual(kwargs['title'], 'A task title')
 
     def test_result(t):
-        t.assertEqual(update_item(t.conf, t.now), f'{t.entry}\n{t.path}')
+        written = update_item(t.conf, t.now)
+        t.assertEqual(written, f'{t.entry}\n{t.path}')
 
     def test_option_left_off(t):
         conf = Mock(spec=['view', 'selector', 'tags'])
@@ -331,8 +329,8 @@ class CompleteItemTests(TestCase):
 
     def test_nothing_logged(t):
         t.task.completed = []
-
-        t.assertEqual(complete_item(t.conf, t.now), 'checked off')
+        logged = complete_item(t.conf, t.now)
+        t.assertEqual(logged, 'checked off')
 
 
 class ScratchItemTests(TestCase):
@@ -376,8 +374,8 @@ class ScratchItemTests(TestCase):
 
     def test_nothing_logged(t):
         t.scratch.return_value = []
-
-        t.assertEqual(scratch_item(t.conf, t.now), 'dropped')
+        logged = scratch_item(t.conf, t.now)
+        t.assertEqual(logged, 'dropped')
 
 
 class BackfillItemsTests(TestCase):
@@ -416,5 +414,5 @@ class BackfillItemsTests(TestCase):
 
     def test_nothing_stamped(t):
         t.backfill_all.return_value = {}
-
-        t.assertEqual(backfill_items(t.conf, t.now), 'nothing to backfill')
+        stamped = backfill_items(t.conf, t.now)
+        t.assertEqual(stamped, 'nothing to backfill')

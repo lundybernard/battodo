@@ -44,9 +44,11 @@ class SubtaskEntryTests(TestCase):
             children=[deep],
         )
 
+        ret = subtask_entry(child)
+
         # The stored fields, and the children below it.
         t.assertEqual(
-            subtask_entry(child),
+            ret,
             {
                 'id': 'abc123',
                 'title': 'Chip the brush',
@@ -77,8 +79,11 @@ class SubtaskEntryTests(TestCase):
             title='Sweep',
             fields={},
         )
+
+        ret = subtask_entry(plain)
+
         t.assertEqual(
-            subtask_entry(plain),
+            ret,
             {
                 'id': None,
                 'title': 'Sweep',
@@ -144,8 +149,10 @@ class ItemDataTests(TestCase):
             ],
         )
 
+        ret = item_data(Path('/source-dir/a-list.md'), subject, TODAY)
+
         t.assertEqual(
-            item_data(Path('/source-dir/a-list.md'), subject, TODAY),
+            ret,
             {
                 'list': 'a-list',
                 'id': '9o71lx',
@@ -174,19 +181,19 @@ class ItemDataTests(TestCase):
         )
 
     def test_absent(t) -> None:
+        bare = TaskNode(
+            raw_index=0,
+            indent=0,
+            done=False,
+            title='Bare',
+            fields={},
+        )
+
+        ret = item_data(Path('/source-dir/a-list.md'), bare, TODAY)
+
         # An unfielded task reads as absent, not as zero.
         t.assertEqual(
-            item_data(
-                Path('/source-dir/a-list.md'),
-                TaskNode(
-                    raw_index=0,
-                    indent=0,
-                    done=False,
-                    title='Bare',
-                    fields={},
-                ),
-                TODAY,
-            ),
+            ret,
             {
                 'list': 'a-list',
                 'id': None,
@@ -226,9 +233,11 @@ class RenderItemTests(TestCase):
         }
 
     def test_rows(t) -> None:
+        ret = render_item(t.data)
+
         # One labelled row per value, aligned.
         t.assertEqual(
-            render_item(t.data),
+            ret,
             'Deck rebuild\n'
             '  list    a-list\n'
             '  id      9o71lx\n'
@@ -251,8 +260,11 @@ class RenderItemTests(TestCase):
             tags=[],
             added=None,
         )
+
+        ret = render_item(t.data)
+
         t.assertEqual(
-            render_item(t.data),
+            ret,
             'Deck rebuild\n  list  a-list\n  id    -\n  rank  10.0\n  P     4.0',
         )
 
@@ -279,8 +291,11 @@ class RenderItemTests(TestCase):
                 ],
             }
         ]
+
+        ret = render_item(t.data)
+
         t.assertEqual(
-            render_item(t.data).splitlines()[-3:],
+            ret.splitlines()[-3:],
             [
                 '  subtasks',
                 (
@@ -310,18 +325,15 @@ class BuildItemTests(TestCase):
 
     def test_selection(t) -> None:
         build_item(t.directory, 'deck', t.now)
-
         t.TaskSelection.assert_called_with(t.directory, 'deck')
 
     def test_data(t) -> None:
         build_item(t.directory, 'deck', t.now)
-
         # The local day of the clock decides the rank.
         t.item_data.assert_called_with(t.record.path, t.record.task, TODAY)
 
     def test_text(t) -> None:
         result = build_item(t.directory, 'deck', t.now)
-
         t.render_item.assert_called_with(t.item_data.return_value)
         t.assertEqual(result, t.render_item.return_value)
 

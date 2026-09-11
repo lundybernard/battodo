@@ -56,8 +56,9 @@ class DoneCommandTests(TestCase):
         return (t.source / name).read_text(encoding='utf-8')
 
     def test_done_on_a_given_date(t) -> None:
-        logged = t.run_ok('done', 'Overdue task', '--date', BACKDATE)
         entry = f'{BACKDATE} | work | DONE | Overdue task'
+
+        logged = t.run_ok('done', 'Overdue task', '--date', BACKDATE)
 
         with t.subTest('the entry carries the date the user gave'):
             t.assertIn(entry, logged)

@@ -102,13 +102,16 @@ class RenderedViewTests(TestCase):
 
             with t.subTest('five items, and a count of what is held back'):
                 out = View(Selection(source, NOW, show_all=False), 80).text
+
                 t.assertIn('Item 5', out)
                 t.assertNotIn('Item 6', out)
                 t.assertIn('… and 2 more', out)
 
             with t.subTest('an explicit top_n replaces the default'):
                 selection = Selection(source, NOW, show_all=False, top_n=2)
+
                 out = View(selection, 80).text
+
                 t.assertIn('Item 2', out)
                 t.assertNotIn('Item 3', out)
                 t.assertIn('… and 5 more', out)
@@ -142,6 +145,7 @@ class RenderedViewTests(TestCase):
                     with patch.dict(environ, {'COLUMNS': columns}):
                         selection = Selection(source, NOW, show_all=False)
                         probed = View(selection).text
+
                     t.assertEqual(probed, expected)
 
         with empty_source() as source:
@@ -165,7 +169,9 @@ class RenderedViewTests(TestCase):
                     '- [ ] A parked task [P:4]',
                     parked=True,
                 )
+
                 out = View(Selection(source, NOW, show_all=True), 80).text
+
                 t.assertNotIn('A parked task', out)
 
             with t.subTest('and the header names only what is open now'):

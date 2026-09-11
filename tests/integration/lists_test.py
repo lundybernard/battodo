@@ -48,16 +48,21 @@ class DiscoverListsTests(TestCase):
             parked=True,
         )
 
+        ret = discover_lists(t.source)
+
         # Every list is found, in name order.
-        t.assertEqual(discover_lists(t.source), [career, study])
+        t.assertEqual(ret, [career, study])
 
     def test_open_section(t) -> None:
         write(t.source, 'career', '- [ ] A visible task [P:2]')
         loose = t.source / 'notes.md'
         loose.write_text('# Notes\n\nNothing open here.\n', encoding='utf-8')
 
+        ret = discover_lists(t.source)
+
         # A file with no open section is not a list.
-        t.assertNotIn(loose, discover_lists(t.source))
+        t.assertNotIn(loose, ret)
 
     def test_absent(t) -> None:
-        t.assertEqual(discover_lists(t.source / 'absent'), [])
+        ret = discover_lists(t.source / 'absent')
+        t.assertEqual(ret, [])

@@ -48,5 +48,4 @@ class CliImportBoundaryTests(TestCase):
 
     def test_imports(t):
         source = Path(cli.__file__).read_text(encoding='utf-8')
-
         t.assertEqual(imported_modules(source) - ALLOWED, set())

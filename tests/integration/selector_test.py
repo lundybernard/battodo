@@ -78,23 +78,22 @@ class TaskSelectionTests(TestCase):
 
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, at any depth'):
+            ret = TaskSelection(t.dir, 'the').records
+
             t.assertEqual(
-                [
-                    record.task.title
-                    for record in TaskSelection(t.dir, 'the').records
-                ],
+                [record.task.title for record in ret],
                 ['Water the plants', 'Chip the brush', 'Sand the rails'],
             )
 
         with t.subTest('a checked task is not open'):
-            t.assertEqual(TaskSelection(t.dir, 'Pack tools').records, [])
+            ret = TaskSelection(t.dir, 'Pack tools').records
+            t.assertEqual(ret, [])
 
         with t.subTest('an id narrows out the titles that quote it'):
+            ret = TaskSelection(t.dir, '9o71lx').records
+
             t.assertEqual(
-                [
-                    record.task.title
-                    for record in TaskSelection(t.dir, '9o71lx').records
-                ],
+                [record.task.title for record in ret],
                 ['Deck rebuild'],
             )
 
@@ -105,32 +104,26 @@ class TaskSelectionTests(TestCase):
             t.assertEqual(record.path.name, 'work.md')
 
         with t.subTest('by part of a title, case-insensitively'):
-            t.assertEqual(
-                TaskSelection(t.dir, 'DECK re').record.task.title,
-                'Deck rebuild',
-            )
+            record = TaskSelection(t.dir, 'DECK re').record
+            t.assertEqual(record.task.title, 'Deck rebuild')
 
         with t.subTest('a subtask, which has no id to be found by'):
+            record = TaskSelection(t.dir, 'sand the').record
+
             t.assertEqual(
-                [
-                    task.title
-                    for task in TaskSelection(
-                        t.dir,
-                        'sand the',
-                    ).record.ancestry
-                ],
+                [task.title for task in record.ancestry],
                 ['Deck rebuild', 'Chip the brush', 'Sand the rails'],
             )
 
         with t.subTest('nothing open matches'):
-            t.assertEqual(
-                t.error('Pack tools'),
-                "no open task matches 'Pack tools'",
-            )
+            message = t.error('Pack tools')
+            t.assertEqual(message, "no open task matches 'Pack tools'")
 
         with t.subTest('more than one does'):
+            message = t.error('the')
+
             t.assertEqual(
-                t.error('the'),
+                message,
                 "'the' matches 3 open tasks: 'Water the plants', "
                 "'Chip the brush', 'Sand the rails'",
             )

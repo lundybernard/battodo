@@ -99,6 +99,7 @@ class MessageCatalogTests(TestCase):
             for text in displayed(parser)
             if text is not None
         }
+
         t.assertEqual(set(MESSAGES.values()) - shown, set())
 
 
@@ -109,6 +110,8 @@ class ArgparserTests(TestCase):
         t.parser = argparser()
 
     def test_format(t):
+        # TODO: --format cuts across the view and show commands. Move it
+        # up one level to serve both, or split the cases per command.
         with t.subTest('view holds text when the flag is not given'):
             args = t.parser.parse_args(['view'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
@@ -121,24 +124,33 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        with (
-            t.subTest('an unknown format exits with a usage error'),
-            redirect_stderr(StringIO()),
-            t.assertRaises(SystemExit),
-        ):
-            t.parser.parse_args(['view', '--format', 'xml'])
+        with t.subTest('an unknown format exits with a usage error'):
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
+                t.parser.parse_args(['view', '--format', 'xml'])
+
+            t.assertEqual(caught.exception.code, 2)
+            t.assertIn(
+                "error: argument --format: invalid choice: 'xml'",
+                stderr.getvalue(),
+            )
 
         with t.subTest('show holds the same two values'):
+            # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['show', 'brush pile'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
+
             args = t.parser.parse_args(
                 ['show', 'brush pile', '--format', 'json']
             )
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
         with t.subTest('and so does completed'):
+            # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['completed'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
+
             args = t.parser.parse_args(['completed', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
@@ -151,13 +163,22 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--top', '2'])
             t.assertEqual(getattr(args, 'battodo.view.top'), '2')
 
+        count_error = 'the item count must be a whole number of 1 or more'
         for value in ('0', '-1', 'five'):
-            with (
-                t.subTest(f'a top of {value} exits with a usage error'),
-                redirect_stderr(StringIO()),
-                t.assertRaises(SystemExit),
-            ):
-                t.parser.parse_args(['view', '--top', value])
+            with t.subTest(f'a top of {value} exits with a usage error'):
+                stderr = StringIO()
+
+                with (
+                    redirect_stderr(stderr),
+                    t.assertRaises(SystemExit) as caught,
+                ):
+                    t.parser.parse_args(['view', '--top', value])
+
+                t.assertEqual(caught.exception.code, 2)
+                t.assertIn(
+                    f'error: argument --top: {count_error}: {value}',
+                    stderr.getvalue(),
+                )
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
@@ -172,7 +193,8 @@ class ArgparserTests(TestCase):
         ]
         for argv, command in cases:
             with t.subTest(argv[0]):
-                t.assertIs(t.parser.parse_args(argv).func, command)
+                args = t.parser.parse_args(argv)
+                t.assertIs(args.func, command)
 
     def test_verbosity(t):
         cases = {
@@ -181,6 +203,7 @@ class ArgparserTests(TestCase):
             ('--verbose', 'view'): 'INFO',
             ('--debug', 'view'): 'DEBUG',
         }
+
         for argv, expected in cases.items():
             with t.subTest(' '.join(argv)):
                 args = t.parser.parse_args(list(argv))
@@ -213,12 +236,17 @@ class ArgparserTests(TestCase):
                 args = t.parser.parse_args(['completed', period])
                 t.assertEqual(getattr(args, 'battodo.period'), period)
 
-        with (
-            t.subTest('a period with no definition is a usage error'),
-            redirect_stderr(StringIO()),
-            t.assertRaises(SystemExit),
-        ):
-            t.parser.parse_args(['completed', 'fortnight'])
+        with t.subTest('a period with no definition is a usage error'):
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
+                t.parser.parse_args(['completed', 'fortnight'])
+
+            t.assertEqual(caught.exception.code, 2)
+            t.assertIn(
+                "error: argument period: invalid choice: 'fortnight'",
+                stderr.getvalue(),
+            )
 
     def test_config_selection(t):
         spellings = {
@@ -260,7 +288,9 @@ class BATCLITests(TestCase):
                 with patch(f'{SRC}.Commands.{func}', autospec=True) as m_cmd:
                     m_cmd.__name__ = func
                     ARGS = cmd.split()
+
                     BATCLI(ARGS)
+
                     args = argparser().parse_args(ARGS)
                     t.get_config.assert_called_with(
                         cli_args=args,
@@ -277,7 +307,9 @@ class BATCLITests(TestCase):
             '--debug',
             'view',
         ]
+
         BATCLI(args)
+
         set_log_level.assert_called_with(t.get_config.return_value)
         t.exit.assert_called_with(0)
 
@@ -588,7 +620,5 @@ class CommandsSetLogLevelTests(TestCase):
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
         conf = SimpleNamespace(loglevel=sentinel.loglevel)
-
         Commands.set_log_level(conf)
-
         log.setLevel.assert_called_once_with(sentinel.loglevel)

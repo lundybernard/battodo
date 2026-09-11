@@ -67,18 +67,23 @@ class ItemReadTests(TestCase):
 
     def test_build_item(t) -> None:
         with t.subTest('every stored field, then the children'):
-            t.assertEqual(build_item(t.source, '9o71lx', NOW), DECK_TEXT)
+            ret = build_item(t.source, '9o71lx', NOW)
+            t.assertEqual(ret, DECK_TEXT)
 
         with t.subTest('part of a title selects the same task'):
-            t.assertEqual(build_item(t.source, 'deck', NOW), DECK_TEXT)
+            ret = build_item(t.source, 'deck', NOW)
+            t.assertEqual(ret, DECK_TEXT)
 
         with t.subTest('absent fields and a childless task are left out'):
-            t.assertEqual(build_item(t.source, 'Undated', NOW), UNDATED_TEXT)
+            ret = build_item(t.source, 'Undated', NOW)
+            t.assertEqual(ret, UNDATED_TEXT)
 
     def test_build_item_json(t) -> None:
         with t.subTest('the item, its fields, and its children'):
+            ret = build_item_json(t.source, '9o71lx', NOW)
+
             t.assertEqual(
-                loads(build_item_json(t.source, '9o71lx', NOW)),
+                loads(ret),
                 {
                     'list': 'work',
                     'id': '9o71lx',

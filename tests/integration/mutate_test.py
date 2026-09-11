@@ -97,6 +97,7 @@ class UpdateTaskTests(TestCase):
 
     def test_journal(t) -> None:
         update_task(t.source, '9o71lx', {'P': '5'}, TODAY, title='Renamed')
+
         events = Journal(t.source).events
 
         with t.subTest('one event, on the task stream'):
@@ -186,8 +187,9 @@ class UpdateTaskTests(TestCase):
                 update_task(t.source, selector, fields, TODAY)
 
         with t.subTest('a rejected update writes nothing at all'):
+            events = Journal(t.source).events
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
-            t.assertEqual(Journal(t.source).events, [])
+            t.assertEqual(events, [])
 
 
 class AddSubtaskTests(TestCase):
@@ -325,8 +327,9 @@ class AddSubtaskTests(TestCase):
             add_subtask(t.source, 'work', 'Sweep up', 'X', {})
 
         with t.subTest('a rejected add writes nothing at all'):
+            events = Journal(t.source).events
             t.assertEqual(t.path.read_text(encoding='utf-8'), before)
-            t.assertEqual(Journal(t.source).events, [])
+            t.assertEqual(events, [])
 
 
 LIST = """# Work
@@ -394,6 +397,7 @@ class BackfillFileTests(TestCase):
 
     def test_journal(t) -> None:
         backfill_file(t.path, TODAY, t.journal)
+
         events = t.journal.events
 
         with t.subTest('one event per stamped task'):
@@ -422,14 +426,20 @@ class BackfillFileTests(TestCase):
     def test_runs_once(t) -> None:
         backfill_file(t.path, TODAY, t.journal)
         first = t.path.read_text()
-        t.assertEqual(backfill_file(t.path, TODAY, t.journal), [])
+
+        ret = backfill_file(t.path, TODAY, t.journal)
+
+        t.assertEqual(ret, [])
         t.assertEqual(t.path.read_text(), first)
 
     def test_unchanged_file(t) -> None:
         path = t.dir / 'empty.md'
         path.write_text('## Open\n\n- [x] Done [P:1]\n')
         before = path.read_text()
-        t.assertEqual(backfill_file(path, TODAY, t.journal), [])
+
+        ret = backfill_file(path, TODAY, t.journal)
+
+        t.assertEqual(ret, [])
         t.assertEqual(path.read_text(), before)
 
 
@@ -461,13 +471,15 @@ class BackfillAllTests(TestCase):
     def test_journal(t) -> None:
         backfill_all(t.dir, TODAY)
 
+        events = Journal(t.dir).events
+
         # Written to the source directory.
-        t.assertEqual(len(Journal(t.dir).events), 2)
+        t.assertEqual(len(events), 2)
 
     def test_runs_once(t) -> None:
         backfill_all(t.dir, TODAY)
-
-        t.assertEqual(backfill_all(t.dir, TODAY), {})
+        ret = backfill_all(t.dir, TODAY)
+        t.assertEqual(ret, {})
 
 
 # Shapes taken from the live lists: legacy inflated P, retired BUMPED,
@@ -577,6 +589,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Chip the brush pile', TODAY)
+
             text = (source / 'chores.md').read_text()
             t.assertNotIn('Chip the brush pile', text)
             t.assertIn('- [ ] Water the plants', text)
@@ -586,6 +599,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Casablanca', TODAY)
+
             kept = [
                 line
                 for index, line in enumerate(NESTED_WORK.split('\n'))
@@ -599,6 +613,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Buy lumber', TODAY)
+
             text = (source / 'chores.md').read_text()
             t.assertNotIn('Build workbench', text)
             t.assertNotIn('Buy lumber', text)
@@ -609,6 +624,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Power supply', TODAY)
+
             lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Power supply', lines)
             t.assertRegex(
@@ -627,6 +643,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Ice packs', TODAY)
+
             lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Ice packs', lines)
             t.assertIn('    - [ ] Water bottles', lines)
@@ -640,6 +657,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Pay credit cards', TODAY)
+
             t.assertEqual(
                 task_line(source, 'chores.md', 'Pay credit cards'),
                 '- [ ] Pay credit cards [P:83] [BUMPED:2026-08-08] '
@@ -651,8 +669,10 @@ class CompleteTests(TestCase):
             t.subTest('a parent completed early takes its children along'),
             todo_lists() as source,
         ):
+            ret = complete(source, 'Trip prep', TODAY)
+
             t.assertEqual(
-                complete(source, 'Trip prep', TODAY),
+                ret,
                 ['2026-08-08 | work | DONE | Trip prep [P:12] [LOE:8]'],
             )
             text = (source / 'work.md').read_text()
@@ -666,6 +686,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, "Captain's log", TODAY)
+
             text = (source / 'work.md').read_text()
             t.assertIn('[DUE:2026-08-14] [REPEAT:weekly:fri]', text)
             t.assertIn('      Scan GitHub activity, then draft', text)
@@ -676,8 +697,10 @@ class CompleteTests(TestCase):
             t.subTest('date, category, status, title, and fields'),
             todo_lists() as source,
         ):
+            ret = complete(source, 'Chip the brush pile', TODAY)
+
             t.assertEqual(
-                complete(source, 'Chip the brush pile', TODAY),
+                ret,
                 [
                     (
                         '2026-08-08 | chores | DONE | Chip the brush pile '
@@ -696,6 +719,7 @@ class CompleteTests(TestCase):
                 [],
             )
             complete(source, 'Pay credit cards', TODAY)
+
             t.assertEqual(
                 logged(source),
                 [
@@ -712,6 +736,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Buy lumber', TODAY)
+
             t.assertEqual(
                 logged(source),
                 [
@@ -730,8 +755,10 @@ class CompleteTests(TestCase):
             t.subTest('checklist items are not logged, their parent is'),
             todo_lists() as source,
         ):
+            ret = complete(source, 'Power supply', TODAY)
+
             t.assertEqual(
-                complete(source, 'Power supply', TODAY),
+                ret,
                 [
                     (
                         '2026-08-08 | work | DONE | Trip prep > '
@@ -746,6 +773,7 @@ class CompleteTests(TestCase):
         ):
             (source / 'completed.md').write_text(COMPLETED.rstrip('\n'))
             complete(source, 'Chip the brush pile', TODAY)
+
             text = (source / 'completed.md').read_text()
             t.assertTrue(text.startswith(COMPLETED))
             t.assertTrue(text.endswith('[TAGS:yard]\n'))
@@ -756,6 +784,7 @@ class CompleteTests(TestCase):
         ):
             (source / 'completed.md').unlink()
             complete(source, 'Chip the brush pile', TODAY)
+
             t.assertTrue(
                 (source / 'completed.md')
                 .read_text()
@@ -766,7 +795,9 @@ class CompleteTests(TestCase):
         with todo_lists() as source:
             with t.subTest('one TaskCompleted per completion, deepest first'):
                 complete(source, 'Buy lumber', TODAY)
+
                 events = Journal(source).events
+
                 t.assertEqual(
                     [e['type'] for e in events],
                     ['TaskCompleted'] * 2,
@@ -782,8 +813,10 @@ class CompleteTests(TestCase):
                 )
 
             with t.subTest('delta and pre-state snapshot'):
+                events = Journal(source).events
+
                 t.assertEqual(
-                    Journal(source).events[0]['payload'],
+                    events[0]['payload'],
                     {
                         'delta': {'done': [False, True]},
                         'snapshot': {
@@ -800,8 +833,11 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Pay credit cards', TODAY)
+
+            events = Journal(source).events
+
             t.assertEqual(
-                Journal(source).events[0]['payload']['delta'],
+                events[0]['payload']['delta'],
                 {'done': [False, True], 'DUE': ['2026-06-24', '2026-08-23']},
             )
 
@@ -810,6 +846,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             complete(source, 'Power supply', TODAY)
+
             events = Journal(source).events
             streams = {e['stream_id'] for e in events}
             t.assertEqual(len(streams), 1)
@@ -868,9 +905,12 @@ class CompleteTests(TestCase):
             ):
                 with t.assertRaises(RepeatError):
                     complete(source, 'Water the plants', TODAY)
+
+                events = Journal(source).events
+
                 t.assertEqual((source / 'chores.md').read_text(), before)
                 t.assertEqual((source / 'completed.md').read_text(), COMPLETED)
-                t.assertEqual(Journal(source).events, [])
+                t.assertEqual(events, [])
 
 
 class ScratchTests(TestCase):
@@ -882,6 +922,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Casablanca', TODAY)
+
             kept = [
                 line
                 for index, line in enumerate(NESTED_WORK.split('\n'))
@@ -894,6 +935,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Book hotel', TODAY)
+
             text = (source / 'work.md').read_text()
             t.assertNotIn('Book hotel', text)
             t.assertIn(
@@ -908,6 +950,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Ice packs', TODAY)
+
             text = (source / 'work.md').read_text()
             t.assertNotIn('Ice packs', text)
             t.assertIn('    - [ ] Water bottles', text)
@@ -921,6 +964,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Pay credit cards', TODAY)
+
             t.assertNotIn(
                 'Pay credit cards',
                 (source / 'chores.md').read_text(),
@@ -931,8 +975,10 @@ class ScratchTests(TestCase):
             t.subTest('one SCRATCHED entry, with ancestry and fields'),
             todo_lists() as source,
         ):
+            ret = scratch(source, 'Book hotel', TODAY)
+
             t.assertEqual(
-                scratch(source, 'Book hotel', TODAY),
+                ret,
                 [
                     (
                         '2026-08-08 | work | SCRATCHED | Trip prep > '
@@ -948,6 +994,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Casablanca', TODAY)
+
             events = Journal(source).events
             t.assertEqual(len(events), 1)
             t.assertEqual(events[0]['type'], 'TaskScratched')
@@ -966,6 +1013,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Book hotel', TODAY)
+
             payload = Journal(source).events[0]['payload']
             t.assertEqual(payload['ancestry'], 'Trip prep > Book hotel')
             t.assertEqual(
@@ -982,6 +1030,7 @@ class ScratchTests(TestCase):
             todo_lists() as source,
         ):
             scratch(source, 'Ice packs', TODAY)
+
             stream = Journal(source).events[0]['stream_id']
             t.assertIn(
                 stream.removeprefix('task/'),
@@ -1099,6 +1148,7 @@ class AddTaskTests(TestCase):
                 '<!-- battodo:parked -->\n\n## Open\n\n- [ ] B [P:1]\n'
             )
             path, line = add_task(source, 'backlog', 'Someday', {}, TODAY)
+
             t.assertIn(line, path.read_text())
 
     def test_journal(t) -> None:
@@ -1200,5 +1250,6 @@ class AddTaskTests(TestCase):
                     add_task(source, 'chores', 'X', fields, TODAY)
 
             with t.subTest('a rejected add writes nothing at all'):
+                events = Journal(source).events
                 t.assertEqual((source / 'chores.md').read_text(), CHORES)
-                t.assertEqual(Journal(source).events, [])
+                t.assertEqual(events, [])

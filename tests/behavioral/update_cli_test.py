@@ -57,6 +57,7 @@ class UpdateCommandTests(TestCase):
 
     def test_update(t) -> None:
         before = t.show(SELECTOR)
+
         with t.subTest('the item starts with no id of its own'):
             t.assertIsNone(before['id'])
 
@@ -90,8 +91,9 @@ class UpdateCommandTests(TestCase):
             t.assertEqual(after['subtasks'], before['subtasks'])
 
         with t.subTest('the update injects an id, so a read by id works'):
+            by_id = t.show(after['id'])
             t.assertIsNotNone(after['id'])
-            t.assertEqual(t.show(after['id']), after)
+            t.assertEqual(by_id, after)
 
     def test_update_rejected(t) -> None:
         """A rejected update reports on stderr and writes nothing."""
