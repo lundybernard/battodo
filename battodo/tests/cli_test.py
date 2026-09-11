@@ -110,6 +110,8 @@ class ArgparserTests(TestCase):
         t.parser = argparser()
 
     def test_format(t):
+        # TODO: --format cuts across the view and show commands. Move it
+        # up one level to serve both, or split the cases per command.
         with t.subTest('view holds text when the flag is not given'):
             args = t.parser.parse_args(['view'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')

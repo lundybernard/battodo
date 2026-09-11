@@ -190,6 +190,8 @@ class JournalTests(TestCase):
             t.assertEqual(event['recorded_at'], STAMP)
 
         with t.subTest('a write drops the text and events it invalidates'):
+            # TODO: a multi-cycle case. Issue #63 covers the Journal.append
+            # refactor that splits it.
             t.file.exists.return_value = True
             t.file.read_text.return_value = '{"stream_id": "task/aa"}\n'
 
