@@ -319,7 +319,10 @@ class BATCLITests(TestCase):
         parser = argparser()
         parser.print_help = Mock(wraps=parser.print_help)
 
-        with patch(f'{SRC}.argparser', autospec=True, return_value=parser):
+        with (
+            patch(f'{SRC}.argparser', autospec=True, return_value=parser),
+            redirect_stdout(StringIO()),
+        ):
             BATCLI([])
 
         parser.print_help.assert_called_with()
