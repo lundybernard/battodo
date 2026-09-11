@@ -122,12 +122,14 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        with (
-            t.subTest('an unknown format exits with a usage error'),
-            redirect_stderr(StringIO()),
-            t.assertRaises(SystemExit),
-        ):
-            t.parser.parse_args(['view', '--format', 'xml'])
+        with t.subTest('an unknown format exits with a usage error'):
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
+                t.parser.parse_args(['view', '--format', 'xml'])
+
+            t.assertEqual(caught.exception.code, 2)
+            t.assertIn('usage:', stderr.getvalue())
 
         with t.subTest('show holds the same two values'):
             # Two cycles: each one checks one of the two accepted values.
@@ -220,12 +222,14 @@ class ArgparserTests(TestCase):
                 args = t.parser.parse_args(['completed', period])
                 t.assertEqual(getattr(args, 'battodo.period'), period)
 
-        with (
-            t.subTest('a period with no definition is a usage error'),
-            redirect_stderr(StringIO()),
-            t.assertRaises(SystemExit),
-        ):
-            t.parser.parse_args(['completed', 'fortnight'])
+        with t.subTest('a period with no definition is a usage error'):
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
+                t.parser.parse_args(['completed', 'fortnight'])
+
+            t.assertEqual(caught.exception.code, 2)
+            t.assertIn('usage:', stderr.getvalue())
 
     def test_config_selection(t):
         spellings = {
