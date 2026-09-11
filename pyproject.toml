@@ -243,7 +243,9 @@ do_not_mutate = [
     "*/messages.py",
 ]
 # no:cacheprovider — a stale .pytest_cache across mutants is a lie.
-pytest_add_cli_args = ["-p", "no:cacheprovider"]
+# The property suite is not part of the oracle, and the mutation env
+# holds no hypothesis to collect it with.
+pytest_add_cli_args = ["-p", "no:cacheprovider", "--ignore=tests/property"]
 
 # Every tool cache in this project lives under .cache/.
 [tool.pytest.ini_options]
