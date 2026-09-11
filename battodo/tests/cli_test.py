@@ -161,12 +161,17 @@ class ArgparserTests(TestCase):
             t.assertEqual(getattr(args, 'battodo.view.top'), '2')
 
         for value in ('0', '-1', 'five'):
-            with (
-                t.subTest(f'a top of {value} exits with a usage error'),
-                redirect_stderr(StringIO()),
-                t.assertRaises(SystemExit),
-            ):
-                t.parser.parse_args(['view', '--top', value])
+            with t.subTest(f'a top of {value} exits with a usage error'):
+                stderr = StringIO()
+
+                with (
+                    redirect_stderr(stderr),
+                    t.assertRaises(SystemExit) as caught,
+                ):
+                    t.parser.parse_args(['view', '--top', value])
+
+                t.assertEqual(caught.exception.code, 2)
+                t.assertIn('usage:', stderr.getvalue())
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
