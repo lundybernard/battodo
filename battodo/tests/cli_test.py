@@ -131,7 +131,10 @@ class ArgparserTests(TestCase):
                 t.parser.parse_args(['view', '--format', 'xml'])
 
             t.assertEqual(caught.exception.code, 2)
-            t.assertIn('usage:', stderr.getvalue())
+            t.assertIn(
+                "error: argument --format: invalid choice: 'xml'",
+                stderr.getvalue(),
+            )
 
         with t.subTest('show holds the same two values'):
             # Two cycles: each one checks one of the two accepted values.
@@ -160,6 +163,7 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--top', '2'])
             t.assertEqual(getattr(args, 'battodo.view.top'), '2')
 
+        count_error = 'the item count must be a whole number of 1 or more'
         for value in ('0', '-1', 'five'):
             with t.subTest(f'a top of {value} exits with a usage error'):
                 stderr = StringIO()
@@ -171,7 +175,10 @@ class ArgparserTests(TestCase):
                     t.parser.parse_args(['view', '--top', value])
 
                 t.assertEqual(caught.exception.code, 2)
-                t.assertIn('usage:', stderr.getvalue())
+                t.assertIn(
+                    f'error: argument --top: {count_error}: {value}',
+                    stderr.getvalue(),
+                )
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
@@ -236,7 +243,10 @@ class ArgparserTests(TestCase):
                 t.parser.parse_args(['completed', 'fortnight'])
 
             t.assertEqual(caught.exception.code, 2)
-            t.assertIn('usage:', stderr.getvalue())
+            t.assertIn(
+                "error: argument period: invalid choice: 'fortnight'",
+                stderr.getvalue(),
+            )
 
     def test_config_selection(t):
         spellings = {
