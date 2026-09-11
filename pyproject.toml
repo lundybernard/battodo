@@ -245,6 +245,10 @@ do_not_mutate = [
 # no:cacheprovider — a stale .pytest_cache across mutants is a lie.
 pytest_add_cli_args = ["-p", "no:cacheprovider"]
 
+# Every tool cache in this project lives under .cache/.
+[tool.pytest.ini_options]
+cache_dir = ".cache/pytest"
+
 [tool.mypy]
 cache_dir = ".cache/mypy"
 # strict = true is the goal; the imported template code needs a full
