@@ -109,9 +109,12 @@ lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
 # are argparse help-string mutants no test can reasonably assert on,
 # so there is no honest number to gate on until they are triaged.
 mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
+property = { depends-on = [{ task = "_property", environment = "test" }] }
+fuz = { depends-on = [{ task = "_property", environment = "test" }] }
 
 [tool.pixi.feature.test.dependencies]
 coverage = "*"
+hypothesis = ">=6.167.1,<7"
 
 # Stdlib unittest, no pytest. Isolation tests live beside the code
 # (battodo/**/tests) and carry the 100% coverage gate. The top-level
@@ -123,6 +126,7 @@ _test = "python -m unittest discover --top-level-directory . --start-directory b
 _unit = "coverage run --source=battodo -m unittest discover --top-level-directory . --start-directory battodo --pattern '*_test.py' && coverage report --fail-under=100"
 _integration = "python -m unittest discover --top-level-directory tests --start-directory tests/integration --pattern '*_test.py'"
 _behavioral = "python -m unittest discover --top-level-directory tests --start-directory tests/behavioral --pattern '*_test.py'"
+_property = "python -m unittest discover --top-level-directory tests --start-directory tests/property --pattern '*_test.py'"
 
 [tool.pixi.feature.lint.dependencies]
 ruff = "*"
