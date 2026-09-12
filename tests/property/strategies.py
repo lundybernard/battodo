@@ -51,3 +51,45 @@ def task_lines(draw: st.DrawFn, max_depth: int = 2) -> str:
 def document(lines: list[str]) -> str:
     """The lines as one list file with a single Open section."""
     return f'{OPEN_HEADING}\n\n' + '\n'.join(lines) + '\n'
+
+
+# A comment holds one line of title text, so nothing ends it early.
+comments = titles.map(lambda text: f'<!-- {text} -->')
+
+# A note is indented text, never a heading and never a comment.
+notes = st.builds(
+    lambda indent, text: f'{" " * indent}{text}',
+    st.integers(min_value=2, max_value=6),
+    titles.filter(lambda text: not text.strip().startswith(('#', '<!--'))),
+)
+
+
+# A note belongs to the task line above it, so the two travel together.
+@st.composite
+def entries(draw: st.DrawFn) -> tuple[str, list[str]]:
+    """One task line and its note lines."""
+    return draw(task_lines()), draw(st.lists(notes, max_size=2))
+
+
+# A list file titles itself, opens the section, and closes it with Done.
+@st.composite
+def documents(draw: st.DrawFn) -> tuple[str, list[tuple[str, list[str]]]]:
+    """A whole list file and the entries of its open section."""
+    blanks = st.lists(st.just(''), max_size=2)
+    lines = [f'# {draw(titles)}']
+    lines.extend(draw(st.lists(comments, max_size=2)))
+    lines.extend(draw(blanks))
+    lines.append(OPEN_HEADING)
+    lines.extend(draw(blanks))
+
+    open_entries = draw(st.lists(entries(), max_size=6))
+    for task_line, note_lines in open_entries:
+        lines.append(task_line)
+        lines.extend(note_lines)
+        # Blank lines mean nothing, so a run may sit after any entry.
+        lines.extend(draw(blanks))
+
+    if draw(st.booleans()):
+        lines.append('## Done')
+        lines.extend(draw(st.lists(task_lines(), max_size=3)))
+    return '\n'.join(lines) + '\n', open_entries

@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument
 
-from .strategies import document, task_lines
+from .strategies import document, documents, task_lines
 
 
 def walk(tasks: list[TaskNode]) -> list[TaskNode]:
@@ -51,3 +51,18 @@ class TodoDocumentTests(TestCase):
         ]
 
         t.assertEqual(len(ret), len(lines))
+
+    @settings(max_examples=200)
+    @given(documents())
+    def test_open_section_reads_back(
+        t, case: tuple[str, list[tuple[str, list[str]]]]
+    ) -> None:
+        source, expected = case
+        doc = TodoDocument(source)
+
+        ret = [
+            (task.raw, [doc.lines[index] for index in task.note_indices])
+            for task in walk(doc.tasks)
+        ]
+
+        t.assertEqual(ret, expected)
