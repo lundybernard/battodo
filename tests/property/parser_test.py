@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument
 
-from .strategies import document, documents, task_lines
+from .strategies import Node, document, documents, task_lines
 
 
 def walk(tasks: list[TaskNode]) -> list[TaskNode]:
@@ -22,6 +22,19 @@ def walk(tasks: list[TaskNode]) -> list[TaskNode]:
         found.append(task)
         found.extend(walk(task.children))
     return found
+
+
+def shape(tasks: list[TaskNode], lines: list[str]) -> list[Node]:
+    """The task tree as the node shape the strategies draw."""
+    return [
+        Node(
+            task.raw,
+            [lines[index] for index in task.note_indices],
+            shape(task.children, lines),
+            task.is_subtask,
+        )
+        for task in tasks
+    ]
 
 
 class TodoDocumentTests(TestCase):
@@ -54,15 +67,10 @@ class TodoDocumentTests(TestCase):
 
     @settings(max_examples=200)
     @given(documents())
-    def test_open_section_reads_back(
-        t, case: tuple[str, list[tuple[str, list[str]]]]
-    ) -> None:
+    def test_open_section_reads_back(t, case: tuple[str, list[Node]]) -> None:
         source, expected = case
         doc = TodoDocument(source)
 
-        ret = [
-            (task.raw, [doc.lines[index] for index in task.note_indices])
-            for task in walk(doc.tasks)
-        ]
+        ret = shape(doc.tasks, doc.lines)
 
         t.assertEqual(ret, expected)
