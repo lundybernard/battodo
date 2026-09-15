@@ -104,12 +104,16 @@ typecheck = { depends-on = [
     { task = "_typecheck", environment = "typecheck" },
 ] }
 lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
-# Deliberately outside the `tests` aggregator. Runtime is not the
-# reason (~40s on 8 cores); the score is. Two thirds of the survivors
-# are argparse help-string mutants no test can reasonably assert on,
-# so there is no honest number to gate on until they are triaged.
+# One class of gate: both stay outside the `tests` aggregator and run
+# at the PR tip, not in the fast loop.
+# mutate: runtime is not the reason (~40s on 8 cores); the score is.
+# Two thirds of the survivors are argparse help-string mutants no test
+# can reasonably assert on, so there is no honest number to gate on
+# until they are triaged.
 mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
-property = { depends-on = [{ task = "_property", environment = "test" }] }
+# fuz: the property suite searches with random inputs. The
+# HYPOTHESIS_PROFILE variable picks the budget: dev runs 100 examples,
+# ci runs 1000. See tests/property/__init__.py.
 fuz = { depends-on = [{ task = "_property", environment = "test" }] }
 
 [tool.pixi.feature.test.dependencies]
