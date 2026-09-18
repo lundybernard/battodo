@@ -55,16 +55,10 @@ class TaskNodeTests(TestCase):
             ret = t.tk.loe
             t.assertIsNone(ret)
 
-        with t.subTest('#51: a value that is not an integer raises'):
+        with t.subTest('a value that is not an integer reads as absent'):
             t.tk.fields = {'LOE': '?'}
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.tk.loe
-
-            t.assertEqual(
-                str(caught.exception),
-                "invalid literal for int() with base 10: '?'",
-            )
+            ret = t.tk.loe
+            t.assertIsNone(ret)
 
     def test_due(t) -> None:
         with t.subTest('the field reads back as it stands'):

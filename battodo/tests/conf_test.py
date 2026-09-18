@@ -16,7 +16,7 @@ SRC = 'battodo.conf'
 class GetConfigTests(TestCase):
     """Unit tests for battodo.conf.get_config."""
 
-    def setUp(t):
+    def setUp(t) -> None:
         patches = [
             'ConfigFile',
         ]
