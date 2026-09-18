@@ -21,6 +21,9 @@ directory to load it.
 - Rank is computed at read time from priority, age and due date.
   Nothing is written to keep a rank current, and there is no `bump`
   command.
+- Name a task to a human by its title. The `[ID:]` value is a random
+  key for commands and for an agent's own notes; it means nothing to
+  the reader. Shorten a long title; add the list name when it helps.
 
 ## Read
 
