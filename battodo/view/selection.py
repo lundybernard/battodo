@@ -107,6 +107,83 @@ def task_entry(task: TaskNode, today: date) -> dict[str, object]:
     }
 
 
+class Row:
+    """One task as a view carries it: a record, and a line of a table.
+
+    The two forms differ in what they say -- the record keeps every
+    stored field verbatim, while the table labels the due date and
+    marks the open children -- but both derive from the same rank,
+    priority and children.
+    """
+
+    def __init__(self, task: TaskNode, today: date) -> None:
+        self.task = task
+        self.today = today
+
+    @cached_property
+    def key(self) -> tuple[float, str, str]:
+        """Rank descending, then nearest due, undated last, then title."""
+        raise NotImplementedError
+
+    @cached_property
+    def rank(self) -> float:
+        """The task's rank on the day the view was asked for."""
+        raise NotImplementedError
+
+    @cached_property
+    def data(self) -> dict[str, object]:
+        """One task as `Selection.json` records it.
+
+        Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
+        `rank` is rounded for display and must not be used to re-sort;
+        the array order is the rank order.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def priority(self) -> float:
+        """The task's stored priority, as a multiplier."""
+        raise NotImplementedError
+
+    @cached_property
+    def subtasks(self) -> int:
+        """How many of the task's children are still open."""
+        raise NotImplementedError
+
+    @cached_property
+    def children(self) -> list[TaskNode]:
+        """The task's incomplete children: subtasks and checklist items."""
+        raise NotImplementedError
+
+    @cached_property
+    def cells(self) -> tuple[str, ...]:
+        """The five values a table shows, in the order its columns run."""
+        raise NotImplementedError
+
+    @cached_property
+    def badge(self) -> str:
+        """The outstanding-children mark, if the task has any.
+
+        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
+        the count needs no plural.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def due_label(self) -> str:
+        """How the due date reads in a table: a label, or the date.
+
+        Named apart from the stored `due` field, which the record
+        carries verbatim.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def parsed_due(self) -> date | None:
+        """The stored due date as a date, or None if it cannot be read."""
+        raise NotImplementedError
+
+
 class TodoList:
     """One discovered list file: where it sorts, and what is open in it."""
 
@@ -118,6 +195,16 @@ class TodoList:
     @cached_property
     def text(self) -> str:
         return self.path.read_text()
+
+    @cached_property
+    def document(self) -> TodoDocument:
+        """The list file, parsed."""
+        raise NotImplementedError
+
+    @cached_property
+    def visible(self) -> list[Row]:
+        """A row per open top-level task, future recurrences aside."""
+        raise NotImplementedError
 
     @cached_property
     def parked(self) -> bool:
@@ -222,6 +309,21 @@ class Selection:
     @cached_property
     def active(self) -> set[str]:
         return active_categories(self.now)
+
+    @cached_property
+    def weekday(self) -> bool:
+        """Whether the clock falls on a working day of the week."""
+        raise NotImplementedError
+
+    @cached_property
+    def day(self) -> int:
+        """Which day of the week the clock falls on. Monday is 0."""
+        raise NotImplementedError
+
+    @cached_property
+    def hour(self) -> int:
+        """The hour of the day the clock reads."""
+        raise NotImplementedError
 
     @cached_property
     def lists(self) -> list[TodoList]:
