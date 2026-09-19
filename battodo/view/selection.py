@@ -1,8 +1,9 @@
 """Decide what a view shows: which lists, which tasks, in what order.
 
-Kept apart from the table rendering so that layout has no say in what
-is chosen. The machine-readable form (R2) lives here as
-`Selection.json`: it is the selection serialized, not a rendering of it.
+Layout has no say in what is chosen: the table module reads this one,
+and never the other way about. The machine-readable form (R2) lives
+here as `Selection.json`, and a row carries the table's cells too,
+because both forms come out of the same rank, priority and children.
 
 A view holds open items only, and suppresses future-dated *recurring*
 items. SCHEMA.md's prose is stricter -- it would also hide future-dated
