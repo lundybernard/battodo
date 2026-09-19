@@ -11,6 +11,25 @@ lives in CLAUDE.local.md (gitignored).
 - Work happens on feature branches, never directly on main; branches get
   manual review before merge.
 
+## Configuration values are strings
+
+Every battodo configuration value is a string: in the TOML file, in the
+environment, and on the command line. The consumer decodes what it
+needs. This is a project design rule rather than operating procedure, so
+it belongs in the code and in ADRs — recorded in the 2026-09-19
+amendment to docs/decisions/0007-toml-config-file.md.
+
+**Why:** an environment variable holds a string only. One type from
+every source keeps each decoder to a single case, where a typed file
+value would force every decoder to handle `0` as well as `"0"`.
+
+**How to apply:** a new config field is a `str` dataclass field with a
+`str` default, decoded by the consumer that reads it. Keep each
+decoder's input a `str`; widening one to accept a non-string is the
+change this rule forbids. A typed TOML value is input outside the
+contract, so the exit-1 error it produces is a config error to fix in
+the file, not a decoder bug.
+
 ## Feature-cycle-end evaluation (modified engineering cycle)
 
 When a feature cycle completes, before moving on, evaluate the finished
