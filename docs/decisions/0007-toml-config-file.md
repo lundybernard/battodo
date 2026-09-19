@@ -70,3 +70,26 @@ found there is upstream signal.
   reasoning; this ADR does not reopen it.
 - **Config file location and schema are still open** — this decision
   fixes the format only.
+
+## Amendment — 2026-09-19
+
+The typed-values argument is withdrawn: Option 3's con "every value
+arrives as a string — the layered config would have to hand-parse its
+own types", and the Rationale sentence about INI's string-only values
+pushing type handling back into battodo. Neither discriminates between
+the formats: battodo decodes its own types from TOML too.
+
+Every battodo configuration value is a string, in the config file as
+well as in the environment and on the command line. A user writes
+`top = "3"`, and the consumer decodes what it needs. An environment
+variable holds a string only, so a typed file value would give one
+option two types and force a special case in every decoder. One type
+from every source removes that case.
+
+Schema-driven type casting in the config layer is a candidate batconf
+feature after 1.0. Until it lands, no decoder is widened to accept a
+non-string.
+
+The decision stands on its other reasons: the conditional dependency
+cost, and the dialect the repo already speaks. INI's remaining con,
+weak nesting, still holds.
