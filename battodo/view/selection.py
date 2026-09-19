@@ -123,12 +123,16 @@ class Row:
     @cached_property
     def key(self) -> tuple[float, str, str]:
         """Rank descending, then nearest due, undated last, then title."""
-        raise NotImplementedError
+        return (
+            -self.rank,
+            self.task.due or NO_DUE_SORTS_LAST,
+            self.task.title,
+        )
 
     @cached_property
     def rank(self) -> float:
         """The task's rank on the day the view was asked for."""
-        raise NotImplementedError
+        return rank(self.task, self.today)
 
     @cached_property
     def data(self) -> dict[str, object]:
@@ -138,27 +142,44 @@ class Row:
         `rank` is rounded for display and must not be used to re-sort;
         the array order is the rank order.
         """
-        raise NotImplementedError
+        return {
+            'id': self.task.task_id,
+            'title': self.task.title,
+            'rank': round(self.rank, RANK_PLACES),
+            'priority': self.priority,
+            'loe': self.task.loe,
+            'due': self.task.due,
+            'added': self.task.added,
+            'repeat': self.task.repeat,
+            'tags': self.task.tags,
+            'subtasks': self.subtasks,
+        }
 
     @cached_property
     def priority(self) -> float:
         """The task's stored priority, as a multiplier."""
-        raise NotImplementedError
+        return multiplier(self.task)
 
     @cached_property
     def subtasks(self) -> int:
         """How many of the task's children are still open."""
-        raise NotImplementedError
+        return len(self.children)
 
     @cached_property
     def children(self) -> list[TaskNode]:
         """The task's incomplete children: subtasks and checklist items."""
-        raise NotImplementedError
+        return [child for child in self.task.children if not child.done]
 
     @cached_property
     def cells(self) -> tuple[str, ...]:
         """The five values a table shows, in the order its columns run."""
-        raise NotImplementedError
+        return (
+            f'{self.rank:.1f}',
+            f'{self.priority:.1f}',
+            '' if self.task.loe is None else str(self.task.loe),
+            f'{self.task.title}{self.badge}',
+            self.due_label,
+        )
 
     @cached_property
     def badge(self) -> str:
@@ -167,7 +188,7 @@ class Row:
         `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
         the count needs no plural.
         """
-        raise NotImplementedError
+        return f' (+{self.subtasks})' if self.subtasks else ''
 
     @cached_property
     def due_label(self) -> str:
@@ -176,12 +197,21 @@ class Row:
         Named apart from the stored `due` field, which the record
         carries verbatim.
         """
-        raise NotImplementedError
+        if self.task.due is None:
+            return ''
+        if self.parsed_due is None:
+            # a placeholder such as YYYY-MM-DD: show it verbatim
+            return self.task.due
+        if self.parsed_due < self.today:
+            return 'OVERDUE'
+        if self.parsed_due == self.today:
+            return 'TODAY'
+        return self.task.due
 
     @cached_property
     def parsed_due(self) -> date | None:
         """The stored due date as a date, or None if it cannot be read."""
-        raise NotImplementedError
+        return parse_date(self.task.due)
 
 
 class TodoList:
@@ -199,12 +229,21 @@ class TodoList:
     @cached_property
     def document(self) -> TodoDocument:
         """The list file, parsed."""
-        raise NotImplementedError
+        return TodoDocument(self.text)
 
     @cached_property
     def visible(self) -> list[Row]:
         """A row per open top-level task, future recurrences aside."""
-        raise NotImplementedError
+        rows = []
+        for task in self.document.tasks:
+            if task.done:
+                continue
+            row = Row(task, self.today)
+            due = row.parsed_due
+            if due and task.repeat and due > self.today:
+                continue
+            rows.append(row)
+        return rows
 
     @cached_property
     def parked(self) -> bool:
@@ -313,17 +352,17 @@ class Selection:
     @cached_property
     def weekday(self) -> bool:
         """Whether the clock falls on a working day of the week."""
-        raise NotImplementedError
+        return self.day < 5
 
     @cached_property
     def day(self) -> int:
         """Which day of the week the clock falls on. Monday is 0."""
-        raise NotImplementedError
+        return self.now.weekday()
 
     @cached_property
     def hour(self) -> int:
         """The hour of the day the clock reads."""
-        raise NotImplementedError
+        return self.now.hour
 
     @cached_property
     def lists(self) -> list[TodoList]:
