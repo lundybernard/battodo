@@ -67,7 +67,7 @@ class TableTests(TestCase):
     """Unit tests for battodo.view.render.Table."""
 
     def setUp(t) -> None:
-        t.rows = [row('4.2', '3.0', '2', 'A task', 'OVERDUE')]
+        t.rows = [row(*CELLS)]
         t.tb = Table(
             'work',
             t.rows,
