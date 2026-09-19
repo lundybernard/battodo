@@ -194,7 +194,7 @@ class TodoList:
 
     @cached_property
     def rows(self) -> list[Row]:
-        """The open tasks, in the order a view shows them."""
+        """A row per open task, in the order a view shows them."""
         return sorted(self.visible, key=lambda row: row.key)
 
     @property
@@ -349,7 +349,7 @@ class Selection:
 
     @cached_property
     def categories(self) -> list[Category]:
-        """The categories a view renders, each with its tasks."""
+        """The categories a view renders, each with its rows."""
         return [
             Category(todo.category, todo.rows, self.limit)
             for todo in self.lists
