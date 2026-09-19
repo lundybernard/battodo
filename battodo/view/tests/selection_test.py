@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from json import loads
 from pathlib import Path
 from unittest import TestCase
@@ -22,6 +22,17 @@ PARSED_DUE = {
     'an-earlier-date': date(2026, 8, 4),
     'an-unreadable-date': None,
 }
+# A Monday, so a weekday number added to it names that day.
+WEEK_START = date(2026, 8, 3)
+# The windows the clock opens, as a table: the category, the weekday
+# numbers it opens on, and the hours it stays open on them.
+WINDOWS = (
+    ('work', range(5), range(9, 17)),
+    ('chores', range(5), range(17, 21)),
+    ('chores', range(5, 7), range(10, 20)),
+)
+# Every hour of one week. A sweep over it names the day and the hour.
+HOURS = [(day, hour) for day in range(7) for hour in range(24)]
 
 
 def autopatch(case: TestCase, target: str) -> Mock:
@@ -57,6 +68,24 @@ def stored(
     found.due = due
     found.repeat = repeat
     return found
+
+
+def at_hour(day: int, hour: int) -> datetime:
+    """The instant `hour` o'clock falls on, `day` days into the week."""
+    return datetime.combine(WEEK_START + timedelta(days=day), time(hour))
+
+
+def opens(day: int, hour: int) -> set[str]:
+    """The categories open on `day` at `hour`.
+
+    Three categories stay open at every hour. The window table adds
+    the rest.
+    """
+    names = {'study', 'career', 'events'}
+    for name, days, hours in WINDOWS:
+        if day in days and hour in hours:
+            names.add(name)
+    return names
 
 
 class RowTests(TestCase):
@@ -526,40 +555,13 @@ class SelectionTests(TestCase):
             t.assertIn(str(t.resolved), str(caught.exception))
 
     def test_active(t) -> None:
-        always = {'study', 'career', 'events'}
-        cases = {
-            # Work runs 09-17 on a weekday, chores 17-21 on a weekday
-            # and 10-20 at the weekend.
-            'a weekday hour before work opens': (True, 8, always),
-            'the hour work opens': (True, 9, always | {'work'}),
-            'the last hour of work': (True, 16, always | {'work'}),
-            'the hour work closes and chores open': (
-                True,
-                17,
-                always | {'chores'},
-            ),
-            'the last hour of weekday chores': (True, 20, always | {'chores'}),
-            'the hour weekday chores close': (True, 21, always),
-            'a weekend hour before chores open': (False, 9, always),
-            'the hour weekend chores open': (False, 10, always | {'chores'}),
-            'weekend midday is never work': (False, 12, always | {'chores'}),
-            'the last hour of weekend chores': (
-                False,
-                19,
-                always | {'chores'},
-            ),
-            'the hour weekend chores close': (False, 20, always),
-        }
+        for day, hour in HOURS:
+            with t.subTest(day=day, hour=hour):
+                ret = Selection(
+                    t.directory, at_hour(day, hour), show_all=False
+                ).active
 
-        for name, (weekday, hour, expected) in cases.items():
-            with t.subTest(name):
-                t.s.__dict__.pop('active', None)
-                t.s.weekday = weekday
-                t.s.hour = hour
-
-                ret = t.s.active
-
-                t.assertEqual(ret, expected)
+                t.assertEqual(ret, opens(day, hour))
 
     def test_weekday(t) -> None:
         with t.subTest('a day the working week covers'):
