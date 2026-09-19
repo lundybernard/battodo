@@ -6,8 +6,8 @@ content, once for the whole view, so the columns line up down the page
 and not merely within one category.
 
 Terminal width is read here rather than at the CLI boundary, because
-the width is an input to the layout. An explicit `width` overrides the
-probe.
+the width is an input to the layout. The probe reads COLUMNS first, so
+a caller that needs a fixed width pins it in the environment.
 
 A row is built by the selection, which carries the same task in the
 published form as well, so the two never derive it apart.
@@ -102,9 +102,8 @@ class Table:
 class View:
     """A selection rendered for a terminal: a header, then a table each."""
 
-    def __init__(self, selection: Selection, width: int = 0) -> None:
+    def __init__(self, selection: Selection) -> None:
         self.selection = selection
-        self.width = width
 
     @property
     def today(self) -> date:
@@ -130,8 +129,8 @@ class View:
 
     @cached_property
     def columns(self) -> int:
-        """The width to lay out in; 0 asks the terminal, 80 if there is none."""
-        return self.width or get_terminal_size().columns
+        """The width to lay out in: the terminal's, or 80 if it has none."""
+        return get_terminal_size().columns
 
     @cached_property
     def widths(self) -> list[int]:

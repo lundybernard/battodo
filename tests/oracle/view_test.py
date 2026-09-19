@@ -15,9 +15,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from json import loads
+from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -38,8 +40,9 @@ HEADER_AT_NOW = (
 # The one list a generated source holds. `career` stays active at every
 # hour, so a pin over generated input never depends on the clock.
 CATEGORY = 'career'
-# The width every rendered pin lays out in.
-WIDTH = 80
+# The width every rendered pin lays out in. The layout probes the
+# terminal, which reads COLUMNS first.
+WIDTH = '80'
 # The windows the view opens, as a table: the category, the weekday
 # numbers it opens on, and the hours it stays open on them.
 WINDOWS = (
@@ -180,7 +183,8 @@ class ViewTests(TestCase):
             selection = Selection(directory, NOW, show_all=False)
             categories = selection.categories
 
-            ret = View(selection, WIDTH).text
+            with patch.dict(environ, {'COLUMNS': WIDTH}):
+                ret = View(selection).text
 
         out = ret.split('\n')
         t.assertEqual(out[0], HEADER_AT_NOW)

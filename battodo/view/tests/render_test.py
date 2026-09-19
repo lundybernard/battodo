@@ -181,10 +181,7 @@ class ViewTests(TestCase):
         t.selection.active = {'work', 'study'}
         t.selection.categories = [category('work')]
 
-        t.v = View(
-            t.selection,
-            # Default: width=0,
-        )
+        t.v = View(t.selection)
 
     def test_today(t) -> None:
         ret = t.v.today
@@ -224,26 +221,14 @@ class ViewTests(TestCase):
             t.assertEqual(ret, first.shown + second.shown)
 
     def test_columns(t) -> None:
-        with t.subTest('a width that was asked for is used as given'):
-            t.v.width = 100
-            ret = t.v.columns
-            t.assertEqual(ret, 100)
+        ret = t.v.columns
 
-        with t.subTest('otherwise the terminal is asked'):
-            t.v.width = 0
-            t.v.__dict__.pop('columns')
-
-            ret = t.v.columns
-
-            t.assertEqual(ret, 80)
-
-        with t.subTest('and a view built without one asks by default'):
-            ret = View(t.selection).columns
-            t.assertEqual(ret, 80)
+        t.assertEqual(ret, 80)
+        t.get_terminal_size.assert_called_once_with()
 
     def resize(t, width: int) -> list[int]:
         """The widths this view settles on at `width` columns."""
-        t.v.width = width
+        t.get_terminal_size.return_value.columns = width
         for cached in ('columns', 'widths'):
             t.v.__dict__.pop(cached, None)
         return t.v.widths
