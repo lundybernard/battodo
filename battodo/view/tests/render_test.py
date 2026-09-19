@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from unittest import TestCase
-from unittest.mock import Mock, patch, sentinel
+from unittest.mock import Mock, patch
 
 from ..render import (
     COLUMNS,
@@ -9,7 +9,6 @@ from ..render import (
     Table,
     View,
     clip,
-    due_label,
     table_width,
 )
 
@@ -17,6 +16,8 @@ SRC = 'battodo.view.render'
 TODAY = date(2026, 8, 5)
 # Five columns wide enough to lay a short row out without clipping.
 WIDTHS = [4, 3, 3, 20, 10]
+# One short row's cells, in the order the columns run.
+CELLS = ('4.2', '3.0', '2', 'A task', 'OVERDUE')
 
 
 def autopatch(case: TestCase, target: str) -> Mock:
@@ -25,30 +26,6 @@ def autopatch(case: TestCase, target: str) -> Mock:
     double = patcher.start()
     case.addCleanup(patcher.stop)
     return double
-
-
-class DueLabelTests(TestCase):
-    """Unit tests for battodo.view.render.due_label."""
-
-    def test_dates(t) -> None:
-        cases = {
-            'no due date reads as nothing at all': (None, ''),
-            'a date already past is called out': ('2026-08-04', 'OVERDUE'),
-            'so is the day itself': ('2026-08-05', 'TODAY'),
-            'a date still ahead shows as written': (
-                '2026-08-20',
-                '2026-08-20',
-            ),
-            'and a placeholder shows verbatim rather than raising': (
-                'YYYY-MM-DD',
-                'YYYY-MM-DD',
-            ),
-        }
-
-        for name, (due, expected) in cases.items():
-            with t.subTest(name):
-                ret = due_label(due, TODAY)
-                t.assertEqual(ret, expected)
 
 
 class TableWidthTests(TestCase):
@@ -77,84 +54,6 @@ class ClipTests(TestCase):
 
         with t.subTest('the mark counts towards the width'):
             t.assertEqual(len(ret), 3)
-
-
-class RowTests(TestCase):
-    """Unit tests for battodo.view.render.Row."""
-
-    def setUp(t) -> None:
-        t.rank = autopatch(t, 'rank')
-        t.multiplier = autopatch(t, 'multiplier')
-        t.open_children = autopatch(t, 'open_children')
-        t.rank.return_value = 4.25
-        t.multiplier.return_value = 3.0
-        t.open_children.return_value = []
-
-        t.task = Mock(spec=['title', 'loe', 'due'])
-        t.task.title = 'A task'
-        t.task.loe = 2
-        t.task.due = None
-
-        t.r = Row(t.task, TODAY)
-
-    def test_children(t) -> None:
-        ret = t.r.children
-        t.assertEqual(ret, t.open_children.return_value)
-        t.open_children.assert_called_once_with(t.task)
-
-    def test_badge(t) -> None:
-        with t.subTest('a task with nothing outstanding wears no badge'):
-            ret = t.r.badge
-            t.assertEqual(ret, '')
-
-        with t.subTest('otherwise it carries the count'):
-            t.r.children = [sentinel.child, sentinel.child]
-            ret = t.r.badge
-            t.assertEqual(ret, ' (+2)')
-
-    def test_cells(t) -> None:
-        with t.subTest('rank and priority are shown to one decimal'):
-            ret = t.r.cells
-            t.assertEqual(ret[:2], ('4.2', '3.0'))
-
-        with t.subTest('the clock reaches the rank'):
-            t.rank.assert_called_once_with(t.task, TODAY)
-
-        with t.subTest('an unestimated task leaves its column empty'):
-            t.task.loe = None
-            t.r.__dict__.pop('cells')
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '')
-
-        with t.subTest('a level of effort is shown when there is one'):
-            t.task.loe = 2
-            t.r.__dict__.pop('cells')
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '2')
-
-        with t.subTest('the title carries its badge'):
-            t.r.children = [sentinel.child]
-            t.r.__dict__.pop('cells')
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[3], 'A task (+1)')
-
-        with t.subTest('and the due date its label'):
-            t.task.due = '2026-08-04'
-            t.r.__dict__.pop('cells')
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[4], 'OVERDUE')
-
-        with t.subTest('there is one cell per column'):
-            ret = t.r.cells
-            t.assertEqual(len(ret), len(COLUMNS))
 
 
 def row(*cells: str) -> Row:
@@ -260,11 +159,11 @@ class TableTests(TestCase):
         t.assertEqual(ret, 0)
 
 
-def category(name: str, hidden: int = 0, shown=('task',)) -> Mock:
+def category(name: str, hidden: int = 0, rows: int = 1) -> Mock:
     """A stand-in category, holding what a view reads off one."""
     stub = Mock(spec=['name', 'shown', 'hidden'])
     stub.name = name
-    stub.shown = list(shown)
+    stub.shown = [row(*CELLS)] * rows
     stub.hidden = hidden
     return stub
 
@@ -273,16 +172,8 @@ class ViewTests(TestCase):
     """Unit tests for battodo.view.render.View."""
 
     def setUp(t) -> None:
-        t.Row = autopatch(t, 'Row')
         t.get_terminal_size = autopatch(t, 'get_terminal_size')
         t.get_terminal_size.return_value.columns = 80
-        t.Row.side_effect = lambda task, today: row(
-            '4.2',
-            '3.0',
-            '2',
-            str(task),
-            'OVERDUE',
-        )
 
         t.selection = Mock(spec=['now', 'today', 'active', 'categories'])
         t.selection.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
@@ -314,15 +205,23 @@ class ViewTests(TestCase):
             ret = t.v.header
             t.assertTrue(ret.endswith('career, study, work'))
 
-    def test_sections(t) -> None:
-        ((found, rows),) = t.v.sections
+    def test_categories(t) -> None:
+        ret = t.v.categories
+        t.assertEqual(ret, t.selection.categories)
 
-        with t.subTest('each category is paired with a row per task shown'):
-            t.assertEqual(found, t.selection.categories[0])
-            t.assertEqual(len(rows), 1)
+    def test_rows(t) -> None:
+        with t.subTest('a category contributes the rows it shows'):
+            ret = t.v.rows
+            t.assertEqual(ret, t.selection.categories[0].shown)
 
-        with t.subTest('every row is built against the same day'):
-            t.Row.assert_called_once_with('task', TODAY)
+        with t.subTest('and the categories run together in display order'):
+            t.v.__dict__.pop('rows')
+            first, second = category('work'), category('study', rows=2)
+            t.v.categories = [first, second]
+
+            ret = t.v.rows
+
+            t.assertEqual(ret, first.shown + second.shown)
 
     def test_columns(t) -> None:
         with t.subTest('a width that was asked for is used as given'):
@@ -362,14 +261,7 @@ class ViewTests(TestCase):
         # The other columns take 27 of the line between them, so what is
         # left for titles is the terminal less that.
         long_title = 'A' * 60
-        t.Row.side_effect = lambda task, today: row(
-            '4.2',
-            '3.0',
-            '2',
-            long_title,
-            'OVERDUE',
-        )
-        t.v.__dict__.pop('sections')
+        t.v.rows = [row('4.2', '3.0', '2', long_title, 'OVERDUE')]
 
         with t.subTest('titles take the room left over when they need it'):
             ret = t.resize(80)
@@ -389,9 +281,11 @@ class ViewTests(TestCase):
             t.assertEqual(table.name, 'work')
             t.assertEqual(table.widths, t.v.widths)
 
-        with t.subTest('each is told what its category held back'):
-            t.selection.categories = [category('work', hidden=4)]
-            t.v.__dict__.pop('sections')
+        with t.subTest('each carries the rows its category shows'):
+            t.assertEqual(table.rows, t.selection.categories[0].shown)
+
+        with t.subTest('and is told what that category held back'):
+            t.v.categories = [category('work', hidden=4)]
             t.v.__dict__.pop('tables')
 
             ret = t.v.tables

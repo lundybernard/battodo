@@ -8,15 +8,16 @@ and not merely within one category.
 Terminal width is read here rather than at the CLI boundary, because
 the width is an input to the layout. An explicit `width` overrides the
 probe.
+
+A row is built by the selection, which carries the same task in the
+published form as well, so the two never derive it apart.
 """
 
 from datetime import date
 from functools import cached_property
 from shutil import get_terminal_size
 
-from ..parser import TaskNode, parse_date
-from ..rank import multiplier, rank
-from .selection import Category, Selection, open_children
+from .selection import Category, Row, Selection
 
 # Layout. TASK is the elastic column: every other one is as wide as its
 # widest value, and the titles absorb whatever room is left over.
@@ -32,21 +33,6 @@ ELLIPSIS = '…'
 MIN_TASK_WIDTH = 20
 
 
-def due_label(due: str | None, today: date) -> str:
-    """How a due date reads in the table: a label, or the date itself."""
-    if due is None:
-        return ''
-    parsed = parse_date(due)
-    if parsed is None:
-        # a placeholder such as YYYY-MM-DD: show it verbatim
-        return due
-    if parsed < today:
-        return 'OVERDUE'
-    if parsed == today:
-        return 'TODAY'
-    return due
-
-
 def table_width(widths: list[int]) -> int:
     """How wide a table laid out to `widths` comes out."""
     return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
@@ -57,38 +43,6 @@ def clip(text: str, width: int) -> str:
     if len(text) <= width:
         return text
     return text[: width - 1] + ELLIPSIS
-
-
-class Row:
-    """One task as the five cells a table shows it in."""
-
-    def __init__(self, task: TaskNode, today: date) -> None:
-        self.task = task
-        self.today = today
-
-    @cached_property
-    def children(self) -> list[TaskNode]:
-        return open_children(self.task)
-
-    @property
-    def badge(self) -> str:
-        """The outstanding-children mark, if the task has any.
-
-        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
-        the count needs no plural.
-        """
-        return f' (+{len(self.children)})' if self.children else ''
-
-    @cached_property
-    def cells(self) -> tuple[str, ...]:
-        """The row's five values, in COLUMNS order."""
-        return (
-            f'{rank(self.task, self.today):.1f}',
-            f'{multiplier(self.task):.1f}',
-            '' if self.task.loe is None else str(self.task.loe),
-            f'{self.task.title}{self.badge}',
-            due_label(self.task.due, self.today),
-        )
 
 
 class Table:
@@ -165,12 +119,14 @@ class View:
         )
 
     @cached_property
-    def sections(self) -> list[tuple[Category, list[Row]]]:
-        """Each category with its rows, before any width is known."""
-        return [
-            (category, [Row(task, self.today) for task in category.shown])
-            for category in self.selection.categories
-        ]
+    def categories(self) -> list[Category]:
+        """The categories this view lays out, in display order."""
+        return self.selection.categories
+
+    @cached_property
+    def rows(self) -> list[Row]:
+        """Every row the view shows, across all of its categories."""
+        return [row for category in self.categories for row in category.shown]
 
     @cached_property
     def columns(self) -> int:
@@ -185,9 +141,8 @@ class View:
         widths serves all of its tables and the columns line up down the
         whole page.
         """
-        rows = [row for _, rows in self.sections for row in rows]
         widths = [
-            max([len(name), *(len(row.cells[index]) for row in rows)])
+            max([len(name), *(len(row.cells[index]) for row in self.rows)])
             for index, name in enumerate(COLUMNS)
         ]
         room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
@@ -200,8 +155,13 @@ class View:
     @cached_property
     def tables(self) -> list[Table]:
         return [
-            Table(category.name, rows, self.widths, category.hidden)
-            for category, rows in self.sections
+            Table(
+                category.name,
+                category.shown,
+                self.widths,
+                category.hidden,
+            )
+            for category in self.categories
         ]
 
     @cached_property

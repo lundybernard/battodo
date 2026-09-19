@@ -220,7 +220,11 @@ class TodoList:
     def __init__(self, path: Path, today: date) -> None:
         self.path = path
         self.today = today
-        self.category = path.stem
+
+    @cached_property
+    def category(self) -> str:
+        """The list's name: the file's name without its extension."""
+        return self.path.stem
 
     @cached_property
     def text(self) -> str:
@@ -250,12 +254,9 @@ class TodoList:
         return PARKED_MARKER in self.text
 
     @cached_property
-    def tasks(self) -> list[TaskNode]:
+    def rows(self) -> list[Row]:
         """The open tasks, in the order a view shows them."""
-        return sorted(
-            visible_tasks(TodoDocument(self.text), self.today),
-            key=lambda task: sort_key(task, self.today),
-        )
+        return sorted(self.visible, key=lambda row: row.key)
 
     @property
     def order(self) -> tuple[int, str]:
@@ -269,22 +270,22 @@ class Category:
     def __init__(
         self,
         name: str,
-        tasks: list[TaskNode],
+        rows: list[Row],
         limit: int | None,
     ) -> None:
         self.name = name
-        self.tasks = tasks
+        self.rows = rows
         self.limit = limit
 
     @property
-    def shown(self) -> list[TaskNode]:
-        """The tasks that make it into the view."""
-        return self.tasks if self.limit is None else self.tasks[: self.limit]
+    def shown(self) -> list[Row]:
+        """The rows that make it into the view."""
+        return self.rows if self.limit is None else self.rows[: self.limit]
 
     @property
     def hidden(self) -> int:
-        """How many tasks the limit held back."""
-        return len(self.tasks) - len(self.shown)
+        """How many rows the limit held back."""
+        return len(self.rows) - len(self.shown)
 
 
 class Selection:
@@ -347,7 +348,15 @@ class Selection:
 
     @cached_property
     def active(self) -> set[str]:
-        return active_categories(self.now)
+        """The categories whose time window is open at `now`."""
+        names = set(ALWAYS_ACTIVE)
+        if self.weekday and 9 <= self.hour < 17:
+            names.add('work')
+        if self.weekday and 17 <= self.hour < 21:
+            names.add('chores')
+        if not self.weekday and 10 <= self.hour < 20:
+            names.add('chores')
+        return names
 
     @cached_property
     def weekday(self) -> bool:
@@ -403,9 +412,9 @@ class Selection:
     def categories(self) -> list[Category]:
         """The categories a view renders, each with its tasks."""
         return [
-            Category(todo.category, todo.tasks, self.limit)
+            Category(todo.category, todo.rows, self.limit)
             for todo in self.lists
-            if self.shows(todo) and todo.tasks
+            if self.shows(todo) and todo.rows
         ]
 
     @cached_property
@@ -434,9 +443,7 @@ class Selection:
                 {
                     'name': category.name,
                     'hidden': category.hidden,
-                    'tasks': [
-                        task_entry(task, self.today) for task in category.shown
-                    ],
+                    'tasks': [row.data for row in category.shown],
                 }
                 for category in self.categories
             ],

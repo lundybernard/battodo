@@ -42,6 +42,13 @@ def at(iso: str) -> datetime:
     return datetime.fromisoformat(iso)
 
 
+def published(title: str) -> Mock:
+    """A stand-in row, holding only the record a document reads off it."""
+    found = Mock(spec=['data'])
+    found.data = {'title': title}
+    return found
+
+
 def stored(
     title: str,
     *,
@@ -507,7 +514,6 @@ class TodoListTests(TestCase):
     """Unit tests for battodo.view.selection.TodoList."""
 
     def setUp(t) -> None:
-        t.rank = autopatch(t, 'rank')
         t.path = Mock(spec=Path)
         t.path.stem = 'work'
         t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
@@ -589,26 +595,22 @@ class TodoListTests(TestCase):
 
             t.assertTrue(ret)
 
-    def test_tasks(t) -> None:
-        with t.subTest('open tasks come back in the order rank gives'):
-            ranked = {'Low': 1.0, 'High': 5.0}
-            t.rank.side_effect = lambda task, today: ranked[task.title]
-            t.tl.text = (
-                '## Open\n'
-                '- [ ] Low [P:1]\n'
-                '- [ ] High [P:5]\n'
-                '- [x] Gone [P:9]\n'
-            )
+    def test_rows(t) -> None:
+        with t.subTest('the rows come back in the order their keys give'):
+            low, high = Mock(spec=['key']), Mock(spec=['key'])
+            low.key = (-1.0, 'zzzz', 'Low')
+            high.key = (-5.0, 'zzzz', 'High')
+            t.tl.visible = [low, high]
 
-            ret = t.tl.tasks
+            ret = t.tl.rows
 
-            t.assertEqual([task.title for task in ret], ['High', 'Low'])
+            t.assertEqual(ret, [high, low])
 
         with t.subTest('a list with nothing open comes back empty'):
-            t.tl.__dict__.pop('tasks')
-            t.tl.text = '## Open\n\n- [x] Gone [P:9]\n'
+            t.tl.__dict__.pop('rows')
+            t.tl.visible = []
 
-            ret = t.tl.tasks
+            ret = t.tl.rows
 
             t.assertEqual(ret, [])
 
@@ -636,25 +638,23 @@ class CategoryTests(TestCase):
     """Unit tests for battodo.view.selection.Category."""
 
     def setUp(t) -> None:
-        t.tasks = TodoDocument(
-            '## Open\n' + ''.join(f'- [ ] Item {n} [P:3]\n' for n in range(6))
-        ).tasks
-        t.c = Category('work', t.tasks, 2)
+        t.rows = [getattr(sentinel, f'row_{n}') for n in range(6)]
+        t.c = Category('work', t.rows, 2)
 
     def test_shown(t) -> None:
         with t.subTest('a limit takes the top of the list'):
             ret = t.c.shown
-            t.assertEqual([task.title for task in ret], ['Item 0', 'Item 1'])
+            t.assertEqual(ret, t.rows[:2])
 
         with t.subTest('no limit shows every one'):
             t.c.limit = None
             ret = t.c.shown
-            t.assertEqual(ret, t.tasks)
+            t.assertEqual(ret, t.rows)
 
         with t.subTest('a limit past the end shows every one too'):
             t.c.limit = 99
             ret = t.c.shown
-            t.assertEqual(ret, t.tasks)
+            t.assertEqual(ret, t.rows)
 
     def test_hidden(t) -> None:
         with t.subTest('what the limit held back is counted'):
@@ -670,9 +670,9 @@ class CategoryTests(TestCase):
         ret = t.c.name
         t.assertEqual(ret, 'work')
 
-    def test_tasks(t) -> None:
-        ret = t.c.tasks
-        t.assertEqual(ret, t.tasks)
+    def test_rows(t) -> None:
+        ret = t.c.rows
+        t.assertEqual(ret, t.rows)
 
 
 class SelectionTests(TestCase):
@@ -680,7 +680,6 @@ class SelectionTests(TestCase):
 
     def setUp(t) -> None:
         t.discover_lists = autopatch(t, 'discover_lists')
-        t.active_categories = autopatch(t, 'active_categories')
 
         t.resolved = Mock(spec=Path)
         t.resolved.is_dir.return_value = True
@@ -694,12 +693,12 @@ class SelectionTests(TestCase):
             # Default: top_n=TOP_N,
         )
 
-    def todo(t, category: str, *, parked: bool = False, tasks=('a',)) -> Mock:
+    def todo(t, category: str, *, parked: bool = False, rows=('a',)) -> Mock:
         """A stand-in list, holding only what a selection reads off one."""
-        found = Mock(spec=['category', 'parked', 'tasks', 'order'])
+        found = Mock(spec=['category', 'parked', 'rows', 'order'])
         found.category = category
         found.parked = parked
-        found.tasks = list(tasks)
+        found.rows = list(rows)
         found.order = (0, category)
         return found
 
@@ -738,9 +737,40 @@ class SelectionTests(TestCase):
             t.assertIn(str(t.resolved), str(caught.exception))
 
     def test_active(t) -> None:
-        ret = t.s.active
-        t.assertEqual(ret, t.active_categories.return_value)
-        t.active_categories.assert_called_once_with(t.s.now)
+        always = {'study', 'career', 'events'}
+        cases = {
+            # Work runs 09-17 on a weekday, chores 17-21 on a weekday
+            # and 10-20 at the weekend.
+            'a weekday hour before work opens': (True, 8, always),
+            'the hour work opens': (True, 9, always | {'work'}),
+            'the last hour of work': (True, 16, always | {'work'}),
+            'the hour work closes and chores open': (
+                True,
+                17,
+                always | {'chores'},
+            ),
+            'the last hour of weekday chores': (True, 20, always | {'chores'}),
+            'the hour weekday chores close': (True, 21, always),
+            'a weekend hour before chores open': (False, 9, always),
+            'the hour weekend chores open': (False, 10, always | {'chores'}),
+            'weekend midday is never work': (False, 12, always | {'chores'}),
+            'the last hour of weekend chores': (
+                False,
+                19,
+                always | {'chores'},
+            ),
+            'the hour weekend chores close': (False, 20, always),
+        }
+
+        for name, (weekday, hour, expected) in cases.items():
+            with t.subTest(name):
+                t.s.__dict__.pop('active', None)
+                t.s.weekday = weekday
+                t.s.hour = hour
+
+                ret = t.s.active
+
+                t.assertEqual(ret, expected)
 
     def test_weekday(t) -> None:
         with t.subTest('a day the working week covers'):
@@ -789,7 +819,7 @@ class SelectionTests(TestCase):
             t.discover_lists.assert_called_with(t.resolved)
 
     def test_shows(t) -> None:
-        t.active_categories.return_value = {'work', 'study'}
+        t.s.active = {'work', 'study'}
 
         cases = {
             'a named category inside its window shows': (
@@ -839,11 +869,11 @@ class SelectionTests(TestCase):
                 t.assertEqual(ret, expected)
 
     def test_categories(t) -> None:
-        t.active_categories.return_value = {'work', 'study'}
+        t.s.active = {'work', 'study'}
         shown, shut, empty = (
             t.todo('work'),
             t.todo('chores'),
-            t.todo('study', tasks=()),
+            t.todo('study', rows=()),
         )
         t.s.lists = [shown, shut, empty]
 
@@ -852,8 +882,8 @@ class SelectionTests(TestCase):
         with t.subTest('only the lists this view shows become categories'):
             t.assertEqual([c.name for c in categories], ['work'])
 
-        with t.subTest("each carries that list's tasks"):
-            t.assertEqual(categories[0].tasks, shown.tasks)
+        with t.subTest("each carries that list's rows"):
+            t.assertEqual(categories[0].rows, shown.rows)
 
         with t.subTest('and the limit the view was asked for'):
             t.assertEqual(categories[0].limit, TOP_N)
@@ -865,22 +895,17 @@ class SelectionTests(TestCase):
         """A stand-in category, holding what the document reads off one."""
         stub = Mock(spec=['name', 'shown', 'hidden'])
         stub.name = name
-        stub.shown = list(shown)
+        stub.shown = [published(title) for title in shown]
         stub.hidden = hidden
         return stub
 
-    def setUpData(t) -> Mock:
-        """Point the selection at stub categories, intercept task_entry."""
-        task_entry_double = autopatch(t, 'task_entry')
-        task_entry_double.side_effect = lambda task, today: {
-            'title': str(task)
-        }
-        t.active_categories.return_value = {'work', 'career'}
+    def setUpData(t) -> None:
+        """Point the selection at a stub category and an active set."""
+        t.s.active = {'work', 'career'}
         t.s.categories = [t.category('work')]
-        return task_entry_double
 
     def test_data(t) -> None:
-        task_entry_double = t.setUpData()
+        t.setUpData()
 
         ret = t.s.data
 
@@ -901,9 +926,6 @@ class SelectionTests(TestCase):
                     }
                 ],
             )
-
-        with t.subTest('only the tasks the selection shows are serialized'):
-            task_entry_double.assert_called_once_with('task', TODAY)
 
         with t.subTest('and it says how many it is holding back'):
             # Without the count, an abridged document reads exactly like
