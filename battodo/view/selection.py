@@ -45,68 +45,6 @@ TOP_N = 5
 RANK_PLACES = 2
 
 
-def active_categories(now: datetime) -> set[str]:
-    """Categories whose time window is open at `now`."""
-    active = set(ALWAYS_ACTIVE)
-    is_weekday = now.weekday() < 5
-    hour = now.hour
-    if is_weekday and 9 <= hour < 17:
-        active.add('work')
-    if is_weekday and 17 <= hour < 21:
-        active.add('chores')
-    if not is_weekday and 10 <= hour < 20:
-        active.add('chores')
-    return active
-
-
-def visible_tasks(doc: TodoDocument, today: date) -> list[TaskNode]:
-    """Open top-level tasks, minus suppressed future recurrences."""
-    visible = []
-    for task in doc.tasks:
-        if task.done:
-            continue
-        due = parse_date(task.due)
-        if due and task.repeat and due > today:
-            continue
-        visible.append(task)
-    return visible
-
-
-def sort_key(task: TaskNode, today: date) -> tuple[float, str, str]:
-    """Rank descending, then nearest due, undated last, then title."""
-    return (
-        -rank(task, today),
-        task.due or NO_DUE_SORTS_LAST,
-        task.title,
-    )
-
-
-def open_children(task: TaskNode) -> list[TaskNode]:
-    """The task's incomplete children: subtasks and checklist items."""
-    return [child for child in task.children if not child.done]
-
-
-def task_entry(task: TaskNode, today: date) -> dict[str, object]:
-    """One task as `Selection.json` records it.
-
-    Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
-    `rank` is rounded for display and must not be used to re-sort; the
-    array order is the rank order.
-    """
-    return {
-        'id': task.task_id,
-        'title': task.title,
-        'rank': round(rank(task, today), RANK_PLACES),
-        'priority': multiplier(task),
-        'loe': task.loe,
-        'due': task.due,
-        'added': task.added,
-        'repeat': task.repeat,
-        'tags': task.tags,
-        'subtasks': len(open_children(task)),
-    }
-
-
 class Row:
     """One task as a view carries it: a record, and a line of a table.
 

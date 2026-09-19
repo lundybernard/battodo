@@ -3,7 +3,7 @@
 Temporary scaffolding for the conversion of `battodo.view.selection` to
 property objects. The suite pins the hour windows, the document a
 selection publishes for a generated list file, and the table rendered
-from that document. It is deleted with the functions it pins.
+from that document. It is deleted when the conversion lands.
 
 The behavioral goldens pin one rendered instant byte for byte, so this
 suite covers what they cannot reach: every hour of a week, and list
@@ -23,12 +23,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from battodo.view.render import RULE, View
-from battodo.view.selection import (
-    ALWAYS_ACTIVE,
-    TOP_N,
-    Selection,
-    active_categories,
-)
+from battodo.view.selection import ALWAYS_ACTIVE, TOP_N, Selection
 
 from ..property.strategies import document, grammar
 
@@ -54,6 +49,9 @@ WINDOWS = (
 )
 # A Monday, so a weekday number added to it names that day.
 WEEK_START = date(2026, 8, 3)
+# A stand-in for a source directory. The active set is a fact about the
+# clock, so the window cases read it without going near a file.
+SOURCE = Path('a-source-dir')
 # The fields of one published task, in the order they are listed.
 TASK_FIELDS = [
     'id',
@@ -113,10 +111,12 @@ def titles(out: list[str]) -> list[str]:
     return found
 
 
-class ActiveCategoriesTests(TestCase):
-    """Characterization tests for the view's hour windows."""
+class SelectionTests(TestCase):
+    """Characterization tests for battodo.view.selection.Selection."""
 
-    def test_windows(t) -> None:
+    maxDiff = None
+
+    def test_active(t) -> None:
         for day in range(7):
             for hour in range(24):
                 with t.subTest(day=day, hour=hour):
@@ -126,15 +126,9 @@ class ActiveCategoriesTests(TestCase):
                         timezone.utc,
                     )
 
-                    ret = active_categories(when)
+                    ret = Selection(SOURCE, when, show_all=False).active
 
                     t.assertEqual(ret, opens(day, hour))
-
-
-class SelectionTests(TestCase):
-    """Characterization tests for battodo.view.selection.Selection."""
-
-    maxDiff = None
 
     @settings(deadline=None)
     @example(lines=KNOWN_LINES)
