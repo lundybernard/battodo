@@ -88,10 +88,11 @@ Two non-parity commits, after parity, in this order:
 2. Extract the schedule, time zone, and always-active list names to
    configuration (R7.3, ADR 0018).
 
-**Recon before the extraction:** probe how the config layer types a
-numeric TOML value. Today every value reaches the view as a string and
-the item count is decoded at the call site. The hour-window fields
-cannot be typed until that answer is known.
+**Recon before the extraction, done:** every configuration value is a
+string and the consumer decodes it, per the 2026-09-19 amendment to
+[ADR 0007](../0007-toml-config-file.md). The hour-window fields are
+`str` fields with `str` defaults, decoded where the view reads them.
+Two lookup limits stay open; they are listed under Risks.
 
 ## Slice 5 — selection and task (#47)
 
@@ -138,10 +139,12 @@ Filed as follow-ups rather than absorbed:
 
 ## Risks
 
-- **Config typing (slice 4).** The hour-window fields are the first
-  numeric configuration the view reads as a number. If the config layer
-  hands back strings, the decode point has to be decided before the
-  fields are named.
+- **Config typing (slice 4) — answered.** The fields are strings and
+  the consumer decodes them, per the 2026-09-19 amendment to
+  [ADR 0007](../0007-toml-config-file.md). Two lookup limits stay open:
+  the config lookup resolves by truthiness, so an empty-string value
+  falls through to the default; and a nested TOML table is invisible to
+  the lookup, so the per-category hour windows cannot be nested tables.
 - **The coverage floor during slice 0.** Removing a document-equality
   test drops coverage that the replacement must already carry. Ordering
   is the whole mitigation: the new tests land first.

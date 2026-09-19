@@ -89,10 +89,12 @@ be exempt from.
 - The view's category filter reads its schedule from configuration
   rather than from a module constant, so it becomes testable without
   patching a clock.
-- **Open before implementation:** how the config layer types a numeric
-  TOML value. Every configuration value reaches the view as a string
-  today, and the item count is decoded at the call site. The hour-window
-  fields cannot be typed until that is answered. Recorded as a recon
-  item in [PLAN.md](PLAN.md).
+- **Resolved:** the new fields are strings, and the consumer decodes
+  them. Every configuration value is a string, per the 2026-09-19
+  amendment to [ADR 0007](../0007-toml-config-file.md). Two lookup
+  limits remain open: the config lookup resolves by truthiness, so an
+  empty-string value falls through to the default; and a nested TOML
+  table is invisible to the lookup, so the per-category hour windows
+  cannot be nested tables. Both are recorded in [PLAN.md](PLAN.md).
 - The configuration surface grows by three fields, all of which must be
   documented where the existing view settings are documented.
