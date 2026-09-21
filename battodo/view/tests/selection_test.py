@@ -585,7 +585,8 @@ class SelectionTests(TestCase):
         ret = t.s.hour
         t.assertEqual(ret, 10)
 
-    def test_lists(t) -> None:
+    @patch(f'{SRC}.TodoList', autospec=True)
+    def test_lists(t, todo_list: MagicMock) -> None:
         with t.subTest('a source holding no lists at all is an error'):
             t.discover_lists.return_value = []
 
@@ -602,9 +603,9 @@ class SelectionTests(TestCase):
             t.discover_lists.return_value = paths
             later, earlier = t.todo('study'), t.todo('work')
             later.order, earlier.order = (2, 'study'), (0, 'work')
-            with patch(f'{SRC}.TodoList', autospec=True) as todo_list:
-                todo_list.side_effect = [later, earlier]
-                ret = t.s.lists
+            todo_list.side_effect = [later, earlier]
+
+            ret = t.s.lists
 
             t.assertEqual(ret, [earlier, later])
             t.discover_lists.assert_called_with(t.resolved)
