@@ -105,6 +105,22 @@ The source directory holds the lists. It defaults to `~/todo`.
 Override it with `BATTODO_VIEW_SOURCE_DIR`, or set `view.source_dir` in
 a config file.
 
+Every value in the config file is a quoted string. The environment and
+the command line carry strings only, so a quoted value gives an option
+one type from every source; the command that reads a value decodes it.
+
+```toml
+[personal.battodo.view]
+top = "3"
+```
+
+The table sits under the environment the file names.
+[README.md](README.md#configuration) holds the full file skeleton.
+
+An unquoted `top = 3` reaches the decoder as a TOML integer. `btodo
+view` then exits 1 and prints `'int' object has no attribute
+'isdecimal'` to stderr.
+
 The config file is resolved in this order:
 
 1. the path given to `--conf`,
