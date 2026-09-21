@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from ..render import (
     COLUMNS,
@@ -18,14 +18,6 @@ TODAY = date(2026, 8, 5)
 WIDTHS = [4, 3, 3, 20, 10]
 # One short row's cells, in the order the columns run.
 CELLS = ('4.2', '3.0', '2', 'A task', 'OVERDUE')
-
-
-def autopatch(case: TestCase, target: str) -> Mock:
-    """Stand in for `target`, put back when `case` finishes."""
-    patcher = patch(f'{SRC}.{target}', autospec=True)
-    double = patcher.start()
-    case.addCleanup(patcher.stop)
-    return double
 
 
 class TableWidthTests(TestCase):
@@ -171,8 +163,15 @@ def category(name: str, hidden: int = 0, rows: int = 1) -> Mock:
 class ViewTests(TestCase):
     """Unit tests for battodo.view.render.View."""
 
+    get_terminal_size: MagicMock
+
     def setUp(t) -> None:
-        t.get_terminal_size = autopatch(t, 'get_terminal_size')
+        patches = ['get_terminal_size']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+
         t.get_terminal_size.return_value.columns = 80
 
         t.selection = Mock(spec=['now', 'today', 'active', 'categories'])

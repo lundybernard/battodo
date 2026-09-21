@@ -35,14 +35,6 @@ WINDOWS = (
 HOURS = [(day, hour) for day in range(7) for hour in range(24)]
 
 
-def autopatch(case: TestCase, target: str) -> Mock:
-    """Stand in for `target`, put back when `case` finishes."""
-    patcher = patch(f'{SRC}.{target}', autospec=True)
-    double = patcher.start()
-    case.addCleanup(patcher.stop)
-    return double
-
-
 def at(iso: str) -> datetime:
     return datetime.fromisoformat(iso)
 
@@ -496,8 +488,14 @@ class CategoryTests(TestCase):
 class SelectionTests(TestCase):
     """Unit tests for battodo.view.selection.Selection."""
 
+    discover_lists: MagicMock
+
     def setUp(t) -> None:
-        t.discover_lists = autopatch(t, 'discover_lists')
+        patches = ['discover_lists']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
 
         t.resolved = Mock(spec=Path)
         t.resolved.is_dir.return_value = True
