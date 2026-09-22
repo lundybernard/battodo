@@ -79,22 +79,22 @@ class Task:
     @property
     def path(self) -> Path:
         """The list file that holds the task."""
-        raise NotImplementedError
+        return self.selection.record.path
 
     @property
     def doc(self) -> TodoDocument:
         """The parsed list file that holds the task."""
-        raise NotImplementedError
+        return self.selection.record.doc
 
     @property
     def ancestry(self) -> list[TaskNode]:
         """The task and every task above it, outermost first."""
-        raise NotImplementedError
+        return self.selection.record.ancestry
 
     @property
     def node(self) -> TaskNode:
         """The task as the parser reads it."""
-        raise NotImplementedError
+        return self.ancestry[-1]
 
     @cached_property
     def selection(self) -> TaskSelection:
@@ -103,7 +103,7 @@ class Task:
         One selection answers from one read of the source, so every
         property above reads the same document.
         """
-        raise NotImplementedError
+        return TaskSelection(self.source, self.selector)
 
     def complete(self) -> None:
         """Log the completion under the day this task carries.
