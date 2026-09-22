@@ -155,6 +155,11 @@ class WrittenList:
         ]
 
     @cached_property
+    def subtasks(self) -> list[tuple[str, int]]:
+        """Each shown task's title, and how many of its children are open."""
+        return [(task.title, open_children(task)) for task in self.shown]
+
+    @cached_property
     def shown(self) -> list[TaskNode]:
         """The tasks a view shows, in the order it shows them."""
         return self.ranked[:TOP_N]
@@ -194,6 +199,11 @@ class WrittenList:
     def tasks(self) -> list[TaskNode]:
         """The top-level tasks of the list file."""
         return TodoDocument(self.text).tasks
+
+
+def open_children(task: TaskNode) -> int:
+    """How many children of `task` are still open, at the next depth."""
+    return len([child for child in task.children if not child.done])
 
 
 def recurs_later(task: TaskNode) -> bool:
@@ -300,6 +310,19 @@ class SelectionTests(TestCase):
             order,
             [(task.title, task.due) for task in written.shown],
         )
+
+    @fuzz
+    def test_subtask_count(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        counts = [
+            (task['title'], task['subtasks']) for task in shown_tasks(ret)
+        ]
+
+        # The order of the tasks is the topic of another case.
+        t.assertEqual(sorted(counts), sorted(written.subtasks))
 
 
 class ViewTests(TestCase):
