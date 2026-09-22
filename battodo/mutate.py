@@ -20,6 +20,9 @@ the block goes, the log records it as SCRATCHED, and nothing cascades
 or reschedules. `update_task` edits a task in place: it writes the
 fields and the title it is given and touches nothing else. `backfill`
 stamps `[ADDED:]` once on every task that lacks it.
+
+Each write to an existing task consumes the `Task` its caller built,
+so the write edits the document that selection read.
 """
 
 from datetime import date

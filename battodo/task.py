@@ -1,8 +1,9 @@
-"""The one task a command names, and what a command does to it.
+"""The one task a command names.
 
-`Task` decides which open task a selector reaches and which day a
-completion is logged under. The write itself stays in `mutate`, which
-owns the markdown and the journal. `lib` composes the two.
+`Task` holds the open task a selector reaches: its list file, the
+parsed document and its ancestry, all from one read of the source. It
+also holds the day a completion is logged under. The writes in
+`mutate` consume a `Task`, and `lib` builds it.
 """
 
 from datetime import date, datetime
