@@ -17,7 +17,7 @@ class TaskTests(TestCase):
     """Unit tests for battodo.task.Task."""
 
     def setUp(t):
-        for target in ('TaskSelection', 'complete', 'parse_date'):
+        for target in ('TaskSelection', 'parse_date'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
@@ -117,20 +117,3 @@ class TaskTests(TestCase):
 
             t.assertIs(ret, t.TaskSelection.return_value)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
-
-    def test_complete(t):
-        t.tk.complete()
-        t.complete.assert_called_once_with(SOURCE, 'a selector', TODAY)
-
-    def test_completed(t):
-        with t.subTest('a task that was not completed logged nothing'):
-            ret = t.tk.completed
-            t.assertEqual(ret, [])
-
-        with t.subTest('the entries the write returned'):
-            t.complete.return_value = ['2026-08-05 | work | DONE | Deck']
-            t.tk.complete()
-
-            ret = t.tk.completed
-
-            t.assertEqual(ret, ['2026-08-05 | work | DONE | Deck'])

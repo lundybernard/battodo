@@ -11,7 +11,6 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from .mutate import complete
 from .parser import TaskNode, TodoDocument, parse_date
 from .selector import TaskRecord, TaskSelection
 
@@ -39,7 +38,6 @@ class Task:
         self.directory = directory
         self.selector = selector
         self.today = today
-        self.completed: list[str] = []
 
     @classmethod
     def from_config(cls, conf: Configuration, now: datetime) -> 'Task':
@@ -104,16 +102,3 @@ class Task:
         property above reads the same document.
         """
         return TaskSelection(self.source, self.selector)
-
-    def complete(self) -> None:
-        """Log the completion under the day this task carries.
-
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
-        RepeatError
-            The task repeats on a `[REPEAT:]` btodo cannot read. Raised
-            before anything is written.
-        """
-        self.completed = complete(self.source, self.selector, self.today)

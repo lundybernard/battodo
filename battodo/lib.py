@@ -26,6 +26,7 @@ from .mutate import (
     add_subtask,
     add_task,
     backfill_all,
+    complete,
     scratch,
     update_task,
 )
@@ -180,7 +181,7 @@ def add_item(conf: Configuration, now: datetime) -> str:
         ADD_FIELDS option the user supplied is written.
     now : datetime
         The clock, whose local day is the add date. A subtask carries
-        no add date, so none is derived for one.
+        no add date, so none is written for one.
 
     Returns
     -------
@@ -210,9 +211,8 @@ def add_item(conf: Configuration, now: datetime) -> str:
         )
     else:
         path, entry = add_subtask(
-            source,
+            Task(source, parent, now.date()),
             conf.list,
-            parent,
             conf.title,
             fields,
         )
@@ -246,10 +246,8 @@ def update_item(conf: Configuration, now: datetime) -> str:
         written.
     """
     path, entry = update_task(
-        _source(conf),
-        conf.selector,
+        Task(_source(conf), conf.selector, now.date()),
         _fields(conf, UPDATE_FIELDS),
-        now.date(),
         title=getattr(conf, 'title', None),
     )
     return f'{entry}\n{path}'
@@ -284,9 +282,8 @@ def complete_item(conf: Configuration, now: datetime) -> str:
         The configured date is not an ISO date. Raised before anything
         is written.
     """
-    task = Task.from_config(conf, now)
-    task.complete()
-    return '\n'.join(task.completed) if task.completed else 'checked off'
+    entries = complete(Task.from_config(conf, now))
+    return '\n'.join(entries) if entries else 'checked off'
 
 
 def scratch_item(conf: Configuration, now: datetime) -> str:
@@ -310,7 +307,7 @@ def scratch_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    entries = scratch(_source(conf), conf.selector, now.date())
+    entries = scratch(Task(_source(conf), conf.selector, now.date()))
     return '\n'.join(entries) if entries else 'dropped'
 
 
