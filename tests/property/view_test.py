@@ -397,6 +397,18 @@ class SelectionTests(TestCase):
         # The order of the tasks is the topic of another case.
         t.assertEqual(sorted(counts), sorted(written.subtasks))
 
+    @fuzz
+    def test_task_visibility(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        hidden = sum(category['hidden'] for category in ret['categories'])
+
+        # A recurrence due after today drops out. A one-off due then
+        # stays, and so does a task whose due date does not read.
+        t.assertEqual(len(shown_tasks(ret)) + hidden, len(written.held))
+
 
 class ViewTests(TestCase):
     """Property tests for battodo.view.View.text."""

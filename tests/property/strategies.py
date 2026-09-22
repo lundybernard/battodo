@@ -13,6 +13,7 @@ drawn line holds a carriage return: a list file is read in text mode,
 where a carriage return ends the line.
 """
 
+from datetime import date
 from functools import cached_property
 from typing import NamedTuple
 
@@ -158,13 +159,20 @@ class Grammar:
 
     @cached_property
     def field_values(self) -> st.SearchStrategy[str]:
-        """A field value is anything up to the closing bracket."""
-        return st.text(
-            alphabet=st.characters(
-                codec='utf-8',
-                exclude_characters=']\n\r',
+        """A field value is anything up to the closing bracket.
+
+        Text that short never spells an ISO date, so dates are drawn
+        apart.
+        """
+        return st.one_of(
+            st.text(
+                alphabet=st.characters(
+                    codec='utf-8',
+                    exclude_characters=']\n\r',
+                ),
+                max_size=8,
             ),
-            max_size=8,
+            st.dates().map(date.isoformat),
         )
 
     @cached_property
