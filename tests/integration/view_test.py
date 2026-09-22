@@ -23,6 +23,9 @@ from battodo.view import Selection, View
 # is shut.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
 PARKED = '<!-- battodo:parked -->'
+# The width the layout probes, through the variable the terminal size
+# reads first.
+WIDTH = 80
 LONG_TITLE = 'A very long task title that has to be clipped to fit'
 
 
@@ -38,16 +41,6 @@ def empty_source() -> Iterator[Path]:
     """An empty source directory of its own, for one group of subtests."""
     with TemporaryDirectory() as tmp:
         yield Path(tmp)
-
-
-def rendered(selection: Selection, width: int = 80) -> str:
-    """The view `selection` lays out at `width` columns.
-
-    The layout probes the terminal, which reads COLUMNS first, so the
-    width is pinned through the environment.
-    """
-    with patch.dict(environ, {'COLUMNS': str(width)}):
-        return View(selection).text
 
 
 def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
@@ -68,6 +61,7 @@ class RenderedViewTests(TestCase):
     def setUp(t) -> None:
         t.source = source_dir(t)
 
+    @patch.dict(environ, {'COLUMNS': str(WIDTH)})
     def test_text(t) -> None:
         # The parked list sorts first. The scan must step over it,
         # not stop at it.
@@ -75,7 +69,7 @@ class RenderedViewTests(TestCase):
         write(t.source, 'career', '- [ ] A task after the parked list [P:2]')
         write(t.source, 'home-repair', '- [ ] The last task of all [P:2]')
 
-        out = rendered(Selection(t.source, NOW, show_all=False))
+        out = View(Selection(t.source, NOW, show_all=False)).text
 
         with t.subTest('the parked list contributes nothing'):
             t.assertNotIn('A parked task', out)
@@ -92,7 +86,7 @@ class RenderedViewTests(TestCase):
             write(source, 'events', '- [x] A completed task [P:3]')
             write(source, 'backlog', '- [ ] A visible task [P:2]')
 
-            out = rendered(Selection(source, NOW, show_all=False))
+            out = View(Selection(source, NOW, show_all=False)).text
 
             with t.subTest('a list with no items has no table'):
                 t.assertNotIn('Career', out)
@@ -111,7 +105,7 @@ class RenderedViewTests(TestCase):
             )
 
             with t.subTest('five items, and a count of what is held back'):
-                out = rendered(Selection(source, NOW, show_all=False))
+                out = View(Selection(source, NOW, show_all=False)).text
 
                 t.assertIn('Item 5', out)
                 t.assertNotIn('Item 6', out)
@@ -120,21 +114,25 @@ class RenderedViewTests(TestCase):
             with t.subTest('an explicit top_n replaces the default'):
                 selection = Selection(source, NOW, show_all=False, top_n=2)
 
-                out = rendered(selection)
+                out = View(selection).text
 
                 t.assertIn('Item 2', out)
                 t.assertNotIn('Item 3', out)
                 t.assertIn('… and 5 more', out)
 
             with t.subTest('show_all keeps every item and holds back none'):
-                out = rendered(Selection(source, NOW, show_all=True))
+                out = View(Selection(source, NOW, show_all=True)).text
                 t.assertIn('Item 7', out)
                 t.assertNotIn('… and', out)
 
         with empty_source() as source:
             write(source, 'career', f'- [ ] {LONG_TITLE} [P:3]')
-            narrow = rendered(Selection(source, NOW, show_all=False), 60)
-            wide = rendered(Selection(source, NOW, show_all=False), 120)
+            # The decorator restores the environment when the test ends.
+            environ['COLUMNS'] = '60'
+            narrow = View(Selection(source, NOW, show_all=False)).text
+            environ['COLUMNS'] = '120'
+            wide = View(Selection(source, NOW, show_all=False)).text
+            environ['COLUMNS'] = str(WIDTH)
 
             with t.subTest('the probed width bounds the table'):
                 # The header line is prose, not columns.
@@ -153,12 +151,12 @@ class RenderedViewTests(TestCase):
             write(source, 'career', '- [ ] An active category task [P:2]')
 
             with t.subTest('a shut window keeps its category out of view'):
-                out = rendered(Selection(source, NOW, show_all=False))
+                out = View(Selection(source, NOW, show_all=False)).text
                 t.assertNotIn('An inactive category task', out)
                 t.assertIn('An active category task', out)
 
             with t.subTest('asking for everything reaches past the windows'):
-                out = rendered(Selection(source, NOW, show_all=True))
+                out = View(Selection(source, NOW, show_all=True)).text
                 t.assertIn('An inactive category task', out)
                 t.assertIn('An active category task', out)
 
@@ -170,14 +168,14 @@ class RenderedViewTests(TestCase):
                     parked=True,
                 )
 
-                out = rendered(Selection(source, NOW, show_all=True))
+                out = View(Selection(source, NOW, show_all=True)).text
 
                 t.assertNotIn('A parked task', out)
 
             with t.subTest('and the header names only what is open now'):
                 # Which categories are active is a fact about the clock.
                 # Asking to see everything does not reopen their windows.
-                out = rendered(Selection(source, NOW, show_all=True))
+                out = View(Selection(source, NOW, show_all=True)).text
                 t.assertIn('active: career, events, study, work', out)
 
 

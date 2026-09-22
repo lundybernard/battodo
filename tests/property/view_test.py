@@ -163,13 +163,13 @@ class ViewTests(TestCase):
     @example(lines=KNOWN_LINES)
     @example(lines=ABRIDGED_LINES)
     @given(LIST_FILES)
+    @patch.dict(environ, {'COLUMNS': str(WIDTH)})
     def test_text(t, lines: list[str]) -> None:
         with source(lines) as directory:
             selection = Selection(directory, NOW, show_all=False)
             published = loads(selection.json)
 
-            with patch.dict(environ, {'COLUMNS': str(WIDTH)}):
-                ret = View(selection).text
+            ret = View(selection).text
 
         out = ret.split('\n')
         active = ', '.join(published['active'])
