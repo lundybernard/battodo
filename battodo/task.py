@@ -12,7 +12,7 @@ from pathlib import Path
 from batconf import Configuration
 
 from .parser import TaskNode, TodoDocument, parse_date
-from .selector import TaskRecord, TaskSelection
+from .selector import TaskSelection
 
 
 def _completion_day(given: str | None, now: datetime) -> date:
@@ -62,17 +62,6 @@ class Task:
     def source(self) -> Path:
         """The source directory, `~` expanded."""
         return self.directory.expanduser()
-
-    @cached_property
-    def record(self) -> TaskRecord:
-        """The task the selector names, with the list that holds it.
-
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
-        """
-        return TaskSelection(self.source, self.selector).record
 
     @property
     def path(self) -> Path:

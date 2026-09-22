@@ -36,12 +36,6 @@ class TaskTests(TestCase):
         t.path.write_text(WORK, encoding='utf-8')
         t.tk = Task(t.source, '9o71lx', TODAY)
 
-    def test_record(t) -> None:
-        with t.subTest('the selector reaches one task in one list'):
-            record = t.tk.record
-            t.assertEqual(record.task.title, 'Deck rebuild')
-            t.assertEqual(record.path, t.path)
-
     def test_path(t) -> None:
         ret = t.tk.path
         t.assertEqual(ret, t.path)

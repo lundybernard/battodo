@@ -71,17 +71,6 @@ class TaskTests(TestCase):
         ret = t.tk.source
         t.assertEqual(ret, SOURCE)
 
-    def test_record(t):
-        with t.subTest('the selector is looked up in the source'):
-            ret = t.tk.record
-            t.assertIs(ret, t.TaskSelection.return_value.record)
-            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
-
-        with t.subTest('and a second read costs no second lookup'):
-            ret = t.tk.record
-            t.assertIs(ret, t.TaskSelection.return_value.record)
-            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
-
     def test_path(t):
         t.tk.selection = t.selection
         ret = t.tk.path
