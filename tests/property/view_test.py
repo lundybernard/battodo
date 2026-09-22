@@ -26,7 +26,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument, parse_date
-from battodo.rank import rank
+from battodo.rank import multiplier, rank
 from battodo.view import RANK_PLACES, TOP_N, Selection, View
 
 from .strategies import document, grammar
@@ -47,6 +47,8 @@ OPEN_MARK = '- [ ] '
 # The character a table rules its headings with, as the renderer draws
 # it. Held here so a case reads the table as a terminal would.
 RULE = '─'
+# The start of the line that closes a table holding tasks back.
+HELD_BACK = '  …'
 # The fields of one published task, in the order they are listed.
 TASK_FIELDS = [
     'id',
@@ -160,6 +162,20 @@ class WrittenList:
         return [(task.title, open_children(task)) for task in self.shown]
 
     @cached_property
+    def cells(self) -> list[tuple[str, ...]]:
+        """The five values a table shows for each task, padding aside."""
+        return [
+            (
+                f'{rank(task, TODAY):.1f}',
+                f'{multiplier(task):.1f}',
+                '' if task.loe is None else str(task.loe),
+                f'{task.title}{badge(task)}',
+                due_label(task).strip(),
+            )
+            for task in self.shown
+        ]
+
+    @cached_property
     def shown(self) -> list[TaskNode]:
         """The tasks a view shows, in the order it shows them."""
         return self.ranked[:TOP_N]
@@ -206,10 +222,67 @@ def open_children(task: TaskNode) -> int:
     return len([child for child in task.children if not child.done])
 
 
+def badge(task: TaskNode) -> str:
+    """The mark a table gives the open children of `task`, if any."""
+    count = open_children(task)
+    return f' (+{count})' if count else ''
+
+
+def due_label(task: TaskNode) -> str:
+    """How a table labels the due date of `task` on the day of NOW."""
+    due = parse_date(task.due)
+    if due is not None and due < TODAY:
+        return 'OVERDUE'
+    if due == TODAY:
+        return 'TODAY'
+    return task.due or ''
+
+
 def recurs_later(task: TaskNode) -> bool:
     """Whether `task` recurs and falls due after the day of NOW."""
     due = parse_date(task.due)
     return bool(task.repeat) and due is not None and due > TODAY
+
+
+class RenderedTable:
+    """The one table a rendered view of a case holds, read as text.
+
+    The view opens with its header, a blank line, the table's heading
+    and its column names. A line per task follows.
+    """
+
+    def __init__(self, text: str) -> None:
+        self.lines = text.split('\n')
+
+    @cached_property
+    def cells(self) -> list[tuple[str, ...]]:
+        """The five values each task line shows, padding aside."""
+        return [
+            tuple(line[span].strip() for span in self.spans)
+            for line in self.lines[4:]
+            if not line.startswith(HELD_BACK)
+        ]
+
+    @cached_property
+    def spans(self) -> list[slice]:
+        """Where each column runs across a line, read off its names.
+
+        A number aligns right, so its column ends where its name ends.
+        Text aligns left, so its column starts where its name starts.
+        """
+        names = self.lines[3]
+        rank_end = names.index('RANK') + len('RANK')
+        priority_end = names.index('P', rank_end) + len('P')
+        loe_end = names.index('LOE') + len('LOE')
+        task_start = names.index('TASK')
+        due_start = names.index('DUE')
+        return [
+            slice(0, rank_end),
+            slice(rank_end, priority_end),
+            slice(priority_end, loe_end),
+            slice(task_start, due_start),
+            slice(due_start, None),
+        ]
 
 
 def headings(out: list[str]) -> list[str]:
@@ -360,3 +433,16 @@ class ViewTests(TestCase):
         )
         t.assertEqual(len(out), 1 + spent)
         t.assertEqual([line for line in out if len(line) > WIDTH], [])
+
+    @fuzz
+    @patch.dict(environ, {'COLUMNS': str(WIDTH)})
+    def test_table_cells(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+        with source(lines) as directory:
+            selection = Selection(directory, NOW, show_all=False)
+
+            ret = View(selection).text
+
+        table = RenderedTable(ret)
+
+        t.assertEqual(table.cells, written.cells)
