@@ -10,13 +10,14 @@ output holds for any list file rather than what it happened to return.
 The cases began as the selection slice's oracle and outlived it (R4).
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from json import loads
 from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -77,6 +78,21 @@ ABRIDGED_LINES = [
 LIST_FILES = st.lists(grammar.task_lines, max_size=8)
 
 
+def fuzz(test: Callable[..., None]) -> Callable[..., None]:
+    """Run `test` on the two fixed list files, then on generated ones."""
+    return settings(deadline=None)(
+        example(lines=KNOWN_LINES)(
+            example(lines=ABRIDGED_LINES)(given(LIST_FILES)(test))
+        )
+    )
+
+
+def published(lines: list[str]) -> dict[str, Any]:
+    """The document a view of the list file `lines` publishes."""
+    with source(lines) as directory:
+        return loads(Selection(directory, NOW, show_all=False).json)
+
+
 @contextmanager
 def source(lines: list[str]) -> Iterator[Path]:
     """A source directory holding `lines` as its one list file."""
@@ -85,6 +101,15 @@ def source(lines: list[str]) -> Iterator[Path]:
         path = directory / f'{CATEGORY}.md'
         path.write_text(document(lines), encoding='utf-8')
         yield directory
+
+
+def shown_tasks(publication: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every task `publication` shows, across its categories."""
+    return [
+        task
+        for category in publication['categories']
+        for task in category['tasks']
+    ]
 
 
 def open_lines(lines: list[str]) -> int:
@@ -107,21 +132,16 @@ class SelectionTests(TestCase):
 
     maxDiff = None
 
-    @settings(deadline=None)
-    @example(lines=KNOWN_LINES)
-    @example(lines=ABRIDGED_LINES)
-    @given(LIST_FILES)
-    def test_json(t, lines: list[str]) -> None:
-        with source(lines) as directory:
-            selection = Selection(directory, NOW, show_all=False)
-
-            ret = loads(selection.json)
+    @fuzz
+    def test_document_shape(t, lines: list[str]) -> None:
+        ret = published(lines)
 
         t.assertEqual(list(ret), ['date', 'active', 'categories'])
         t.assertEqual(ret['date'], NOW.date().isoformat())
         t.assertEqual(ret['active'], sorted(set(ret['active'])))
 
         categories = ret['categories']
+        shown = shown_tasks(ret)
 
         t.assertEqual(
             [list(category) for category in categories],
@@ -131,25 +151,36 @@ class SelectionTests(TestCase):
             [category['name'] for category in categories],
             [CATEGORY] * len(categories),
         )
+        t.assertEqual(
+            [list(task) for task in shown],
+            [TASK_FIELDS] * len(shown),
+        )
+
+    @fuzz
+    def test_category_limits(t, lines: list[str]) -> None:
+        ret = published(lines)
+
+        categories = ret['categories']
+        shown = shown_tasks(ret)
+        hidden = sum(category['hidden'] for category in categories)
+
         # The case writes one list file, so a view of it publishes one
         # category at most. What that category holds is the whole
         # publication.
         t.assertLessEqual(len(categories), 1)
-
-        shown = [task for category in categories for task in category['tasks']]
-        hidden = sum(category['hidden'] for category in categories)
-        ranks = [task['rank'] for task in shown]
-
         # A category with nothing open is left out altogether, and one
         # holding anything back is filled to the limit first.
         t.assertEqual(bool(shown), bool(categories))
         t.assertEqual(len(shown), min(len(shown) + hidden, TOP_N))
         # A category accounts for no more than the case wrote open.
         t.assertLessEqual(len(shown) + hidden, open_lines(lines))
-        t.assertEqual(
-            [list(task) for task in shown],
-            [TASK_FIELDS] * len(shown),
-        )
+
+    @fuzz
+    def test_task_rank(t, lines: list[str]) -> None:
+        ret = published(lines)
+
+        ranks = [task['rank'] for task in shown_tasks(ret)]
+
         t.assertEqual(ranks, sorted(ranks, reverse=True))
         t.assertEqual(ranks, [round(rank, RANK_PLACES) for rank in ranks])
 
@@ -159,26 +190,23 @@ class ViewTests(TestCase):
 
     maxDiff = None
 
-    @settings(deadline=None)
-    @example(lines=KNOWN_LINES)
-    @example(lines=ABRIDGED_LINES)
-    @given(LIST_FILES)
+    @fuzz
     @patch.dict(environ, {'COLUMNS': str(WIDTH)})
     def test_text(t, lines: list[str]) -> None:
         with source(lines) as directory:
             selection = Selection(directory, NOW, show_all=False)
-            published = loads(selection.json)
+            publication = loads(selection.json)
 
             ret = View(selection).text
 
         out = ret.split('\n')
-        active = ', '.join(published['active'])
+        active = ', '.join(publication['active'])
         t.assertEqual(
             out[0],
-            f'{NOW:%A} {published["date"]} {NOW:%H:%M} — active: {active}',
+            f'{NOW:%A} {publication["date"]} {NOW:%H:%M} — active: {active}',
         )
 
-        categories = published['categories']
+        categories = publication['categories']
 
         t.assertEqual(
             [heading.strip(f'{RULE} ') for heading in headings(out)],
