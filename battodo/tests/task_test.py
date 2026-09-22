@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from ..task import Task
 
@@ -23,6 +23,8 @@ class TaskTests(TestCase):
             t.addCleanup(patcher.stop)
 
         t.tk = Task(Path(CONFIGURED), 'a selector', TODAY)
+        t.selection = MagicMock(spec=['record'])
+        t.selection.record = MagicMock(spec=['path', 'doc', 'ancestry'])
 
         t.now = Mock(spec=datetime)
         # spec models batconf: an option the user did not supply is
@@ -78,6 +80,42 @@ class TaskTests(TestCase):
         with t.subTest('and a second read costs no second lookup'):
             ret = t.tk.record
             t.assertIs(ret, t.TaskSelection.return_value.record)
+            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
+
+    def test_path(t):
+        t.tk.selection = t.selection
+        ret = t.tk.path
+        t.assertIs(ret, t.selection.record.path)
+
+    def test_doc(t):
+        t.tk.selection = t.selection
+        ret = t.tk.doc
+        t.assertIs(ret, t.selection.record.doc)
+
+    def test_ancestry(t):
+        t.tk.selection = t.selection
+        ret = t.tk.ancestry
+        t.assertIs(ret, t.selection.record.ancestry)
+
+    def test_node(t):
+        t.tk.selection = t.selection
+        t.selection.record.ancestry = ['a parent', 'the task']
+
+        ret = t.tk.node
+
+        t.assertEqual(ret, 'the task')
+
+    def test_selection(t):
+        with t.subTest('the selector is looked up in the source'):
+            ret = t.tk.selection
+
+            t.assertIs(ret, t.TaskSelection.return_value)
+            t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
+
+        with t.subTest('and a second read costs no second lookup'):
+            ret = t.tk.selection
+
+            t.assertIs(ret, t.TaskSelection.return_value)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
     def test_complete(t):

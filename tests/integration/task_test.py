@@ -43,6 +43,26 @@ class TaskTests(TestCase):
             t.assertEqual(record.task.title, 'Deck rebuild')
             t.assertEqual(record.path, t.path)
 
+    def test_path(t) -> None:
+        ret = t.tk.path
+        t.assertEqual(ret, t.path)
+
+    def test_doc(t) -> None:
+        ret = t.tk.doc
+        t.assertEqual(ret.text, WORK)
+
+    def test_ancestry(t) -> None:
+        ret = t.tk.ancestry
+        t.assertEqual([task.title for task in ret], ['Deck rebuild'])
+
+    def test_node(t) -> None:
+        ret = t.tk.node
+        t.assertEqual(ret.title, 'Deck rebuild')
+
+    def test_selection(t) -> None:
+        ret = t.tk.selection
+        t.assertEqual((ret.directory, ret.selector), (t.source, '9o71lx'))
+
     def test_complete(t) -> None:
         t.tk.complete()
 

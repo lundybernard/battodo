@@ -12,7 +12,7 @@ from pathlib import Path
 from batconf import Configuration
 
 from .mutate import complete
-from .parser import parse_date
+from .parser import TaskNode, TodoDocument, parse_date
 from .selector import TaskRecord, TaskSelection
 
 
@@ -75,6 +75,35 @@ class Task:
             The selector does not name exactly one open task.
         """
         return TaskSelection(self.source, self.selector).record
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def doc(self) -> TodoDocument:
+        """The parsed list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def ancestry(self) -> list[TaskNode]:
+        """The task and every task above it, outermost first."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it."""
+        raise NotImplementedError
+
+    @cached_property
+    def selection(self) -> TaskSelection:
+        """The open tasks the selector reaches in the source.
+
+        One selection answers from one read of the source, so every
+        property above reads the same document.
+        """
+        raise NotImplementedError
 
     def complete(self) -> None:
         """Log the completion under the day this task carries.
