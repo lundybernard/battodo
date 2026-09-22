@@ -1,14 +1,15 @@
-"""Characterization tests for the task a selector names.
+"""Property tests for the task a selector names, driven by Hypothesis.
 
-Temporary scaffolding for the move of the selected task onto `Task`.
-The suite pins which open task `TaskSelection.record` names in a list
-file drawn from the schema grammar, and the error it raises when a
-selector names no task or several. It is deleted with the record it
-pins.
+Each case writes a list file drawn from the schema grammar, then
+asserts what `Task` holds for a selector: the list, the document and
+the ancestry, or the error text when the selector names no open task
+or several. The expected answer derives from the drawn file, never
+from the code under test.
 """
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,30 +19,36 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument
-from battodo.selector import SelectionError, TaskSelection
+from battodo.selector import SelectionError
+from battodo.task import Task
 
-from ..property.strategies import Node, grammar
+from .strategies import Node, grammar
 
 # The one list a generated source holds.
 LIST_FILE = 'a-list.md'
+# A day no selection reads.
+TODAY = date(2026, 8, 5)
+
+Answer = tuple[str, str, list[TaskNode]] | str
 
 
-class TaskSelectionTests(TestCase):
-    """Characterization tests for battodo.selector.TaskSelection."""
+class TaskTests(TestCase):
+    """Property tests for battodo.task.Task."""
 
     @given(grammar.documents, st.data())
-    def test_record(
+    def test_selection(
         t,
         drawn: tuple[str, list[Node]],
         data: st.DataObject,
     ) -> None:
         text, _ = drawn
-        ancestries = descend(TodoDocument(as_read(text)).tasks, [])
+        read = as_read(text)
+        ancestries = descend(TodoDocument(read).tasks, [])
         selector = data.draw(selectors(ancestries))
-        expected = outcome(ancestries, selector)
+        expected = outcome(read, ancestries, selector)
 
         with source(text) as directory:
-            ret = answer(TaskSelection(directory, selector))
+            ret = answer(Task(directory, selector, TODAY))
 
         t.assertEqual(ret, expected)
 
@@ -80,10 +87,14 @@ def selectors(ancestries: list[list[TaskNode]]) -> st.SearchStrategy[str]:
 
 
 def outcome(
+    read: str,
     ancestries: list[list[TaskNode]],
     selector: str,
-) -> tuple[str, list[TaskNode]] | str:
-    """The list and ancestry the selector names, or the error text."""
+) -> Answer:
+    """What the task holds for the selector, or the error text.
+
+    An `[ID:]` match narrows out the title matches.
+    """
     # fmt: off
     found = [
         ancestry
@@ -106,7 +117,7 @@ def outcome(
     if len(named) > 1:
         titles = ', '.join(repr(ancestry[-1].title) for ancestry in named)
         return f'{selector!r} matches {len(named)} open tasks: {titles}'
-    return LIST_FILE, named[0]
+    return LIST_FILE, read, named[0]
 
 
 @contextmanager
@@ -118,10 +129,9 @@ def source(text: str) -> Iterator[Path]:
         yield directory
 
 
-def answer(selection: TaskSelection) -> tuple[str, list[TaskNode]] | str:
-    """The list and ancestry the selection names, or the error text."""
+def answer(task: Task) -> Answer:
+    """What the task holds, or the error text."""
     try:
-        record = selection.record
+        return task.path.name, task.doc.text, task.ancestry
     except SelectionError as error:
         return str(error)
-    return record.path.name, record.ancestry
