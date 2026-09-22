@@ -55,8 +55,14 @@ a test-improvement finding, not a blocker.
 Each slice runs one bracket: pin current behavior in an oracle,
 declare the new interface, land the red, land the green, prove parity
 against the oracle, cut callers over, retire the old code. Oracles live
-in `tests/oracle/`. The retire commit of a slice deletes that slice's
-oracle. No oracle outlives its slice.
+in `tests/oracle/`. The retire commit of a slice empties that
+directory. No oracle outlives its slice.
+
+What dies with the old code is the comparison against it. A slice's
+Hypothesis-driven oracle tests are not discarded: the retire commit
+moves them to `tests/property/`, drops the old-versus-new comparisons,
+and asserts on the output itself in their place. Generated input is
+worth more than the code it was first aimed at.
 
 The R1 and R2 pins are not slice oracles. They pin contracts that
 outlive the refactor, so they are permanent tests in the integration

@@ -40,6 +40,16 @@ def empty_source() -> Iterator[Path]:
         yield Path(tmp)
 
 
+def rendered(selection: Selection, width: int = 80) -> str:
+    """The view `selection` lays out at `width` columns.
+
+    The layout probes the terminal, which reads COLUMNS first, so the
+    width is pinned through the environment.
+    """
+    with patch.dict(environ, {'COLUMNS': str(width)}):
+        return View(selection).text
+
+
 def write(source: Path, name: str, *items: str, parked: bool = False) -> Path:
     """Write the list `name`, holding `items` in its open section."""
     marker = f'{PARKED}\n\n' if parked else ''
@@ -65,7 +75,7 @@ class RenderedViewTests(TestCase):
         write(t.source, 'career', '- [ ] A task after the parked list [P:2]')
         write(t.source, 'home-repair', '- [ ] The last task of all [P:2]')
 
-        out = View(Selection(t.source, NOW, show_all=False), 80).text
+        out = rendered(Selection(t.source, NOW, show_all=False))
 
         with t.subTest('the parked list contributes nothing'):
             t.assertNotIn('A parked task', out)
@@ -82,7 +92,7 @@ class RenderedViewTests(TestCase):
             write(source, 'events', '- [x] A completed task [P:3]')
             write(source, 'backlog', '- [ ] A visible task [P:2]')
 
-            out = View(Selection(source, NOW, show_all=False), 80).text
+            out = rendered(Selection(source, NOW, show_all=False))
 
             with t.subTest('a list with no items has no table'):
                 t.assertNotIn('Career', out)
@@ -101,7 +111,7 @@ class RenderedViewTests(TestCase):
             )
 
             with t.subTest('five items, and a count of what is held back'):
-                out = View(Selection(source, NOW, show_all=False), 80).text
+                out = rendered(Selection(source, NOW, show_all=False))
 
                 t.assertIn('Item 5', out)
                 t.assertNotIn('Item 6', out)
@@ -110,23 +120,23 @@ class RenderedViewTests(TestCase):
             with t.subTest('an explicit top_n replaces the default'):
                 selection = Selection(source, NOW, show_all=False, top_n=2)
 
-                out = View(selection, 80).text
+                out = rendered(selection)
 
                 t.assertIn('Item 2', out)
                 t.assertNotIn('Item 3', out)
                 t.assertIn('… and 5 more', out)
 
             with t.subTest('show_all keeps every item and holds back none'):
-                out = View(Selection(source, NOW, show_all=True), 80).text
+                out = rendered(Selection(source, NOW, show_all=True))
                 t.assertIn('Item 7', out)
                 t.assertNotIn('… and', out)
 
         with empty_source() as source:
             write(source, 'career', f'- [ ] {LONG_TITLE} [P:3]')
-            narrow = View(Selection(source, NOW, show_all=False), 60).text
-            wide = View(Selection(source, NOW, show_all=False), 120).text
+            narrow = rendered(Selection(source, NOW, show_all=False), 60)
+            wide = rendered(Selection(source, NOW, show_all=False), 120)
 
-            with t.subTest('an explicit width bounds the table'):
+            with t.subTest('the probed width bounds the table'):
                 # The header line is prose, not columns.
                 table = narrow.split('\n')[1:]
                 t.assertLessEqual(max(len(line) for line in table), 60)
@@ -138,27 +148,17 @@ class RenderedViewTests(TestCase):
             with t.subTest('a wide one does not have to'):
                 t.assertIn(LONG_TITLE, wide)
 
-            # With no explicit width, the layout reads COLUMNS from the
-            # environment.
-            for columns, expected in (('60', narrow), ('120', wide)):
-                with t.subTest(f'no width given probes {columns} columns'):
-                    with patch.dict(environ, {'COLUMNS': columns}):
-                        selection = Selection(source, NOW, show_all=False)
-                        probed = View(selection).text
-
-                    t.assertEqual(probed, expected)
-
         with empty_source() as source:
             write(source, 'chores', '- [ ] An inactive category task [P:3]')
             write(source, 'career', '- [ ] An active category task [P:2]')
 
             with t.subTest('a shut window keeps its category out of view'):
-                out = View(Selection(source, NOW, show_all=False), 80).text
+                out = rendered(Selection(source, NOW, show_all=False))
                 t.assertNotIn('An inactive category task', out)
                 t.assertIn('An active category task', out)
 
             with t.subTest('asking for everything reaches past the windows'):
-                out = View(Selection(source, NOW, show_all=True), 80).text
+                out = rendered(Selection(source, NOW, show_all=True))
                 t.assertIn('An inactive category task', out)
                 t.assertIn('An active category task', out)
 
@@ -170,14 +170,14 @@ class RenderedViewTests(TestCase):
                     parked=True,
                 )
 
-                out = View(Selection(source, NOW, show_all=True), 80).text
+                out = rendered(Selection(source, NOW, show_all=True))
 
                 t.assertNotIn('A parked task', out)
 
             with t.subTest('and the header names only what is open now'):
                 # Which categories are active is a fact about the clock.
                 # Asking to see everything does not reopen their windows.
-                out = View(Selection(source, NOW, show_all=True), 80).text
+                out = rendered(Selection(source, NOW, show_all=True))
                 t.assertIn('active: career, events, study, work', out)
 
 
