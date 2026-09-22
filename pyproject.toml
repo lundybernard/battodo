@@ -113,7 +113,8 @@ lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
 mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 # fuz: the property suite searches with random inputs. The
 # HYPOTHESIS_PROFILE variable picks the budget: dev runs 100 examples,
-# ci runs 1000. See tests/property/__init__.py.
+# ci runs 1000. The HYPOTHESIS_EXAMPLES variable replaces the example
+# count of that profile. See tests/property/__init__.py.
 fuz = { depends-on = [{ task = "_property", environment = "test" }] }
 
 [tool.pixi.feature.test.dependencies]
