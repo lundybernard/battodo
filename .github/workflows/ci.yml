@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
         with:
-          pixi-version: v0.71.1
+          pixi-version: v0.81.0
           locked: true
           # Install only this leg's env; the default 3.14 env is unused
           # here and would be an extra download on every older leg.
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
         with:
-          pixi-version: v0.71.1
+          pixi-version: v0.81.0
           locked: true
       - run: pixi run --locked typecheck
 
@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
         with:
-          pixi-version: v0.71.1
+          pixi-version: v0.81.0
           locked: true
       - run: pixi run --locked lint
 
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
         with:
-          pixi-version: v0.71.1
+          pixi-version: v0.81.0
           locked: true
           environments: test
       - run: HYPOTHESIS_PROFILE=ci pixi run --locked fuz
