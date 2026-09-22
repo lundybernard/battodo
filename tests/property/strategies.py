@@ -8,7 +8,9 @@ reads top-down.
 
 Every drawn character is one a UTF-8 file can hold. A list file is read
 and written as UTF-8, so a surrogate code point is not a list file that
-exists, and a suite that writes what it draws cannot encode one.
+exists, and a suite that writes what it draws cannot encode one. No
+drawn line holds a carriage return: a list file is read in text mode,
+where a carriage return ends the line.
 """
 
 from functools import cached_property
@@ -72,7 +74,10 @@ class Grammar:
     def titles(self) -> st.SearchStrategy[str]:
         """A title holds no brackets, so a field never hides inside it."""
         return st.text(
-            alphabet=st.characters(codec='utf-8', exclude_characters='[]\n'),
+            alphabet=st.characters(
+                codec='utf-8',
+                exclude_characters='[]\n\r',
+            ),
             min_size=1,
             max_size=16,
         ).filter(str.strip)
@@ -155,7 +160,10 @@ class Grammar:
     def field_values(self) -> st.SearchStrategy[str]:
         """A field value is anything up to the closing bracket."""
         return st.text(
-            alphabet=st.characters(codec='utf-8', exclude_characters=']\n'),
+            alphabet=st.characters(
+                codec='utf-8',
+                exclude_characters=']\n\r',
+            ),
             max_size=8,
         )
 

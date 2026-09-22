@@ -13,6 +13,7 @@ The cases began as the selection slice's oracle and outlived it (R4).
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import cached_property
 from json import loads
 from os import environ
 from pathlib import Path
@@ -24,6 +25,8 @@ from unittest.mock import patch
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
+from battodo.parser import TaskNode, TodoDocument, parse_date
+from battodo.rank import rank
 from battodo.view import RANK_PLACES, TOP_N, Selection, View
 
 from .strategies import document, grammar
@@ -31,6 +34,7 @@ from .strategies import document, grammar
 # Wednesday mid-morning: the work window is open and the chores window
 # is shut.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+TODAY = NOW.date()
 # The one list a generated source holds. A named category no hour shuts
 # keeps a case independent of the clock.
 CATEGORY = 'career'
@@ -56,6 +60,12 @@ TASK_FIELDS = [
     'tags',
     'subtasks',
 ]
+# The fields a published task carries verbatim from its line.
+STORED_FIELDS = ['id', 'title', 'loe', 'due', 'added', 'repeat', 'tags']
+# Where a task with no due date sorts among the due dates of its ties.
+NO_DUE = 'zzzz'
+# A list file that holds this marker anywhere is never shown.
+PARKED = 'battodo:parked'
 # One list file covering the cases the hand-written suites name: an
 # open task, a finished one, a recurrence ahead of today, a one-off
 # ahead of today, a late recurrence, one due today, and a date the
@@ -115,6 +125,81 @@ def shown_tasks(publication: dict[str, Any]) -> list[dict[str, Any]]:
 def open_lines(lines: list[str]) -> int:
     """How many of `lines` are task lines left open, at any depth."""
     return len([line for line in lines if line.lstrip().startswith(OPEN_MARK)])
+
+
+class WrittenList:
+    """The list file a case writes, read and ranked apart from the view.
+
+    The parser reads the lines and the rank module ranks each task on
+    the day of NOW, so each member states what a view of the file holds
+    from the input and the clock alone.
+    """
+
+    def __init__(self, lines: list[str]) -> None:
+        self.lines = lines
+
+    @cached_property
+    def stored(self) -> list[dict[str, object]]:
+        """The fields each shown task carries verbatim from its line."""
+        return [
+            {
+                'id': task.task_id,
+                'title': task.title,
+                'loe': task.loe,
+                'due': task.due,
+                'added': task.added,
+                'repeat': task.repeat,
+                'tags': task.tags,
+            }
+            for task in self.shown
+        ]
+
+    @cached_property
+    def shown(self) -> list[TaskNode]:
+        """The tasks a view shows, in the order it shows them."""
+        return self.ranked[:TOP_N]
+
+    @cached_property
+    def ranked(self) -> list[TaskNode]:
+        """The held tasks: rank descending, then due, then title."""
+        return sorted(
+            self.held,
+            key=lambda task: (
+                -rank(task, TODAY),
+                task.due or NO_DUE,
+                task.title,
+            ),
+        )
+
+    @cached_property
+    def held(self) -> list[TaskNode]:
+        """The visible tasks, or none where the list file is parked."""
+        return [] if PARKED in self.text else self.visible
+
+    @cached_property
+    def text(self) -> str:
+        """The list file the lines make."""
+        return document(self.lines)
+
+    @cached_property
+    def visible(self) -> list[TaskNode]:
+        """The open top-level tasks, less each recurrence due later."""
+        return [
+            task
+            for task in self.tasks
+            if not task.done and not recurs_later(task)
+        ]
+
+    @cached_property
+    def tasks(self) -> list[TaskNode]:
+        """The top-level tasks of the list file."""
+        return TodoDocument(self.text).tasks
+
+
+def recurs_later(task: TaskNode) -> bool:
+    """Whether `task` recurs and falls due after the day of NOW."""
+    due = parse_date(task.due)
+    return bool(task.repeat) and due is not None and due > TODAY
 
 
 def headings(out: list[str]) -> list[str]:
@@ -183,6 +268,23 @@ class SelectionTests(TestCase):
 
         t.assertEqual(ranks, sorted(ranks, reverse=True))
         t.assertEqual(ranks, [round(rank, RANK_PLACES) for rank in ranks])
+
+    @fuzz
+    def test_task_fields(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        stored = [
+            {name: task[name] for name in STORED_FIELDS}
+            for task in shown_tasks(ret)
+        ]
+
+        # The order of the tasks is the topic of another case.
+        t.assertEqual(
+            sorted(stored, key=repr),
+            sorted(written.stored, key=repr),
+        )
 
 
 class ViewTests(TestCase):
