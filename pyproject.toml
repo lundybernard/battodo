@@ -29,6 +29,7 @@ include = ["battodo/", "LICENSE", "pyproject.toml"]
 packages = ["battodo"]
 
 [tool.pixi.workspace]
+requires-pixi = ">=0.71"
 channels = ["conda-forge"]
 # pixi-build is preview: it turns this workspace into a buildable
 # package, which `pixi global install` requires.
