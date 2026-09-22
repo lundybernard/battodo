@@ -286,6 +286,21 @@ class SelectionTests(TestCase):
             sorted(written.stored, key=repr),
         )
 
+    @fuzz
+    def test_task_order(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        order = [(task['title'], task['due']) for task in shown_tasks(ret)]
+
+        # Most drawn tasks share a rank, so the due date and the title
+        # decide their order.
+        t.assertEqual(
+            order,
+            [(task.title, task.due) for task in written.shown],
+        )
+
 
 class ViewTests(TestCase):
     """Property tests for battodo.view.View.text."""
