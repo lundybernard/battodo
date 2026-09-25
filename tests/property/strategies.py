@@ -161,8 +161,9 @@ class Grammar:
     def field_values(self) -> st.SearchStrategy[str]:
         """A field value is anything up to the closing bracket.
 
-        Text that short never spells an ISO date, so dates are drawn
-        apart.
+        Text that short seldom spells an ISO date or a whole number, so
+        both are drawn apart. A whole number reads as an `LOE` or as a
+        `P`, the legacy scale included.
         """
         return st.one_of(
             st.text(
@@ -173,6 +174,7 @@ class Grammar:
                 max_size=8,
             ),
             st.dates().map(date.isoformat),
+            st.integers(min_value=0, max_value=130).map(str),
         )
 
     @cached_property
