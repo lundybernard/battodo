@@ -20,7 +20,7 @@ from batconf import Configuration
 
 from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
 from .conf import TZ
-from .item import build_item, build_item_json
+from .item import Item, ItemView
 from .lists import item_count
 from .mutate import (
     add_subtask,
@@ -166,8 +166,10 @@ def get_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    build = build_item_json if _is_json(conf) else build_item
-    return build(_source(conf), conf.selector, now)
+    item = Item.from_config(conf, now)
+    if _is_json(conf):
+        return item.json
+    return ItemView(item).text
 
 
 def add_item(conf: Configuration, now: datetime) -> str:

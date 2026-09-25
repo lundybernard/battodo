@@ -103,49 +103,42 @@ class GetItemTests(TestCase):
     """Unit tests for battodo.lib.get_item."""
 
     def setUp(t):
-        for target in ('build_item', 'build_item_json'):
+        patches = ['Item', 'ItemView']
+        for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
+        t.item = t.Item.from_config.return_value
 
         t.now = sentinel.now
         # spec models batconf: an option the user did not supply is
         # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'selector', 'format'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.selector = 'a selector'
+        t.conf = Mock(spec=['format'])
         t.conf.format = 'text'
 
-    def test_text(t):
-        built = get_item(t.conf, t.now)
+    def test_item(t):
+        get_item(t.conf, t.now)
+        # The configuration is decoded once, by the item.
+        t.Item.from_config.assert_called_once_with(t.conf, t.now)
 
-        args = t.build_item.call_args[0]
-        t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], 'a selector')
-        t.assertEqual(args[2], t.now)
-        t.assertEqual(built, t.build_item.return_value)
+    def test_text(t):
+        rendered = get_item(t.conf, t.now)
+        t.ItemView.assert_called_once_with(t.item)
+        t.assertEqual(rendered, t.ItemView.return_value.text)
 
     def test_json(t):
         t.conf.format = 'json'
 
-        built = get_item(t.conf, t.now)
+        rendered = get_item(t.conf, t.now)
 
-        t.assertEqual(t.build_item_json.call_args[0][1], 'a selector')
-        t.assertEqual(built, t.build_item_json.return_value)
-
-        # The json builder serializes; nothing renders.
-        t.build_item.assert_not_called()
+        t.assertEqual(rendered, t.item.json)
+        # The item serializes itself; nothing renders it.
+        t.ItemView.assert_not_called()
 
     def test_unconfigured_format(t):
-        conf = Mock(spec=['view', 'selector'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.selector = 'a selector'
-
-        get_item(conf, t.now)
-
-        t.build_item.assert_called_once()
+        conf = Mock(spec=[])
+        rendered = get_item(conf, t.now)
+        t.assertEqual(rendered, t.ItemView.return_value.text)
 
 
 class AddItemTests(TestCase):
