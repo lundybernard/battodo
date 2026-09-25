@@ -13,7 +13,7 @@ drawn line holds a carriage return: a list file is read in text mode,
 where a carriage return ends the line.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from functools import cached_property
 from typing import NamedTuple
 
@@ -21,8 +21,13 @@ from hypothesis import strategies as st
 
 from battodo.parser import FIELD_NAMES, OPEN_HEADING
 
+# The day the suites read at.
+TODAY = date(2026, 8, 5)
+# How far either side of TODAY a nearby date falls.
+NEARBY = timedelta(days=100)
 
-# `Node` leads the module: the annotations below it name this type, and
+
+# `Node` leads the classes: the annotations below it name this type, and
 # an annotation evaluates at definition time.
 class Node(NamedTuple):
     """One task line, with its note lines and its child nodes.
@@ -163,7 +168,8 @@ class Grammar:
 
         Text that short seldom spells an ISO date or a whole number, so
         both are drawn apart. A whole number reads as an `LOE` or as a
-        `P`, the legacy scale included.
+        `P`, the legacy scale included. Some dates fall near TODAY, where
+        an age and a due date weigh on a rank.
         """
         return st.one_of(
             st.text(
@@ -174,6 +180,10 @@ class Grammar:
                 max_size=8,
             ),
             st.dates().map(date.isoformat),
+            st.dates(
+                min_value=TODAY - NEARBY,
+                max_value=TODAY + NEARBY,
+            ).map(date.isoformat),
             st.integers(min_value=0, max_value=130).map(str),
         )
 
