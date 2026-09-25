@@ -224,32 +224,37 @@ class Item:
 
         The local day of the clock decides the rank.
         """
-        raise NotImplementedError
+        task = Task(
+            Path(conf.view.source_dir),
+            conf.selector,
+            now.date(),
+        )
+        return cls(task)
 
     @property
     def category(self) -> str:
         """The name of the list: its file's name without the extension."""
-        raise NotImplementedError
+        return self.task.path.stem
 
     @property
     def node(self) -> TaskNode:
         """The task as the parser reads it."""
-        raise NotImplementedError
+        return self.task.node
 
     @property
     def rank(self) -> float:
         """The task's rank on the day the task carries."""
-        raise NotImplementedError
+        return rank(self.node, self.task.today)
 
     @property
     def priority(self) -> float:
         """The task's stored priority, as a multiplier."""
-        raise NotImplementedError
+        return multiplier(self.node)
 
     @property
     def subtasks(self) -> list[TaskNode]:
         """The task's children, done ones included, in file order."""
-        raise NotImplementedError
+        return self.node.children
 
 
 class ItemView:
@@ -264,7 +269,16 @@ class ItemView:
 
         Returned without a trailing newline.
         """
-        raise NotImplementedError
+        width = self.width
+        lines = [self.item.node.title]
+        lines.extend(
+            f'{INDENT}{label:<{width}}{INDENT}{value}'
+            for label, value in self.rows
+        )
+        if self.item.subtasks:
+            lines.append(f'{INDENT}subtasks')
+            lines.extend(self.outline)
+        return '\n'.join(lines)
 
     @property
     def rows(self) -> list[tuple[str, str]]:
@@ -272,22 +286,46 @@ class ItemView:
 
         An absent field has no row. An absent id reads as NO_VALUE.
         """
-        raise NotImplementedError
+        node = self.item.node
+        rows = [
+            ('list', self.item.category),
+            ('id', node.task_id or NO_VALUE),
+            ('rank', f'{round(self.item.rank, RANK_PLACES):.1f}'),
+            ('P', f'{self.item.priority:.1f}'),
+        ]
+        # SCHEMA.md's order, then ADDED, a btodo extension.
+        stored = (
+            ('LOE', node.loe),
+            ('DUE', node.due),
+            ('REPEAT', node.repeat),
+            ('TAGS', ', '.join(node.tags) or None),
+            ('ADDED', node.added),
+        )
+        rows.extend(
+            (label, str(value))
+            for label, value in stored
+                if value is not None
+        )  # fmt: skip
+        return rows
 
     @property
     def width(self) -> int:
         """How wide the labels pad to: the longest label."""
-        raise NotImplementedError
+        return max(len(label) for label, _ in self.rows)
 
     @property
     def outline(self) -> list[str]:
         """The subtask lines, indented below their label."""
-        raise NotImplementedError
+        return [
+            f'{INDENT * 2}{line}'
+            for subtask in self.subtasks
+            for line in subtask.lines
+        ]
 
     @property
     def subtasks(self) -> list['SubtaskView']:
         """The item's children, each laid out as text."""
-        raise NotImplementedError
+        return [SubtaskView(child) for child in self.item.subtasks]
 
 
 class SubtaskView:
@@ -299,22 +337,29 @@ class SubtaskView:
     @property
     def lines(self) -> list[str]:
         """The child's line, then its children's, one indent deeper."""
-        raise NotImplementedError
+        return [
+            self.line,
+            *(
+                f'{INDENT}{line}'
+                for subtask in self.subtasks
+                for line in subtask.lines
+            ),
+        ]
 
     @property
     def line(self) -> str:
         """The child in SCHEMA.md markup: the checkbox, title and fields."""
-        raise NotImplementedError
+        return f'[{self.mark}] {self.node.title}{self.fields}'
 
     @property
     def subtasks(self) -> list['SubtaskView']:
         """The child's own children, each laid out as text."""
-        raise NotImplementedError
+        return [SubtaskView(child) for child in self.node.children]
 
     @property
     def mark(self) -> str:
         """The checkbox mark: `x` once done, a space while open."""
-        raise NotImplementedError
+        return 'x' if self.node.done else ' '
 
     @property
     def fields(self) -> str:
@@ -322,7 +367,17 @@ class SubtaskView:
 
         An absent field is left out.
         """
-        raise NotImplementedError
+        stored = (
+            ('LOE', self.node.loe),
+            ('DUE', self.node.due),
+            ('TAGS', ','.join(self.node.tags) or None),
+            ('ID', self.node.task_id),
+        )
+        return ''.join(
+            f' [{name}:{value}]'
+            for name, value in stored
+                if value is not None
+        )  # fmt: skip
 
 
 class ItemJsonView:
@@ -337,7 +392,7 @@ class ItemJsonView:
 
         The schema is a contract for agents; see `data` for its shape.
         """
-        raise NotImplementedError
+        return dumps(self.data, indent=2)
 
     @property
     def data(self) -> dict[str, Any]:
@@ -356,12 +411,26 @@ class ItemJsonView:
         nests to any depth, and holds completed children as well as open
         ones -- a read reports the item as it stands.
         """
-        raise NotImplementedError
+        node = self.item.node
+        return {
+            'list': self.item.category,
+            'id': node.task_id,
+            'title': node.title,
+            'done': node.done,
+            'rank': round(self.item.rank, RANK_PLACES),
+            'priority': self.item.priority,
+            'loe': node.loe,
+            'due': node.due,
+            'added': node.added,
+            'repeat': node.repeat,
+            'tags': node.tags,
+            'subtasks': [subtask.data for subtask in self.subtasks],
+        }
 
     @property
     def subtasks(self) -> list['SubtaskJsonView']:
         """The item's children, each laid out as JSON."""
-        raise NotImplementedError
+        return [SubtaskJsonView(child) for child in self.item.subtasks]
 
 
 class SubtaskJsonView:
@@ -378,9 +447,17 @@ class SubtaskJsonView:
     @property
     def data(self) -> dict[str, Any]:
         """The child as `ItemJsonView.data` records it, with its children."""
-        raise NotImplementedError
+        return {
+            'id': self.node.task_id,
+            'title': self.node.title,
+            'done': self.node.done,
+            'loe': self.node.loe,
+            'due': self.node.due,
+            'tags': self.node.tags,
+            'subtasks': [subtask.data for subtask in self.subtasks],
+        }
 
     @property
     def subtasks(self) -> list['SubtaskJsonView']:
         """The child's own children, each laid out as JSON."""
-        raise NotImplementedError
+        return [SubtaskJsonView(child) for child in self.node.children]
