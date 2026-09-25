@@ -86,15 +86,23 @@ KNOWN_LINES = [
 ABRIDGED_LINES = [
     f'- [ ] Open task {number} [P:{number}]' for number in range(1, 8)
 ]
+# A list file with the marker in one open task's title, so every case
+# reaches the parked path: a view shows neither task.
+PARKED_LINES = [
+    f'- [ ] A title holding {PARKED} [P:2]',
+    '- [ ] An unmarked task [P:2]',
+]
 
 LIST_FILES = st.lists(grammar.task_lines, max_size=8)
 
 
 def fuzz(test: Callable[..., None]) -> Callable[..., None]:
-    """Run `test` on the two fixed list files, then on generated ones."""
+    """Run `test` on the three fixed list files, then on generated ones."""
     return settings(deadline=None)(
         example(lines=KNOWN_LINES)(
-            example(lines=ABRIDGED_LINES)(given(LIST_FILES)(test))
+            example(lines=ABRIDGED_LINES)(
+                example(lines=PARKED_LINES)(given(LIST_FILES)(test))
+            )
         )
     )
 
