@@ -224,7 +224,7 @@ class Item:
 
         The local day of the clock decides the rank.
         """
-        raise NotImplementedError
+        return cls(Task(Path(conf.view.source_dir), conf.selector, now.date()))
 
     @property
     def json(self) -> str:
@@ -232,7 +232,7 @@ class Item:
 
         The schema is a contract for agents; see `data` for its shape.
         """
-        raise NotImplementedError
+        return dumps(self.data, indent=2)
 
     @property
     def data(self) -> dict[str, Any]:
@@ -251,32 +251,45 @@ class Item:
         nests to any depth, and holds completed children as well as open
         ones -- a read reports the item as it stands.
         """
-        raise NotImplementedError
+        return {
+            'list': self.category,
+            'id': self.node.task_id,
+            'title': self.node.title,
+            'done': self.node.done,
+            'rank': round(self.rank, RANK_PLACES),
+            'priority': self.priority,
+            'loe': self.node.loe,
+            'due': self.node.due,
+            'added': self.node.added,
+            'repeat': self.node.repeat,
+            'tags': self.node.tags,
+            'subtasks': [subtask.data for subtask in self.subtasks],
+        }
 
     @property
     def category(self) -> str:
         """The name of the list: its file's name without the extension."""
-        raise NotImplementedError
+        return self.task.path.stem
 
     @property
     def node(self) -> TaskNode:
         """The task as the parser reads it."""
-        raise NotImplementedError
+        return self.task.node
 
     @property
     def rank(self) -> float:
         """The task's rank on the day the task carries."""
-        raise NotImplementedError
+        return rank(self.node, self.task.today)
 
     @property
     def priority(self) -> float:
         """The task's stored priority, as a multiplier."""
-        raise NotImplementedError
+        return multiplier(self.node)
 
     @property
     def subtasks(self) -> list['Subtask']:
         """The task's children, done ones included, in file order."""
-        raise NotImplementedError
+        return [Subtask(child) for child in self.node.children]
 
 
 class Subtask:
@@ -293,27 +306,42 @@ class Subtask:
     @property
     def data(self) -> dict[str, Any]:
         """The child as `Item.data` records it, with its own children."""
-        raise NotImplementedError
+        return {
+            'id': self.node.task_id,
+            'title': self.node.title,
+            'done': self.node.done,
+            'loe': self.node.loe,
+            'due': self.node.due,
+            'tags': self.node.tags,
+            'subtasks': [subtask.data for subtask in self.subtasks],
+        }
 
     @property
     def subtasks(self) -> list['Subtask']:
         """The child's own children, in file order."""
-        raise NotImplementedError
+        return [Subtask(child) for child in self.node.children]
 
     @property
     def lines(self) -> list[str]:
         """The child's line, then its children's, one indent deeper."""
-        raise NotImplementedError
+        return [
+            self.line,
+            *(
+                f'{INDENT}{line}'
+                for subtask in self.subtasks
+                for line in subtask.lines
+            ),
+        ]
 
     @property
     def line(self) -> str:
         """The child in SCHEMA.md markup: the checkbox, title and fields."""
-        raise NotImplementedError
+        return f'[{self.mark}] {self.node.title}{self.fields}'
 
     @property
     def mark(self) -> str:
         """The checkbox mark: `x` once done, a space while open."""
-        raise NotImplementedError
+        return 'x' if self.node.done else ' '
 
     @property
     def fields(self) -> str:
@@ -321,7 +349,16 @@ class Subtask:
 
         An absent field is left out.
         """
-        raise NotImplementedError
+        return ''.join(
+            f' [{name}:{value}]'
+            for name, value in (
+                ('LOE', self.node.loe),
+                ('DUE', self.node.due),
+                ('TAGS', ','.join(self.node.tags) or None),
+                ('ID', self.node.task_id),
+            )
+            if value is not None
+        )
 
 
 class ItemView:
@@ -336,7 +373,16 @@ class ItemView:
 
         Returned without a trailing newline.
         """
-        raise NotImplementedError
+        width = self.width
+        lines = [self.item.node.title]
+        lines.extend(
+            f'{INDENT}{label:<{width}}{INDENT}{value}'
+            for label, value in self.rows
+        )
+        if self.item.subtasks:
+            lines.append(f'{INDENT}subtasks')
+            lines.extend(self.outline)
+        return '\n'.join(lines)
 
     @property
     def rows(self) -> list[tuple[str, str]]:
@@ -344,14 +390,36 @@ class ItemView:
 
         An absent field has no row. An absent id reads as NO_VALUE.
         """
-        raise NotImplementedError
+        node = self.item.node
+        rows = [
+            ('list', self.item.category),
+            ('id', node.task_id or NO_VALUE),
+            ('rank', f'{round(self.item.rank, RANK_PLACES):.1f}'),
+            ('P', f'{self.item.priority:.1f}'),
+        ]
+        # SCHEMA.md's order, then ADDED, a btodo extension.
+        stored = (
+            ('LOE', node.loe),
+            ('DUE', node.due),
+            ('REPEAT', node.repeat),
+            ('TAGS', ', '.join(node.tags) or None),
+            ('ADDED', node.added),
+        )
+        rows.extend(
+            (label, str(value)) for label, value in stored if value is not None
+        )
+        return rows
 
     @property
     def width(self) -> int:
         """How wide the labels pad to: the longest label."""
-        raise NotImplementedError
+        return max(len(label) for label, _ in self.rows)
 
     @property
     def outline(self) -> list[str]:
         """The subtask lines, indented below their label."""
-        raise NotImplementedError
+        return [
+            f'{INDENT * 2}{line}'
+            for subtask in self.item.subtasks
+            for line in subtask.lines
+        ]
