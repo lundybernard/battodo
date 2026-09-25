@@ -14,9 +14,12 @@ from json import dumps
 from pathlib import Path
 from typing import Any
 
+from batconf import Configuration
+
 from .parser import TaskNode
 from .rank import multiplier, rank
 from .selector import TaskSelection
+from .task import Task
 from .view import RANK_PLACES
 
 INDENT = '  '
@@ -203,3 +206,152 @@ def build_item_json(directory: Path, selector: str, now: datetime) -> str:
     """
     record = TaskSelection(directory, selector).record
     return dumps(item_data(record.path, record.task, now.date()), indent=2)
+
+
+class Item:
+    """One open task shown in full: its list, its fields, its children.
+
+    Built on the `Task` a selector names, and ranked on the day that
+    task carries.
+    """
+
+    def __init__(self, task: Task) -> None:
+        self.task = task
+
+    @classmethod
+    def from_config(cls, conf: Configuration, now: datetime) -> 'Item':
+        """Build an item from a resolved configuration.
+
+        The local day of the clock decides the rank.
+        """
+        raise NotImplementedError
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        raise NotImplementedError
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The machine-readable form of the item.
+
+        Shaped as::
+
+            {"list": "work", "id": "9o71lx", "title": "...", "done": false,
+             "rank": 10.0, "priority": 4.0, "loe": 8, "due": "2026-08-12",
+             "added": "2026-07-06", "repeat": null, "tags": ["yard"],
+             "subtasks": [{"id": null, "title": "...", "done": false,
+                           "loe": 2, "due": null, "tags": [],
+                           "subtasks": []}]}
+
+        Every key is always present; an absent field is null. `subtasks`
+        nests to any depth, and holds completed children as well as open
+        ones -- a read reports the item as it stands.
+        """
+        raise NotImplementedError
+
+    @property
+    def category(self) -> str:
+        """The name of the list: its file's name without the extension."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it."""
+        raise NotImplementedError
+
+    @property
+    def rank(self) -> float:
+        """The task's rank on the day the task carries."""
+        raise NotImplementedError
+
+    @property
+    def priority(self) -> float:
+        """The task's stored priority, as a multiplier."""
+        raise NotImplementedError
+
+    @property
+    def subtasks(self) -> list['Subtask']:
+        """The task's children, done ones included, in file order."""
+        raise NotImplementedError
+
+
+class Subtask:
+    """One child of an item, with its own children.
+
+    Carries no rank: SCHEMA.md gives a child no `P` of its own, so a
+    rank computed for one would report the neutral multiplier as if the
+    child had been prioritised.
+    """
+
+    def __init__(self, node: TaskNode) -> None:
+        self.node = node
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The child as `Item.data` records it, with its own children."""
+        raise NotImplementedError
+
+    @property
+    def subtasks(self) -> list['Subtask']:
+        """The child's own children, in file order."""
+        raise NotImplementedError
+
+    @property
+    def lines(self) -> list[str]:
+        """The child's line, then its children's, one indent deeper."""
+        raise NotImplementedError
+
+    @property
+    def line(self) -> str:
+        """The child in SCHEMA.md markup: the checkbox, title and fields."""
+        raise NotImplementedError
+
+    @property
+    def mark(self) -> str:
+        """The checkbox mark: `x` once done, a space while open."""
+        raise NotImplementedError
+
+    @property
+    def fields(self) -> str:
+        """The child's fields as SCHEMA.md writes them, in its order.
+
+        An absent field is left out.
+        """
+        raise NotImplementedError
+
+
+class ItemView:
+    """An item rendered for a terminal: a title, then labelled rows."""
+
+    def __init__(self, item: Item) -> None:
+        self.item = item
+
+    @property
+    def text(self) -> str:
+        """The title, the labelled rows, then the subtasks.
+
+        Returned without a trailing newline.
+        """
+        raise NotImplementedError
+
+    @property
+    def rows(self) -> list[tuple[str, str]]:
+        """The labelled values the text form lists, in order.
+
+        An absent field has no row. An absent id reads as NO_VALUE.
+        """
+        raise NotImplementedError
+
+    @property
+    def width(self) -> int:
+        """How wide the labels pad to: the longest label."""
+        raise NotImplementedError
+
+    @property
+    def outline(self) -> list[str]:
+        """The subtask lines, indented below their label."""
+        raise NotImplementedError
