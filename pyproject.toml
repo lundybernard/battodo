@@ -117,6 +117,9 @@ mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 # ci runs 1000. The HYPOTHESIS_EXAMPLES variable replaces the example
 # count of that profile. See tests/property/__init__.py.
 fuz = { depends-on = [{ task = "_property", environment = "test" }] }
+# oracle: the parity suite of a refactor slice. tests/oracle exists only
+# while a slice is in flight, and the task fails when it is absent.
+oracle = { depends-on = [{ task = "_oracle", environment = "test" }] }
 
 [tool.pixi.feature.test.dependencies]
 coverage = "*"
@@ -133,6 +136,7 @@ _unit = "coverage run --source=battodo -m unittest discover --top-level-director
 _integration = "python -m unittest discover --top-level-directory tests --start-directory tests/integration --pattern '*_test.py'"
 _behavioral = "python -m unittest discover --top-level-directory tests --start-directory tests/behavioral --pattern '*_test.py'"
 _property = "python -m unittest discover --top-level-directory tests --start-directory tests/property --pattern '*_test.py'"
+_oracle = "python -m unittest discover --top-level-directory tests --start-directory tests/oracle --pattern '*_test.py'"
 
 [tool.pixi.feature.lint.dependencies]
 ruff = "*"
