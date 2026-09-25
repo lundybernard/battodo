@@ -167,13 +167,13 @@ def rendered(found: Answer) -> str:
 def labelled(name: str, task: TaskNode) -> list[tuple[str, str]]:
     """The rows of the text form. An absent field has none.
 
-    An absent id reads as a dash. The rank is the published one, shown
-    to one decimal place.
+    An absent id reads as a dash. The rank reads as a view row shows
+    it, rounded once to one decimal place.
     """
     rows = [
         ('list', name),
         ('id', task.task_id or '-'),
-        ('rank', f'{round(rank(task, TODAY), RANK_PLACES):.1f}'),
+        ('rank', f'{rank(task, TODAY):.1f}'),
         ('P', f'{multiplier(task):.1f}'),
     ]
     stored = (('LOE', task.loe), ('DUE', task.due), ('REPEAT', task.repeat))

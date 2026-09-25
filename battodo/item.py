@@ -212,13 +212,15 @@ class ItemView:
     def rows(self) -> list[tuple[str, str]]:
         """The labelled values the text form lists, in order.
 
-        An absent field has no row. An absent id reads as NO_VALUE.
+        An absent field has no row. An absent id reads as NO_VALUE. The
+        rank reads as a view row shows it: rounded once, not from the
+        published rank.
         """
         node = self.item.node
         rows = [
             ('list', self.item.category),
             ('id', node.task_id or NO_VALUE),
-            ('rank', f'{round(self.item.rank, RANK_PLACES):.1f}'),
+            ('rank', f'{self.item.rank:.1f}'),
             ('P', f'{self.item.priority:.1f}'),
         ]
         # SCHEMA.md's order, then ADDED, a btodo extension.
