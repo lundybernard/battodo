@@ -1,14 +1,13 @@
-"""Characterization tests for the item read.
+"""Property tests for the item read, driven by Hypothesis.
 
-Temporary scaffolding for the move of the item read onto property
-objects. The suite pins what `Item.json` publishes and what
-`ItemView.text` renders for the task a selector names in a list file
-drawn from the schema grammar, and the error text when the selector
-names no open task or several. The expected answer derives from the
-drawn file and the clock, never from the code under test.
+Each case writes a list file drawn from the schema grammar, then
+asserts what `Item.json` publishes and what `ItemView.text` renders for
+the task a selector names, or the error text when the selector names no
+open task or several. The expected answer derives from the drawn file
+and the clock, never from the code under test. The cases began as the
+item slice's oracle and outlived it (R4).
 """
 
-from datetime import datetime, timezone
 from json import dumps
 from pathlib import Path
 from typing import Any
@@ -23,24 +22,16 @@ from battodo.rank import multiplier, rank
 from battodo.selector import SelectionError
 from battodo.task import Task
 from battodo.view import RANK_PLACES
-from tests.property.strategies import Node, grammar
-from tests.property.task_test import (
-    Answer,
-    descend,
-    outcome,
-    selectors,
-    source,
-)
 
-# The clock every read is asked at.
-NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
-TODAY = NOW.date()
+from .strategies import TODAY, Node, grammar
+from .task_test import Answer, descend, outcome, selectors, source
+
 # The indent the text form lays each level out with.
 INDENT = '  '
 
 
 class ItemTests(TestCase):
-    """Characterization tests for battodo.item.Item.json."""
+    """Property tests for battodo.item.Item.json."""
 
     maxDiff = None
 
@@ -62,7 +53,7 @@ class ItemTests(TestCase):
 
 
 class ItemViewTests(TestCase):
-    """Characterization tests for battodo.item.ItemView.text."""
+    """Property tests for battodo.item.ItemView.text."""
 
     maxDiff = None
 
