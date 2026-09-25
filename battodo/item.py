@@ -4,9 +4,13 @@ The two forms mirror `view`: text for a terminal, JSON for an agent.
 Both describe a *single* task, so `subtasks` here is the nested list of
 children rather than the count `view` publishes.
 
+`Item` holds what one item publishes. It is built on the `Task` a
+selector names, so a selector reaches the same task in every command.
+`ItemView` lays the same item out as text. `lib.get_item` composes
+them.
+
 Values are derived, not stored: `P` reads as the 0-5 multiplier `view`
-shows. `selector` supplies the lookup, so a selector reaches the same
-task in every command.
+shows.
 """
 
 from datetime import datetime
