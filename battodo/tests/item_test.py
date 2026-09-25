@@ -370,6 +370,12 @@ class ItemViewTests(TestCase):
 
             t.assertEqual(ret[2:4], [('rank', '10.0'), ('P', '2.0')])
 
+        with t.subTest('the rank rounds once, as a view row shows it'):
+            t.item.rank = 1.952
+            ret = t.iv.rows
+            # Rounded to the published 1.95 first, it would show 1.9.
+            t.assertEqual(ret[2], ('rank', '2.0'))
+
     @patch.object(ItemView, 'rows', new_callable=PropertyMock)
     def test_width(t, rows: PropertyMock) -> None:
         rows.return_value = [('list', 'a-list'), ('REPEAT', '30d')]

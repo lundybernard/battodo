@@ -30,6 +30,7 @@ WORK = """# Work
   - [ ] Sweep
   - [x] Buy the lumber [LOE:1]
 - [ ] Undated task [P:2]
+- [ ] Soon task [P:1] [DUE:2026-08-08] [ADDED:2026-07-31]
 
 ## Done
 """
@@ -53,6 +54,16 @@ UNDATED_TEXT = """Undated task
   id    -
   rank  2.0
   P     2.0"""
+
+# Ranked 1.952 on the day of NOW, which a view row shows as 2.0. The
+# published rank, 1.95, would show as 1.9.
+SOON_TEXT = """Soon task
+  list   work
+  id     -
+  rank   2.0
+  P      1.0
+  DUE    2026-08-08
+  ADDED  2026-07-31"""
 
 
 class ItemTests(TestCase):
@@ -153,6 +164,10 @@ class ItemViewTests(TestCase):
         with t.subTest('absent fields and a childless task are left out'):
             ret = ItemView(read(t.source, 'Undated')).text
             t.assertEqual(ret, UNDATED_TEXT)
+
+        with t.subTest('the rank reads as a view row shows it'):
+            ret = ItemView(read(t.source, 'Soon')).text
+            t.assertEqual(ret, SOON_TEXT)
 
 
 def source_dir(t: TestCase) -> Path:
