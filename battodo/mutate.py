@@ -20,6 +20,9 @@ the block goes, the log records it as SCRATCHED, and nothing cascades
 or reschedules. `update_task` edits a task in place: it writes the
 fields and the title it is given and touches nothing else. `backfill`
 stamps `[ADDED:]` once on every task that lacks it.
+
+Each write to an existing task consumes the `Task` its caller built,
+so the write edits the document that selection read.
 """
 
 from datetime import date
@@ -30,7 +33,7 @@ from .journal import Journal, new_task_id
 from .lists import discover_lists
 from .parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from .repeat import next_due
-from .selector import TaskRecord, TaskSelection
+from .task import Task
 
 ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
@@ -306,9 +309,8 @@ def add_task(
 
 
 def add_subtask(
-    directory: Path,
+    parent: Task,
     list_name: str,
-    parent: str,
     title: str,
     fields: dict[str, str],
 ) -> tuple[Path, str]:
@@ -323,13 +325,11 @@ def add_subtask(
 
     Parameters
     ----------
-    directory : Path
-        The source directory: its lists and its journal.
+    parent : Task
+        The parent task. It must be a task in `list_name`, and its
+        source directory holds the lists and the journal.
     list_name : str
         A list's filename stem, e.g. `chores` for `chores.md`.
-    parent : str
-        The parent task's `[ID:]` or part of its title. It must name a
-        task in `list_name`.
     title : str
         The subtask title, without fields.
     fields : dict
@@ -347,24 +347,25 @@ def add_subtask(
     ListError
         If `list_name` names no discovered list.
     SelectionError
-        If `parent` does not name exactly one open task.
+        If the parent's selector does not name exactly one open task.
     ValueError
         If a supplied value is unreadable, if `fields` carries a field
         the top-level task owns, or if `parent` names a checklist item
         or a task in another list. Raised before anything is written.
     """
+    directory = parent.source
     path = _resolve_list(directory, list_name)
     _refuse_root_fields(fields)
     # `REPEAT` is refused above, so no supplied value needs a day.
     checked = _checked_values(fields)
 
-    record = TaskSelection(directory, parent).record
-    if record.path != path:
+    if parent.path != path:
         raise ValueError(
-            f'{parent!r} names a task in {record.path.name}, not {path.name}'
+            f'{parent.selector!r} names a task in {parent.path.name}, '
+            f'not {path.name}'
         )
 
-    task = record.task
+    task = parent.node
     _refuse_checklist_item(task)
     stamped = task.task_id is None
     parent_id = task.task_id or new_task_id()
@@ -374,7 +375,7 @@ def add_subtask(
     }
     indent = ' ' * (task.indent + SUBTASK_INDENT)
 
-    doc = record.doc
+    doc = parent.doc
     if stamped:
         doc.set_field(task.raw_index, 'ID', parent_id)
     # After every line the parent owns -- its notes, its children and
@@ -409,7 +410,7 @@ def add_subtask(
 # --- Completion -----------------------------------------------------
 
 
-def _completed_ancestries(record: TaskRecord) -> list[list[TaskNode]]:
+def _completed_ancestries(ancestry: list[TaskNode]) -> list[list[TaskNode]]:
     """Ancestries for the target and each ancestor it finishes.
 
     A task is complete when all its children are checked (SCHEMA.md), so
@@ -417,15 +418,12 @@ def _completed_ancestries(record: TaskRecord) -> list[list[TaskNode]]:
     complete its parent in turn. Deepest first, which is the order the
     completions get logged.
     """
-    ancestries = [record.ancestry]
-    for depth in reversed(range(len(record.ancestry) - 1)):
-        parent, child = (
-            record.ancestry[depth],
-            record.ancestry[depth + 1],
-        )
+    ancestries = [ancestry]
+    for depth in reversed(range(len(ancestry) - 1)):
+        parent, child = ancestry[depth], ancestry[depth + 1]
         if not all(c.done or c is child for c in parent.children):
             break
-        ancestries.append(record.ancestry[: depth + 1])
+        ancestries.append(ancestry[: depth + 1])
     return ancestries
 
 
@@ -490,8 +488,8 @@ def _mark_done(raw: str) -> str:
     return raw.replace('- [ ]', '- [x]', 1)
 
 
-def complete(directory: Path, selector: str, today: date) -> list[str]:
-    """Complete the task `selector` names. Returns the log entries.
+def complete(task: Task) -> list[str]:
+    """Complete the task. Returns the log entries.
 
     Follows SCHEMA.md: the completion is logged to `completed.md` with
     its full `Parent > Child` ancestry, the item is checked off, and the
@@ -502,13 +500,10 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
 
     Parameters
     ----------
-    directory : Path
-        The source directory: its lists, its `completed.md`, its
-        journal.
-    selector : str
-        A task `[ID:]` or part of a title.
-    today : date
-        The completion date, in the user's local day.
+    task : Task
+        The task a selector names. Its source directory holds the
+        lists, `completed.md` and the journal, and its day is the
+        completion date, in the user's local day.
 
     Returns
     -------
@@ -520,14 +515,14 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
     Raises
     ------
     SelectionError
-        If `selector` does not name exactly one open task.
+        If the task's selector does not name exactly one open task.
     RepeatError
         If a completed recurring task carries a `[REPEAT:]` btodo
         cannot read. Raised before anything is written.
     """
-    record = TaskSelection(directory, selector).record
-    ancestries = _completed_ancestries(record)
-    root = record.ancestry[0]
+    directory, today = task.source, task.today
+    ancestries = _completed_ancestries(task.ancestry)
+    root = task.ancestry[0]
     root_done = len(ancestries[-1]) == 1
     rescheduled = (
         next_due(root.repeat, today) if root_done and root.repeat else None
@@ -537,7 +532,7 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
     streams = [
         _identify(_stream_task(ancestry), ids) for ancestry in ancestries
     ]
-    doc = record.doc
+    doc = task.doc
 
     if root_done:
         drop = _block_indices(root)
@@ -564,19 +559,19 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
             doc.lines[index] = _mark_done(doc.lines[index])
 
     entries = [
-        _log_entry(record.path, ancestry, DONE_STATUS, today)
+        _log_entry(task.path, ancestry, DONE_STATUS, today)
         for ancestry in ancestries
         if not _is_checklist_item(ancestry[-1])
     ]
 
-    record.path.write_text(doc.text)
+    task.path.write_text(doc.text)
     _append_log(directory, entries)
 
     journal = Journal(directory)
     for ancestry, stream in zip(ancestries, streams):
-        task = ancestry[-1]
+        node = ancestry[-1]
         delta: dict[str, list[Any]] = {'done': [False, True]}
-        if task is root and rescheduled is not None:
+        if node is root and rescheduled is not None:
             delta['DUE'] = [root.due, rescheduled.isoformat()]
         journal.append(
             COMPLETED_EVENT,
@@ -585,18 +580,18 @@ def complete(directory: Path, selector: str, today: date) -> list[str]:
                 'delta': delta,
                 # Pre-state, as everywhere here: the delta says what
                 # changed, the snapshot says what it changed from.
-                'snapshot': task_snapshot(task),
+                'snapshot': task_snapshot(node),
                 'ancestry': _format_ancestry(ancestry),
             },
             actor='agent',
-            source_file=record.path.name,
+            source_file=task.path.name,
         )
 
     return entries
 
 
-def scratch(directory: Path, selector: str, today: date) -> list[str]:
-    """Drop the task `selector` names without completing it.
+def scratch(task: Task) -> list[str]:
+    """Drop the task without completing it.
 
     The whole block goes -- the task, its notes, its children -- and
     nothing cascades: abandoning one child says nothing about its
@@ -610,13 +605,10 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
 
     Parameters
     ----------
-    directory : Path
-        The source directory: its lists, its `completed.md`, its
-        journal.
-    selector : str
-        A task `[ID:]` or part of a title.
-    today : date
-        The date the task was abandoned, in the user's local day.
+    task : Task
+        The task a selector names. Its source directory holds the
+        lists, `completed.md` and the journal, and its day is the date
+        the task was abandoned, in the user's local day.
 
     Returns
     -------
@@ -627,30 +619,28 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
     Raises
     ------
     SelectionError
-        If `selector` does not name exactly one open task.
+        If the task's selector does not name exactly one open task.
     """
-    record = TaskSelection(directory, selector).record
-    task = record.task
-    stream = _stream_task(record.ancestry)
+    directory, today = task.source, task.today
+    node = task.node
+    stream = _stream_task(task.ancestry)
     stream_id = stream.task_id or new_task_id()
 
-    doc = record.doc
-    if stream is not task:
+    doc = task.doc
+    if stream is not node:
         # A checklist item cannot hold an id, so the event belongs to
         # the ancestor's stream and the ancestor's line is the one that
         # has to carry it.
         doc.set_field(stream.raw_index, 'ID', stream_id)
-    doc.lines = _drop_lines(doc.lines, _block_indices(task))
+    doc.lines = _drop_lines(doc.lines, _block_indices(node))
 
     entries = (
         []
-        if _is_checklist_item(task)
-        else [
-            _log_entry(record.path, record.ancestry, SCRATCHED_STATUS, today)
-        ]
+        if _is_checklist_item(node)
+        else [_log_entry(task.path, task.ancestry, SCRATCHED_STATUS, today)]
     )
 
-    record.path.write_text(doc.text)
+    task.path.write_text(doc.text)
     _append_log(directory, entries)
 
     Journal(directory).append(
@@ -658,11 +648,11 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
         f'task/{stream_id}',
         {
             'delta': {'removed': [False, True]},
-            'snapshot': task_snapshot(task),
-            'ancestry': _format_ancestry(record.ancestry),
+            'snapshot': task_snapshot(node),
+            'ancestry': _format_ancestry(task.ancestry),
         },
         actor='agent',
-        source_file=record.path.name,
+        source_file=task.path.name,
     )
     return entries
 
@@ -671,13 +661,11 @@ def scratch(directory: Path, selector: str, today: date) -> list[str]:
 
 
 def update_task(
-    directory: Path,
-    selector: str,
+    task: Task,
     fields: dict[str, str],
-    today: date,
     title: str | None = None,
 ) -> tuple[Path, str]:
-    """Rewrite the task `selector` names. Returns the path and line.
+    """Rewrite the task. Returns the path and line.
 
     Only the fields named are written; the rest of the line, and every
     other line in the file, is left exactly as it was. An `[ID:]` is
@@ -690,14 +678,11 @@ def update_task(
 
     Parameters
     ----------
-    directory : Path
-        The source directory: its lists and its journal.
-    selector : str
-        A task `[ID:]` or part of a title.
+    task : Task
+        The task a selector names. Its source directory holds the
+        lists and the journal, and its day validates a `REPEAT`.
     fields : dict
         SCHEMA.md field names to values, as strings.
-    today : date
-        The user's local day, which validates a `REPEAT`.
     title : str, optional
         A new title. The fields on the line keep their positions.
 
@@ -709,7 +694,7 @@ def update_task(
     Raises
     ------
     SelectionError
-        If `selector` does not name exactly one open task.
+        If the task's selector does not name exactly one open task.
     ValueError
         If nothing was named to change, if the task is a checklist
         item, if `fields` carries a field the top-level task owns, or
@@ -718,51 +703,50 @@ def update_task(
     """
     if not fields and title is None:
         raise ValueError('nothing to update: name a field or a title')
-    checked = _checked_fields(fields, today)
+    checked = _checked_fields(fields, task.today)
 
-    record = TaskSelection(directory, selector).record
-    task = record.task
-    nested = len(record.ancestry) > 1
-    _refuse_checklist_item(task)
+    node = task.node
+    nested = len(task.ancestry) > 1
+    _refuse_checklist_item(node)
     if nested:
         _refuse_root_fields(fields)
 
-    task_id = task.task_id or new_task_id()
+    task_id = node.task_id or new_task_id()
     written = dict(checked)
-    if not task.task_id:
+    if not node.task_id:
         written['ID'] = task_id
-    doc = record.doc
-    entry = _set_fields(doc, task.raw_index, written)
+    doc = task.doc
+    entry = _set_fields(doc, node.raw_index, written)
     if title is not None:
-        entry = doc.set_title(task.raw_index, title)
+        entry = doc.set_title(node.raw_index, title)
 
     delta: dict[str, list[Any]] = {
-        name: [task.fields.get(name), value] for name, value in written.items()
+        name: [node.fields.get(name), value] for name, value in written.items()
     }
     if title is not None:
-        delta['title'] = [task.title, title]
+        delta['title'] = [node.title, title]
 
     payload: dict[str, Any] = {
         'delta': delta,
         # Pre-state, as everywhere but an add: the delta says what
         # changed, the snapshot says what it changed from.
-        'snapshot': task_snapshot(task),
+        'snapshot': task_snapshot(node),
     }
     if nested:
         # Only a child needs it. A top-level task's ancestry is its own
         # title, which the snapshot already carries.
-        payload['ancestry'] = _format_ancestry(record.ancestry)
+        payload['ancestry'] = _format_ancestry(task.ancestry)
 
-    record.path.write_text(doc.text)
+    task.path.write_text(doc.text)
 
-    Journal(directory).append(
+    Journal(task.source).append(
         UPDATED_EVENT,
         f'task/{task_id}',
         payload,
         actor='agent',
-        source_file=record.path.name,
+        source_file=task.path.name,
     )
-    return record.path, entry
+    return task.path, entry
 
 
 # --- Backfill -------------------------------------------------------

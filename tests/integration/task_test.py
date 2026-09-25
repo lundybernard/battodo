@@ -1,8 +1,7 @@
 """Contract test for the task a command works on, against real files.
 
-The source is a real directory holding a real list, and both the list
-and `completed.md` are read back from disk. This layer asserts state;
-interaction checks stay in the isolation tests beside the code.
+The source is a real directory holding a real list. This layer asserts
+state; interaction checks stay in the isolation tests beside the code.
 """
 
 from datetime import date
@@ -37,30 +36,22 @@ class TaskTests(TestCase):
         t.path.write_text(WORK, encoding='utf-8')
         t.tk = Task(t.source, '9o71lx', TODAY)
 
-    def test_record(t) -> None:
-        with t.subTest('the selector reaches one task in one list'):
-            record = t.tk.record
-            t.assertEqual(record.task.title, 'Deck rebuild')
-            t.assertEqual(record.path, t.path)
+    def test_path(t) -> None:
+        ret = t.tk.path
+        t.assertEqual(ret, t.path)
 
-    def test_complete(t) -> None:
-        t.tk.complete()
+    def test_doc(t) -> None:
+        ret = t.tk.doc
+        t.assertEqual(ret.text, WORK)
 
-        logged = t.tk.completed
+    def test_ancestry(t) -> None:
+        ret = t.tk.ancestry
+        t.assertEqual([task.title for task in ret], ['Deck rebuild'])
 
-        with t.subTest('the entry is logged under the day it was given'):
-            t.assertEqual(
-                logged,
-                ['2026-08-08 | work | DONE | Deck rebuild [P:4] [LOE:8]'],
-            )
+    def test_node(t) -> None:
+        ret = t.tk.node
+        t.assertEqual(ret.title, 'Deck rebuild')
 
-        with t.subTest('the log on disk holds it'):
-            log = (t.source / 'completed.md').read_text(encoding='utf-8')
-            t.assertIn(logged[0], log)
-
-        with t.subTest('the block is gone from the list'):
-            text = t.path.read_text(encoding='utf-8')
-            t.assertNotIn('Deck rebuild', text)
-
-        with t.subTest('and every other task stays where it was'):
-            t.assertIn('- [ ] Unidentified task [P:2]', text)
+    def test_selection(t) -> None:
+        ret = t.tk.selection
+        t.assertEqual((ret.directory, ret.selector), (t.source, '9o71lx'))

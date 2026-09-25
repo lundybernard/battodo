@@ -8,7 +8,6 @@ from ..mutate import (
     OPEN_HEADING,
     ListError,
     TaskNode,
-    TaskRecord,
     TodoDocument,
     add_subtask,
     add_task,
@@ -54,6 +53,26 @@ def stand_in(t: TestCase, *targets: str) -> None:
 def logged(handle: MagicMock) -> str:
     """What the completed log was asked to append."""
     return handle.write.call_args[0][0]
+
+
+def selected(
+    directory: MagicMock,
+    path: MagicMock,
+    doc: MagicMock,
+    ancestry: list[TaskNode],
+) -> MagicMock:
+    """A task a selector reached, with the list and document it sits in."""
+    task = MagicMock(
+        spec=['source', 'selector', 'today', 'path', 'doc', 'ancestry', 'node']
+    )
+    task.source = directory
+    task.selector = 'a selector'
+    task.today = TODAY
+    task.path = path
+    task.doc = doc
+    task.ancestry = ancestry
+    task.node = ancestry[-1]
+    return task
 
 
 def document(*lines: str) -> MagicMock:
@@ -109,10 +128,9 @@ class UpdateTaskTests(TestCase):
 
     Journal: MagicMock
     new_task_id: MagicMock
-    TaskSelection: MagicMock
 
     def setUp(t) -> None:
-        stand_in(t, 'Journal', 'new_task_id', 'TaskSelection')
+        stand_in(t, 'Journal', 'new_task_id')
         t.append = t.Journal.return_value.append
         t.new_task_id.return_value = 'zz01ab'
         t.path = MagicMock(spec=Path)
@@ -129,20 +147,10 @@ class UpdateTaskTests(TestCase):
             note_indices=[2],
         )
         t.doc = document(OPEN_HEADING, TASK_LINE, NOTE_LINE, CHILD_LINE)
-        t.lookup = t.TaskSelection.return_value
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task])
+        t.target = selected(t.dir, t.path, t.doc, [t.task])
 
     def test_line(t) -> None:
-        with t.subTest('the selector is resolved against the directory'):
-            path, entry = update_task(
-                t.dir,
-                '9o71lx',
-                {'P': '5'},
-                TODAY,
-                title='A new title',
-            )
-
-            t.TaskSelection.assert_called_once_with(t.dir, '9o71lx')
+        path, entry = update_task(t.target, {'P': '5'}, title='A new title')
 
         with t.subTest('the named field is written on to the task line'):
             t.assertEqual(t.doc.set_field.call_args_list, [call(1, 'P', '5')])
@@ -156,7 +164,7 @@ class UpdateTaskTests(TestCase):
             t.assertEqual(path, t.path)
 
     def test_event(t) -> None:
-        update_task(t.dir, '9o71lx', {'P': '5'}, TODAY, title='A new title')
+        update_task(t.target, {'P': '5'}, title='A new title')
 
         with t.subTest('the journal of the source directory'):
             t.Journal.assert_called_once_with(t.dir)
@@ -192,9 +200,9 @@ class UpdateTaskTests(TestCase):
                 fields={'P': '2'},
                 raw=BARE_LINE,
             )
-            t.lookup.record = TaskRecord(t.path, t.doc, [bare])
+            t.target = selected(t.dir, t.path, t.doc, [bare])
 
-            _, entry = update_task(t.dir, 'no id', {'P': '5'}, TODAY)
+            _, entry = update_task(t.target, {'P': '5'})
 
             t.assertEqual(
                 t.doc.set_field.call_args_list,
@@ -221,9 +229,9 @@ class UpdateTaskTests(TestCase):
                 fields={'LOE': '2'},
                 raw=CHILD_LINE,
             )
-            t.lookup.record = TaskRecord(t.path, t.doc, [t.task, child])
+            t.target = selected(t.dir, t.path, t.doc, [t.task, child])
 
-            update_task(t.dir, 'subtask', {'DUE': '2026-09-01'}, TODAY)
+            update_task(t.target, {'DUE': '2026-09-01'})
 
             payload = t.append.call_args[0][2]
             t.assertEqual(payload['ancestry'], 'A task > A subtask of it')
@@ -252,9 +260,9 @@ class UpdateTaskTests(TestCase):
                 fields={'LOE': '1'},
                 raw=GRANDCHILD_LINE,
             )
-            t.lookup.record = TaskRecord(t.path, t.doc, [t.task, child, below])
+            t.target = selected(t.dir, t.path, t.doc, [t.task, child, below])
 
-            update_task(t.dir, 'below', {'DUE': '2026-09-01'}, TODAY)
+            update_task(t.target, {'DUE': '2026-09-01'})
 
             t.assertEqual(
                 t.append.call_args[0][2]['ancestry'],
@@ -266,13 +274,13 @@ class UpdateTaskTests(TestCase):
             t.subTest('an update that names no change'),
             t.assertRaisesRegex(ValueError, 'nothing to update'),
         ):
-            update_task(t.dir, '9o71lx', {}, TODAY)
+            update_task(t.target, {})
 
         with (
             t.subTest('a value btodo cannot read'),
             t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'),
         ):
-            update_task(t.dir, '9o71lx', {'DUE': 'someday'}, TODAY)
+            update_task(t.target, {'DUE': 'someday'})
 
         child = TaskNode(
             raw_index=3,
@@ -282,13 +290,13 @@ class UpdateTaskTests(TestCase):
             fields={'LOE': '2'},
             raw=CHILD_LINE,
         )
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task, child])
+        t.target = selected(t.dir, t.path, t.doc, [t.task, child])
 
         with (
             t.subTest('a field the top-level task owns'),
             t.assertRaisesRegex(ValueError, 'P belongs to the top-level task'),
         ):
-            update_task(t.dir, 'subtask', {'P': '5'}, TODAY)
+            update_task(t.target, {'P': '5'})
 
         item = TaskNode(
             raw_index=3,
@@ -298,13 +306,13 @@ class UpdateTaskTests(TestCase):
             fields={},
             raw=ITEM_LINE,
         )
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task, item])
+        t.target = selected(t.dir, t.path, t.doc, [t.task, item])
 
         with (
             t.subTest('a checklist item, which carries no fields'),
             t.assertRaisesRegex(ValueError, 'checklist item'),
         ):
-            update_task(t.dir, 'checklist', {'DUE': '2026-09-01'}, TODAY)
+            update_task(t.target, {'DUE': '2026-09-01'})
 
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()
@@ -316,7 +324,6 @@ class AddSubtaskTests(TestCase):
 
     Journal: MagicMock
     new_task_id: MagicMock
-    TaskSelection: MagicMock
     discover_lists: MagicMock
     TodoDocument: MagicMock
 
@@ -325,7 +332,6 @@ class AddSubtaskTests(TestCase):
             t,
             'Journal',
             'new_task_id',
-            'TaskSelection',
             'discover_lists',
             'TodoDocument',
         )
@@ -369,8 +375,7 @@ class AddSubtaskTests(TestCase):
             CHILD_LINE,
             BARE_LINE,
         )
-        t.lookup = t.TaskSelection.return_value
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task])
+        t.target = selected(t.dir, t.path, t.doc, [t.task])
         t.added('A new subtask', {'LOE': '2', 'ID': 'zz01ab'})
 
     def added(t, title: str, fields: dict[str, str]) -> None:
@@ -386,17 +391,15 @@ class AddSubtaskTests(TestCase):
         ]
 
     def test_line(t) -> None:
-        with t.subTest('the list and the parent are resolved in the source'):
+        with t.subTest('the list is resolved in the source of the parent'):
             path, entry = add_subtask(
-                t.dir,
+                t.target,
                 'a-list',
-                '9o71lx',
                 'A new subtask',
                 {'LOE': '2'},
             )
 
             t.discover_lists.assert_called_once_with(t.dir)
-            t.TaskSelection.assert_called_once_with(t.dir, '9o71lx')
             t.assertEqual(path, t.path)
 
         with t.subTest('the line is indented one level under its parent'):
@@ -429,9 +432,8 @@ class AddSubtaskTests(TestCase):
 
     def test_event(t) -> None:
         _, entry = add_subtask(
-            t.dir,
+            t.target,
             'a-list',
-            '9o71lx',
             'A new subtask',
             {'LOE': '2'},
         )
@@ -464,11 +466,11 @@ class AddSubtaskTests(TestCase):
 
     def test_stamps_the_parent(t) -> None:
         with t.subTest('a parent with no id of its own is given one'):
-            t.lookup.record = TaskRecord(t.path, t.doc, [t.bare])
+            t.target = selected(t.dir, t.path, t.doc, [t.bare])
             t.new_task_id.side_effect = ['pp02cd', 'cc03ef']
             t.added('A second subtask', {'ID': 'cc03ef'})
 
-            add_subtask(t.dir, 'a-list', 'no id', 'A second subtask', {})
+            add_subtask(t.target, 'a-list', 'A second subtask', {})
 
             t.assertEqual(
                 t.doc.set_field.call_args_list,
@@ -510,23 +512,23 @@ class AddSubtaskTests(TestCase):
                     f'{name} belongs to the top-level task',
                 ),
             ):
-                add_subtask(t.dir, 'a-list', '9o71lx', 'X', {name: '3'})
+                add_subtask(t.target, 'a-list', 'X', {name: '3'})
 
         with (
             t.subTest('a value btodo cannot read'),
             t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'),
         ):
-            add_subtask(t.dir, 'a-list', '9o71lx', 'X', {'DUE': 'someday'})
+            add_subtask(t.target, 'a-list', 'X', {'DUE': 'someday'})
 
         with (
             t.subTest('a level of effort off the scale'),
             t.assertRaisesRegex(ValueError, 'LOE must be one of'),
         ):
-            add_subtask(t.dir, 'a-list', '9o71lx', 'X', {'LOE': '4'})
+            add_subtask(t.target, 'a-list', 'X', {'LOE': '4'})
 
         with t.subTest('a list no discovered file carries'):
             with t.assertRaises(ListError) as caught:
-                add_subtask(t.dir, 'another-list', '9o71lx', 'X', {})
+                add_subtask(t.target, 'another-list', 'X', {})
             t.assertIn('available: a-list', str(caught.exception))
 
         with t.subTest('a checklist item, which cannot hold an id'):
@@ -538,16 +540,16 @@ class AddSubtaskTests(TestCase):
                 fields={},
                 raw=ITEM_LINE,
             )
-            t.lookup.record = TaskRecord(t.path, t.doc, [t.task, item])
+            t.target = selected(t.dir, t.path, t.doc, [t.task, item])
             with t.assertRaisesRegex(ValueError, 'checklist item'):
-                add_subtask(t.dir, 'a-list', 'checklist', 'X', {})
+                add_subtask(t.target, 'a-list', 'X', {})
 
         with t.subTest('a parent that lives in another list'):
             other = MagicMock(spec=Path)
             other.name = 'another-list.md'
-            t.lookup.record = TaskRecord(other, t.doc, [t.task])
+            t.target = selected(t.dir, other, t.doc, [t.task])
             with t.assertRaisesRegex(ValueError, 'a task in another-list.md'):
-                add_subtask(t.dir, 'a-list', '9o71lx', 'X', {})
+                add_subtask(t.target, 'a-list', 'X', {})
 
         with t.subTest('nothing is written and nothing is logged'):
             t.path.write_text.assert_not_called()
@@ -884,11 +886,10 @@ class CompleteTests(TestCase):
 
     Journal: MagicMock
     new_task_id: MagicMock
-    TaskSelection: MagicMock
     next_due: MagicMock
 
     def setUp(t) -> None:
-        stand_in(t, 'Journal', 'new_task_id', 'TaskSelection', 'next_due')
+        stand_in(t, 'Journal', 'new_task_id', 'next_due')
         t.append = t.Journal.return_value.append
         t.new_task_id.return_value = 'zz01ab'
         t.path = MagicMock(spec=Path)
@@ -901,7 +902,6 @@ class CompleteTests(TestCase):
         t.log.read_text.return_value = '# Completed Tasks\n'
         t.log_handle = MagicMock(spec=TextIOWrapper)
         t.log.open.return_value.__enter__.return_value = t.log_handle
-        t.lookup = t.TaskSelection.return_value
         t.next_due.return_value = date(2026, 8, 15)
         t.child = TaskNode(
             raw_index=3,
@@ -938,12 +938,12 @@ class CompleteTests(TestCase):
             BARE_LINE,
         )
         t.doc.tasks = [t.task]
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task, t.child])
+        t.target = selected(t.dir, t.path, t.doc, [t.task, t.child])
 
     def test_cascade(t) -> None:
         with t.subTest('the finished block leaves the document'):
-            entries = complete(t.dir, 'subtask', TODAY)
-            t.TaskSelection.assert_called_once_with(t.dir, 'subtask')
+            entries = complete(t.target)
+
             t.assertEqual(t.doc.lines, [OPEN_HEADING, BARE_LINE])
 
         with t.subTest('which then goes to the file it came from'):
@@ -991,7 +991,7 @@ class CompleteTests(TestCase):
         with t.subTest('a parent with another open child stays open'):
             t.finished.done = False
 
-            entries = complete(t.dir, 'subtask', TODAY)
+            entries = complete(t.target)
 
             t.assertEqual(t.doc.lines[1], TASK_LINE)
             t.assertEqual(len(entries), 1)
@@ -1022,9 +1022,9 @@ class CompleteTests(TestCase):
             )
             t.doc = document(OPEN_HEADING, REPEAT_LINE, NOTE_LINE)
             t.doc.tasks = [recurring]
-            t.lookup.record = TaskRecord(t.path, t.doc, [recurring])
+            t.target = selected(t.dir, t.path, t.doc, [recurring])
 
-            complete(t.dir, 'rr01ab', TODAY)
+            complete(t.target)
 
             t.next_due.assert_called_once_with('7d', TODAY)
             t.assertEqual(
@@ -1082,9 +1082,9 @@ class CompleteTests(TestCase):
                 CHILD_LINE,
             )
             t.doc.tasks = [parent]
-            t.lookup.record = TaskRecord(t.path, t.doc, [parent, item])
+            t.target = selected(t.dir, t.path, t.doc, [parent, item])
 
-            ret = complete(t.dir, 'checklist', TODAY)
+            ret = complete(t.target)
 
             t.assertEqual(ret, [])
             t.log.open.assert_not_called()
@@ -1104,10 +1104,9 @@ class ScratchTests(TestCase):
 
     Journal: MagicMock
     new_task_id: MagicMock
-    TaskSelection: MagicMock
 
     def setUp(t) -> None:
-        stand_in(t, 'Journal', 'new_task_id', 'TaskSelection')
+        stand_in(t, 'Journal', 'new_task_id')
         t.append = t.Journal.return_value.append
         t.new_task_id.return_value = 'zz01ab'
         t.path = MagicMock(spec=Path)
@@ -1120,7 +1119,6 @@ class ScratchTests(TestCase):
         t.log.read_text.return_value = '# Completed Tasks\n'
         t.log_handle = MagicMock(spec=TextIOWrapper)
         t.log.open.return_value.__enter__.return_value = t.log_handle
-        t.lookup = t.TaskSelection.return_value
         t.child = TaskNode(
             raw_index=4,
             indent=2,
@@ -1149,12 +1147,12 @@ class ScratchTests(TestCase):
             BARE_LINE,
         )
         t.doc.tasks = [t.task]
-        t.lookup.record = TaskRecord(t.path, t.doc, [t.task])
+        t.target = selected(t.dir, t.path, t.doc, [t.task])
 
     def test_block(t) -> None:
         with t.subTest('the task and everything under it are removed'):
-            entries = scratch(t.dir, '9o71lx', TODAY)
-            t.TaskSelection.assert_called_once_with(t.dir, '9o71lx')
+            entries = scratch(t.target)
+
             t.assertEqual(t.doc.lines, [OPEN_HEADING, '', BARE_LINE])
 
         with t.subTest('and no pair of blank lines is left behind'):
@@ -1186,7 +1184,7 @@ class ScratchTests(TestCase):
         with t.subTest('a task carrying no SCHEMA field logs none'):
             t.task.fields = {'ID': '9o71lx'}
 
-            ret = scratch(t.dir, '9o71lx', TODAY)
+            ret = scratch(t.target)
 
             t.assertEqual(
                 ret,
@@ -1196,14 +1194,14 @@ class ScratchTests(TestCase):
     def test_log_newline(t) -> None:
         with t.subTest('a log with no trailing newline gains one first'):
             t.log.read_text.return_value = '# Completed Tasks'
-            entries = scratch(t.dir, '9o71lx', TODAY)
+            entries = scratch(t.target)
             t.assertEqual(logged(t.log_handle), '\n' + entries[0] + '\n')
 
     def test_log_absent(t) -> None:
         with t.subTest('a log that is not there yet is written from empty'):
             t.log.exists.return_value = False
 
-            entries = scratch(t.dir, '9o71lx', TODAY)
+            entries = scratch(t.target)
 
             t.log.read_text.assert_not_called()
             t.assertEqual(logged(t.log_handle), entries[0] + '\n')
@@ -1229,9 +1227,9 @@ class ScratchTests(TestCase):
             )
             t.doc = document(OPEN_HEADING, BARE_LINE, ITEM_LINE)
             t.doc.tasks = [parent]
-            t.lookup.record = TaskRecord(t.path, t.doc, [parent, item])
+            t.target = selected(t.dir, t.path, t.doc, [parent, item])
 
-            ret = scratch(t.dir, 'checklist', TODAY)
+            ret = scratch(t.target)
 
             t.assertEqual(ret, [])
             t.log.open.assert_not_called()

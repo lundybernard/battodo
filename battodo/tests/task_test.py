@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from ..task import Task
 
@@ -17,12 +17,14 @@ class TaskTests(TestCase):
     """Unit tests for battodo.task.Task."""
 
     def setUp(t):
-        for target in ('TaskSelection', 'complete', 'parse_date'):
+        for target in ('TaskSelection', 'parse_date'):
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
 
         t.tk = Task(Path(CONFIGURED), 'a selector', TODAY)
+        t.selection = MagicMock(spec=['record'])
+        t.selection.record = MagicMock(spec=['path', 'doc', 'ancestry'])
 
         t.now = Mock(spec=datetime)
         # spec models batconf: an option the user did not supply is
@@ -69,30 +71,38 @@ class TaskTests(TestCase):
         ret = t.tk.source
         t.assertEqual(ret, SOURCE)
 
-    def test_record(t):
+    def test_path(t):
+        t.tk.selection = t.selection
+        ret = t.tk.path
+        t.assertIs(ret, t.selection.record.path)
+
+    def test_doc(t):
+        t.tk.selection = t.selection
+        ret = t.tk.doc
+        t.assertIs(ret, t.selection.record.doc)
+
+    def test_ancestry(t):
+        t.tk.selection = t.selection
+        ret = t.tk.ancestry
+        t.assertIs(ret, t.selection.record.ancestry)
+
+    def test_node(t):
+        t.tk.selection = t.selection
+        t.selection.record.ancestry = ['a parent', 'the task']
+
+        ret = t.tk.node
+
+        t.assertEqual(ret, 'the task')
+
+    def test_selection(t):
         with t.subTest('the selector is looked up in the source'):
-            ret = t.tk.record
-            t.assertIs(ret, t.TaskSelection.return_value.record)
+            ret = t.tk.selection
+
+            t.assertIs(ret, t.TaskSelection.return_value)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
 
         with t.subTest('and a second read costs no second lookup'):
-            ret = t.tk.record
-            t.assertIs(ret, t.TaskSelection.return_value.record)
+            ret = t.tk.selection
+
+            t.assertIs(ret, t.TaskSelection.return_value)
             t.TaskSelection.assert_called_once_with(SOURCE, 'a selector')
-
-    def test_complete(t):
-        t.tk.complete()
-        t.complete.assert_called_once_with(SOURCE, 'a selector', TODAY)
-
-    def test_completed(t):
-        with t.subTest('a task that was not completed logged nothing'):
-            ret = t.tk.completed
-            t.assertEqual(ret, [])
-
-        with t.subTest('the entries the write returned'):
-            t.complete.return_value = ['2026-08-05 | work | DONE | Deck']
-            t.tk.complete()
-
-            ret = t.tk.completed
-
-            t.assertEqual(ret, ['2026-08-05 | work | DONE | Deck'])

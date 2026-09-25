@@ -1,8 +1,9 @@
-"""The one task a command names, and what a command does to it.
+"""The one task a command names.
 
-`Task` decides which open task a selector reaches and which day a
-completion is logged under. The write itself stays in `mutate`, which
-owns the markdown and the journal. `lib` composes the two.
+`Task` holds the open task a selector reaches: its list file, the
+parsed document and its ancestry, all from one read of the source. It
+also holds the day a completion is logged under. The writes in
+`mutate` consume a `Task`, and `lib` builds it.
 """
 
 from datetime import date, datetime
@@ -11,9 +12,8 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from .mutate import complete
-from .parser import parse_date
-from .selector import TaskRecord, TaskSelection
+from .parser import TaskNode, TodoDocument, parse_date
+from .selector import TaskSelection
 
 
 def _completion_day(given: str | None, now: datetime) -> date:
@@ -39,7 +39,6 @@ class Task:
         self.directory = directory
         self.selector = selector
         self.today = today
-        self.completed: list[str] = []
 
     @classmethod
     def from_config(cls, conf: Configuration, now: datetime) -> 'Task':
@@ -65,26 +64,31 @@ class Task:
         """The source directory, `~` expanded."""
         return self.directory.expanduser()
 
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        return self.selection.record.path
+
+    @property
+    def doc(self) -> TodoDocument:
+        """The parsed list file that holds the task."""
+        return self.selection.record.doc
+
+    @property
+    def ancestry(self) -> list[TaskNode]:
+        """The task and every task above it, outermost first."""
+        return self.selection.record.ancestry
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it."""
+        return self.ancestry[-1]
+
     @cached_property
-    def record(self) -> TaskRecord:
-        """The task the selector names, with the list that holds it.
+    def selection(self) -> TaskSelection:
+        """The open tasks the selector reaches in the source.
 
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
+        One selection answers from one read of the source, so every
+        property above reads the same document.
         """
-        return TaskSelection(self.source, self.selector).record
-
-    def complete(self) -> None:
-        """Log the completion under the day this task carries.
-
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
-        RepeatError
-            The task repeats on a `[REPEAT:]` btodo cannot read. Raised
-            before anything is written.
-        """
-        self.completed = complete(self.source, self.selector, self.today)
+        return TaskSelection(self.source, self.selector)

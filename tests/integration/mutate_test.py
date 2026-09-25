@@ -28,6 +28,7 @@ from battodo.mutate import (
 )
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
+from battodo.task import Task
 
 TODAY = date(2026, 8, 8)
 
@@ -71,10 +72,8 @@ class UpdateTaskTests(TestCase):
 
     def test_line(t) -> None:
         path, entry = update_task(
-            t.source,
-            '9o71lx',
+            Task(t.source, '9o71lx', TODAY),
             {'P': '5', 'DUE': '2026-09-01'},
-            TODAY,
             title='Deck rebuild, phase two',
         )
         text = t.path.read_text(encoding='utf-8')
@@ -96,7 +95,11 @@ class UpdateTaskTests(TestCase):
             t.assertTrue(text.endswith('## Done\n'))
 
     def test_journal(t) -> None:
-        update_task(t.source, '9o71lx', {'P': '5'}, TODAY, title='Renamed')
+        update_task(
+            Task(t.source, '9o71lx', TODAY),
+            {'P': '5'},
+            title='Renamed',
+        )
 
         events = Journal(t.source).events
 
@@ -130,7 +133,10 @@ class UpdateTaskTests(TestCase):
             t.assertEqual(events[0]['metadata']['source_file'], 'work.md')
 
     def test_injects_an_id(t) -> None:
-        _, entry = update_task(t.source, 'Unidentified', {'P': '5'}, TODAY)
+        _, entry = update_task(
+            Task(t.source, 'Unidentified', TODAY),
+            {'P': '5'},
+        )
         event = Journal(t.source).events[0]
         task_id = event['stream_id'].removeprefix('task/')
 
@@ -145,10 +151,8 @@ class UpdateTaskTests(TestCase):
 
     def test_reaches_a_subtask(t) -> None:
         _, entry = update_task(
-            t.source,
-            'Chip the brush',
+            Task(t.source, 'Chip the brush', TODAY),
             {'DUE': '2026-09-01'},
-            TODAY,
         )
         child = task_id(entry)
         (event,) = Journal(t.source).events
@@ -184,7 +188,7 @@ class UpdateTaskTests(TestCase):
 
         for name, (selector, fields) in cases.items():
             with t.subTest(name), t.assertRaises(ValueError):
-                update_task(t.source, selector, fields, TODAY)
+                update_task(Task(t.source, selector, TODAY), fields)
 
         with t.subTest('a rejected update writes nothing at all'):
             events = Journal(t.source).events
@@ -203,9 +207,8 @@ class AddSubtaskTests(TestCase):
 
     def test_line(t) -> None:
         path, entry = add_subtask(
-            t.source,
+            Task(t.source, '9o71lx', TODAY),
             'work',
-            '9o71lx',
             'Buy lumber',
             {'LOE': '2'},
         )
@@ -228,9 +231,8 @@ class AddSubtaskTests(TestCase):
 
     def test_journal(t) -> None:
         _, entry = add_subtask(
-            t.source,
+            Task(t.source, '9o71lx', TODAY),
             'work',
-            '9o71lx',
             'Buy lumber',
             {'LOE': '2'},
         )
@@ -262,9 +264,8 @@ class AddSubtaskTests(TestCase):
     def test_nests_deeper(t) -> None:
         """A subtask is itself a parent, as SCHEMA.md allows."""
         _, entry = add_subtask(
-            t.source,
+            Task(t.source, 'Chip the brush', TODAY),
             'work',
-            'Chip the brush',
             'Rake the chips',
             {},
         )
@@ -282,9 +283,8 @@ class AddSubtaskTests(TestCase):
 
     def test_stamps_the_parent(t) -> None:
         _, entry = add_subtask(
-            t.source,
+            Task(t.source, 'Unidentified', TODAY),
             'work',
-            'Unidentified',
             'Get quotes',
             {},
         )
@@ -312,19 +312,24 @@ class AddSubtaskTests(TestCase):
             t.subTest('a parent no selector reaches'),
             t.assertRaises(SelectionError),
         ):
-            add_subtask(t.source, 'work', 'nothing', 'X', {})
+            add_subtask(Task(t.source, 'nothing', TODAY), 'work', 'X', {})
 
         with (
             t.subTest('a field only the top-level task carries'),
             t.assertRaisesRegex(ValueError, 'P belongs to the top-level task'),
         ):
-            add_subtask(t.source, 'work', '9o71lx', 'X', {'P': '3'})
+            add_subtask(
+                Task(t.source, '9o71lx', TODAY),
+                'work',
+                'X',
+                {'P': '3'},
+            )
 
         with (
             t.subTest('a checklist item, which cannot hold an id'),
             t.assertRaisesRegex(ValueError, 'checklist item'),
         ):
-            add_subtask(t.source, 'work', 'Sweep up', 'X', {})
+            add_subtask(Task(t.source, 'Sweep up', TODAY), 'work', 'X', {})
 
         with t.subTest('a rejected add writes nothing at all'):
             events = Journal(t.source).events
@@ -588,7 +593,7 @@ class CompleteTests(TestCase):
             t.subTest('a finished top-level task loses its whole block'),
             todo_lists() as source,
         ):
-            complete(source, 'Chip the brush pile', TODAY)
+            complete(Task(source, 'Chip the brush pile', TODAY))
 
             text = (source / 'chores.md').read_text()
             t.assertNotIn('Chip the brush pile', text)
@@ -598,7 +603,7 @@ class CompleteTests(TestCase):
             t.subTest('untouched lines survive byte-identically'),
             todo_lists() as source,
         ):
-            complete(source, 'Casablanca', TODAY)
+            complete(Task(source, 'Casablanca', TODAY))
 
             kept = [
                 line
@@ -612,7 +617,7 @@ class CompleteTests(TestCase):
             t.subTest('completing the last open child empties the block'),
             todo_lists() as source,
         ):
-            complete(source, 'Buy lumber', TODAY)
+            complete(Task(source, 'Buy lumber', TODAY))
 
             text = (source / 'chores.md').read_text()
             t.assertNotIn('Build workbench', text)
@@ -623,7 +628,7 @@ class CompleteTests(TestCase):
             t.subTest('a cascade that stops checks lines off in place'),
             todo_lists() as source,
         ):
-            complete(source, 'Power supply', TODAY)
+            complete(Task(source, 'Power supply', TODAY))
 
             lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Power supply', lines)
@@ -642,7 +647,7 @@ class CompleteTests(TestCase):
             t.subTest('a checklist item alone gets no [ID:], its owner does'),
             todo_lists() as source,
         ):
-            complete(source, 'Ice packs', TODAY)
+            complete(Task(source, 'Ice packs', TODAY))
 
             lines = (source / 'work.md').read_text().split('\n')
             t.assertIn('    - [x] Ice packs', lines)
@@ -656,7 +661,7 @@ class CompleteTests(TestCase):
             t.subTest('a recurring task is rescheduled, not removed'),
             todo_lists() as source,
         ):
-            complete(source, 'Pay credit cards', TODAY)
+            complete(Task(source, 'Pay credit cards', TODAY))
 
             t.assertEqual(
                 task_line(source, 'chores.md', 'Pay credit cards'),
@@ -669,7 +674,7 @@ class CompleteTests(TestCase):
             t.subTest('a parent completed early takes its children along'),
             todo_lists() as source,
         ):
-            ret = complete(source, 'Trip prep', TODAY)
+            ret = complete(Task(source, 'Trip prep', TODAY))
 
             t.assertEqual(
                 ret,
@@ -685,7 +690,7 @@ class CompleteTests(TestCase):
             t.subTest('a recurrence keeps its notes, drops its children'),
             todo_lists() as source,
         ):
-            complete(source, "Captain's log", TODAY)
+            complete(Task(source, "Captain's log", TODAY))
 
             text = (source / 'work.md').read_text()
             t.assertIn('[DUE:2026-08-14] [REPEAT:weekly:fri]', text)
@@ -697,7 +702,7 @@ class CompleteTests(TestCase):
             t.subTest('date, category, status, title, and fields'),
             todo_lists() as source,
         ):
-            ret = complete(source, 'Chip the brush pile', TODAY)
+            ret = complete(Task(source, 'Chip the brush pile', TODAY))
 
             t.assertEqual(
                 ret,
@@ -718,7 +723,7 @@ class CompleteTests(TestCase):
                 logged(source),
                 [],
             )
-            complete(source, 'Pay credit cards', TODAY)
+            complete(Task(source, 'Pay credit cards', TODAY))
 
             t.assertEqual(
                 logged(source),
@@ -735,7 +740,7 @@ class CompleteTests(TestCase):
             t.subTest('ancestry with a line per completion, deepest first'),
             todo_lists() as source,
         ):
-            complete(source, 'Buy lumber', TODAY)
+            complete(Task(source, 'Buy lumber', TODAY))
 
             t.assertEqual(
                 logged(source),
@@ -755,7 +760,7 @@ class CompleteTests(TestCase):
             t.subTest('checklist items are not logged, their parent is'),
             todo_lists() as source,
         ):
-            ret = complete(source, 'Power supply', TODAY)
+            ret = complete(Task(source, 'Power supply', TODAY))
 
             t.assertEqual(
                 ret,
@@ -772,7 +777,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             (source / 'completed.md').write_text(COMPLETED.rstrip('\n'))
-            complete(source, 'Chip the brush pile', TODAY)
+            complete(Task(source, 'Chip the brush pile', TODAY))
 
             text = (source / 'completed.md').read_text()
             t.assertTrue(text.startswith(COMPLETED))
@@ -783,7 +788,7 @@ class CompleteTests(TestCase):
             todo_lists() as source,
         ):
             (source / 'completed.md').unlink()
-            complete(source, 'Chip the brush pile', TODAY)
+            complete(Task(source, 'Chip the brush pile', TODAY))
 
             t.assertTrue(
                 (source / 'completed.md')
@@ -794,7 +799,7 @@ class CompleteTests(TestCase):
     def test_journal(t) -> None:
         with todo_lists() as source:
             with t.subTest('one TaskCompleted per completion, deepest first'):
-                complete(source, 'Buy lumber', TODAY)
+                complete(Task(source, 'Buy lumber', TODAY))
 
                 events = Journal(source).events
 
@@ -832,7 +837,7 @@ class CompleteTests(TestCase):
             t.subTest('a reschedule records the due date it moved to'),
             todo_lists() as source,
         ):
-            complete(source, 'Pay credit cards', TODAY)
+            complete(Task(source, 'Pay credit cards', TODAY))
 
             events = Journal(source).events
 
@@ -845,7 +850,7 @@ class CompleteTests(TestCase):
             t.subTest('a checklist item records on its parent stream'),
             todo_lists() as source,
         ):
-            complete(source, 'Power supply', TODAY)
+            complete(Task(source, 'Power supply', TODAY))
 
             events = Journal(source).events
             streams = {e['stream_id'] for e in events}
@@ -864,7 +869,7 @@ class CompleteTests(TestCase):
         source = work_list(t)
         path = source / 'work.md'
 
-        entries = complete(source, 'Sweep up', TODAY)
+        entries = complete(Task(source, 'Sweep up', TODAY))
         (event,) = Journal(source).events
         text = path.read_text(encoding='utf-8')
 
@@ -892,19 +897,19 @@ class CompleteTests(TestCase):
 
             with t.subTest('nothing matches'):
                 with t.assertRaises(SelectionError) as caught:
-                    complete(source, 'nonexistent', TODAY)
+                    complete(Task(source, 'nonexistent', TODAY))
                 t.assertIn("'nonexistent'", str(caught.exception))
 
             with t.subTest('several tasks match'):
                 with t.assertRaises(SelectionError) as caught:
-                    complete(source, 'the', TODAY)
+                    complete(Task(source, 'the', TODAY))
                 t.assertIn('matches 3 open tasks', str(caught.exception))
 
             with t.subTest(
                 'an unreadable REPEAT stops before anything is written'
             ):
                 with t.assertRaises(RepeatError):
-                    complete(source, 'Water the plants', TODAY)
+                    complete(Task(source, 'Water the plants', TODAY))
 
                 events = Journal(source).events
 
@@ -921,7 +926,7 @@ class ScratchTests(TestCase):
             t.subTest('the block goes, untouched lines byte-identically'),
             todo_lists() as source,
         ):
-            scratch(source, 'Casablanca', TODAY)
+            scratch(Task(source, 'Casablanca', TODAY))
 
             kept = [
                 line
@@ -934,7 +939,7 @@ class ScratchTests(TestCase):
             t.subTest('a subtask goes without touching its parent'),
             todo_lists() as source,
         ):
-            scratch(source, 'Book hotel', TODAY)
+            scratch(Task(source, 'Book hotel', TODAY))
 
             text = (source / 'work.md').read_text()
             t.assertNotIn('Book hotel', text)
@@ -949,7 +954,7 @@ class ScratchTests(TestCase):
             t.subTest('a checklist item goes, its owner gains an [ID:]'),
             todo_lists() as source,
         ):
-            scratch(source, 'Ice packs', TODAY)
+            scratch(Task(source, 'Ice packs', TODAY))
 
             text = (source / 'work.md').read_text()
             t.assertNotIn('Ice packs', text)
@@ -963,7 +968,7 @@ class ScratchTests(TestCase):
             t.subTest('a recurring task is abandoned, not rescheduled'),
             todo_lists() as source,
         ):
-            scratch(source, 'Pay credit cards', TODAY)
+            scratch(Task(source, 'Pay credit cards', TODAY))
 
             t.assertNotIn(
                 'Pay credit cards',
@@ -975,7 +980,7 @@ class ScratchTests(TestCase):
             t.subTest('one SCRATCHED entry, with ancestry and fields'),
             todo_lists() as source,
         ):
-            ret = scratch(source, 'Book hotel', TODAY)
+            ret = scratch(Task(source, 'Book hotel', TODAY))
 
             t.assertEqual(
                 ret,
@@ -993,7 +998,7 @@ class ScratchTests(TestCase):
             t.subTest('TaskScratched on the task, no cascade'),
             todo_lists() as source,
         ):
-            scratch(source, 'Casablanca', TODAY)
+            scratch(Task(source, 'Casablanca', TODAY))
 
             events = Journal(source).events
             t.assertEqual(len(events), 1)
@@ -1012,7 +1017,7 @@ class ScratchTests(TestCase):
             t.subTest('ancestry and pre-state snapshot'),
             todo_lists() as source,
         ):
-            scratch(source, 'Book hotel', TODAY)
+            scratch(Task(source, 'Book hotel', TODAY))
 
             payload = Journal(source).events[0]['payload']
             t.assertEqual(payload['ancestry'], 'Trip prep > Book hotel')
@@ -1029,7 +1034,7 @@ class ScratchTests(TestCase):
             t.subTest('a checklist item records on its parent stream'),
             todo_lists() as source,
         ):
-            scratch(source, 'Ice packs', TODAY)
+            scratch(Task(source, 'Ice packs', TODAY))
 
             stream = Journal(source).events[0]['stream_id']
             t.assertIn(
@@ -1046,7 +1051,7 @@ class ScratchTests(TestCase):
         source = work_list(t)
         path = source / 'work.md'
 
-        entries = scratch(source, 'Sweep up', TODAY)
+        entries = scratch(Task(source, 'Sweep up', TODAY))
         (event,) = Journal(source).events
         text = path.read_text(encoding='utf-8')
 

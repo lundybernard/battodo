@@ -26,7 +26,11 @@ class SelectionError(Exception):
 
 @dataclass
 class TaskRecord:
-    """One open task, the list it lives in, and its ancestry."""
+    """One open task, the list it lives in, and its ancestry.
+
+    Internal to this module: `battodo.task.Task` gives callers the same
+    fields.
+    """
 
     path: Path
     doc: TodoDocument
