@@ -10,19 +10,23 @@ output holds for any list file rather than what it happened to return.
 The cases began as the selection slice's oracle and outlived it (R4).
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import cached_property
 from json import loads
 from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest import TestCase
 from unittest.mock import patch
 
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
+from battodo.parser import TaskNode, TodoDocument, parse_date
+from battodo.rank import multiplier, rank
 from battodo.view import RANK_PLACES, TOP_N, Selection, View
 
 from .strategies import document, grammar
@@ -30,6 +34,7 @@ from .strategies import document, grammar
 # Wednesday mid-morning: the work window is open and the chores window
 # is shut.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+TODAY = NOW.date()
 # The one list a generated source holds. A named category no hour shuts
 # keeps a case independent of the clock.
 CATEGORY = 'career'
@@ -42,6 +47,8 @@ OPEN_MARK = '- [ ] '
 # The character a table rules its headings with, as the renderer draws
 # it. Held here so a case reads the table as a terminal would.
 RULE = '─'
+# The start of the line that closes a table holding tasks back.
+HELD_BACK = '  …'
 # The fields of one published task, in the order they are listed.
 TASK_FIELDS = [
     'id',
@@ -55,6 +62,12 @@ TASK_FIELDS = [
     'tags',
     'subtasks',
 ]
+# The fields a published task carries verbatim from its line.
+STORED_FIELDS = ['id', 'title', 'loe', 'due', 'added', 'repeat', 'tags']
+# Where a task with no due date sorts among the due dates of its ties.
+NO_DUE = 'zzzz'
+# A list file that holds this marker anywhere is never shown.
+PARKED = 'battodo:parked'
 # One list file covering the cases the hand-written suites name: an
 # open task, a finished one, a recurrence ahead of today, a one-off
 # ahead of today, a late recurrence, one due today, and a date the
@@ -77,6 +90,21 @@ ABRIDGED_LINES = [
 LIST_FILES = st.lists(grammar.task_lines, max_size=8)
 
 
+def fuzz(test: Callable[..., None]) -> Callable[..., None]:
+    """Run `test` on the two fixed list files, then on generated ones."""
+    return settings(deadline=None)(
+        example(lines=KNOWN_LINES)(
+            example(lines=ABRIDGED_LINES)(given(LIST_FILES)(test))
+        )
+    )
+
+
+def published(lines: list[str]) -> dict[str, Any]:
+    """The document a view of the list file `lines` publishes."""
+    with source(lines) as directory:
+        return loads(Selection(directory, NOW, show_all=False).json)
+
+
 @contextmanager
 def source(lines: list[str]) -> Iterator[Path]:
     """A source directory holding `lines` as its one list file."""
@@ -87,9 +115,174 @@ def source(lines: list[str]) -> Iterator[Path]:
         yield directory
 
 
+def shown_tasks(publication: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every task `publication` shows, across its categories."""
+    return [
+        task
+        for category in publication['categories']
+        for task in category['tasks']
+    ]
+
+
 def open_lines(lines: list[str]) -> int:
     """How many of `lines` are task lines left open, at any depth."""
     return len([line for line in lines if line.lstrip().startswith(OPEN_MARK)])
+
+
+class WrittenList:
+    """The list file a case writes, read and ranked apart from the view.
+
+    The parser reads the lines and the rank module ranks each task on
+    the day of NOW, so each member states what a view of the file holds
+    from the input and the clock alone.
+    """
+
+    def __init__(self, lines: list[str]) -> None:
+        self.lines = lines
+
+    @cached_property
+    def stored(self) -> list[dict[str, object]]:
+        """The fields each shown task carries verbatim from its line."""
+        return [
+            {
+                'id': task.task_id,
+                'title': task.title,
+                'loe': task.loe,
+                'due': task.due,
+                'added': task.added,
+                'repeat': task.repeat,
+                'tags': task.tags,
+            }
+            for task in self.shown
+        ]
+
+    @cached_property
+    def subtasks(self) -> list[tuple[str, int]]:
+        """Each shown task's title, and how many of its children are open."""
+        return [(task.title, open_children(task)) for task in self.shown]
+
+    @cached_property
+    def cells(self) -> list[tuple[str, ...]]:
+        """The five values a table shows for each task, padding aside."""
+        return [
+            (
+                f'{rank(task, TODAY):.1f}',
+                f'{multiplier(task):.1f}',
+                '' if task.loe is None else str(task.loe),
+                f'{task.title}{badge(task)}',
+                due_label(task).strip(),
+            )
+            for task in self.shown
+        ]
+
+    @cached_property
+    def shown(self) -> list[TaskNode]:
+        """The tasks a view shows, in the order it shows them."""
+        return self.ranked[:TOP_N]
+
+    @cached_property
+    def ranked(self) -> list[TaskNode]:
+        """The held tasks: rank descending, then due, then title."""
+        return sorted(
+            self.held,
+            key=lambda task: (
+                -rank(task, TODAY),
+                task.due or NO_DUE,
+                task.title,
+            ),
+        )
+
+    @cached_property
+    def held(self) -> list[TaskNode]:
+        """The visible tasks, or none where the list file is parked."""
+        return [] if PARKED in self.text else self.visible
+
+    @cached_property
+    def text(self) -> str:
+        """The list file the lines make."""
+        return document(self.lines)
+
+    @cached_property
+    def visible(self) -> list[TaskNode]:
+        """The open top-level tasks, less each recurrence due later."""
+        return [
+            task
+            for task in self.tasks
+            if not task.done and not recurs_later(task)
+        ]
+
+    @cached_property
+    def tasks(self) -> list[TaskNode]:
+        """The top-level tasks of the list file."""
+        return TodoDocument(self.text).tasks
+
+
+def open_children(task: TaskNode) -> int:
+    """How many children of `task` are still open, at the next depth."""
+    return len([child for child in task.children if not child.done])
+
+
+def badge(task: TaskNode) -> str:
+    """The mark a table gives the open children of `task`, if any."""
+    count = open_children(task)
+    return f' (+{count})' if count else ''
+
+
+def due_label(task: TaskNode) -> str:
+    """How a table labels the due date of `task` on the day of NOW."""
+    due = parse_date(task.due)
+    if due is not None and due < TODAY:
+        return 'OVERDUE'
+    if due == TODAY:
+        return 'TODAY'
+    return task.due or ''
+
+
+def recurs_later(task: TaskNode) -> bool:
+    """Whether `task` recurs and falls due after the day of NOW."""
+    due = parse_date(task.due)
+    return bool(task.repeat) and due is not None and due > TODAY
+
+
+class RenderedTable:
+    """The one table a rendered view of a case holds, read as text.
+
+    The view opens with its header, a blank line, the table's heading
+    and its column names. A line per task follows.
+    """
+
+    def __init__(self, text: str) -> None:
+        self.lines = text.split('\n')
+
+    @cached_property
+    def cells(self) -> list[tuple[str, ...]]:
+        """The five values each task line shows, padding aside."""
+        return [
+            tuple(line[span].strip() for span in self.spans)
+            for line in self.lines[4:]
+            if not line.startswith(HELD_BACK)
+        ]
+
+    @cached_property
+    def spans(self) -> list[slice]:
+        """Where each column runs across a line, read off its names.
+
+        A number aligns right, so its column ends where its name ends.
+        Text aligns left, so its column starts where its name starts.
+        """
+        names = self.lines[3]
+        rank_end = names.index('RANK') + len('RANK')
+        priority_end = names.index('P', rank_end) + len('P')
+        loe_end = names.index('LOE') + len('LOE')
+        task_start = names.index('TASK')
+        due_start = names.index('DUE')
+        return [
+            slice(0, rank_end),
+            slice(rank_end, priority_end),
+            slice(priority_end, loe_end),
+            slice(task_start, due_start),
+            slice(due_start, None),
+        ]
 
 
 def headings(out: list[str]) -> list[str]:
@@ -107,21 +300,16 @@ class SelectionTests(TestCase):
 
     maxDiff = None
 
-    @settings(deadline=None)
-    @example(lines=KNOWN_LINES)
-    @example(lines=ABRIDGED_LINES)
-    @given(LIST_FILES)
-    def test_json(t, lines: list[str]) -> None:
-        with source(lines) as directory:
-            selection = Selection(directory, NOW, show_all=False)
-
-            ret = loads(selection.json)
+    @fuzz
+    def test_document_shape(t, lines: list[str]) -> None:
+        ret = published(lines)
 
         t.assertEqual(list(ret), ['date', 'active', 'categories'])
         t.assertEqual(ret['date'], NOW.date().isoformat())
         t.assertEqual(ret['active'], sorted(set(ret['active'])))
 
         categories = ret['categories']
+        shown = shown_tasks(ret)
 
         t.assertEqual(
             [list(category) for category in categories],
@@ -131,27 +319,95 @@ class SelectionTests(TestCase):
             [category['name'] for category in categories],
             [CATEGORY] * len(categories),
         )
+        t.assertEqual(
+            [list(task) for task in shown],
+            [TASK_FIELDS] * len(shown),
+        )
+
+    @fuzz
+    def test_category_limits(t, lines: list[str]) -> None:
+        ret = published(lines)
+
+        categories = ret['categories']
+        shown = shown_tasks(ret)
+        hidden = sum(category['hidden'] for category in categories)
+
         # The case writes one list file, so a view of it publishes one
         # category at most. What that category holds is the whole
         # publication.
         t.assertLessEqual(len(categories), 1)
-
-        shown = [task for category in categories for task in category['tasks']]
-        hidden = sum(category['hidden'] for category in categories)
-        ranks = [task['rank'] for task in shown]
-
         # A category with nothing open is left out altogether, and one
         # holding anything back is filled to the limit first.
         t.assertEqual(bool(shown), bool(categories))
         t.assertEqual(len(shown), min(len(shown) + hidden, TOP_N))
         # A category accounts for no more than the case wrote open.
         t.assertLessEqual(len(shown) + hidden, open_lines(lines))
-        t.assertEqual(
-            [list(task) for task in shown],
-            [TASK_FIELDS] * len(shown),
-        )
+
+    @fuzz
+    def test_task_rank(t, lines: list[str]) -> None:
+        ret = published(lines)
+
+        ranks = [task['rank'] for task in shown_tasks(ret)]
+
         t.assertEqual(ranks, sorted(ranks, reverse=True))
         t.assertEqual(ranks, [round(rank, RANK_PLACES) for rank in ranks])
+
+    @fuzz
+    def test_task_fields(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        stored = [
+            {name: task[name] for name in STORED_FIELDS}
+            for task in shown_tasks(ret)
+        ]
+
+        # The order of the tasks is the topic of another case.
+        t.assertEqual(
+            sorted(stored, key=repr),
+            sorted(written.stored, key=repr),
+        )
+
+    @fuzz
+    def test_task_order(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        order = [(task['title'], task['due']) for task in shown_tasks(ret)]
+
+        # Most drawn tasks share a rank, so the due date and the title
+        # decide their order.
+        t.assertEqual(
+            order,
+            [(task.title, task.due) for task in written.shown],
+        )
+
+    @fuzz
+    def test_subtask_count(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        counts = [
+            (task['title'], task['subtasks']) for task in shown_tasks(ret)
+        ]
+
+        # The order of the tasks is the topic of another case.
+        t.assertEqual(sorted(counts), sorted(written.subtasks))
+
+    @fuzz
+    def test_task_visibility(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+
+        ret = published(lines)
+
+        hidden = sum(category['hidden'] for category in ret['categories'])
+
+        # A recurrence due after today drops out. A one-off due then
+        # stays, and so does a task whose due date does not read.
+        t.assertEqual(len(shown_tasks(ret)) + hidden, len(written.held))
 
 
 class ViewTests(TestCase):
@@ -159,26 +415,23 @@ class ViewTests(TestCase):
 
     maxDiff = None
 
-    @settings(deadline=None)
-    @example(lines=KNOWN_LINES)
-    @example(lines=ABRIDGED_LINES)
-    @given(LIST_FILES)
+    @fuzz
+    @patch.dict(environ, {'COLUMNS': str(WIDTH)})
     def test_text(t, lines: list[str]) -> None:
         with source(lines) as directory:
             selection = Selection(directory, NOW, show_all=False)
-            published = loads(selection.json)
+            publication = loads(selection.json)
 
-            with patch.dict(environ, {'COLUMNS': str(WIDTH)}):
-                ret = View(selection).text
+            ret = View(selection).text
 
         out = ret.split('\n')
-        active = ', '.join(published['active'])
+        active = ', '.join(publication['active'])
         t.assertEqual(
             out[0],
-            f'{NOW:%A} {published["date"]} {NOW:%H:%M} — active: {active}',
+            f'{NOW:%A} {publication["date"]} {NOW:%H:%M} — active: {active}',
         )
 
-        categories = published['categories']
+        categories = publication['categories']
 
         t.assertEqual(
             [heading.strip(f'{RULE} ') for heading in headings(out)],
@@ -192,3 +445,16 @@ class ViewTests(TestCase):
         )
         t.assertEqual(len(out), 1 + spent)
         t.assertEqual([line for line in out if len(line) > WIDTH], [])
+
+    @fuzz
+    @patch.dict(environ, {'COLUMNS': str(WIDTH)})
+    def test_table_cells(t, lines: list[str]) -> None:
+        written = WrittenList(lines)
+        with source(lines) as directory:
+            selection = Selection(directory, NOW, show_all=False)
+
+            ret = View(selection).text
+
+        table = RenderedTable(ret)
+
+        t.assertEqual(table.cells, written.cells)
