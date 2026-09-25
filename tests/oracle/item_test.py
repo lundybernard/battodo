@@ -1,14 +1,13 @@
 """Characterization tests for the item read.
 
 Temporary scaffolding for the move of the item read onto property
-objects. The suite pins what `build_item_json` publishes and what
-`build_item` renders for the task a selector names in a list file drawn
-from the schema grammar, and the error text when the selector names no
-open task or several. The expected answer derives from the drawn file
-and the clock, never from the code under test.
+objects. The suite pins what `Item.json` publishes and what
+`ItemView.text` renders for the task a selector names in a list file
+drawn from the schema grammar, and the error text when the selector
+names no open task or several. The expected answer derives from the
+drawn file and the clock, never from the code under test.
 """
 
-from collections.abc import Callable
 from datetime import datetime, timezone
 from json import dumps
 from pathlib import Path
@@ -18,10 +17,11 @@ from unittest import TestCase
 from hypothesis import given
 from hypothesis import strategies as st
 
-from battodo.item import build_item, build_item_json
+from battodo.item import Item, ItemView
 from battodo.parser import TaskNode, TodoDocument
 from battodo.rank import multiplier, rank
 from battodo.selector import SelectionError
+from battodo.task import Task
 from battodo.view import RANK_PLACES
 from tests.property.strategies import Node, grammar
 from tests.property.task_test import (
@@ -39,13 +39,13 @@ TODAY = NOW.date()
 INDENT = '  '
 
 
-class BuildItemJsonTests(TestCase):
-    """Characterization tests for battodo.item.build_item_json."""
+class ItemTests(TestCase):
+    """Characterization tests for battodo.item.Item.json."""
 
     maxDiff = None
 
     @given(grammar.documents, st.data())
-    def test_document(
+    def test_json(
         t,
         drawn: tuple[str, list[Node]],
         data: st.DataObject,
@@ -56,13 +56,13 @@ class BuildItemJsonTests(TestCase):
         expected = published(outcome(text, ancestries, selector))
 
         with source(text) as directory:
-            ret = answer(build_item_json, directory, selector)
+            ret = document(directory, selector)
 
         t.assertEqual(ret, expected)
 
 
-class BuildItemTests(TestCase):
-    """Characterization tests for battodo.item.build_item."""
+class ItemViewTests(TestCase):
+    """Characterization tests for battodo.item.ItemView.text."""
 
     maxDiff = None
 
@@ -78,7 +78,7 @@ class BuildItemTests(TestCase):
         expected = rendered(outcome(text, ancestries, selector))
 
         with source(text) as directory:
-            ret = answer(build_item, directory, selector)
+            ret = rendering(directory, selector)
 
         t.assertEqual(ret, expected)
 
@@ -143,14 +143,10 @@ def child_record(task: TaskNode) -> dict[str, Any]:
     }
 
 
-def answer(
-    build: Callable[[Path, str, datetime], str],
-    directory: Path,
-    selector: str,
-) -> str:
-    """What `build` returns for the selector, or the error text."""
+def document(directory: Path, selector: str) -> str:
+    """The document the item publishes, or the error text."""
     try:
-        return build(directory, selector, NOW)
+        return Item(Task(directory, selector, TODAY)).json
     except SelectionError as error:
         return str(error)
 
@@ -218,3 +214,11 @@ def outline(tasks: list[TaskNode], depth: int) -> list[str]:
         lines.append(f'{INDENT * depth}[{mark}] {task.title}{fields}')
         lines.extend(outline(task.children, depth + 1))
     return lines
+
+
+def rendering(directory: Path, selector: str) -> str:
+    """The item as its view renders it, or the error text."""
+    try:
+        return ItemView(Item(Task(directory, selector, TODAY))).text
+    except SelectionError as error:
+        return str(error)

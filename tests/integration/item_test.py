@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from battodo.conf import TZ
-from battodo.item import Item, ItemView, build_item, build_item_json
+from battodo.item import Item, ItemView
 from battodo.task import Task
 
 # Chosen so the rank comes out whole: the task is one month old and one
@@ -53,87 +53,6 @@ UNDATED_TEXT = """Undated task
   id    -
   rank  2.0
   P     2.0"""
-
-
-class ItemReadTests(TestCase):
-    """Contract tests for battodo.item.build_item and build_item_json."""
-
-    maxDiff = None
-
-    def setUp(t) -> None:
-        tmp = TemporaryDirectory()
-        t.addCleanup(tmp.cleanup)
-        t.source = Path(tmp.name)
-        (t.source / 'work.md').write_text(WORK, encoding='utf-8')
-
-    def test_build_item(t) -> None:
-        with t.subTest('every stored field, then the children'):
-            ret = build_item(t.source, '9o71lx', NOW)
-            t.assertEqual(ret, DECK_TEXT)
-
-        with t.subTest('part of a title selects the same task'):
-            ret = build_item(t.source, 'deck', NOW)
-            t.assertEqual(ret, DECK_TEXT)
-
-        with t.subTest('absent fields and a childless task are left out'):
-            ret = build_item(t.source, 'Undated', NOW)
-            t.assertEqual(ret, UNDATED_TEXT)
-
-    def test_build_item_json(t) -> None:
-        with t.subTest('the item, its fields, and its children'):
-            ret = build_item_json(t.source, '9o71lx', NOW)
-
-            t.assertEqual(
-                loads(ret),
-                {
-                    'list': 'work',
-                    'id': '9o71lx',
-                    'title': 'Deck rebuild',
-                    'done': False,
-                    'rank': 10.0,
-                    'priority': 4.0,
-                    'loe': 8,
-                    'due': '2026-08-12',
-                    'added': '2026-07-06',
-                    'repeat': None,
-                    'tags': ['yard', 'summer'],
-                    'subtasks': [
-                        {
-                            'id': None,
-                            'title': 'Chip the brush',
-                            'done': False,
-                            'loe': 2,
-                            'due': None,
-                            'tags': [],
-                            'subtasks': [],
-                        },
-                        {
-                            'id': None,
-                            'title': 'Sweep',
-                            'done': False,
-                            'loe': None,
-                            'due': None,
-                            'tags': [],
-                            'subtasks': [],
-                        },
-                        {
-                            'id': None,
-                            'title': 'Buy the lumber',
-                            'done': True,
-                            'loe': 1,
-                            'due': None,
-                            'tags': [],
-                            'subtasks': [],
-                        },
-                    ],
-                },
-            )
-
-        with t.subTest('an absent field is null, not missing'):
-            data = loads(build_item_json(t.source, 'Undated', NOW))
-            t.assertIsNone(data['id'])
-            t.assertIsNone(data['due'])
-            t.assertEqual(data['subtasks'], [])
 
 
 class ItemTests(TestCase):
