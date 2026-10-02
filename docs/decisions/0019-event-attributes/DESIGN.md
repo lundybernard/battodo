@@ -91,12 +91,16 @@ finished task
 the target's event only. An ancestor that the cascade completes gets
 none.
 
-**Completed log.** The log reader splits a record into four fields on
-the first three separators and folds the rest into the title, and the
-digest strips `[FIELD:]` markup from that title. Attributes appended to
-the existing record line would read as title text or vanish from the
-digest. The record line keeps its shape unless the reader changes in
-the same work.
+**Completed log.** Completion attributes appear in the completed log.
+The log is a render of the journal: its records derive from journal
+events, and btodo never rebuilds journal state from the log. The record
+line carries the attributes of its completion. Today the digest reader
+splits a record into four fields on the first three separators, folds
+the rest into the title, and strips `[FIELD:]` markup from that title,
+so attributes on the line would read as title text or vanish. The
+implementing work sets the attribute syntax on the line and changes the
+reader in the same change. The four-field split is a render detail, not
+a compatibility constraint.
 
 ## Task description
 
@@ -144,10 +148,6 @@ format lays out, as `show --format json` does.
 
 ## Open questions
 
-- **Attributes in the completed log.** Completion attributes may also
-  reach the completed log export, or stay journal-only. Either way the
-  record line keeps its four-field shape unless the reader changes with
-  it.
 - **Checklist item completions.** A checklist item carries no `[ID:]`,
   so its completion event goes on the stream of its nearest ancestor
   that has one, with the item named in the event's `ancestry`. That

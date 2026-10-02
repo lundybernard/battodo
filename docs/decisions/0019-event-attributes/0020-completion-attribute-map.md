@@ -96,7 +96,7 @@ vocabulary, and the vocabulary is what this decision declines to fix.
 - An ancestor that a cascade completes carries no attributes. The rule
   for a checklist item, whose completion event goes on an ancestor's
   stream, is open ([DESIGN.md](DESIGN.md#open-questions)).
-- Whether attributes also reach the completed log is open
-  ([DESIGN.md](DESIGN.md#open-questions)).
+- Attributes also appear in the completed log, which is a render of
+  the journal ([DESIGN.md](DESIGN.md#completion-attributes)).
 - Nothing catches a misspelt key. A reader that lists the keys in use
   is where a check would start.

@@ -3,6 +3,7 @@
 > Author: lundybernard
 > Date: 2026-10-01
 > Branch: adr-event-attributes
+> Issue: #79
 
 ## Purpose
 
