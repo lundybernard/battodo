@@ -10,7 +10,7 @@ ADRs 0020–0022 are the component decisions: the attribute map on
 completion events, the journaled task description, and the history
 command.
 
-Branch: `adr-event-attributes`
+Branch: `adr-event-attributes` — Issue: #79
 
 **Status: deferred.** The work lands after the journal-authority flip
 ([ADR group 0008](../0008-journal-authority/README.md)) and after the
