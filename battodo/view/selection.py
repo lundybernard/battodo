@@ -46,6 +46,250 @@ TOP_N = 5
 RANK_PLACES = 2
 
 
+class Selection:
+    """What one view shows, for one directory read at one moment."""
+
+    def __init__(
+        self,
+        directory: Path,
+        now: datetime,
+        *,
+        show_all: bool,
+        top_n: int = TOP_N,
+    ) -> None:
+        self.directory = directory
+        self.now = now
+        self.show_all = show_all
+        self.top_n = top_n
+
+    @classmethod
+    def from_config(cls, conf: Configuration, now: datetime) -> 'Selection':
+        """Build a selection from a resolved configuration.
+
+        Every configuration value is a string, so the item count is
+        decoded here. A flag the user left off is absent, not false.
+
+        Raises
+        ------
+        ValueError
+            The configured count is not a whole number of one or more.
+        """
+        return cls(
+            Path(conf.view.source_dir),
+            now,
+            show_all=bool(getattr(conf, 'show_all', False)),
+            top_n=item_count(conf.view.top),
+        )
+
+    @cached_property
+    def today(self) -> date:
+        return self.now.date()
+
+    @property
+    def limit(self) -> int | None:
+        """How many items a category may show; None for all of them."""
+        return None if self.show_all else self.top_n
+
+    @cached_property
+    def source(self) -> Path:
+        """The resolved source directory.
+
+        Raises
+        ------
+        SourceError
+            The directory is not there.
+        """
+        resolved = self.directory.expanduser().resolve()
+        if not resolved.is_dir():
+            raise SourceError(f'todo source directory not found: {resolved}')
+        return resolved
+
+    @cached_property
+    def active(self) -> set[str]:
+        """The categories whose time window is open at `now`."""
+        names = set(ALWAYS_ACTIVE)
+        if self.weekday and 9 <= self.hour < 17:
+            names.add('work')
+        if self.weekday and 17 <= self.hour < 21:
+            names.add('chores')
+        if not self.weekday and 10 <= self.hour < 20:
+            names.add('chores')
+        return names
+
+    @cached_property
+    def weekday(self) -> bool:
+        """Whether the clock falls on a working day of the week."""
+        return self.day < 5
+
+    @cached_property
+    def day(self) -> int:
+        """Which day of the week the clock falls on. Monday is 0."""
+        return self.now.weekday()
+
+    @cached_property
+    def hour(self) -> int:
+        """The hour of the day the clock reads."""
+        return self.now.hour
+
+    @cached_property
+    def lists(self) -> list['TodoList']:
+        """Every list in the source, in display order.
+
+        Raises
+        ------
+        SourceError
+            The directory holds no todo lists.
+        """
+        paths = discover_lists(self.source)
+        if not paths:
+            raise SourceError(
+                f'no todo lists (no file with a "{OPEN_HEADING}" heading) '
+                f'in: {self.source}'
+            )
+        found = [TodoList(path, self.today) for path in paths]
+        return sorted(found, key=lambda todo: todo.order)
+
+    def shows(self, todo: 'TodoList') -> bool:
+        """Whether `todo` has any place in this view.
+
+        A named category is shown while its window is open, or whenever
+        everything has been asked for -- a shut window is the view being
+        selective, and asking for all of it says not to be. A name the
+        display order does not know has no window to be outside of.
+
+        Opting out is not a window, and nothing reopens it: a parked
+        list stays out of every view.
+        """
+        named = todo.category in CATEGORY_ORDER
+        shut = named and todo.category not in self.active
+        if shut and not self.show_all:
+            return False
+        return not todo.parked
+
+    @cached_property
+    def categories(self) -> list['Category']:
+        """The categories a view renders, each with its rows."""
+        return [
+            Category(todo.category, todo.rows, self.limit)
+            for todo in self.lists
+            if self.shows(todo) and todo.rows
+        ]
+
+    @cached_property
+    def data(self) -> dict[str, object]:
+        """The machine-readable form of this selection.
+
+        Shaped as::
+
+            {"date": "2026-08-05",
+             "active": ["career", "events", "study", "work"],
+             "categories": [{"name": "work", "hidden": 2, "tasks": [
+                 {"id": null, "title": "...", "rank": 6.0,
+                  "priority": 2.0, "loe": null, "due": null,
+                  "added": "2026-05-10", "repeat": null,
+                  "tags": [], "subtasks": 0}]}]}
+
+        `hidden` is how many of the category's open items this leaves
+        out. Without it an abridged document reads exactly like a
+        complete one, and a reader has no way of knowing to ask for
+        the rest.
+        """
+        return {
+            'date': self.today.isoformat(),
+            'active': sorted(self.active),
+            'categories': [
+                {
+                    'name': category.name,
+                    'hidden': category.hidden,
+                    'tasks': [row.data for row in category.shown],
+                }
+                for category in self.categories
+            ],
+        }
+
+    @cached_property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        return dumps(self.data, indent=2)
+
+
+class TodoList:
+    """One discovered list file: where it sorts, and what is open in it."""
+
+    def __init__(self, path: Path, today: date) -> None:
+        self.path = path
+        self.today = today
+
+    @cached_property
+    def category(self) -> str:
+        """The list's name: the file's name without its extension."""
+        return self.path.stem
+
+    @cached_property
+    def text(self) -> str:
+        return self.path.read_text()
+
+    @cached_property
+    def document(self) -> TodoDocument:
+        """The list file, parsed."""
+        return TodoDocument(self.text)
+
+    @cached_property
+    def visible(self) -> list['Row']:
+        """A row per open top-level task, future recurrences aside."""
+        rows = []
+        for task in self.document.tasks:
+            if task.done:
+                continue
+            row = Row(task, self.today)
+            due = row.parsed_due
+            if due and task.repeat and due > self.today:
+                continue
+            rows.append(row)
+        return rows
+
+    @cached_property
+    def parked(self) -> bool:
+        return PARKED_MARKER in self.text
+
+    @cached_property
+    def rows(self) -> list['Row']:
+        """A row per open task, in the order a view shows them."""
+        return sorted(self.visible, key=lambda row: row.key)
+
+    @property
+    def order(self) -> tuple[int, str]:
+        """Where this list sits among the others."""
+        return category_order(self.category)
+
+
+class Category:
+    """One list's place in a view: what it shows, and what it holds back."""
+
+    def __init__(
+        self,
+        name: str,
+        rows: list['Row'],
+        limit: int | None,
+    ) -> None:
+        self.name = name
+        self.rows = rows
+        self.limit = limit
+
+    @property
+    def shown(self) -> list['Row']:
+        """The rows that make it into the view."""
+        return self.rows if self.limit is None else self.rows[: self.limit]
+
+    @property
+    def hidden(self) -> int:
+        """How many rows the limit held back."""
+        return len(self.rows) - len(self.shown)
+
+
 class Row:
     """One task as a view carries it: a record, and a line of a table.
 
@@ -151,247 +395,3 @@ class Row:
     def parsed_due(self) -> date | None:
         """The stored due date as a date, or None if it cannot be read."""
         return parse_date(self.task.due)
-
-
-class TodoList:
-    """One discovered list file: where it sorts, and what is open in it."""
-
-    def __init__(self, path: Path, today: date) -> None:
-        self.path = path
-        self.today = today
-
-    @cached_property
-    def category(self) -> str:
-        """The list's name: the file's name without its extension."""
-        return self.path.stem
-
-    @cached_property
-    def text(self) -> str:
-        return self.path.read_text()
-
-    @cached_property
-    def document(self) -> TodoDocument:
-        """The list file, parsed."""
-        return TodoDocument(self.text)
-
-    @cached_property
-    def visible(self) -> list[Row]:
-        """A row per open top-level task, future recurrences aside."""
-        rows = []
-        for task in self.document.tasks:
-            if task.done:
-                continue
-            row = Row(task, self.today)
-            due = row.parsed_due
-            if due and task.repeat and due > self.today:
-                continue
-            rows.append(row)
-        return rows
-
-    @cached_property
-    def parked(self) -> bool:
-        return PARKED_MARKER in self.text
-
-    @cached_property
-    def rows(self) -> list[Row]:
-        """A row per open task, in the order a view shows them."""
-        return sorted(self.visible, key=lambda row: row.key)
-
-    @property
-    def order(self) -> tuple[int, str]:
-        """Where this list sits among the others."""
-        return category_order(self.category)
-
-
-class Category:
-    """One list's place in a view: what it shows, and what it holds back."""
-
-    def __init__(
-        self,
-        name: str,
-        rows: list[Row],
-        limit: int | None,
-    ) -> None:
-        self.name = name
-        self.rows = rows
-        self.limit = limit
-
-    @property
-    def shown(self) -> list[Row]:
-        """The rows that make it into the view."""
-        return self.rows if self.limit is None else self.rows[: self.limit]
-
-    @property
-    def hidden(self) -> int:
-        """How many rows the limit held back."""
-        return len(self.rows) - len(self.shown)
-
-
-class Selection:
-    """What one view shows, for one directory read at one moment."""
-
-    def __init__(
-        self,
-        directory: Path,
-        now: datetime,
-        *,
-        show_all: bool,
-        top_n: int = TOP_N,
-    ) -> None:
-        self.directory = directory
-        self.now = now
-        self.show_all = show_all
-        self.top_n = top_n
-
-    @classmethod
-    def from_config(cls, conf: Configuration, now: datetime) -> 'Selection':
-        """Build a selection from a resolved configuration.
-
-        Every configuration value is a string, so the item count is
-        decoded here. A flag the user left off is absent, not false.
-
-        Raises
-        ------
-        ValueError
-            The configured count is not a whole number of one or more.
-        """
-        return cls(
-            Path(conf.view.source_dir),
-            now,
-            show_all=bool(getattr(conf, 'show_all', False)),
-            top_n=item_count(conf.view.top),
-        )
-
-    @cached_property
-    def today(self) -> date:
-        return self.now.date()
-
-    @property
-    def limit(self) -> int | None:
-        """How many items a category may show; None for all of them."""
-        return None if self.show_all else self.top_n
-
-    @cached_property
-    def source(self) -> Path:
-        """The resolved source directory.
-
-        Raises
-        ------
-        SourceError
-            The directory is not there.
-        """
-        resolved = self.directory.expanduser().resolve()
-        if not resolved.is_dir():
-            raise SourceError(f'todo source directory not found: {resolved}')
-        return resolved
-
-    @cached_property
-    def active(self) -> set[str]:
-        """The categories whose time window is open at `now`."""
-        names = set(ALWAYS_ACTIVE)
-        if self.weekday and 9 <= self.hour < 17:
-            names.add('work')
-        if self.weekday and 17 <= self.hour < 21:
-            names.add('chores')
-        if not self.weekday and 10 <= self.hour < 20:
-            names.add('chores')
-        return names
-
-    @cached_property
-    def weekday(self) -> bool:
-        """Whether the clock falls on a working day of the week."""
-        return self.day < 5
-
-    @cached_property
-    def day(self) -> int:
-        """Which day of the week the clock falls on. Monday is 0."""
-        return self.now.weekday()
-
-    @cached_property
-    def hour(self) -> int:
-        """The hour of the day the clock reads."""
-        return self.now.hour
-
-    @cached_property
-    def lists(self) -> list[TodoList]:
-        """Every list in the source, in display order.
-
-        Raises
-        ------
-        SourceError
-            The directory holds no todo lists.
-        """
-        paths = discover_lists(self.source)
-        if not paths:
-            raise SourceError(
-                f'no todo lists (no file with a "{OPEN_HEADING}" heading) '
-                f'in: {self.source}'
-            )
-        found = [TodoList(path, self.today) for path in paths]
-        return sorted(found, key=lambda todo: todo.order)
-
-    def shows(self, todo: TodoList) -> bool:
-        """Whether `todo` has any place in this view.
-
-        A named category is shown while its window is open, or whenever
-        everything has been asked for -- a shut window is the view being
-        selective, and asking for all of it says not to be. A name the
-        display order does not know has no window to be outside of.
-
-        Opting out is not a window, and nothing reopens it: a parked
-        list stays out of every view.
-        """
-        named = todo.category in CATEGORY_ORDER
-        shut = named and todo.category not in self.active
-        if shut and not self.show_all:
-            return False
-        return not todo.parked
-
-    @cached_property
-    def categories(self) -> list[Category]:
-        """The categories a view renders, each with its rows."""
-        return [
-            Category(todo.category, todo.rows, self.limit)
-            for todo in self.lists
-            if self.shows(todo) and todo.rows
-        ]
-
-    @cached_property
-    def data(self) -> dict[str, object]:
-        """The machine-readable form of this selection.
-
-        Shaped as::
-
-            {"date": "2026-08-05",
-             "active": ["career", "events", "study", "work"],
-             "categories": [{"name": "work", "hidden": 2, "tasks": [
-                 {"id": null, "title": "...", "rank": 6.0,
-                  "priority": 2.0, "loe": null, "due": null,
-                  "added": "2026-05-10", "repeat": null,
-                  "tags": [], "subtasks": 0}]}]}
-
-        `hidden` is how many of the category's open items this leaves
-        out. Without it an abridged document reads exactly like a
-        complete one, and a reader has no way of knowing to ask for
-        the rest.
-        """
-        return {
-            'date': self.today.isoformat(),
-            'active': sorted(self.active),
-            'categories': [
-                {
-                    'name': category.name,
-                    'hidden': category.hidden,
-                    'tasks': [row.data for row in category.shown],
-                }
-                for category in self.categories
-            ],
-        }
-
-    @cached_property
-    def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
-
-        The schema is a contract for agents; see `data` for its shape.
-        """
-        return dumps(self.data, indent=2)

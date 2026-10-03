@@ -35,456 +35,6 @@ WINDOWS = (
 HOURS = [(day, hour) for day in range(7) for hour in range(24)]
 
 
-def at(iso: str) -> datetime:
-    return datetime.fromisoformat(iso)
-
-
-def published(title: str) -> Mock:
-    """A stand-in row, holding only the record a document reads off it."""
-    found = Mock(spec=['data'])
-    found.data = {'title': title}
-    return found
-
-
-def stored(
-    title: str,
-    *,
-    done: bool = False,
-    due: str | None = None,
-    repeat: str | None = None,
-) -> Mock:
-    """A stand-in task, holding what a list reads off one."""
-    found = Mock(spec=['title', 'done', 'due', 'repeat'])
-    found.title = title
-    found.done = done
-    found.due = due
-    found.repeat = repeat
-    return found
-
-
-def at_hour(day: int, hour: int) -> datetime:
-    """The instant `hour` o'clock falls on, `day` days into the week."""
-    return datetime.combine(WEEK_START + timedelta(days=day), time(hour))
-
-
-def opens(day: int, hour: int) -> set[str]:
-    """The categories open on `day` at `hour`.
-
-    Three categories stay open at every hour. The window table adds
-    the rest.
-    """
-    names = {'study', 'career', 'events'}
-    for name, days, hours in WINDOWS:
-        if day in days and hour in hours:
-            names.add(name)
-    return names
-
-
-class RowTests(TestCase):
-    """Unit tests for battodo.view.selection.Row."""
-
-    rank: MagicMock
-    multiplier: MagicMock
-    parse_date: MagicMock
-
-    def setUp(t) -> None:
-        patches = ['rank', 'multiplier', 'parse_date']
-        for target in patches:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
-
-        t.rank.return_value = 4.25
-        t.multiplier.return_value = 3.0
-        t.parse_date.return_value = None
-
-        t.task = Mock(
-            spec=[
-                'task_id',
-                'title',
-                'loe',
-                'due',
-                'added',
-                'repeat',
-                'tags',
-                'children',
-            ]
-        )
-        t.task.task_id = 'ab12cd'
-        t.task.title = 'A task'
-        t.task.loe = 2
-        t.task.due = None
-        t.task.added = '2026-07-29'
-        t.task.repeat = None
-        t.task.tags = ['home']
-        t.task.children = []
-
-        t.r = Row(t.task, TODAY)
-
-    def test_key(t) -> None:
-        with t.subTest('an undated task sorts behind every dated one'):
-            ret = t.r.key
-            t.assertEqual(ret, (-4.25, 'zzzz', 'A task'))
-
-        with t.subTest('a stored date takes the place the marker held'):
-            t.r.__dict__.pop('key', None)
-            t.task.due = '2026-08-20'
-
-            ret = t.r.key
-
-            t.assertEqual(ret, (-4.25, '2026-08-20', 'A task'))
-
-    def test_rank(t) -> None:
-        ret = t.r.rank
-
-        t.assertEqual(ret, 4.25)
-        t.rank.assert_called_once_with(t.task, TODAY)
-
-    def test_data(t) -> None:
-        with t.subTest('every stored field is carried through verbatim'):
-            ret = t.r.data
-
-            t.assertEqual(
-                ret,
-                {
-                    'id': 'ab12cd',
-                    'title': 'A task',
-                    'rank': 4.25,
-                    'priority': 3.0,
-                    'loe': 2,
-                    'due': None,
-                    'added': '2026-07-29',
-                    'repeat': None,
-                    'tags': ['home'],
-                    'subtasks': 0,
-                },
-            )
-
-        with t.subTest('a rank is published to two decimal places'):
-            t.r.__dict__.pop('data', None)
-            t.r.rank = 1 + 7 / 30
-
-            ret = t.r.data
-
-            t.assertEqual(ret['rank'], 1.23)
-
-        with t.subTest('the due date keeps its stored form, unlabelled'):
-            t.r.__dict__.pop('data', None)
-            t.r.due_label = 'OVERDUE'
-            t.task.due = '2026-08-04'
-
-            ret = t.r.data
-
-            t.assertEqual(ret['due'], '2026-08-04')
-
-        with t.subTest('and open children are counted, not nested'):
-            t.r.__dict__.pop('data', None)
-            t.r.subtasks = 2
-
-            ret = t.r.data
-
-            t.assertEqual(ret['subtasks'], 2)
-
-    def test_priority(t) -> None:
-        ret = t.r.priority
-
-        t.assertEqual(ret, 3.0)
-        t.multiplier.assert_called_once_with(t.task)
-
-    def test_subtasks(t) -> None:
-        with t.subTest('a task with nothing open under it counts none'):
-            ret = t.r.subtasks
-            t.assertEqual(ret, 0)
-
-        with t.subTest('otherwise the open children are counted'):
-            t.r.__dict__.pop('subtasks', None)
-            t.r.children = [sentinel.child, sentinel.child]
-
-            ret = t.r.subtasks
-
-            t.assertEqual(ret, 2)
-
-    def test_children(t) -> None:
-        finished, open_child = Mock(spec=['done']), Mock(spec=['done'])
-        finished.done = True
-        open_child.done = False
-        t.task.children = [finished, open_child]
-
-        ret = t.r.children
-
-        # Subtasks and checklist items both count; a finished child
-        # does not.
-        t.assertEqual(ret, [open_child])
-
-    def test_cells(t) -> None:
-        with t.subTest('rank and priority are shown to one decimal'):
-            ret = t.r.cells
-            t.assertEqual(ret[:2], ('4.2', '3.0'))
-
-        with t.subTest('an unestimated task leaves its column empty'):
-            t.r.__dict__.pop('cells', None)
-            t.task.loe = None
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '')
-
-        with t.subTest('a level of effort is shown when there is one'):
-            t.r.__dict__.pop('cells', None)
-            t.task.loe = 2
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '2')
-
-        with t.subTest('the title carries its badge'):
-            t.r.__dict__.pop('cells', None)
-            t.r.badge = ' (+1)'
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[3], 'A task (+1)')
-
-        with t.subTest('and the due column carries its label'):
-            t.r.__dict__.pop('cells', None)
-            t.r.due_label = 'OVERDUE'
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[4], 'OVERDUE')
-
-        with t.subTest('there is one cell for each of the five columns'):
-            ret = t.r.cells
-            t.assertEqual(len(ret), 5)
-
-    def test_badge(t) -> None:
-        with t.subTest('a task with nothing outstanding wears no badge'):
-            ret = t.r.badge
-            t.assertEqual(ret, '')
-
-        with t.subTest('otherwise the badge carries the count'):
-            t.r.__dict__.pop('badge', None)
-            t.r.subtasks = 2
-
-            ret = t.r.badge
-
-            t.assertEqual(ret, ' (+2)')
-
-    def test_due_label(t) -> None:
-        cases = {
-            'no due date reads as nothing at all': (None, None, ''),
-            'a date already past is called out': (
-                '2026-08-04',
-                date(2026, 8, 4),
-                'OVERDUE',
-            ),
-            'so is the day itself': ('2026-08-05', TODAY, 'TODAY'),
-            'a date still ahead shows as written': (
-                '2026-08-20',
-                date(2026, 8, 20),
-                '2026-08-20',
-            ),
-            'and a date the parser cannot read shows verbatim': (
-                'YYYY-MM-DD',
-                None,
-                'YYYY-MM-DD',
-            ),
-        }
-
-        for name, (due, parsed, expected) in cases.items():
-            with t.subTest(name):
-                t.r.__dict__.pop('due_label', None)
-                t.task.due = due
-                t.r.parsed_due = parsed
-
-                ret = t.r.due_label
-
-                t.assertEqual(ret, expected)
-
-    def test_parsed_due(t) -> None:
-        with t.subTest('a stored date is read through the parser'):
-            t.parse_date.return_value = date(2026, 8, 20)
-            t.task.due = '2026-08-20'
-
-            ret = t.r.parsed_due
-
-            t.assertEqual(ret, date(2026, 8, 20))
-            t.parse_date.assert_called_once_with('2026-08-20')
-
-        with t.subTest('and one the parser cannot read comes back empty'):
-            t.r.__dict__.pop('parsed_due', None)
-            t.parse_date.return_value = None
-
-            ret = t.r.parsed_due
-
-            t.assertIsNone(ret)
-
-
-class TodoListTests(TestCase):
-    """Unit tests for battodo.view.selection.TodoList."""
-
-    def setUp(t) -> None:
-        t.path = Mock(spec=Path)
-        t.path.stem = 'work'
-        t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
-        t.tl = TodoList(t.path, TODAY)
-
-    def test_category(t) -> None:
-        ret = t.tl.category
-        t.assertEqual(ret, 'work')
-
-    def test_text(t) -> None:
-        with t.subTest('the file is read through'):
-            ret = t.tl.text
-            t.assertEqual(ret, '## Open\n\n- [ ] A task [P:3]\n')
-
-        with t.subTest('and read only the once'):
-            again = t.tl.text
-            t.assertEqual(again, t.tl.text)
-            t.path.read_text.assert_called_once_with()
-
-    @patch(f'{SRC}.TodoDocument', autospec=True)
-    def test_document(t, parsed: MagicMock) -> None:
-        t.tl.text = 'a list file'
-
-        ret = t.tl.document
-
-        t.assertEqual(ret, parsed.return_value)
-        parsed.assert_called_once_with('a list file')
-
-    @patch(f'{SRC}.parse_date', autospec=True)
-    def test_visible(t, parse_date: MagicMock) -> None:
-        parse_date.side_effect = lambda value: PARSED_DUE.get(value)
-        t.tl.document = Mock(spec=['tasks'])
-        t.tl.document.tasks = [
-            stored('An open task'),
-            stored('A finished task', done=True),
-            stored(
-                'A later recurrence',
-                due='a-later-date',
-                repeat='7d',
-            ),
-            stored('A later one-off', due='a-later-date'),
-            stored(
-                'A late recurrence',
-                due='an-earlier-date',
-                repeat='7d',
-            ),
-            stored(
-                'A placeholder due date',
-                due='an-unreadable-date',
-                repeat='7d',
-            ),
-        ]
-
-        ret = t.tl.visible
-
-        # Only a recurrence still ahead of today is suppressed. A
-        # one-off keeps its place however far off it is, and a date the
-        # parser cannot read is no reason to drop an item.
-        t.assertEqual(
-            [row.task.title for row in ret],
-            [
-                'An open task',
-                'A later one-off',
-                'A late recurrence',
-                'A placeholder due date',
-            ],
-        )
-
-    def test_parked(t) -> None:
-        with t.subTest('a list with no marker is not parked'):
-            ret = t.tl.parked
-            t.assertFalse(ret)
-
-        with t.subTest('the marker anywhere in the file parks it'):
-            t.tl.__dict__.pop('parked')
-            t.tl.text = '<!-- battodo:parked -->\n## Open\n\n- [ ] A [P:1]\n'
-
-            ret = t.tl.parked
-
-            t.assertTrue(ret)
-
-    def test_rows(t) -> None:
-        with t.subTest('the rows come back in the order their keys give'):
-            low, high = Mock(spec=['key']), Mock(spec=['key'])
-            low.key = (-1.0, 'zzzz', 'Low')
-            high.key = (-5.0, 'zzzz', 'High')
-            t.tl.visible = [low, high]
-
-            ret = t.tl.rows
-
-            t.assertEqual(ret, [high, low])
-
-        with t.subTest('a list with nothing open comes back empty'):
-            t.tl.__dict__.pop('rows')
-            t.tl.visible = []
-
-            ret = t.tl.rows
-
-            t.assertEqual(ret, [])
-
-    def test_order(t) -> None:
-        with t.subTest('a named category sorts by its place in the order'):
-            ret = t.tl.order
-            t.assertEqual(ret, (CATEGORY_ORDER.index('work'), 'work'))
-
-        with t.subTest('an unknown name sorts after every named one'):
-            t.tl.category = 'side-quests'
-            ret = t.tl.order
-            t.assertEqual(ret, (len(CATEGORY_ORDER), 'side-quests'))
-
-        with t.subTest('and unknown names sort among themselves by name'):
-            t.tl.category = 'backlog'
-            first = t.tl.order
-            t.tl.category = 'side-quests'
-
-            ret = t.tl.order
-
-            t.assertLess(first, ret)
-
-
-class CategoryTests(TestCase):
-    """Unit tests for battodo.view.selection.Category."""
-
-    def setUp(t) -> None:
-        t.rows = [getattr(sentinel, f'row_{n}') for n in range(6)]
-        t.c = Category('work', t.rows, 2)
-
-    def test_shown(t) -> None:
-        with t.subTest('a limit takes the top of the list'):
-            ret = t.c.shown
-            t.assertEqual(ret, t.rows[:2])
-
-        with t.subTest('no limit shows every one'):
-            t.c.limit = None
-            ret = t.c.shown
-            t.assertEqual(ret, t.rows)
-
-        with t.subTest('a limit past the end shows every one too'):
-            t.c.limit = 99
-            ret = t.c.shown
-            t.assertEqual(ret, t.rows)
-
-    def test_hidden(t) -> None:
-        with t.subTest('what the limit held back is counted'):
-            ret = t.c.hidden
-            t.assertEqual(ret, 4)
-
-        with t.subTest('nothing is held back without a limit'):
-            t.c.limit = None
-            ret = t.c.hidden
-            t.assertEqual(ret, 0)
-
-    def test_name(t) -> None:
-        ret = t.c.name
-        t.assertEqual(ret, 'work')
-
-    def test_rows(t) -> None:
-        ret = t.c.rows
-        t.assertEqual(ret, t.rows)
-
-
 class SelectionTests(TestCase):
     """Unit tests for battodo.view.selection.Selection."""
 
@@ -799,3 +349,453 @@ class SelectionFromConfigTests(TestCase):
             t.conf.view.top = '0'
             with t.assertRaises(ValueError):
                 Selection.from_config(t.conf, t.now)
+
+
+class TodoListTests(TestCase):
+    """Unit tests for battodo.view.selection.TodoList."""
+
+    def setUp(t) -> None:
+        t.path = Mock(spec=Path)
+        t.path.stem = 'work'
+        t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
+        t.tl = TodoList(t.path, TODAY)
+
+    def test_category(t) -> None:
+        ret = t.tl.category
+        t.assertEqual(ret, 'work')
+
+    def test_text(t) -> None:
+        with t.subTest('the file is read through'):
+            ret = t.tl.text
+            t.assertEqual(ret, '## Open\n\n- [ ] A task [P:3]\n')
+
+        with t.subTest('and read only the once'):
+            again = t.tl.text
+            t.assertEqual(again, t.tl.text)
+            t.path.read_text.assert_called_once_with()
+
+    @patch(f'{SRC}.TodoDocument', autospec=True)
+    def test_document(t, parsed: MagicMock) -> None:
+        t.tl.text = 'a list file'
+
+        ret = t.tl.document
+
+        t.assertEqual(ret, parsed.return_value)
+        parsed.assert_called_once_with('a list file')
+
+    @patch(f'{SRC}.parse_date', autospec=True)
+    def test_visible(t, parse_date: MagicMock) -> None:
+        parse_date.side_effect = lambda value: PARSED_DUE.get(value)
+        t.tl.document = Mock(spec=['tasks'])
+        t.tl.document.tasks = [
+            stored('An open task'),
+            stored('A finished task', done=True),
+            stored(
+                'A later recurrence',
+                due='a-later-date',
+                repeat='7d',
+            ),
+            stored('A later one-off', due='a-later-date'),
+            stored(
+                'A late recurrence',
+                due='an-earlier-date',
+                repeat='7d',
+            ),
+            stored(
+                'A placeholder due date',
+                due='an-unreadable-date',
+                repeat='7d',
+            ),
+        ]
+
+        ret = t.tl.visible
+
+        # Only a recurrence still ahead of today is suppressed. A
+        # one-off keeps its place however far off it is, and a date the
+        # parser cannot read is no reason to drop an item.
+        t.assertEqual(
+            [row.task.title for row in ret],
+            [
+                'An open task',
+                'A later one-off',
+                'A late recurrence',
+                'A placeholder due date',
+            ],
+        )
+
+    def test_parked(t) -> None:
+        with t.subTest('a list with no marker is not parked'):
+            ret = t.tl.parked
+            t.assertFalse(ret)
+
+        with t.subTest('the marker anywhere in the file parks it'):
+            t.tl.__dict__.pop('parked')
+            t.tl.text = '<!-- battodo:parked -->\n## Open\n\n- [ ] A [P:1]\n'
+
+            ret = t.tl.parked
+
+            t.assertTrue(ret)
+
+    def test_rows(t) -> None:
+        with t.subTest('the rows come back in the order their keys give'):
+            low, high = Mock(spec=['key']), Mock(spec=['key'])
+            low.key = (-1.0, 'zzzz', 'Low')
+            high.key = (-5.0, 'zzzz', 'High')
+            t.tl.visible = [low, high]
+
+            ret = t.tl.rows
+
+            t.assertEqual(ret, [high, low])
+
+        with t.subTest('a list with nothing open comes back empty'):
+            t.tl.__dict__.pop('rows')
+            t.tl.visible = []
+
+            ret = t.tl.rows
+
+            t.assertEqual(ret, [])
+
+    def test_order(t) -> None:
+        with t.subTest('a named category sorts by its place in the order'):
+            ret = t.tl.order
+            t.assertEqual(ret, (CATEGORY_ORDER.index('work'), 'work'))
+
+        with t.subTest('an unknown name sorts after every named one'):
+            t.tl.category = 'side-quests'
+            ret = t.tl.order
+            t.assertEqual(ret, (len(CATEGORY_ORDER), 'side-quests'))
+
+        with t.subTest('and unknown names sort among themselves by name'):
+            t.tl.category = 'backlog'
+            first = t.tl.order
+            t.tl.category = 'side-quests'
+
+            ret = t.tl.order
+
+            t.assertLess(first, ret)
+
+
+class CategoryTests(TestCase):
+    """Unit tests for battodo.view.selection.Category."""
+
+    def setUp(t) -> None:
+        t.rows = [getattr(sentinel, f'row_{n}') for n in range(6)]
+        t.c = Category('work', t.rows, 2)
+
+    def test_shown(t) -> None:
+        with t.subTest('a limit takes the top of the list'):
+            ret = t.c.shown
+            t.assertEqual(ret, t.rows[:2])
+
+        with t.subTest('no limit shows every one'):
+            t.c.limit = None
+            ret = t.c.shown
+            t.assertEqual(ret, t.rows)
+
+        with t.subTest('a limit past the end shows every one too'):
+            t.c.limit = 99
+            ret = t.c.shown
+            t.assertEqual(ret, t.rows)
+
+    def test_hidden(t) -> None:
+        with t.subTest('what the limit held back is counted'):
+            ret = t.c.hidden
+            t.assertEqual(ret, 4)
+
+        with t.subTest('nothing is held back without a limit'):
+            t.c.limit = None
+            ret = t.c.hidden
+            t.assertEqual(ret, 0)
+
+    def test_name(t) -> None:
+        ret = t.c.name
+        t.assertEqual(ret, 'work')
+
+    def test_rows(t) -> None:
+        ret = t.c.rows
+        t.assertEqual(ret, t.rows)
+
+
+class RowTests(TestCase):
+    """Unit tests for battodo.view.selection.Row."""
+
+    rank: MagicMock
+    multiplier: MagicMock
+    parse_date: MagicMock
+
+    def setUp(t) -> None:
+        patches = ['rank', 'multiplier', 'parse_date']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+
+        t.rank.return_value = 4.25
+        t.multiplier.return_value = 3.0
+        t.parse_date.return_value = None
+
+        t.task = Mock(
+            spec=[
+                'task_id',
+                'title',
+                'loe',
+                'due',
+                'added',
+                'repeat',
+                'tags',
+                'children',
+            ]
+        )
+        t.task.task_id = 'ab12cd'
+        t.task.title = 'A task'
+        t.task.loe = 2
+        t.task.due = None
+        t.task.added = '2026-07-29'
+        t.task.repeat = None
+        t.task.tags = ['home']
+        t.task.children = []
+
+        t.r = Row(t.task, TODAY)
+
+    def test_key(t) -> None:
+        with t.subTest('an undated task sorts behind every dated one'):
+            ret = t.r.key
+            t.assertEqual(ret, (-4.25, 'zzzz', 'A task'))
+
+        with t.subTest('a stored date takes the place the marker held'):
+            t.r.__dict__.pop('key', None)
+            t.task.due = '2026-08-20'
+
+            ret = t.r.key
+
+            t.assertEqual(ret, (-4.25, '2026-08-20', 'A task'))
+
+    def test_rank(t) -> None:
+        ret = t.r.rank
+
+        t.assertEqual(ret, 4.25)
+        t.rank.assert_called_once_with(t.task, TODAY)
+
+    def test_data(t) -> None:
+        with t.subTest('every stored field is carried through verbatim'):
+            ret = t.r.data
+
+            t.assertEqual(
+                ret,
+                {
+                    'id': 'ab12cd',
+                    'title': 'A task',
+                    'rank': 4.25,
+                    'priority': 3.0,
+                    'loe': 2,
+                    'due': None,
+                    'added': '2026-07-29',
+                    'repeat': None,
+                    'tags': ['home'],
+                    'subtasks': 0,
+                },
+            )
+
+        with t.subTest('a rank is published to two decimal places'):
+            t.r.__dict__.pop('data', None)
+            t.r.rank = 1 + 7 / 30
+
+            ret = t.r.data
+
+            t.assertEqual(ret['rank'], 1.23)
+
+        with t.subTest('the due date keeps its stored form, unlabelled'):
+            t.r.__dict__.pop('data', None)
+            t.r.due_label = 'OVERDUE'
+            t.task.due = '2026-08-04'
+
+            ret = t.r.data
+
+            t.assertEqual(ret['due'], '2026-08-04')
+
+        with t.subTest('and open children are counted, not nested'):
+            t.r.__dict__.pop('data', None)
+            t.r.subtasks = 2
+
+            ret = t.r.data
+
+            t.assertEqual(ret['subtasks'], 2)
+
+    def test_priority(t) -> None:
+        ret = t.r.priority
+
+        t.assertEqual(ret, 3.0)
+        t.multiplier.assert_called_once_with(t.task)
+
+    def test_subtasks(t) -> None:
+        with t.subTest('a task with nothing open under it counts none'):
+            ret = t.r.subtasks
+            t.assertEqual(ret, 0)
+
+        with t.subTest('otherwise the open children are counted'):
+            t.r.__dict__.pop('subtasks', None)
+            t.r.children = [sentinel.child, sentinel.child]
+
+            ret = t.r.subtasks
+
+            t.assertEqual(ret, 2)
+
+    def test_children(t) -> None:
+        finished, open_child = Mock(spec=['done']), Mock(spec=['done'])
+        finished.done = True
+        open_child.done = False
+        t.task.children = [finished, open_child]
+
+        ret = t.r.children
+
+        # Subtasks and checklist items both count; a finished child
+        # does not.
+        t.assertEqual(ret, [open_child])
+
+    def test_cells(t) -> None:
+        with t.subTest('rank and priority are shown to one decimal'):
+            ret = t.r.cells
+            t.assertEqual(ret[:2], ('4.2', '3.0'))
+
+        with t.subTest('an unestimated task leaves its column empty'):
+            t.r.__dict__.pop('cells', None)
+            t.task.loe = None
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[2], '')
+
+        with t.subTest('a level of effort is shown when there is one'):
+            t.r.__dict__.pop('cells', None)
+            t.task.loe = 2
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[2], '2')
+
+        with t.subTest('the title carries its badge'):
+            t.r.__dict__.pop('cells', None)
+            t.r.badge = ' (+1)'
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[3], 'A task (+1)')
+
+        with t.subTest('and the due column carries its label'):
+            t.r.__dict__.pop('cells', None)
+            t.r.due_label = 'OVERDUE'
+
+            ret = t.r.cells
+
+            t.assertEqual(ret[4], 'OVERDUE')
+
+        with t.subTest('there is one cell for each of the five columns'):
+            ret = t.r.cells
+            t.assertEqual(len(ret), 5)
+
+    def test_badge(t) -> None:
+        with t.subTest('a task with nothing outstanding wears no badge'):
+            ret = t.r.badge
+            t.assertEqual(ret, '')
+
+        with t.subTest('otherwise the badge carries the count'):
+            t.r.__dict__.pop('badge', None)
+            t.r.subtasks = 2
+
+            ret = t.r.badge
+
+            t.assertEqual(ret, ' (+2)')
+
+    def test_due_label(t) -> None:
+        cases = {
+            'no due date reads as nothing at all': (None, None, ''),
+            'a date already past is called out': (
+                '2026-08-04',
+                date(2026, 8, 4),
+                'OVERDUE',
+            ),
+            'so is the day itself': ('2026-08-05', TODAY, 'TODAY'),
+            'a date still ahead shows as written': (
+                '2026-08-20',
+                date(2026, 8, 20),
+                '2026-08-20',
+            ),
+            'and a date the parser cannot read shows verbatim': (
+                'YYYY-MM-DD',
+                None,
+                'YYYY-MM-DD',
+            ),
+        }
+
+        for name, (due, parsed, expected) in cases.items():
+            with t.subTest(name):
+                t.r.__dict__.pop('due_label', None)
+                t.task.due = due
+                t.r.parsed_due = parsed
+
+                ret = t.r.due_label
+
+                t.assertEqual(ret, expected)
+
+    def test_parsed_due(t) -> None:
+        with t.subTest('a stored date is read through the parser'):
+            t.parse_date.return_value = date(2026, 8, 20)
+            t.task.due = '2026-08-20'
+
+            ret = t.r.parsed_due
+
+            t.assertEqual(ret, date(2026, 8, 20))
+            t.parse_date.assert_called_once_with('2026-08-20')
+
+        with t.subTest('and one the parser cannot read comes back empty'):
+            t.r.__dict__.pop('parsed_due', None)
+            t.parse_date.return_value = None
+
+            ret = t.r.parsed_due
+
+            t.assertIsNone(ret)
+
+
+def at(iso: str) -> datetime:
+    return datetime.fromisoformat(iso)
+
+
+def at_hour(day: int, hour: int) -> datetime:
+    """The instant `hour` o'clock falls on, `day` days into the week."""
+    return datetime.combine(WEEK_START + timedelta(days=day), time(hour))
+
+
+def opens(day: int, hour: int) -> set[str]:
+    """The categories open on `day` at `hour`.
+
+    Three categories stay open at every hour. The window table adds
+    the rest.
+    """
+    names = {'study', 'career', 'events'}
+    for name, days, hours in WINDOWS:
+        if day in days and hour in hours:
+            names.add(name)
+    return names
+
+
+def published(title: str) -> Mock:
+    """A stand-in row, holding only the record a document reads off it."""
+    found = Mock(spec=['data'])
+    found.data = {'title': title}
+    return found
+
+
+def stored(
+    title: str,
+    *,
+    done: bool = False,
+    due: str | None = None,
+    repeat: str | None = None,
+) -> Mock:
+    """A stand-in task, holding what a list reads off one."""
+    found = Mock(spec=['title', 'done', 'due', 'repeat'])
+    found.title = title
+    found.done = done
+    found.due = due
+    found.repeat = repeat
+    return found
