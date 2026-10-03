@@ -18,7 +18,13 @@ from pathlib import Path
 
 from batconf import Configuration
 
-from .completed import DEFAULT_PERIOD, PERIODS, Digest, DigestView
+from .completed import (
+    DEFAULT_PERIOD,
+    PERIODS,
+    Digest,
+    DigestJsonView,
+    DigestView,
+)
 from .conf import TZ
 from .item import build_item, build_item_json
 from .lists import item_count
@@ -140,7 +146,7 @@ def get_completed(conf: Configuration, now: datetime) -> str:
     """
     digest = Digest.from_config(conf, now)
     if _is_json(conf):
-        return digest.json
+        return DigestJsonView(digest).json
     return DigestView(digest).text
 
 

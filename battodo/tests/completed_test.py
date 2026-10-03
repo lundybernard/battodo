@@ -1,5 +1,4 @@
 from datetime import date, datetime, timezone
-from json import loads
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
@@ -137,49 +136,6 @@ class DigestTests(TestCase):
                 ['Oldest in the week', 'Completed today'],
             )
 
-    def test_data(t) -> None:
-        ret = t.d.data
-
-        t.assertEqual(
-            ret,
-            {
-                'period': 'week',
-                'start': '2026-07-30',
-                'end': '2026-08-05',
-                'total': 3,
-                'categories': [
-                    {
-                        'name': 'work',
-                        'entries': [
-                            {
-                                'date': '2026-07-30',
-                                'title': 'Oldest in the week',
-                            },
-                            {'date': '2026-08-05', 'title': 'Completed today'},
-                        ],
-                    },
-                    {
-                        'name': 'unlisted',
-                        'entries': [
-                            {
-                                'date': '2026-08-02',
-                                'title': 'In the other category',
-                            }
-                        ],
-                    },
-                ],
-            },
-        )
-
-    def test_json(t) -> None:
-        ret = t.d.json
-
-        with t.subTest('what comes back is the digest, serialized'):
-            t.assertEqual(loads(ret), t.d.data)
-
-        with t.subTest('indented for a person to read as well'):
-            t.assertIn('\n  "period": "week"', ret)
-
 
 class DigestFromConfigTests(TestCase):
     """Unit tests for battodo.completed.Digest.from_config.
@@ -226,14 +182,6 @@ class RecordTests(TestCase):
     def test_cells(t) -> None:
         ret = t.r.cells
         t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
-
-    def test_entry(t) -> None:
-        ret = t.r.entry
-
-        t.assertEqual(
-            ret,
-            {'date': '2026-08-04', 'title': 'A parent > A record'},
-        )
 
 
 class ReadRecordTests(TestCase):
@@ -295,22 +243,11 @@ class GroupTests(TestCase):
     """Unit tests for battodo.completed.Group."""
 
     def setUp(t) -> None:
-        t.g = Group(
-            'side-quests',
-            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
-        )
+        t.g = Group('side-quests', [])
 
     def test_title(t) -> None:
         ret = t.g.title
         t.assertEqual(ret, 'Side quests')
-
-    def test_entries(t) -> None:
-        ret = t.g.entries
-
-        t.assertEqual(
-            ret,
-            [{'date': '2026-08-04', 'title': 'A record'}],
-        )
 
 
 class DigestViewTests(TestCase):

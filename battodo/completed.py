@@ -9,8 +9,9 @@ A title keeps the `Parent > Child` ancestry the log stores, and loses
 its `[FIELD:]` markup. Categories sort in the view's order, so a
 category leads in both.
 
-`Digest` decides what one digest holds; `DigestView` lays the same
-digest out as aligned text. `lib.get_completed` composes them.
+`Digest` decides what one digest holds. Each form reads it through its
+attributes: `DigestView` lays it out as aligned text, and
+`DigestJsonView` as JSON. `lib.get_completed` composes them.
 """
 
 from collections.abc import Callable
@@ -152,39 +153,6 @@ class Digest:
             for name in names
         ]
 
-    @cached_property
-    def data(self) -> dict[str, Any]:
-        """The machine-readable form of this digest.
-
-        Shaped as::
-
-            {"period": "week", "start": "2026-07-30",
-             "end": "2026-08-05", "total": 6,
-             "categories": [{"name": "work", "entries": [
-                 {"date": "2026-08-05", "title": "Deck > Chip it"}]}]}
-
-        `total` counts every record the period holds, which is the sum
-        of the entries: a digest abridges nothing.
-        """
-        return {
-            'period': self.period,
-            'start': self.start.isoformat(),
-            'end': self.end.isoformat(),
-            'total': len(self.records),
-            'categories': [
-                {'name': group.name, 'entries': group.entries}
-                for group in self.groups
-            ],
-        }
-
-    @cached_property
-    def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
-
-        The schema is a contract for agents; see `data` for its shape.
-        """
-        return dumps(self.data, indent=2)
-
 
 @dataclass(frozen=True)
 class Record:
@@ -198,11 +166,6 @@ class Record:
     def cells(self) -> tuple[str, ...]:
         """The record's two values, in COLUMNS order."""
         return (self.day.isoformat(), self.title)
-
-    @property
-    def entry(self) -> dict[str, str]:
-        """The record as `Digest.data` publishes it."""
-        return {'date': self.day.isoformat(), 'title': self.title}
 
 
 def read_record(line: str) -> Record | None:
@@ -233,11 +196,6 @@ class Group:
     @property
     def title(self) -> str:
         return self.name.replace('-', ' ').capitalize()
-
-    @property
-    def entries(self) -> list[dict[str, str]]:
-        """The records as `Digest.data` publishes them."""
-        return [record.entry for record in self.records]
 
 
 def clean_title(title: str) -> str:
@@ -339,7 +297,7 @@ class DigestJsonView:
 
         The schema is a contract for agents; see `data` for its shape.
         """
-        raise NotImplementedError
+        return dumps(self.data, indent=2)
 
     @property
     def data(self) -> dict[str, Any]:
@@ -355,12 +313,18 @@ class DigestJsonView:
         `total` counts every record the period holds, which is the sum
         of the entries: a digest abridges nothing.
         """
-        raise NotImplementedError
+        return {
+            'period': self.digest.period,
+            'start': self.digest.start.isoformat(),
+            'end': self.digest.end.isoformat(),
+            'total': len(self.digest.records),
+            'categories': [group.data for group in self.groups],
+        }
 
     @property
     def groups(self) -> list['GroupJsonView']:
         """The digest's groups, each laid out as JSON."""
-        raise NotImplementedError
+        return [GroupJsonView(group) for group in self.digest.groups]
 
 
 class GroupJsonView:
@@ -372,12 +336,15 @@ class GroupJsonView:
     @property
     def data(self) -> dict[str, Any]:
         """The group as `DigestJsonView.data` records it."""
-        raise NotImplementedError
+        return {
+            'name': self.group.name,
+            'entries': [record.data for record in self.records],
+        }
 
     @property
     def records(self) -> list['RecordJsonView']:
         """The group's records, each laid out as JSON."""
-        raise NotImplementedError
+        return [RecordJsonView(record) for record in self.group.records]
 
 
 class RecordJsonView:
@@ -389,4 +356,7 @@ class RecordJsonView:
     @property
     def data(self) -> dict[str, str]:
         """The record as `GroupJsonView.data` records it."""
-        raise NotImplementedError
+        return {
+            'date': self.record.day.isoformat(),
+            'title': self.record.title,
+        }
