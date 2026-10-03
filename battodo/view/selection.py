@@ -395,3 +395,79 @@ class Row:
     def parsed_due(self) -> date | None:
         """The stored due date as a date, or None if it cannot be read."""
         return parse_date(self.task.due)
+
+
+class SelectionJsonView:
+    """A selection laid out as JSON, for an agent to read."""
+
+    def __init__(self, selection: Selection) -> None:
+        self.selection = selection
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        raise NotImplementedError
+
+    @property
+    def data(self) -> dict[str, object]:
+        """The machine-readable form of the selection.
+
+        Shaped as::
+
+            {"date": "2026-08-05",
+             "active": ["career", "events", "study", "work"],
+             "categories": [{"name": "work", "hidden": 2, "tasks": [
+                 {"id": null, "title": "...", "rank": 6.0,
+                  "priority": 2.0, "loe": null, "due": null,
+                  "added": "2026-05-10", "repeat": null,
+                  "tags": [], "subtasks": 0}]}]}
+        """
+        raise NotImplementedError
+
+    @property
+    def categories(self) -> list['CategoryJsonView']:
+        """The selection's categories, each laid out as JSON."""
+        raise NotImplementedError
+
+
+class CategoryJsonView:
+    """One category of a selection laid out as JSON."""
+
+    def __init__(self, category: Category) -> None:
+        self.category = category
+
+    @property
+    def data(self) -> dict[str, object]:
+        """The category as `SelectionJsonView.data` records it.
+
+        `hidden` is how many of the category's open items the view
+        leaves out. Without it an abridged document reads exactly like
+        a complete one, and a reader has no way of knowing to ask for
+        the rest.
+        """
+        raise NotImplementedError
+
+    @property
+    def rows(self) -> list['RowJsonView']:
+        """The rows the category shows, each laid out as JSON."""
+        raise NotImplementedError
+
+
+class RowJsonView:
+    """One task of a selection laid out as JSON."""
+
+    def __init__(self, row: Row) -> None:
+        self.row = row
+
+    @property
+    def data(self) -> dict[str, object]:
+        """The task as `CategoryJsonView.data` records it.
+
+        Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
+        `rank` is rounded for display and must not be used to re-sort;
+        the array order is the rank order.
+        """
+        raise NotImplementedError

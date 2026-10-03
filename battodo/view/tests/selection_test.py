@@ -2,14 +2,17 @@ from datetime import date, datetime, time, timedelta
 from json import loads
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch, sentinel
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..selection import (
     CATEGORY_ORDER,
     TOP_N,
     Category,
+    CategoryJsonView,
     Row,
+    RowJsonView,
     Selection,
+    SelectionJsonView,
     SourceError,
     TodoList,
 )
@@ -754,6 +757,182 @@ class RowTests(TestCase):
             ret = t.r.parsed_due
 
             t.assertIsNone(ret)
+
+
+class SelectionJsonViewTests(TestCase):
+    """Unit tests for battodo.view.selection.SelectionJsonView."""
+
+    def setUp(t) -> None:
+        t.selection = Mock(spec=Selection)
+        t.selection.today = TODAY
+        t.selection.active = {'work', 'career'}
+        t.sjv = SelectionJsonView(t.selection)
+
+    @patch(f'{SRC}.dumps', autospec=True)
+    @patch.object(SelectionJsonView, 'data', new_callable=PropertyMock)
+    def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
+        ret = t.sjv.json
+        # Serialized, indented for a person to read too.
+        dumps.assert_called_once_with(data.return_value, indent=2)
+        t.assertIs(ret, dumps.return_value)
+
+    @patch.object(SelectionJsonView, 'categories', new_callable=PropertyMock)
+    def test_data(t, categories: PropertyMock) -> None:
+        category = Mock(spec=CategoryJsonView)
+        category.data = {'name': 'work'}
+        categories.return_value = [category]
+
+        ret = t.sjv.data
+
+        with t.subTest('the day is recorded in its stored form'):
+            t.assertEqual(ret['date'], '2026-08-05')
+
+        with t.subTest('the active set reads in a settled order'):
+            t.assertEqual(ret['active'], ['career', 'work'])
+
+        with t.subTest('each category as its own view records it'):
+            t.assertEqual(ret['categories'], [{'name': 'work'}])
+
+        with t.subTest('the keys are the documented ones, in order'):
+            t.assertEqual(list(ret), ['date', 'active', 'categories'])
+
+    @patch(f'{SRC}.CategoryJsonView', autospec=True)
+    def test_categories(t, category_json_view: MagicMock) -> None:
+        first = Mock(spec=Category)
+        second = Mock(spec=Category)
+        t.selection.categories = [first, second]
+
+        ret = t.sjv.categories
+
+        # One per category, in the selection's order.
+        t.assertEqual(ret, [category_json_view.return_value] * 2)
+        t.assertEqual(
+            category_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class CategoryJsonViewTests(TestCase):
+    """Unit tests for battodo.view.selection.CategoryJsonView."""
+
+    def setUp(t) -> None:
+        t.category = Mock(spec=Category)
+        t.category.name = 'work'
+        t.category.hidden = 0
+        t.cjv = CategoryJsonView(t.category)
+
+    @patch.object(CategoryJsonView, 'rows', new_callable=PropertyMock)
+    def test_data(t, rows: PropertyMock) -> None:
+        row = Mock(spec=RowJsonView)
+        row.data = {'title': 'task'}
+        rows.return_value = [row]
+
+        with t.subTest('a category carries its name and its tasks'):
+            ret = t.cjv.data
+            t.assertEqual(
+                ret,
+                {'name': 'work', 'hidden': 0, 'tasks': [{'title': 'task'}]},
+            )
+
+        with t.subTest('and it says how many it is holding back'):
+            # Without the count, an abridged document reads exactly like
+            # a complete one, and a reader cannot tell it should ask for
+            # the rest.
+            t.category.hidden = 4
+
+            ret = t.cjv.data
+
+            t.assertEqual(
+                ret,
+                {'name': 'work', 'hidden': 4, 'tasks': [{'title': 'task'}]},
+            )
+
+    @patch(f'{SRC}.RowJsonView', autospec=True)
+    def test_rows(t, row_json_view: MagicMock) -> None:
+        first = Mock(spec=Row)
+        second = Mock(spec=Row)
+        t.category.shown = [first, second]
+
+        ret = t.cjv.rows
+
+        # One per row the category shows, in its order.
+        t.assertEqual(ret, [row_json_view.return_value] * 2)
+        t.assertEqual(
+            row_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class RowJsonViewTests(TestCase):
+    """Unit tests for battodo.view.selection.RowJsonView."""
+
+    def setUp(t) -> None:
+        t.task = Mock(
+            spec=[
+                'task_id',
+                'title',
+                'loe',
+                'due',
+                'added',
+                'repeat',
+                'tags',
+            ]
+        )
+        t.task.task_id = 'ab12cd'
+        t.task.title = 'A task'
+        t.task.loe = 2
+        t.task.due = None
+        t.task.added = '2026-07-29'
+        t.task.repeat = None
+        t.task.tags = ['home']
+
+        t.row = Mock(spec=Row)
+        t.row.task = t.task
+        t.row.rank = 4.25
+        t.row.priority = 3.0
+        t.row.subtasks = 0
+        t.rjv = RowJsonView(t.row)
+
+    def test_data(t) -> None:
+        with t.subTest('every stored field is carried through verbatim'):
+            ret = t.rjv.data
+            t.assertEqual(
+                ret,
+                {
+                    'id': 'ab12cd',
+                    'title': 'A task',
+                    'rank': 4.25,
+                    'priority': 3.0,
+                    'loe': 2,
+                    'due': None,
+                    'added': '2026-07-29',
+                    'repeat': None,
+                    'tags': ['home'],
+                    'subtasks': 0,
+                },
+            )
+
+        with t.subTest('a rank is published to two decimal places'):
+            t.row.rank = 1 + 7 / 30
+
+            ret = t.rjv.data
+
+            t.assertEqual(ret['rank'], 1.23)
+
+        with t.subTest('the due date keeps its stored form, unlabelled'):
+            t.row.due_label = 'OVERDUE'
+            t.task.due = '2026-08-04'
+
+            ret = t.rjv.data
+
+            t.assertEqual(ret['due'], '2026-08-04')
+
+        with t.subTest('and open children are counted, not nested'):
+            t.row.subtasks = 2
+
+            ret = t.rjv.data
+
+            t.assertEqual(ret['subtasks'], 2)
 
 
 def at(iso: str) -> datetime:

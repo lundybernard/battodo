@@ -45,13 +45,16 @@ class GetViewTests(TestCase):
         t.View.assert_called_once_with(t.selection)
         t.assertEqual(rendered, t.View.return_value.text)
 
-    def test_json(t):
+    @patch(f'{SRC}.SelectionJsonView', autospec=True)
+    def test_json(t, selection_json_view):
         t.conf.format = 'json'
 
         rendered = get_view(t.conf, t.now)
 
-        t.assertEqual(rendered, t.selection.json)
-        # The selection serializes itself; nothing renders it.
+        selection_json_view.assert_called_once_with(t.selection)
+        t.assertEqual(rendered, selection_json_view.return_value.json)
+        # The JSON view serializes the selection; the text view is not
+        # built.
         t.View.assert_not_called()
 
     def test_unconfigured_format(t):

@@ -10,4 +10,4 @@ The names read outside the package are re-exported here, so
 """
 
 from .render import View
-from .selection import RANK_PLACES, TOP_N, Selection
+from .selection import RANK_PLACES, TOP_N, Selection, SelectionJsonView
