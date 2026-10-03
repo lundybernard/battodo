@@ -10,7 +10,6 @@ from the code under test.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
-from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -42,20 +41,14 @@ class TaskTests(TestCase):
         data: st.DataObject,
     ) -> None:
         text, _ = drawn
-        read = as_read(text)
-        ancestries = descend(TodoDocument(read).tasks, [])
+        ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(selectors(ancestries))
-        expected = outcome(read, ancestries, selector)
+        expected = outcome(text, ancestries, selector)
 
         with source(text) as directory:
             ret = answer(Task(directory, selector, TODAY))
 
         t.assertEqual(ret, expected)
-
-
-def as_read(text: str) -> str:
-    """The text as a read in text mode returns it, each line end a newline."""
-    return StringIO(text, newline=None).read()
 
 
 def descend(
@@ -87,7 +80,7 @@ def selectors(ancestries: list[list[TaskNode]]) -> st.SearchStrategy[str]:
 
 
 def outcome(
-    read: str,
+    text: str,
     ancestries: list[list[TaskNode]],
     selector: str,
 ) -> Answer:
@@ -117,7 +110,7 @@ def outcome(
     if len(named) > 1:
         titles = ', '.join(repr(ancestry[-1].title) for ancestry in named)
         return f'{selector!r} matches {len(named)} open tasks: {titles}'
-    return LIST_FILE, read, named[0]
+    return LIST_FILE, text, named[0]
 
 
 @contextmanager
