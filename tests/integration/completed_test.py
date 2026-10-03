@@ -11,7 +11,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from battodo.completed import CompletedError, Digest, DigestView
+from battodo.completed import (
+    CompletedError,
+    Digest,
+    DigestJsonView,
+    DigestView,
+)
 
 # Wednesday. The week reaches back to 2026-07-30, the month to
 # 2026-08-01.
@@ -95,14 +100,15 @@ class RenderedDigestTests(TestCase):
             t.rendered(t.source, 'fortnight')
 
 
-class DigestDocumentTests(TestCase):
-    """Contract tests for battodo.completed.Digest.json."""
+class DigestJsonViewTests(TestCase):
+    """Contract tests for battodo.completed.DigestJsonView.json."""
 
     def setUp(t) -> None:
         t.source = source_dir(t)
 
     def test_json(t) -> None:
-        data = loads(Digest(t.source, NOW, period='week').json)
+        digest = Digest(t.source, NOW, period='week')
+        data = loads(DigestJsonView(digest).json)
 
         with t.subTest('the period and its span'):
             t.assertEqual(data['period'], 'week')

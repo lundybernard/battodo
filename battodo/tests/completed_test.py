@@ -2,19 +2,23 @@ from datetime import date, datetime, timezone
 from json import loads
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..completed import (
     DEFAULT_PERIOD,
     CompletedError,
     Digest,
+    DigestJsonView,
     DigestView,
     Group,
+    GroupJsonView,
     Record,
+    RecordJsonView,
     Table,
     read_record,
 )
 
+SRC = 'battodo.completed'
 TODAY = date(2026, 8, 5)
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
 # Two records of one category, one of another, one outside every
@@ -426,4 +430,111 @@ class TableTests(TestCase):
                 '  DATE        TASK',
                 '  2026-08-05  Ship it',
             ],
+        )
+
+
+class DigestJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.DigestJsonView."""
+
+    def setUp(t) -> None:
+        t.digest = Mock(spec=Digest)
+        t.digest.period = 'week'
+        t.digest.start = date(2026, 7, 30)
+        t.digest.end = TODAY
+        t.digest.records = [sentinel.record] * 3
+        t.djv = DigestJsonView(t.digest)
+
+    @patch(f'{SRC}.dumps', autospec=True)
+    @patch.object(DigestJsonView, 'data', new_callable=PropertyMock)
+    def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
+        ret = t.djv.json
+        # Serialized, indented for a person to read too.
+        dumps.assert_called_once_with(data.return_value, indent=2)
+        t.assertIs(ret, dumps.return_value)
+
+    @patch.object(DigestJsonView, 'groups', new_callable=PropertyMock)
+    def test_data(t, groups: PropertyMock) -> None:
+        group = Mock(spec=GroupJsonView)
+        group.data = {'name': 'work'}
+        groups.return_value = [group]
+
+        ret = t.djv.data
+
+        # A digest abridges nothing: the total counts every record.
+        t.assertEqual(
+            ret,
+            {
+                'period': 'week',
+                'start': '2026-07-30',
+                'end': '2026-08-05',
+                'total': 3,
+                'categories': [{'name': 'work'}],
+            },
+        )
+
+    @patch(f'{SRC}.GroupJsonView', autospec=True)
+    def test_groups(t, group_json_view: MagicMock) -> None:
+        first = Mock(spec=Group)
+        second = Mock(spec=Group)
+        t.digest.groups = [first, second]
+
+        ret = t.djv.groups
+
+        # One per group, in the digest's order.
+        t.assertEqual(ret, [group_json_view.return_value] * 2)
+        t.assertEqual(
+            group_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class GroupJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.GroupJsonView."""
+
+    def setUp(t) -> None:
+        t.group = Mock(spec=Group)
+        t.group.name = 'side-quests'
+        t.gjv = GroupJsonView(t.group)
+
+    @patch.object(GroupJsonView, 'records', new_callable=PropertyMock)
+    def test_data(t, records: PropertyMock) -> None:
+        record = Mock(spec=RecordJsonView)
+        record.data = {'title': 'A record'}
+        records.return_value = [record]
+
+        ret = t.gjv.data
+
+        t.assertEqual(
+            ret,
+            {'name': 'side-quests', 'entries': [{'title': 'A record'}]},
+        )
+
+    @patch(f'{SRC}.RecordJsonView', autospec=True)
+    def test_records(t, record_json_view: MagicMock) -> None:
+        first = Mock(spec=Record)
+        second = Mock(spec=Record)
+        t.group.records = [first, second]
+
+        ret = t.gjv.records
+
+        # One per record, in the group's order.
+        t.assertEqual(ret, [record_json_view.return_value] * 2)
+        t.assertEqual(
+            record_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class RecordJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.RecordJsonView."""
+
+    def setUp(t) -> None:
+        t.record = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
+        t.rjv = RecordJsonView(t.record)
+
+    def test_data(t) -> None:
+        ret = t.rjv.data
+        t.assertEqual(
+            ret,
+            {'date': '2026-08-04', 'title': 'A parent > A record'},
         )

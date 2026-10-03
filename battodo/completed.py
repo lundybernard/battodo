@@ -325,3 +325,68 @@ class Table:
 def table_width(widths: list[int]) -> int:
     """How wide a table laid out to `widths` comes out."""
     return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
+
+
+class DigestJsonView:
+    """A digest laid out as JSON, for an agent to read."""
+
+    def __init__(self, digest: Digest) -> None:
+        self.digest = digest
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        raise NotImplementedError
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The machine-readable form of the digest.
+
+        Shaped as::
+
+            {"period": "week", "start": "2026-07-30",
+             "end": "2026-08-05", "total": 6,
+             "categories": [{"name": "work", "entries": [
+                 {"date": "2026-08-05", "title": "Deck > Chip it"}]}]}
+
+        `total` counts every record the period holds, which is the sum
+        of the entries: a digest abridges nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def groups(self) -> list['GroupJsonView']:
+        """The digest's groups, each laid out as JSON."""
+        raise NotImplementedError
+
+
+class GroupJsonView:
+    """One category's records within a digest, laid out as JSON."""
+
+    def __init__(self, group: Group) -> None:
+        self.group = group
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The group as `DigestJsonView.data` records it."""
+        raise NotImplementedError
+
+    @property
+    def records(self) -> list['RecordJsonView']:
+        """The group's records, each laid out as JSON."""
+        raise NotImplementedError
+
+
+class RecordJsonView:
+    """One record of a digest laid out as JSON."""
+
+    def __init__(self, record: Record) -> None:
+        self.record = record
+
+    @property
+    def data(self) -> dict[str, str]:
+        """The record as `GroupJsonView.data` records it."""
+        raise NotImplementedError
