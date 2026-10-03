@@ -2,8 +2,9 @@
 
 Layout has no say in what is chosen: the table module reads this one,
 and never the other way about. The machine-readable form (R2) lives
-here as `Selection.json`, and a row carries the table's cells too,
-because both forms come out of the same rank, priority and children.
+here as `SelectionJsonView`, which reads a selection through its
+attributes. A row carries the table's cells, and the published form
+reads the same row, so the two never derive a task apart.
 
 A view holds open items only, and suppresses future-dated *recurring*
 items. SCHEMA.md's prose is stricter -- it would also hide future-dated
@@ -175,46 +176,6 @@ class Selection:
             if self.shows(todo) and todo.rows
         ]
 
-    @cached_property
-    def data(self) -> dict[str, object]:
-        """The machine-readable form of this selection.
-
-        Shaped as::
-
-            {"date": "2026-08-05",
-             "active": ["career", "events", "study", "work"],
-             "categories": [{"name": "work", "hidden": 2, "tasks": [
-                 {"id": null, "title": "...", "rank": 6.0,
-                  "priority": 2.0, "loe": null, "due": null,
-                  "added": "2026-05-10", "repeat": null,
-                  "tags": [], "subtasks": 0}]}]}
-
-        `hidden` is how many of the category's open items this leaves
-        out. Without it an abridged document reads exactly like a
-        complete one, and a reader has no way of knowing to ask for
-        the rest.
-        """
-        return {
-            'date': self.today.isoformat(),
-            'active': sorted(self.active),
-            'categories': [
-                {
-                    'name': category.name,
-                    'hidden': category.hidden,
-                    'tasks': [row.data for row in category.shown],
-                }
-                for category in self.categories
-            ],
-        }
-
-    @cached_property
-    def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
-
-        The schema is a contract for agents; see `data` for its shape.
-        """
-        return dumps(self.data, indent=2)
-
 
 class TodoList:
     """One discovered list file: where it sorts, and what is open in it."""
@@ -291,12 +252,12 @@ class Category:
 
 
 class Row:
-    """One task as a view carries it: a record, and a line of a table.
+    """One task as a view carries it: its rank, priority and children.
 
-    The two forms differ in what they say -- the record keeps every
-    stored field verbatim, while the table labels the due date and
-    marks the open children -- but both derive from the same rank,
-    priority and children.
+    The table's line comes from here, and `RowJsonView` publishes the
+    task's record from the same values. The record keeps every stored
+    field verbatim, while the table labels the due date and marks the
+    open children.
     """
 
     def __init__(self, task: TaskNode, today: date) -> None:
@@ -316,27 +277,6 @@ class Row:
     def rank(self) -> float:
         """The task's rank on the day the view was asked for."""
         return rank(self.task, self.today)
-
-    @cached_property
-    def data(self) -> dict[str, object]:
-        """One task as `Selection.json` records it.
-
-        Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
-        `rank` is rounded for display and must not be used to re-sort;
-        the array order is the rank order.
-        """
-        return {
-            'id': self.task.task_id,
-            'title': self.task.title,
-            'rank': round(self.rank, RANK_PLACES),
-            'priority': self.priority,
-            'loe': self.task.loe,
-            'due': self.task.due,
-            'added': self.task.added,
-            'repeat': self.task.repeat,
-            'tags': self.task.tags,
-            'subtasks': self.subtasks,
-        }
 
     @cached_property
     def priority(self) -> float:
@@ -377,8 +317,8 @@ class Row:
     def due_label(self) -> str:
         """How the due date reads in a table: a label, or the date.
 
-        Named apart from the stored `due` field, which the record
-        carries verbatim.
+        Named apart from the stored `due` field, which `RowJsonView`
+        publishes verbatim.
         """
         if self.task.due is None:
             return ''
@@ -409,7 +349,7 @@ class SelectionJsonView:
 
         The schema is a contract for agents; see `data` for its shape.
         """
-        raise NotImplementedError
+        return dumps(self.data, indent=2)
 
     @property
     def data(self) -> dict[str, object]:
@@ -425,12 +365,19 @@ class SelectionJsonView:
                   "added": "2026-05-10", "repeat": null,
                   "tags": [], "subtasks": 0}]}]}
         """
-        raise NotImplementedError
+        return {
+            'date': self.selection.today.isoformat(),
+            'active': sorted(self.selection.active),
+            'categories': [category.data for category in self.categories],
+        }
 
     @property
     def categories(self) -> list['CategoryJsonView']:
         """The selection's categories, each laid out as JSON."""
-        raise NotImplementedError
+        return [
+            CategoryJsonView(category)
+            for category in self.selection.categories
+        ]
 
 
 class CategoryJsonView:
@@ -448,12 +395,16 @@ class CategoryJsonView:
         a complete one, and a reader has no way of knowing to ask for
         the rest.
         """
-        raise NotImplementedError
+        return {
+            'name': self.category.name,
+            'hidden': self.category.hidden,
+            'tasks': [row.data for row in self.rows],
+        }
 
     @property
     def rows(self) -> list['RowJsonView']:
         """The rows the category shows, each laid out as JSON."""
-        raise NotImplementedError
+        return [RowJsonView(row) for row in self.category.shown]
 
 
 class RowJsonView:
@@ -470,4 +421,16 @@ class RowJsonView:
         `rank` is rounded for display and must not be used to re-sort;
         the array order is the rank order.
         """
-        raise NotImplementedError
+        task = self.row.task
+        return {
+            'id': task.task_id,
+            'title': task.title,
+            'rank': round(self.row.rank, RANK_PLACES),
+            'priority': self.row.priority,
+            'loe': task.loe,
+            'due': task.due,
+            'added': task.added,
+            'repeat': task.repeat,
+            'tags': task.tags,
+            'subtasks': self.row.subtasks,
+        }

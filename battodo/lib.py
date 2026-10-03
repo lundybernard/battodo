@@ -31,7 +31,7 @@ from .mutate import (
     update_task,
 )
 from .task import Task
-from .view import Selection, View
+from .view import Selection, SelectionJsonView, View
 
 __all__ = [
     'DEFAULT_PERIOD',
@@ -111,7 +111,7 @@ def get_view(conf: Configuration, now: datetime) -> str:
     """
     selection = Selection.from_config(conf, now)
     if _is_json(conf):
-        return selection.json
+        return SelectionJsonView(selection).json
     return View(selection).text
 
 

@@ -1,5 +1,4 @@
 from datetime import date, datetime, time, timedelta
-from json import loads
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
@@ -234,80 +233,6 @@ class SelectionTests(TestCase):
         with t.subTest('a list with nothing open contributes no category'):
             t.assertNotIn('study', [c.name for c in categories])
 
-    def category(t, name: str, hidden: int = 0, shown=('task',)) -> Mock:
-        """A stand-in category, holding what the document reads off one."""
-        stub = Mock(spec=['name', 'shown', 'hidden'])
-        stub.name = name
-        stub.shown = [published(title) for title in shown]
-        stub.hidden = hidden
-        return stub
-
-    def setUpData(t) -> None:
-        """Point the selection at a stub category and an active set."""
-        t.s.active = {'work', 'career'}
-        t.s.categories = [t.category('work')]
-
-    def test_data(t) -> None:
-        t.setUpData()
-
-        ret = t.s.data
-
-        with t.subTest('the day is recorded in its stored form'):
-            t.assertEqual(ret['date'], '2026-08-05')
-
-        with t.subTest('the active set reads in a settled order'):
-            t.assertEqual(ret['active'], ['career', 'work'])
-
-        with t.subTest('a category carries its name and its tasks'):
-            t.assertEqual(
-                ret['categories'],
-                [
-                    {
-                        'name': 'work',
-                        'hidden': 0,
-                        'tasks': [{'title': 'task'}],
-                    }
-                ],
-            )
-
-        with t.subTest('and it says how many it is holding back'):
-            # Without the count, an abridged document reads exactly like
-            # a complete one, and a reader cannot tell it should ask for
-            # the rest.
-            t.s.categories = [t.category('work', hidden=4)]
-            t.s.__dict__.pop('data')
-
-            abridged = t.s.data
-
-            t.assertEqual(
-                abridged['categories'],
-                [
-                    {
-                        'name': 'work',
-                        'hidden': 4,
-                        'tasks': [{'title': 'task'}],
-                    }
-                ],
-            )
-
-        with t.subTest('the keys are the documented ones, in order'):
-            t.assertEqual(list(t.s.data), ['date', 'active', 'categories'])
-
-    def test_json(t) -> None:
-        t.setUpData()
-
-        ret = t.s.json
-
-        with t.subTest('the document is the serialized data'):
-            t.assertEqual(loads(ret), t.s.data)
-
-        with t.subTest('laid out for a person to read as well'):
-            lines = ret.split('\n')
-
-            t.assertGreater(len(lines), 1)
-            t.assertTrue(lines[1].startswith('  "'))
-            t.assertFalse(lines[1].startswith('   '))
-
 
 class SelectionFromConfigTests(TestCase):
     """Unit tests for battodo.view.selection.Selection.from_config.
@@ -537,25 +462,10 @@ class RowTests(TestCase):
         t.multiplier.return_value = 3.0
         t.parse_date.return_value = None
 
-        t.task = Mock(
-            spec=[
-                'task_id',
-                'title',
-                'loe',
-                'due',
-                'added',
-                'repeat',
-                'tags',
-                'children',
-            ]
-        )
-        t.task.task_id = 'ab12cd'
+        t.task = Mock(spec=['title', 'loe', 'due', 'children'])
         t.task.title = 'A task'
         t.task.loe = 2
         t.task.due = None
-        t.task.added = '2026-07-29'
-        t.task.repeat = None
-        t.task.tags = ['home']
         t.task.children = []
 
         t.r = Row(t.task, TODAY)
@@ -578,51 +488,6 @@ class RowTests(TestCase):
 
         t.assertEqual(ret, 4.25)
         t.rank.assert_called_once_with(t.task, TODAY)
-
-    def test_data(t) -> None:
-        with t.subTest('every stored field is carried through verbatim'):
-            ret = t.r.data
-
-            t.assertEqual(
-                ret,
-                {
-                    'id': 'ab12cd',
-                    'title': 'A task',
-                    'rank': 4.25,
-                    'priority': 3.0,
-                    'loe': 2,
-                    'due': None,
-                    'added': '2026-07-29',
-                    'repeat': None,
-                    'tags': ['home'],
-                    'subtasks': 0,
-                },
-            )
-
-        with t.subTest('a rank is published to two decimal places'):
-            t.r.__dict__.pop('data', None)
-            t.r.rank = 1 + 7 / 30
-
-            ret = t.r.data
-
-            t.assertEqual(ret['rank'], 1.23)
-
-        with t.subTest('the due date keeps its stored form, unlabelled'):
-            t.r.__dict__.pop('data', None)
-            t.r.due_label = 'OVERDUE'
-            t.task.due = '2026-08-04'
-
-            ret = t.r.data
-
-            t.assertEqual(ret['due'], '2026-08-04')
-
-        with t.subTest('and open children are counted, not nested'):
-            t.r.__dict__.pop('data', None)
-            t.r.subtasks = 2
-
-            ret = t.r.data
-
-            t.assertEqual(ret['subtasks'], 2)
 
     def test_priority(t) -> None:
         ret = t.r.priority
@@ -955,13 +820,6 @@ def opens(day: int, hour: int) -> set[str]:
         if day in days and hour in hours:
             names.add(name)
     return names
-
-
-def published(title: str) -> Mock:
-    """A stand-in row, holding only the record a document reads off it."""
-    found = Mock(spec=['data'])
-    found.data = {'title': title}
-    return found
 
 
 def stored(

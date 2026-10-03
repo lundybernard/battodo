@@ -9,8 +9,8 @@ Terminal width is read here rather than at the CLI boundary, because
 the width is an input to the layout. The probe reads COLUMNS first, so
 a caller that needs a fixed width pins it in the environment.
 
-A row is built by the selection, which carries the same task in the
-published form as well, so the two never derive it apart.
+A row is built by the selection, and the published form reads the
+same row, so the two never derive a task apart.
 """
 
 from datetime import date
