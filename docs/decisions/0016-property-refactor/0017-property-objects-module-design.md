@@ -38,6 +38,10 @@ property-based object.** The constructor stores its inputs and does no
 work. Each `cached_property` derives one step from the step before it.
 Writes are methods.
 
+**An object that holds values builds no output form.** Each output form
+is a view object of its own, which reads the value object through its
+attributes: one view lays it out as text, another as JSON.
+
 **Pure computation stays as functions.** A function that computes a
 value from its arguments and holds nothing keeps its shape.
 
@@ -85,6 +89,12 @@ test assert one step, and stops the intermediate values from becoming
 locals that only the whole function can see. Every module in Option 1's
 scope has that shape today, written as locals instead.
 
+A value object that builds its own output forms hands each consumer
+one dict of everything it holds, whatever that consumer reads. A view
+per form depends on the value object's attributes instead: each form
+reads only what it lays out, and a new form adds a class, not a member
+on the value object. The review of #77 set this rule.
+
 Pure computation has no steps to name. Wrapping it buys a container and
 costs a construction at every call site. Option 2 would apply the
 pattern to satisfy consistency rather than to fix anything, and
@@ -97,7 +107,9 @@ happens, and their shape is what makes each change expensive.
 ## Consequences
 
 - `mutate.py` becomes one command object per write operation. `item.py`
-  becomes an object shaped like the completed digest and the view.
+  becomes a value object with a text view and a JSON view. The
+  completed digest and the view move their JSON forms to views of
+  their own; their value objects still build the table cells.
   `parser.py` gains a document object that owns the byte-identity
   contract. `journal.py` gains a property chain and one parse path. The
   functions in `view/selection.py` fold into the objects beside them,
