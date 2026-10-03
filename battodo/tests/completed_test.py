@@ -31,102 +31,6 @@ LOG = """\
 WIDTHS = [10, 20]
 
 
-class ReadRecordTests(TestCase):
-    """Unit tests for battodo.completed.read_record."""
-
-    def test_record(t) -> None:
-        ret = read_record('2026-08-04 | chores | DONE | A completed task')
-
-        t.assertEqual(
-            ret,
-            Record(date(2026, 8, 4), 'chores', 'A completed task'),
-        )
-
-    def test_title(t) -> None:
-        titles = {
-            'the title keeps its ancestry, and loses its fields': (
-                '2026-08-04 | work | DONE | Deck > Chip [LOE:2] [P:4]',
-                'Deck > Chip',
-            ),
-            'a field inside a title leaves no gap behind': (
-                '2026-08-04 | work | DONE | Ship [P:4] it',
-                'Ship it',
-            ),
-            'a separator inside a title is part of the title': (
-                '2026-08-04 | work | DONE | Ship it | today',
-                'Ship it | today',
-            ),
-        }
-
-        for name, (line, title) in titles.items():
-            with t.subTest(name):
-                ret = read_record(line)
-
-                t.assertEqual(
-                    ret,
-                    Record(date(2026, 8, 4), 'work', title),
-                )
-
-    def test_skipped(t) -> None:
-        skipped = {
-            'an abandoned task is no completion': (
-                '2026-08-04 | work | SCRATCHED | Drop it'
-            ),
-            'a comment carries no date': (
-                '<!-- YYYY-MM-DD | CATEGORY | DONE | TITLE -->'
-            ),
-            'a heading is not a record': '# Completed Tasks',
-            'a blank line holds nothing': '',
-            'and neither does prose': 'this line is not a record',
-        }
-
-        for name, line in skipped.items():
-            with t.subTest(name):
-                ret = read_record(line)
-                t.assertIsNone(ret)
-
-
-class RecordTests(TestCase):
-    """Unit tests for battodo.completed.Record."""
-
-    def setUp(t) -> None:
-        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
-
-    def test_cells(t) -> None:
-        ret = t.r.cells
-        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
-
-    def test_entry(t) -> None:
-        ret = t.r.entry
-
-        t.assertEqual(
-            ret,
-            {'date': '2026-08-04', 'title': 'A parent > A record'},
-        )
-
-
-class GroupTests(TestCase):
-    """Unit tests for battodo.completed.Group."""
-
-    def setUp(t) -> None:
-        t.g = Group(
-            'side-quests',
-            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
-        )
-
-    def test_title(t) -> None:
-        ret = t.g.title
-        t.assertEqual(ret, 'Side quests')
-
-    def test_entries(t) -> None:
-        ret = t.g.entries
-
-        t.assertEqual(
-            ret,
-            [{'date': '2026-08-04', 'title': 'A record'}],
-        )
-
-
 class DigestTests(TestCase):
     """Unit tests for battodo.completed.Digest."""
 
@@ -309,41 +213,99 @@ class DigestFromConfigTests(TestCase):
             t.assertEqual(ret.period, DEFAULT_PERIOD)
 
 
-class TableTests(TestCase):
-    """Unit tests for battodo.completed.Table."""
+class RecordTests(TestCase):
+    """Unit tests for battodo.completed.Record."""
 
     def setUp(t) -> None:
-        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
-        t.table = Table(t.group, WIDTHS)
+        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
 
-    def test_heading(t) -> None:
-        with t.subTest('a titled rule spanning the table'):
-            ret = t.table.heading
-            t.assertEqual(ret, '── Work ' + '─' * 26)
+    def test_cells(t) -> None:
+        ret = t.r.cells
+        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
 
-        with t.subTest('a title of its own length rules no further'):
-            wide = Table(Group('a' * 40, []), WIDTHS)
-            ret = wide.heading
-            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
-
-    def test_line(t) -> None:
-        with t.subTest('each cell padded to its column'):
-            ret = t.table.line(('a', 'b'))
-            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
-
-        with t.subTest('trailing space is stripped'):
-            ret = t.table.line(('', ''))
-            t.assertEqual(ret, '')
-
-    def test_lines(t) -> None:
-        ret = t.table.lines
+    def test_entry(t) -> None:
+        ret = t.r.entry
 
         t.assertEqual(
             ret,
-            [
-                '  DATE        TASK',
-                '  2026-08-05  Ship it',
-            ],
+            {'date': '2026-08-04', 'title': 'A parent > A record'},
+        )
+
+
+class ReadRecordTests(TestCase):
+    """Unit tests for battodo.completed.read_record."""
+
+    def test_record(t) -> None:
+        ret = read_record('2026-08-04 | chores | DONE | A completed task')
+
+        t.assertEqual(
+            ret,
+            Record(date(2026, 8, 4), 'chores', 'A completed task'),
+        )
+
+    def test_title(t) -> None:
+        titles = {
+            'the title keeps its ancestry, and loses its fields': (
+                '2026-08-04 | work | DONE | Deck > Chip [LOE:2] [P:4]',
+                'Deck > Chip',
+            ),
+            'a field inside a title leaves no gap behind': (
+                '2026-08-04 | work | DONE | Ship [P:4] it',
+                'Ship it',
+            ),
+            'a separator inside a title is part of the title': (
+                '2026-08-04 | work | DONE | Ship it | today',
+                'Ship it | today',
+            ),
+        }
+
+        for name, (line, title) in titles.items():
+            with t.subTest(name):
+                ret = read_record(line)
+
+                t.assertEqual(
+                    ret,
+                    Record(date(2026, 8, 4), 'work', title),
+                )
+
+    def test_skipped(t) -> None:
+        skipped = {
+            'an abandoned task is no completion': (
+                '2026-08-04 | work | SCRATCHED | Drop it'
+            ),
+            'a comment carries no date': (
+                '<!-- YYYY-MM-DD | CATEGORY | DONE | TITLE -->'
+            ),
+            'a heading is not a record': '# Completed Tasks',
+            'a blank line holds nothing': '',
+            'and neither does prose': 'this line is not a record',
+        }
+
+        for name, line in skipped.items():
+            with t.subTest(name):
+                ret = read_record(line)
+                t.assertIsNone(ret)
+
+
+class GroupTests(TestCase):
+    """Unit tests for battodo.completed.Group."""
+
+    def setUp(t) -> None:
+        t.g = Group(
+            'side-quests',
+            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
+        )
+
+    def test_title(t) -> None:
+        ret = t.g.title
+        t.assertEqual(ret, 'Side quests')
+
+    def test_entries(t) -> None:
+        ret = t.g.entries
+
+        t.assertEqual(
+            ret,
+            [{'date': '2026-08-04', 'title': 'A record'}],
         )
 
 
@@ -427,3 +389,41 @@ class DigestViewTests(TestCase):
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
+
+
+class TableTests(TestCase):
+    """Unit tests for battodo.completed.Table."""
+
+    def setUp(t) -> None:
+        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
+        t.table = Table(t.group, WIDTHS)
+
+    def test_heading(t) -> None:
+        with t.subTest('a titled rule spanning the table'):
+            ret = t.table.heading
+            t.assertEqual(ret, '── Work ' + '─' * 26)
+
+        with t.subTest('a title of its own length rules no further'):
+            wide = Table(Group('a' * 40, []), WIDTHS)
+            ret = wide.heading
+            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
+
+    def test_line(t) -> None:
+        with t.subTest('each cell padded to its column'):
+            ret = t.table.line(('a', 'b'))
+            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
+
+        with t.subTest('trailing space is stripped'):
+            ret = t.table.line(('', ''))
+            t.assertEqual(ret, '')
+
+    def test_lines(t) -> None:
+        ret = t.table.lines
+
+        t.assertEqual(
+            ret,
+            [
+                '  DATE        TASK',
+                '  2026-08-05  Ship it',
+            ],
+        )

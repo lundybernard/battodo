@@ -59,70 +59,6 @@ class CompletedError(Exception):
     """
 
 
-def clean_title(title: str) -> str:
-    """The title as a digest shows it: no fields, no double spaces."""
-    return ' '.join(FIELD_RE.sub('', title).split())
-
-
-def table_width(widths: list[int]) -> int:
-    """How wide a table laid out to `widths` comes out."""
-    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
-
-
-@dataclass(frozen=True)
-class Record:
-    """One DONE line of the log: when, which list, what."""
-
-    day: date
-    category: str
-    title: str
-
-    @property
-    def cells(self) -> tuple[str, ...]:
-        """The record's two values, in COLUMNS order."""
-        return (self.day.isoformat(), self.title)
-
-    @property
-    def entry(self) -> dict[str, str]:
-        """The record as `Digest.data` publishes it."""
-        return {'date': self.day.isoformat(), 'title': self.title}
-
-
-def read_record(line: str) -> Record | None:
-    """One log line as a record, or None where it is not one.
-
-    Comments, blank lines and SCRATCHED records all read as None, as
-    does any line the four fields cannot be read from. The log is
-    hand-edited, so a line btodo cannot parse is skipped rather than
-    raised on.
-    """
-    parts = line.split(SEPARATOR, RECORD_FIELDS - 1)
-    if len(parts) != RECORD_FIELDS:
-        return None
-    stamp, category, status, title = (part.strip() for part in parts)
-    day = parse_date(stamp)
-    if day is None or status != DONE_STATUS:
-        return None
-    return Record(day, category, clean_title(title))
-
-
-class Group:
-    """One category's records within a digest."""
-
-    def __init__(self, name: str, records: list[Record]) -> None:
-        self.name = name
-        self.records = records
-
-    @property
-    def title(self) -> str:
-        return self.name.replace('-', ' ').capitalize()
-
-    @property
-    def entries(self) -> list[dict[str, str]]:
-        """The records as `Digest.data` publishes them."""
-        return [record.entry for record in self.records]
-
-
 class Digest:
     """What one digest holds: one period of one log, by category."""
 
@@ -186,7 +122,7 @@ class Digest:
         return self.path.read_text(encoding='utf-8')
 
     @cached_property
-    def records(self) -> list[Record]:
+    def records(self) -> list['Record']:
         """The period's DONE records, oldest first.
 
         Sorted here rather than trusted from the file: the log is
@@ -202,7 +138,7 @@ class Digest:
         return sorted(found, key=lambda record: record.day)
 
     @cached_property
-    def groups(self) -> list[Group]:
+    def groups(self) -> list['Group']:
         """The records by category, in the order a view shows them."""
         names = sorted(
             {record.category for record in self.records},
@@ -250,30 +186,63 @@ class Digest:
         return dumps(self.data, indent=2)
 
 
-class Table:
-    """One group's records, at a width the whole digest shares."""
+@dataclass(frozen=True)
+class Record:
+    """One DONE line of the log: when, which list, what."""
 
-    def __init__(self, group: Group, widths: list[int]) -> None:
-        self.group = group
-        self.widths = widths
-
-    @property
-    def heading(self) -> str:
-        """A titled rule spanning the table, e.g. `── Work ────`."""
-        prefix = f'{RULE * 2} {self.group.title} '
-        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
-
-    def line(self, cells: tuple[str, ...]) -> str:
-        """Pad one row's cells. Trailing space is stripped."""
-        laid = (f'{cell:<{size}}' for cell, size in zip(cells, self.widths))
-        return f'{INDENT}{GAP.join(laid)}'.rstrip()
+    day: date
+    category: str
+    title: str
 
     @property
-    def lines(self) -> list[str]:
-        """Everything under the heading: the column names, then the rows."""
-        out = [self.line(COLUMNS)]
-        out.extend(self.line(record.cells) for record in self.group.records)
-        return out
+    def cells(self) -> tuple[str, ...]:
+        """The record's two values, in COLUMNS order."""
+        return (self.day.isoformat(), self.title)
+
+    @property
+    def entry(self) -> dict[str, str]:
+        """The record as `Digest.data` publishes it."""
+        return {'date': self.day.isoformat(), 'title': self.title}
+
+
+def read_record(line: str) -> Record | None:
+    """One log line as a record, or None where it is not one.
+
+    Comments, blank lines and SCRATCHED records all read as None, as
+    does any line the four fields cannot be read from. The log is
+    hand-edited, so a line btodo cannot parse is skipped rather than
+    raised on.
+    """
+    parts = line.split(SEPARATOR, RECORD_FIELDS - 1)
+    if len(parts) != RECORD_FIELDS:
+        return None
+    stamp, category, status, title = (part.strip() for part in parts)
+    day = parse_date(stamp)
+    if day is None or status != DONE_STATUS:
+        return None
+    return Record(day, category, clean_title(title))
+
+
+class Group:
+    """One category's records within a digest."""
+
+    def __init__(self, name: str, records: list[Record]) -> None:
+        self.name = name
+        self.records = records
+
+    @property
+    def title(self) -> str:
+        return self.name.replace('-', ' ').capitalize()
+
+    @property
+    def entries(self) -> list[dict[str, str]]:
+        """The records as `Digest.data` publishes them."""
+        return [record.entry for record in self.records]
+
+
+def clean_title(title: str) -> str:
+    """The title as a digest shows it: no fields, no double spaces."""
+    return ' '.join(FIELD_RE.sub('', title).split())
 
 
 class DigestView:
@@ -311,7 +280,7 @@ class DigestView:
         ]
 
     @cached_property
-    def tables(self) -> list[Table]:
+    def tables(self) -> list['Table']:
         return [Table(group, self.widths) for group in self.digest.groups]
 
     @cached_property
@@ -325,3 +294,34 @@ class DigestView:
 
     def __str__(self) -> str:
         return self.text
+
+
+class Table:
+    """One group's records, at a width the whole digest shares."""
+
+    def __init__(self, group: Group, widths: list[int]) -> None:
+        self.group = group
+        self.widths = widths
+
+    @property
+    def heading(self) -> str:
+        """A titled rule spanning the table, e.g. `── Work ────`."""
+        prefix = f'{RULE * 2} {self.group.title} '
+        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
+
+    def line(self, cells: tuple[str, ...]) -> str:
+        """Pad one row's cells. Trailing space is stripped."""
+        laid = (f'{cell:<{size}}' for cell, size in zip(cells, self.widths))
+        return f'{INDENT}{GAP.join(laid)}'.rstrip()
+
+    @property
+    def lines(self) -> list[str]:
+        """Everything under the heading: the column names, then the rows."""
+        out = [self.line(COLUMNS)]
+        out.extend(self.line(record.cells) for record in self.group.records)
+        return out
+
+
+def table_width(widths: list[int]) -> int:
+    """How wide a table laid out to `widths` comes out."""
+    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
