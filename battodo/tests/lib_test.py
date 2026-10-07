@@ -152,16 +152,14 @@ class AddItemTests(TestCase):
     """Unit tests for battodo.lib.add_item."""
 
     def setUp(t):
-        patches = ['add_task', 'add_subtask', 'Task']
+        patches = ['Addition', 'SubtaskAddition', 'Task']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
-
-        t.path = Path('~/a-source-dir/a-list.md')
-        t.entry = '- [ ] A task title [P:4] [ADDED:2026-08-08] [ID:ab12cd]'
-        t.add_task.return_value = (t.path, t.entry)
-        t.add_subtask.return_value = (t.path, t.entry)
+        t.addition = t.Addition.return_value
+        t.addition.path = Path('~/a-source-dir/a-list.md')
+        t.addition.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
@@ -170,55 +168,61 @@ class AddItemTests(TestCase):
         t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.list = 'chores'
+        t.conf.list = 'a-list'
         t.conf.title = 'A task title'
         t.conf.priority = '4'
         t.conf.due = '2026-09-01'
 
     def test_forwarded(t):
         add_item(t.conf, t.now)
+        t.Addition.assert_called_once_with(
+            SOURCE,
+            'a-list',
+            'A task title',
+            {'P': '4', 'DUE': '2026-09-01'},
+            t.today,
+        )
 
-        args = t.add_task.call_args[0]
-        t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], 'chores')
-        t.assertEqual(args[2], 'A task title')
-        t.assertEqual(args[3], {'P': '4', 'DUE': '2026-09-01'})
-        t.assertEqual(args[4], t.today)
+    def test_written(t):
+        add_item(t.conf, t.now)
+        t.addition.write.assert_called_once_with()
 
     def test_result(t):
         written = add_item(t.conf, t.now)
-
         # A P-less add ranks near 0 and will not show in a view, so
         # this is the only confirmation of the write.
-        t.assertEqual(written, f'{t.entry}\n{t.path}')
+        t.assertEqual(written, f'{t.addition.entry}\n{t.addition.path}')
 
     def test_no_fields(t):
         conf = Mock(spec=['view', 'list', 'title'])
         conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'chores'
+        conf.list = 'a-list'
         conf.title = 'A task title'
 
         add_item(conf, t.now)
 
-        t.assertEqual(t.add_task.call_args[0][3], {})
+        t.assertEqual(t.Addition.call_args[0][3], {})
 
     def test_subtask(t):
         conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
         conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'work'
+        conf.list = 'a-list'
         conf.title = 'A subtask title'
         conf.parent = '9o71lx'
         conf.loe = '2'
+        addition = t.SubtaskAddition.return_value
+        addition.path = Path('~/a-source-dir/a-list.md')
+        addition.entry = '  - [ ] A subtask title [LOE:2] [ID:cd34ef]'
 
         written = add_item(conf, t.now)
 
-        with t.subTest('a parent sends the add to the subtask path'):
-            t.add_task.assert_not_called()
-            t.add_subtask.assert_called_once_with(
+        with t.subTest('a parent sends the add to a subtask'):
+            t.Addition.assert_not_called()
+            t.SubtaskAddition.assert_called_once_with(
                 t.Task.return_value,
-                'work',
+                'a-list',
                 'A subtask title',
                 {'LOE': '2'},
             )
@@ -226,23 +230,25 @@ class AddItemTests(TestCase):
         with t.subTest('the parent is the task its selector names'):
             t.Task.assert_called_once_with(SOURCE, '9o71lx', t.today)
 
+        with t.subTest('the subtask is written'):
+            addition.write.assert_called_once_with()
+
         with t.subTest('the subtask line and its file come back'):
-            t.assertEqual(written, f'{t.entry}\n{t.path}')
+            t.assertEqual(written, f'{addition.entry}\n{addition.path}')
 
 
 class UpdateItemTests(TestCase):
     """Unit tests for battodo.lib.update_item."""
 
     def setUp(t):
-        patches = ['update_task', 'Task']
+        patches = ['Update', 'Task']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
-
-        t.path = Path('~/a-source-dir/a-list.md')
-        t.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
-        t.update_task.return_value = (t.path, t.entry)
+        t.update = t.Update.return_value
+        t.update.path = Path('~/a-source-dir/a-list.md')
+        t.update.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
@@ -260,28 +266,32 @@ class UpdateItemTests(TestCase):
         update_item(t.conf, t.now)
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
-        t.update_task.assert_called_once_with(
+        t.Update.assert_called_once_with(
             t.Task.return_value,
             {'P': '4', 'DUE': '2026-09-01'},
             title='A task title',
         )
 
+    def test_written(t):
+        update_item(t.conf, t.now)
+        t.update.write.assert_called_once_with()
+
     def test_result(t):
         written = update_item(t.conf, t.now)
-        t.assertEqual(written, f'{t.entry}\n{t.path}')
+        t.assertEqual(written, f'{t.update.entry}\n{t.update.path}')
 
     def test_option_left_off(t):
         conf = Mock(spec=['view', 'selector', 'tags'])
         conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
         conf.selector = 'a selector'
-        conf.tags = 'yard,summer'
+        conf.tags = 'a-tag,another-tag'
 
         update_item(conf, t.now)
 
         # An option left off names no change to that field.
-        args, kwargs = t.update_task.call_args
-        t.assertEqual(args[1], {'TAGS': 'yard,summer'})
+        args, kwargs = t.Update.call_args
+        t.assertEqual(args[1], {'TAGS': 'a-tag,another-tag'})
         t.assertIsNone(kwargs['title'])
 
 
@@ -289,7 +299,7 @@ class CompleteItemTests(TestCase):
     """Unit tests for battodo.lib.complete_item."""
 
     def setUp(t):
-        patches = ['Task', 'complete']
+        patches = ['Task', 'Completion']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -299,6 +309,8 @@ class CompleteItemTests(TestCase):
         # classmethod is pointed at that.
         t.task = t.Task.return_value
         t.Task.from_config.return_value = t.task
+        t.completion = t.Completion.return_value
+        t.completion.entries = []
 
         t.now = sentinel.now
         # The task decodes the configuration, so this call reads no
@@ -308,32 +320,33 @@ class CompleteItemTests(TestCase):
     def test_result(t):
         # Completing the last open child completes its parent too, so
         # one call can log more than one entry.
-        t.complete.return_value = [
-            '2026-08-08 | chores | DONE | A parent > A child',
-            '2026-08-08 | chores | DONE | A parent',
+        t.completion.entries = [
+            '2026-08-08 | a-list | DONE | A parent > A child',
+            '2026-08-08 | a-list | DONE | A parent',
         ]
 
         logged = complete_item(t.conf, t.now)
 
         t.assertEqual(
             logged,
-            '2026-08-08 | chores | DONE | A parent > A child\n'
-            '2026-08-08 | chores | DONE | A parent',
+            '2026-08-08 | a-list | DONE | A parent > A child\n'
+            '2026-08-08 | a-list | DONE | A parent',
         )
 
     def test_task(t):
-        t.complete.return_value = []
-
         complete_item(t.conf, t.now)
 
         with t.subTest('the configuration is decoded once, by the task'):
             t.Task.from_config.assert_called_once_with(t.conf, t.now)
 
-        with t.subTest('which the call then completes'):
-            t.complete.assert_called_once_with(t.task)
+        with t.subTest('which the completion is built on'):
+            t.Completion.assert_called_once_with(t.task)
+
+    def test_written(t):
+        complete_item(t.conf, t.now)
+        t.completion.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        t.complete.return_value = []
         logged = complete_item(t.conf, t.now)
         t.assertEqual(logged, 'checked off')
 
@@ -342,11 +355,13 @@ class ScratchItemTests(TestCase):
     """Unit tests for battodo.lib.scratch_item."""
 
     def setUp(t):
-        patches = ['scratch', 'Task']
+        patches = ['Scratch', 'Task']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
             t.addCleanup(patcher.stop)
+        t.scratch = t.Scratch.return_value
+        t.scratch.entries = []
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
@@ -356,29 +371,28 @@ class ScratchItemTests(TestCase):
         t.conf.selector = 'a selector'
 
     def test_result(t):
-        t.scratch.return_value = [
-            '2026-08-08 | chores | SCRATCHED | A parent > A child',
-            '2026-08-08 | chores | SCRATCHED | A parent',
+        t.scratch.entries = [
+            '2026-08-08 | a-list | SCRATCHED | A parent > A child',
         ]
 
         logged = scratch_item(t.conf, t.now)
 
         t.assertEqual(
             logged,
-            '2026-08-08 | chores | SCRATCHED | A parent > A child\n'
-            '2026-08-08 | chores | SCRATCHED | A parent',
+            '2026-08-08 | a-list | SCRATCHED | A parent > A child',
         )
 
     def test_forwarded(t):
-        t.scratch.return_value = []
-
         scratch_item(t.conf, t.now)
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
-        t.scratch.assert_called_once_with(t.Task.return_value)
+        t.Scratch.assert_called_once_with(t.Task.return_value)
+
+    def test_written(t):
+        scratch_item(t.conf, t.now)
+        t.scratch.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        t.scratch.return_value = []
         logged = scratch_item(t.conf, t.now)
         t.assertEqual(logged, 'dropped')
 
@@ -387,9 +401,13 @@ class BackfillItemsTests(TestCase):
     """Unit tests for battodo.lib.backfill_items."""
 
     def setUp(t):
-        patcher = patch(f'{SRC}.backfill_all', autospec=True)
-        t.backfill_all = patcher.start()
-        t.addCleanup(patcher.stop)
+        patches = ['Backfill']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.backfill = t.Backfill.return_value
+        t.backfill.lists = []
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
@@ -398,26 +416,32 @@ class BackfillItemsTests(TestCase):
         t.conf.view.source_dir = '~/a-source-dir'
 
     def test_result(t):
-        t.backfill_all.return_value = {
-            'work.md': ['a', 'b'],
-            'chores.md': ['c'],
-        }
+        t.backfill.lists = [
+            stamped('a-list.md', 2),
+            stamped('another-list.md', 1),
+        ]
 
-        stamped = backfill_items(t.conf, t.now)
+        ret = backfill_items(t.conf, t.now)
 
         # A count per changed list, in name order.
-        t.assertEqual(stamped, 'chores.md: stamped 1\nwork.md: stamped 2')
+        t.assertEqual(ret, 'a-list.md: stamped 2\nanother-list.md: stamped 1')
 
     def test_forwarded(t):
-        t.backfill_all.return_value = {}
-
         backfill_items(t.conf, t.now)
+        t.Backfill.assert_called_once_with(SOURCE, t.today)
 
-        args = t.backfill_all.call_args[0]
-        t.assertEqual(args[0], SOURCE)
-        t.assertEqual(args[1], t.today)
+    def test_written(t):
+        backfill_items(t.conf, t.now)
+        t.backfill.write.assert_called_once_with()
 
     def test_nothing_stamped(t):
-        t.backfill_all.return_value = {}
-        stamped = backfill_items(t.conf, t.now)
-        t.assertEqual(stamped, 'nothing to backfill')
+        ret = backfill_items(t.conf, t.now)
+        t.assertEqual(ret, 'nothing to backfill')
+
+
+def stamped(name: str, count: int) -> Mock:
+    """A list backfill: its file, and the tasks it stamps."""
+    backfill = Mock(spec=['path', 'tasks'])
+    backfill.path = Path(name)
+    backfill.tasks = [sentinel.task] * count
+    return backfill
