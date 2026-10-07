@@ -2,8 +2,9 @@
 
 `Task` holds the open task a selector reaches: its list file, the
 parsed document and its ancestry, all from one read of the source. It
-also holds the day a completion is logged under. The writes in
-`mutate` consume a `Task`, and `lib` builds it.
+also holds the command's day: the day a completion is logged under, or
+the day an item is ranked for. The writes in `mutate` consume a `Task`
+that `lib` builds, and an `Item` builds its own.
 """
 
 from datetime import date, datetime
