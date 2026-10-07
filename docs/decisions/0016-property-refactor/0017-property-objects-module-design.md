@@ -42,8 +42,15 @@ Writes are methods.
 is a view object of its own, which reads the value object through its
 attributes: one view lays it out as text, another as JSON.
 
+**A write object derives with properties and writes with one method.**
+Each write operation is an object that derives the new text of one list
+and the journal events that record it. Its properties stay free of side
+effects, and its `write` method writes what they derive. The `lib`
+entry point composes the object and calls `write`.
+
 **Pure computation stays as functions.** A function that computes a
-value from its arguments and holds nothing keeps its shape.
+value from its arguments and holds nothing keeps its shape. A fact
+derived from the data of one object becomes a property of that object.
 
 `lib.py` keeps the boundary functions the user interfaces call. The
 layering the CLI depends on
@@ -95,6 +102,11 @@ per form depends on the value object's attributes instead: each form
 reads only what it lays out, and a new form adds a class, not a member
 on the value object. The review of #77 set this rule.
 
+A write object reads every value before it writes anything, so a
+refused write leaves the files as they were. Every write passes its
+values to one shared sequence, so each reaches the list, the log and
+the journal in the same order.
+
 Pure computation has no steps to name. Wrapping it buys a container and
 costs a construction at every call site. Option 2 would apply the
 pattern to satisfy consistency rather than to fix anything, and
@@ -106,7 +118,8 @@ happens, and their shape is what makes each change expensive.
 
 ## Consequences
 
-- `mutate.py` becomes one command object per write operation. `item.py`
+- `mutate.py` becomes one command object per write operation, and each
+  writes what it derives when its `lib` entry point calls it. `item.py`
   becomes a value object with a text view and a JSON view. The
   completed digest and the view move their JSON forms to views of
   their own; their value objects still build the table cells.
