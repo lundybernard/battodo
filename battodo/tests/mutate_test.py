@@ -424,6 +424,11 @@ class SubtaskAdditionTests(TestCase):
             ret = t.sa.stamped
             t.assertTrue(ret)
 
+        with t.subTest('a parent whose id is empty is too'):
+            node.return_value.fields = {'P': '2', 'ID': ''}
+            ret = t.sa.stamped
+            t.assertTrue(ret)
+
     @patch.object(TaskNode, 'refuse_checklist_item', autospec=True)
     def test_node(t, refuse_checklist_item: MagicMock) -> None:
         with t.subTest('the parent the selector names'):

@@ -56,6 +56,9 @@ RENAMED_TASK = (
 )
 # A second list, its open section empty.
 ANOTHER_LIST = '# Another list\n\n## Open\n'
+# A list whose one task carries an `[ID:]` with nothing in it.
+EMPTY_ID_TASK = '- [ ] A task with an empty id [P:2] [ID:]'
+EMPTY_ID_LIST = f'## Open\n\n{EMPTY_ID_TASK}\n'
 
 
 class AdditionTests(TestCase):
@@ -257,6 +260,17 @@ class SubtaskAdditionTests(TestCase):
             with t.subTest(name), t.assertRaisesRegex(error, message):
                 _ = refusal.text
 
+        with t.subTest('a parent whose id is empty is stamped too'):
+            unrecorded = under_an_empty_id(t.source)
+
+            ret = unrecorded.text
+
+            stamp = EMPTY_ID_TASK.replace(
+                '[ID:]',
+                f'[ID:{unrecorded.parent_id}]',
+            )
+            t.assertEqual(ret, f'## Open\n\n{stamp}\n{unrecorded.entry}\n')
+
     def test_entry(t) -> None:
         ret = t.sa.entry
         t.assertRegex(ret, r'^  - \[ \] A new subtask \[LOE:2\] \[ID:\w{6}\]$')
@@ -306,6 +320,19 @@ class SubtaskAdditionTests(TestCase):
                 ),
             )
             t.assertEqual(added.payload['parent'], parent_id)
+
+        with t.subTest('a parent whose id is empty is stamped first too'):
+            unrecorded = under_an_empty_id(t.source)
+
+            streams = [event.stream for event in unrecorded.events]
+
+            t.assertEqual(
+                streams,
+                [
+                    f'task/{unrecorded.parent_id}',
+                    f'task/{unrecorded.task_id}',
+                ],
+            )
 
 
 class UpdateTests(TestCase):
@@ -817,6 +844,17 @@ def without(text: str, *indices: int) -> str:
 def completion_of(source: Path, selector: str) -> Completion:
     """The completion of the task `selector` names."""
     return Completion(Task(source, selector, TODAY))
+
+
+def under_an_empty_id(source: Path) -> SubtaskAddition:
+    """A new subtask under a parent whose `[ID:]` holds nothing."""
+    list_file = source / 'an-empty-id-list.md'
+    list_file.write_text(EMPTY_ID_LIST, encoding='utf-8')
+    return subtask(
+        source,
+        'A task with an empty id',
+        list_name='an-empty-id-list',
+    )
 
 
 def journaled(source: Path) -> list[tuple[str, str]]:
