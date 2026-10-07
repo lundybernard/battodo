@@ -173,11 +173,12 @@ class TodoDocument:
             The edited line.
         """
         raw = self.lines[index]
-        pattern = rf'\[{name}:[^\]]*\]'
-        if re.search(pattern, raw):
-            edited = re.sub(pattern, f'[{name}:{value}]', raw, count=1)
+        written = f'[{name}:{value}]'
+        found = re.search(rf'\[{name}:[^\]]*\]', raw)
+        if found:
+            edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
         else:
-            edited = f'{raw.rstrip()} [{name}:{value}]'
+            edited = f'{raw.rstrip()} {written}'
         self.lines[index] = edited
         return edited
 
