@@ -1,27 +1,29 @@
-"""Markdown mutations that also record events (ADR 0004, ADR 0005).
+"""The writes to a todo list, one object each (ADR 0004, ADR 0005).
 
-Every mutation edits the raw task line in place and appends an event, so
-the markdown stays authoritative while the journal accumulates history.
-A file with nothing to change is not rewritten at all, so file sync
-sees no change.
+A write object derives the new text of one list and the journal events
+that record it. Its `write` method reads every value first, then writes
+the list, the completed-log records and the events, so the markdown
+stays authoritative while the journal accumulates history. The document
+performs every line edit.
 
-`add_task` and `add_subtask` create rather than edit. A new top-level
-task lands as the last entry of a named list's `## Open` section,
-carrying only the fields the caller gave it plus the `[ADDED:]` and
-`[ID:]` btodo owns. A subtask lands last in its parent's block, one
-indent level deeper: the markdown states the relation by indentation,
-and the event names the parent by id.
+`Addition` and `SubtaskAddition` create a task. A top-level task
+lands last in the `## Open` section of a named list and carries only
+the fields the caller gave it, plus the `[ADDED:]` and `[ID:]` btodo
+owns. A subtask lands last in its parent's block, one level deeper:
+the file states the relation by indentation, and the event names the
+parent by id.
 
-`complete` implements SCHEMA.md's completion rules: log the ancestry to
-`completed.md`, mark `[x]`, remove the block once the whole thing is
-done, and reschedule a recurring task instead of deleting it. `scratch`
-is the same plumbing for abandoning a task rather than finishing it:
-the block goes, the log records it as SCRATCHED, and nothing cascades
-or reschedules. `update_task` edits a task in place: it writes the
-fields and the title it is given and touches nothing else. `backfill`
-stamps `[ADDED:]` once on every task that lacks it.
+`Completion` follows SCHEMA.md's completion rules: it logs the
+ancestry to `completed.md`, checks the box, removes the block once all
+of it is done, and reschedules a recurring task instead of removing
+it. `Scratch` abandons a task: the block goes, the log records it as
+SCRATCHED, and nothing cascades or reschedules. `Update` sets the
+fields and the title it is given and leaves the rest of the list.
+`Backfill` stamps `[ADDED:]` once on every task that lacks it, and
+leaves a list with nothing to stamp unwritten, so file sync sees no
+change.
 
-Each write to an existing task consumes the `Task` its caller built,
+A write to an existing task is built on the `Task` its caller built,
 so the write edits the document that selection read.
 """
 
