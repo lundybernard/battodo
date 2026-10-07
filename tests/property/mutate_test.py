@@ -1,11 +1,11 @@
-"""Characterization tests for the list writes.
+"""Property tests for the list writes, driven by Hypothesis.
 
-Temporary scaffolding for the move of `battodo.mutate` onto write
-objects. Each case writes a source drawn from the schema grammar, runs
-one write entry point of `battodo.lib` on it, and pins the answer and
-what the source holds after the write: the list files, the completed
-log and the journal. The expected outcome derives from the drawn source
-and the clock, never from the code under test.
+Each case writes a source drawn from the schema grammar, runs one write
+entry point of `battodo.lib` on it, and asserts the answer and what the
+source holds after the write: the list files, the completed log and the
+journal. The expected outcome derives from the drawn source and the
+clock, never from the code under test. The cases began as the mutate
+slice's oracle and outlived it (R4).
 
 A new task id is random, so each case draws new ids from a stand-in,
 and the two outcomes compare up to a renaming of the new ids.
@@ -39,9 +39,10 @@ from battodo.mutate import ListError
 from battodo.parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from battodo.repeat import next_due
 from battodo.selector import SelectionError
-from tests.property.item_test import item_selectors
-from tests.property.strategies import NEARBY, TODAY, Node, grammar
-from tests.property.task_test import LIST_FILE, Answer, descend, outcome
+
+from .item_test import item_selectors
+from .strategies import NEARBY, TODAY, Node, grammar
+from .task_test import LIST_FILE, Answer, descend, outcome
 
 # The clock every write runs at. Its day is TODAY.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
@@ -60,6 +61,8 @@ NEW_ID = 'fresh[{:04}'
 NEW_ID_RE = re.compile(r'fresh\[\d{4,}')
 # The event fields that differ on every run.
 VOLATILE = frozenset({'event_id', 'occurred_at', 'recorded_at'})
+# The errors a write refuses with, before it writes anything.
+REFUSALS = (ListError, SelectionError, ValueError)
 # The options a write reads, by the field each supplies, in the order
 # the write passes them on.
 ADD_OPTIONS = {
@@ -81,7 +84,7 @@ INDENT = '  '
 
 
 class AddItemTests(TestCase):
-    """Characterization tests for battodo.lib.add_item."""
+    """Property tests for battodo.lib.add_item."""
 
     maxDiff = None
 
@@ -147,7 +150,7 @@ class AddItemTests(TestCase):
 
 
 class UpdateItemTests(TestCase):
-    """Characterization tests for battodo.lib.update_item."""
+    """Property tests for battodo.lib.update_item."""
 
     maxDiff = None
 
@@ -175,7 +178,7 @@ class UpdateItemTests(TestCase):
 
 
 class CompleteItemTests(TestCase):
-    """Characterization tests for battodo.lib.complete_item."""
+    """Property tests for battodo.lib.complete_item."""
 
     maxDiff = None
 
@@ -201,7 +204,7 @@ class CompleteItemTests(TestCase):
 
 
 class ScratchItemTests(TestCase):
-    """Characterization tests for battodo.lib.scratch_item."""
+    """Property tests for battodo.lib.scratch_item."""
 
     maxDiff = None
 
@@ -227,7 +230,7 @@ class ScratchItemTests(TestCase):
 
 
 class BackfillItemsTests(TestCase):
-    """Characterization tests for battodo.lib.backfill_items."""
+    """Property tests for battodo.lib.backfill_items."""
 
     maxDiff = None
 
@@ -288,7 +291,7 @@ def foreseen(
     """
     try:
         found = model(before, *args)
-    except (ListError, SelectionError, ValueError) as error:
+    except REFUSALS as error:
         found = Outcome(refusal(error), before)
     return canonical(found)
 
@@ -315,8 +318,7 @@ def added(
     }
     doc = TodoDocument(before.lists[name])
     index = doc.append_open(f'- [ ] {title}')
-    for field, value in fields.items():
-        doc.set_field(index, field, value)
+    doc.set_fields(index, fields)
     entry = doc.lines[index]
     payload = addition(entry, fields)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
@@ -360,7 +362,7 @@ def observed(
         new_task_id.side_effect = new_ids()
         try:
             answer = write(conf, NOW)
-        except (ListError, SelectionError, ValueError) as error:
+        except REFUSALS as error:
             answer = refusal(error)
     named = answer.replace(str(directory), SOURCE)
     after = held(directory)
@@ -398,9 +400,7 @@ def added_below(
     fields = supplied(options, ADD_OPTIONS)
     refuse_root_fields(fields)
     values = checked(fields)
-    if isinstance(found, str):
-        raise SelectionError(found)
-    _, text, ancestry = found
+    text, ancestry = reached(found)
     if name != LIST_FILE:
         raise ValueError(f'{parent!r} names a task in {LIST_FILE}, not {name}')
     node = ancestry[-1]
@@ -412,11 +412,10 @@ def added_below(
     doc = TodoDocument(text)
     if stamped:
         doc.set_field(node.raw_index, 'ID', parent_id)
-    index = max(block(node)) + 1
+    index = max(node.block) + 1
     indent = ' ' * (node.indent + len(INDENT))
-    doc.lines.insert(index, f'{indent}- [ ] {title}')
-    for field, value in child_fields.items():
-        doc.set_field(index, field, value)
+    doc.insert(index, f'{indent}- [ ] {title}')
+    doc.set_fields(index, child_fields)
     entry = doc.lines[index]
     events = []
     if stamped:
@@ -449,9 +448,7 @@ def updated(
     if not fields and title is None:
         raise ValueError('nothing to update: name a field or a title')
     values = checked(fields)
-    if isinstance(found, str):
-        raise SelectionError(found)
-    _, text, ancestry = found
+    text, ancestry = reached(found)
     node = ancestry[-1]
     refuse_checklist_item(node)
     nested = len(ancestry) > 1
@@ -462,8 +459,7 @@ def updated(
     if not node.task_id:
         written_fields['ID'] = task_id
     doc = TodoDocument(text)
-    for field, value in written_fields.items():
-        doc.set_field(node.raw_index, field, value)
+    doc.set_fields(node.raw_index, written_fields)
     if title is not None:
         doc.set_title(node.raw_index, title)
     entry = doc.lines[node.raw_index]
@@ -498,9 +494,7 @@ def completed(before: Source, found: Answer) -> 'Outcome':
     top-level task loses its block, unless it repeats: then it stays
     with a new due date, and only its children go.
     """
-    if isinstance(found, str):
-        raise SelectionError(found)
-    _, text, ancestry = found
+    text, ancestry = reached(found)
     ancestries = cascade(ancestry)
     root = ancestry[0]
     root_done = len(ancestries[-1]) == 1
@@ -513,11 +507,12 @@ def completed(before: Source, found: Answer) -> 'Outcome':
         doc.set_field(root.raw_index, 'ID', ids[root.raw_index])
     if root_done:
         kept = {root.raw_index, *root.note_indices} if repeats else set()
-        lines = dropped(doc.lines, block(root) - kept)
+        doc.drop(root.block - kept)
     else:
         for index, task_id in ids.items():
             doc.set_field(index, 'ID', task_id)
-        lines = checked_off(doc.lines, ancestries)
+        for each in ancestries:
+            doc.mark_done(each[-1].raw_index)
     entries = [
         log_entry(ancestry, 'DONE')
         for ancestry in ancestries
@@ -538,7 +533,7 @@ def completed(before: Source, found: Answer) -> 'Outcome':
         events.append(
             Appended('TaskCompleted', f'task/{stream}', payload, LIST_FILE)
         )
-    lists = {**before.lists, LIST_FILE: '\n'.join(lines)}
+    lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
     after = Source(lists, log, journal(events))
     return Outcome('\n'.join(entries) or 'checked off', after)
@@ -550,16 +545,14 @@ def scratched(before: Source, found: Answer) -> 'Outcome':
     Nothing cascades. A checklist item is not logged, and its event
     lands on the stream of the nearest ancestor that can carry an id.
     """
-    if isinstance(found, str):
-        raise SelectionError(found)
-    _, text, ancestry = found
+    text, ancestry = reached(found)
     node = ancestry[-1]
     stream = stream_task(ancestry)
     stream_id = stream.task_id or next(new_ids())
     doc = TodoDocument(text)
     if stream is not node:
         doc.set_field(stream.raw_index, 'ID', stream_id)
-    lines = dropped(doc.lines, block(node))
+    doc.drop(node.block)
     entries = (
         [] if is_checklist_item(node) else [log_entry(ancestry, 'SCRATCHED')]
     )
@@ -569,7 +562,7 @@ def scratched(before: Source, found: Answer) -> 'Outcome':
         'ancestry': path_of(ancestry),
     }
     event = Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
-    lists = {**before.lists, LIST_FILE: '\n'.join(lines)}
+    lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
     after = Source(lists, log, journal([event]))
     return Outcome('\n'.join(entries) or 'dropped', after)
@@ -813,6 +806,20 @@ def refuse_root_fields(fields: dict[str, str]) -> None:
             )
 
 
+def reached(found: Answer) -> tuple[str, list[TaskNode]]:
+    """The list text and the ancestry of the task a selector reached.
+
+    Raises
+    ------
+    SelectionError
+        The selector reached no open task, or several.
+    """
+    if isinstance(found, str):
+        raise SelectionError(found)
+    _, text, ancestry = found
+    return text, ancestry
+
+
 def refuse_checklist_item(task: TaskNode) -> None:
     """Refuse a checklist item, which a field would promote.
 
@@ -826,14 +833,6 @@ def refuse_checklist_item(task: TaskNode) -> None:
             f'{task.title!r} is a checklist item: a field written to it '
             'would promote it to a subtask'
         )
-
-
-def block(task: TaskNode) -> set[int]:
-    """Every line the task owns: its own, its notes, its children's."""
-    owned = {task.raw_index, *task.note_indices}
-    for child in task.children:
-        owned |= block(child)
-    return owned
 
 
 def snapshot(task: TaskNode) -> dict[str, Any]:
@@ -877,37 +876,6 @@ def stream_ids(ancestries: list[list[TaskNode]]) -> dict[int, str]:
         if stream.raw_index not in ids:
             ids[stream.raw_index] = stream.task_id or next(new)
     return ids
-
-
-def dropped(lines: list[str], drop: set[int]) -> list[str]:
-    """The lines without `drop`.
-
-    When a blank line borders the removed span on each side, the one
-    after it goes too, so no two blanks are left together.
-    """
-    if not drop:
-        return lines
-    before, after = min(drop) - 1, max(drop) + 1
-    blank_pair = (
-        before >= 0
-        and after < len(lines)
-        and not lines[before].strip()
-        and not lines[after].strip()
-    )
-    gone = drop | {after} if blank_pair else drop
-    return [line for index, line in enumerate(lines) if index not in gone]
-
-
-def checked_off(
-    lines: list[str],
-    ancestries: list[list[TaskNode]],
-) -> list[str]:
-    """The lines with the box of each completed task checked."""
-    done = {ancestry[-1].raw_index for ancestry in ancestries}
-    return [
-        line.replace('- [ ]', '- [x]', 1) if index in done else line
-        for index, line in enumerate(lines)
-    ]
 
 
 def log_entry(ancestry: list[TaskNode], status: str) -> str:
