@@ -2,7 +2,7 @@
 
 `TodoDocument` keeps every source line verbatim and records only
 *indices* into that line list, so its text gives the source back byte
-for byte. Every mutation edits one raw line where it stands. Field
+for byte. A field edit rewrites one raw line where it stands. Field
 order varies from line to line, so a line rebuilt from its parsed
 fields would reorder the fields of every line it touched.
 """
@@ -85,15 +85,21 @@ class TaskNode:
         """
         return bool(self.indent) and bool(self.fields)
 
+    @property
+    def block(self) -> set[int]:
+        """Every line the task owns: its own, its notes, its children's."""
+        raise NotImplementedError
+
 
 class TodoDocument:
     """One SCHEMA.md-format todo list, held as the text it was read from.
 
     Tasks record only indices into `lines`, the document's editable
     state, so `text` gives the source back byte for byte until a write.
-    `set_field`, `set_title` and `append_open` are the edits the
-    document performs itself, each rewriting one raw line where it
-    stands.
+    The document performs every edit of a list itself: `set_fields`,
+    `set_field`, `set_title` and `mark_done` rewrite one raw line where
+    it stands, `append_open` and `insert` add a line, and `drop` removes
+    lines. An edit leaves `tasks` as it was read.
     """
 
     def __init__(self, source: str) -> None:
@@ -157,6 +163,16 @@ class TodoDocument:
     def text(self) -> str:
         """The list as it stands; the source until a method writes."""
         return '\n'.join(self.lines)
+
+    def set_fields(self, index: int, fields: dict[str, str]) -> str:
+        """Set each of `fields` on the line at `index`, in order.
+
+        Returns
+        -------
+        str
+            The edited line.
+        """
+        raise NotImplementedError
 
     def set_field(self, index: int, name: str, value: str) -> str:
         """Set `name` to `value` on the line at `index`.
@@ -250,6 +266,39 @@ class TodoDocument:
         )
         self.lines.insert(last + 1, entry)
         return last + 1
+
+    @property
+    def open_end(self) -> int:
+        """Where an entry appended to the `## Open` section goes.
+
+        After the last non-blank line of the section, so the entry
+        follows whatever the previous item ended with -- its notes, its
+        children -- and the blank run before the next heading stays
+        where it is.
+
+        Raises
+        ------
+        StopIteration
+            There is no `## Open` heading.
+        """
+        raise NotImplementedError
+
+    def insert(self, index: int, line: str) -> None:
+        """Insert `line` at `index`. Every later line moves down one."""
+        raise NotImplementedError
+
+    def drop(self, indices: set[int]) -> None:
+        """Remove the lines at `indices`.
+
+        Items are separated by a blank line in some lists and not in
+        others, so only when the removal would leave two blank lines
+        together does the one after the removed span go too.
+        """
+        raise NotImplementedError
+
+    def mark_done(self, index: int) -> None:
+        """Check the box of the task line at `index`."""
+        raise NotImplementedError
 
 
 def parse_date(value: str | None) -> date | None:

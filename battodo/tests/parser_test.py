@@ -25,8 +25,14 @@ OPEN_DOC = """# Work
 # Line indices into OPEN_DOC.
 ALPHA_INDEX = 8
 NOTE_INDEX = 9
+# Alpha's children: the subtask, its checklist item, the checklist child.
+SUB_INDICES = (10, 11, 12)
 BETA_INDEX = 14
 APPEND_INDEX = 15
+ALPHA = (
+    '- [ ] Alpha [P:95] [BUMPED:2026-08-08] [ADDED:2026-07-01] [LOE:8] '
+    '[TAGS:a,b]'
+)
 BETA = '- [x] Beta [P:3] [DUE:2026-01-01] [REPEAT:14d]'
 
 
@@ -134,6 +140,37 @@ class TaskNodeTests(TestCase):
             t.tk.fields = {}
             ret = t.tk.is_subtask
             t.assertFalse(ret)
+
+    def test_block(t) -> None:
+        with t.subTest('a task alone owns its own line'):
+            ret = t.tk.block
+            t.assertEqual(ret, {2})
+
+        with t.subTest('its notes and its children join it, at any depth'):
+            t.tk.note_indices = [3]
+            t.tk.children = [
+                TaskNode(
+                    raw_index=4,
+                    indent=2,
+                    done=False,
+                    title='A subtask',
+                    fields={'LOE': '1'},
+                    children=[
+                        TaskNode(
+                            raw_index=6,
+                            indent=4,
+                            done=False,
+                            title='A checklist item',
+                            fields={},
+                        ),
+                    ],
+                    note_indices=[5],
+                ),
+            ]
+
+            ret = t.tk.block
+
+            t.assertEqual(ret, {2, 3, 4, 5, 6})
 
     def test_raw_index(t) -> None:
         ret = t.tk.raw_index
@@ -267,6 +304,20 @@ class TodoDocumentTests(TestCase):
             ret = tagged.set_field(1, 'TAGS', r'\1\n')
             t.assertEqual(ret, r'- [ ] X [TAGS:\1\n]')
 
+    def test_set_fields(t) -> None:
+        with t.subTest('each field in turn, and the edited line returned'):
+            stamped = f'{BETA.replace("[P:3]", "[P:2]")} [ID:zz01ab]'
+
+            ret = t.td.set_fields(BETA_INDEX, {'P': '2', 'ID': 'zz01ab'})
+
+            t.assertEqual(ret, stamped)
+            t.assertEqual(t.td.lines[BETA_INDEX], stamped)
+
+        with t.subTest('no field leaves the line as it stands'):
+            t.td.lines = OPEN_DOC.split('\n')
+            ret = t.td.set_fields(BETA_INDEX, {})
+            t.assertEqual(ret, BETA)
+
     def test_set_title(t) -> None:
         renamed = BETA.replace('Beta', 'Gamma')
 
@@ -320,3 +371,73 @@ class TodoDocumentTests(TestCase):
             headless = TodoDocument('# Work\n\n## Done\n')
             with t.assertRaises(StopIteration):
                 headless.append_open(entry)
+
+    def test_open_end(t) -> None:
+        with t.subTest('after the last line of the open section'):
+            ret = t.td.open_end
+            t.assertEqual(ret, APPEND_INDEX)
+
+        with t.subTest('under the heading of an empty section'):
+            t.td.lines = ['# Work', '', '## Open', '', '## Done', '']
+            ret = t.td.open_end
+            t.assertEqual(ret, 3)
+
+        with t.subTest('a file with no open section raises'):
+            t.td.lines = ['# Work', '', '## Done', '']
+            with t.assertRaises(StopIteration):
+                _ = t.td.open_end
+
+    def test_insert(t) -> None:
+        line = '  - [ ] New child [LOE:1]'
+        expected = OPEN_DOC.split('\n')
+        expected.insert(BETA_INDEX - 1, line)
+
+        t.td.insert(BETA_INDEX - 1, line)
+
+        # The blank after the block, and every line after it, move down.
+        t.assertEqual(t.td.lines, expected)
+
+    def test_drop(t) -> None:
+        lines = OPEN_DOC.split('\n')
+
+        with t.subTest('a span between blank lines takes one along'):
+            t.td.drop({ALPHA_INDEX, *SUB_INDICES, NOTE_INDEX})
+            # The blank after the span goes, the one before it stays.
+            t.assertEqual(t.td.lines, lines[:ALPHA_INDEX] + lines[14:])
+
+        with t.subTest('a span beside a non-blank line leaves its blanks'):
+            t.td.lines = list(lines)
+            t.td.drop(set(SUB_INDICES))
+            t.assertEqual(t.td.lines, lines[:10] + lines[13:])
+
+        with t.subTest('a span at the end has no line after it to take'):
+            t.td.lines = list(lines)
+            t.td.drop({16, 17})
+            t.assertEqual(t.td.lines, lines[:16])
+
+        with t.subTest('a span at the start has no line before it'):
+            t.td.lines = list(lines)
+            t.td.drop({0})
+            t.assertEqual(t.td.lines, lines[1:])
+
+        with t.subTest('no index leaves every line'):
+            t.td.lines = list(lines)
+            t.td.drop(set())
+            t.assertEqual(t.td.lines, lines)
+
+    def test_mark_done(t) -> None:
+        with t.subTest('the box is checked, the rest of the line kept'):
+            t.td.mark_done(ALPHA_INDEX)
+            ret = t.td.lines[ALPHA_INDEX]
+            t.assertEqual(ret, ALPHA.replace('- [ ]', '- [x]'))
+
+        with t.subTest('an indented task keeps its indent'):
+            t.td.mark_done(SUB_INDICES[0])
+            ret = t.td.lines[SUB_INDICES[0]]
+            t.assertEqual(ret, '  - [x] Sub one [LOE:3]')
+
+        with t.subTest('a box quoted in the title is left alone'):
+            t.td.lines = ['## Open', '- [ ] Quote - [ ] in a title']
+            t.td.mark_done(1)
+            ret = t.td.lines[1]
+            t.assertEqual(ret, '- [x] Quote - [ ] in a title')

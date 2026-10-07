@@ -21,6 +21,9 @@ STAMPED = f'{OVERDUE} [ID:zz01ab]'
 # The line an appended entry takes: after the last open entry, and
 # before the blank run that precedes the next heading.
 APPENDED_INDEX = 15
+# The task with children in `work.md`, and every line of its block.
+PARENT_INDEX = 6
+PARENT_BLOCK = {6, 7, 8, 9}
 
 # Every construct the parser branches on, one case each. The titles
 # name the role the line plays, not any real task.
@@ -79,6 +82,19 @@ class RoundTripTests(TestCase):
             with t.subTest(name):
                 ret = round_trip(text)
                 t.assertEqual(ret, text)
+
+
+class TaskNodeTests(TestCase):
+    """Contract tests for battodo.parser.TaskNode, against a real list."""
+
+    def setUp(t) -> None:
+        tasks = TodoDocument(WORK.read_text(encoding='utf-8')).tasks
+        t.tk = next(task for task in tasks if task.raw_index == PARENT_INDEX)
+
+    def test_block(t) -> None:
+        ret = t.tk.block
+        # The task line, then its three children, one level down.
+        t.assertEqual(ret, PARENT_BLOCK)
 
 
 class TodoDocumentTests(TestCase):
@@ -167,6 +183,15 @@ class TodoDocumentTests(TestCase):
             ret = t.td.set_field(OVERDUE_INDEX, 'P', r'a\nb')
             t.assertEqual(ret, STAMPED.replace('[P:4]', r'[P:a\nb]'))
 
+    def test_set_fields(t) -> None:
+        stamped = STAMPED.replace('[P:4]', '[P:2]')
+
+        ret = t.td.set_fields(OVERDUE_INDEX, {'P': '2', 'ID': 'zz01ab'})
+
+        with t.subTest('each field in turn, and the line returned'):
+            t.assertEqual(ret, stamped)
+            t.assertEqual(t.td.lines[OVERDUE_INDEX], stamped)
+
     def test_set_title(t) -> None:
         renamed = OVERDUE.replace('Overdue task', 'Renamed task')
 
@@ -197,3 +222,47 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('and every other line keeps its text and order'):
             t.assertEqual(t.td.text, '\n'.join(expected))
+
+    def test_open_end(t) -> None:
+        ret = t.td.open_end
+        # After the last open entry, before the blank run that ends it.
+        t.assertEqual(ret, APPENDED_INDEX)
+
+    def test_insert(t) -> None:
+        line = '  - [ ] Inserted subtask [LOE:1]'
+        index = max(PARENT_BLOCK) + 1
+        expected = t.source.split('\n')
+        expected.insert(index, line)
+
+        t.td.insert(index, line)
+
+        with t.subTest('the line takes the index, every later line moves'):
+            t.assertEqual(t.td.text, '\n'.join(expected))
+
+    def test_drop(t) -> None:
+        with t.subTest('the lines go, and every other line stays'):
+            kept = [
+                line
+                for index, line in enumerate(t.source.split('\n'))
+                    if index not in PARENT_BLOCK
+            ]  # fmt: skip
+
+            t.td.drop(PARENT_BLOCK)
+
+            t.assertEqual(t.td.text, '\n'.join(kept))
+
+        with t.subTest('a blank on either side leaves one blank behind'):
+            spaced = TodoDocument(SHAPES['blank runs between entries'])
+
+            spaced.drop({9})
+
+            t.assertEqual(
+                spaced.text,
+                '# Roles\n\n## Open\n\n\n- [ ] First task [P:1]\n\n\n\n'
+                '## Done\n',
+            )
+
+    def test_mark_done(t) -> None:
+        t.td.mark_done(OVERDUE_INDEX)
+        ret = t.td.lines[OVERDUE_INDEX]
+        t.assertEqual(ret, OVERDUE.replace('- [ ]', '- [x]'))
