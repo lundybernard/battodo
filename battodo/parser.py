@@ -88,7 +88,10 @@ class TaskNode:
     @property
     def block(self) -> set[int]:
         """Every line the task owns: its own, its notes, its children's."""
-        raise NotImplementedError
+        owned = {self.raw_index, *self.note_indices}
+        for child in self.children:
+            owned |= child.block
+        return owned
 
 
 class TodoDocument:
@@ -172,7 +175,9 @@ class TodoDocument:
         str
             The edited line.
         """
-        raise NotImplementedError
+        for name, value in fields.items():
+            self.set_field(index, name, value)
+        return self.lines[index]
 
     def set_field(self, index: int, name: str, value: str) -> str:
         """Set `name` to `value` on the line at `index`.
@@ -228,11 +233,6 @@ class TodoDocument:
     def append_open(self, entry: str) -> int:
         """Insert `entry` as the last entry of the `## Open` section.
 
-        The insertion point is after the last non-blank line of the
-        section, so the entry follows whatever the previous item ended
-        with -- its notes, its children -- and the blank run before the
-        next heading stays where it is.
-
         Returns
         -------
         int
@@ -245,27 +245,9 @@ class TodoDocument:
             file a todo list at all, so `discover_lists` has already
             ruled this out for every caller that goes through it.
         """
-        start = next(
-            index
-            for index, line in enumerate(self.lines)
-            if line.strip() == OPEN_HEADING
-        )
-        end = next(
-            (
-                index
-                for index in range(start + 1, len(self.lines))
-                if self.lines[index].strip().startswith('## ')
-            ),
-            len(self.lines),
-        )
-        # `start` is itself non-blank, so an empty section appends
-        # directly under the heading rather than falling off the front
-        # of the file.
-        last = max(
-            index for index in range(start, end) if self.lines[index].strip()
-        )
-        self.lines.insert(last + 1, entry)
-        return last + 1
+        index = self.open_end
+        self.insert(index, entry)
+        return index
 
     @property
     def open_end(self) -> int:
@@ -281,11 +263,32 @@ class TodoDocument:
         StopIteration
             There is no `## Open` heading.
         """
-        raise NotImplementedError
+        start = next(
+            index
+            for index, line in enumerate(self.lines)
+                if line.strip() == OPEN_HEADING
+        )  # fmt: skip
+        end = next(
+            (
+                index
+                for index in range(start + 1, len(self.lines))
+                    if self.lines[index].strip().startswith('## ')
+            ),
+            len(self.lines),
+        )  # fmt: skip
+        # `start` is itself non-blank, so an empty section appends
+        # directly under the heading rather than falling off the front
+        # of the file.
+        last = max(
+            index
+            for index in range(start, end)
+                if self.lines[index].strip()
+        )  # fmt: skip
+        return last + 1
 
     def insert(self, index: int, line: str) -> None:
         """Insert `line` at `index`. Every later line moves down one."""
-        raise NotImplementedError
+        self.lines.insert(index, line)
 
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.
@@ -294,11 +297,25 @@ class TodoDocument:
         others, so only when the removal would leave two blank lines
         together does the one after the removed span go too.
         """
-        raise NotImplementedError
+        if not indices:
+            return
+        before, after = min(indices) - 1, max(indices) + 1
+        blank_pair = (
+            before >= 0
+            and after < len(self.lines)
+            and not self.lines[before].strip()
+            and not self.lines[after].strip()
+        )
+        gone = indices | {after} if blank_pair else indices
+        self.lines[:] = [
+            line
+            for index, line in enumerate(self.lines)
+                if index not in gone
+        ]  # fmt: skip
 
     def mark_done(self, index: int) -> None:
         """Check the box of the task line at `index`."""
-        raise NotImplementedError
+        self.lines[index] = self.lines[index].replace('- [ ]', '- [x]', 1)
 
 
 def parse_date(value: str | None) -> date | None:
