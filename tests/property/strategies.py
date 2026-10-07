@@ -20,6 +20,7 @@ from typing import NamedTuple
 from hypothesis import strategies as st
 
 from battodo.parser import FIELD_NAMES, OPEN_HEADING
+from battodo.repeat import WEEKDAYS
 
 # The day the suites read at.
 TODAY = date(2026, 8, 5)
@@ -166,10 +167,10 @@ class Grammar:
     def field_values(self) -> st.SearchStrategy[str]:
         """A field value is anything up to the closing bracket.
 
-        Text that short seldom spells an ISO date or a whole number, so
-        both are drawn apart. A whole number reads as an `LOE` or as a
-        `P`, the legacy scale included. Some dates fall near TODAY, where
-        an age and a due date weigh on a rank.
+        Text that short seldom spells an ISO date, a whole number or a
+        recurrence, so each is drawn apart. A whole number reads as an
+        `LOE` or as a `P`, the legacy scale included. Some dates fall
+        near TODAY, where an age and a due date weigh on a rank.
         """
         return st.one_of(
             st.text(
@@ -185,7 +186,26 @@ class Grammar:
                 max_value=TODAY + NEARBY,
             ).map(date.isoformat),
             st.integers(min_value=0, max_value=130).map(str),
+            self.repeats,
         )
+
+    @cached_property
+    def repeats(self) -> st.SearchStrategy[str]:
+        """A `REPEAT` value the scheduler reads: an interval or a schedule.
+
+        The three forms draw as one strategy, so a `one_of` that holds
+        this one gives a repeat the weight of one branch, not three.
+        """
+        forms = [
+            st.builds(
+                interval_text,
+                st.integers(min_value=1, max_value=60),
+                st.sampled_from('dw'),
+            ),
+            st.sampled_from(WEEKDAYS).map('weekly:{}'.format),
+            st.integers(min_value=1, max_value=31).map('monthly:{}'.format),
+        ]
+        return st.sampled_from(forms).flatmap(lambda form: form)
 
     @cached_property
     def one_field(self) -> st.SearchStrategy[str]:
@@ -315,6 +335,11 @@ def note_line(indent: int, text: str) -> str:
 def field_text(name: str, value: str) -> str:
     """One field, written as the parser's field pattern."""
     return f' [{name}:{value}]'
+
+
+def interval_text(count: int, unit: str) -> str:
+    """One interval recurrence: a count of days or of weeks."""
+    return f'{count}{unit}'
 
 
 def document(lines: list[str]) -> str:
