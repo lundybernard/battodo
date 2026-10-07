@@ -103,7 +103,7 @@ class TaskNode:
         distinguishes a subtask from a checklist item, so injecting one
         would silently promote the line.
         """
-        raise NotImplementedError
+        return bool(self.indent) and not self.fields
 
     @property
     def block(self) -> set[int]:
@@ -120,12 +120,20 @@ class TaskNode:
         Snapshots are what make a later authority flip replayable
         despite hand-edits that never reached the journal.
         """
-        raise NotImplementedError
+        return {
+            'title': self.title,
+            'done': self.done,
+            'fields': dict(self.fields),
+        }
 
     @property
     def schema_fields(self) -> dict[str, str]:
         """The fields SCHEMA.md names, in its order."""
-        raise NotImplementedError
+        return {
+            name: self.fields[name]
+            for name in SCHEMA_FIELDS
+                if name in self.fields
+        }  # fmt: skip
 
     @property
     def needs_added(self) -> bool:
@@ -136,7 +144,13 @@ class TaskNode:
         rewriting a line btodo cannot interpret is exactly the
         corruption the round-trip guarantee exists to prevent.
         """
-        raise NotImplementedError
+        if self.done or self.indent or self.added:
+            return False
+        return all(
+            parse_date(self.fields[name]) is not None
+            for name in DATE_FIELDS
+                if name in self.fields
+        )  # fmt: skip
 
     def refuse_checklist_item(self) -> None:
         """Refuse a field written to the task if it is a checklist item.
@@ -147,7 +161,11 @@ class TaskNode:
             The task is a checklist item. Any field written to one, an
             `[ID:]` included, promotes it to a subtask (SCHEMA.md).
         """
-        raise NotImplementedError
+        if self.is_checklist_item:
+            raise ValueError(
+                f'{self.title!r} is a checklist item: a field written to it '
+                'would promote it to a subtask'
+            )
 
 
 class Ancestry:
@@ -159,12 +177,12 @@ class Ancestry:
     @property
     def node(self) -> TaskNode:
         """The task the ancestry ends at."""
-        raise NotImplementedError
+        return self.tasks[-1]
 
     @property
     def path(self) -> str:
         """The `Parent > Child` path SCHEMA.md logs a nested task under."""
-        raise NotImplementedError
+        return ANCESTRY_SEPARATOR.join(task.title for task in self.tasks)
 
     @property
     def stream(self) -> TaskNode:
@@ -174,7 +192,11 @@ class Ancestry:
         `[ID:]`, so its events are recorded against the nearest ancestor
         that can -- at worst the top-level task, which never is one.
         """
-        raise NotImplementedError
+        return next(
+            task
+            for task in reversed(self.tasks)
+                if not task.is_checklist_item
+        )  # fmt: skip
 
 
 class TodoDocument:
