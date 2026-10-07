@@ -956,126 +956,6 @@ class Changeset:
             )
 
 
-class Event(NamedTuple):
-    """One journal event a write records."""
-
-    type: str
-    stream: str
-    payload: dict[str, Any]
-
-
-class ListBackfill:
-    """The backfill of one list: `[ADDED:today]` where a task has none.
-
-    `today` is the migration date, not the real add date: that is not
-    recoverable from the files (ADR 0005). Age accrues from here.
-    """
-
-    def __init__(self, path: Path, today: date) -> None:
-        self.path = path
-        self.today = today
-
-    def write(self) -> None:
-        """Write the list, its log records and its events.
-
-        Every value is read before the first write, so a refused write
-        writes nothing.
-        """
-        changes = Changeset(
-            self.text,
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
-
-    @property
-    def source(self) -> Path:
-        """The source directory that holds the list."""
-        return self.path.parent
-
-    @property
-    def text(self) -> str:
-        """The list with every stamp written."""
-        return self.document.text
-
-    @property
-    def document(self) -> TodoDocument:
-        """The list as read, each task to stamp given its date and id."""
-        doc = TodoDocument(self.parsed.text)
-        for index, fields in self.stamps.items():
-            doc.set_fields(index, fields)
-        return doc
-
-    @cached_property
-    def parsed(self) -> TodoDocument:
-        """The list as read.
-
-        Cached: one read of the file answers every property.
-        """
-        return TodoDocument(self.path.read_text())
-
-    @property
-    def stamps(self) -> dict[int, dict[str, str]]:
-        """The fields each task to stamp gains, by its line.
-
-        A task with no id gains one beside its add date.
-        """
-        stamps = {}
-        for task in self.tasks:
-            fields = {'ADDED': self.today.isoformat()}
-            if not task.task_id:
-                fields['ID'] = self.ids[task.raw_index]
-            stamps[task.raw_index] = fields
-        return stamps
-
-    @property
-    def tasks(self) -> list[TaskNode]:
-        """The open top-level tasks to stamp, in file order."""
-        return [
-            task
-            for task in self.parsed.tasks
-                if task.needs_added
-        ]  # fmt: skip
-
-    @cached_property
-    def ids(self) -> dict[int, str]:
-        """The id of each task to stamp, by its line.
-
-        A task with no id takes a new one. Cached: a new id is drawn at
-        random, so every read names one.
-        """
-        return {
-            task.raw_index: task.task_id or new_task_id()
-            for task in self.tasks
-        }
-
-    @property
-    def entries(self) -> list[str]:
-        """None: a backfill logs no completed-log record."""
-        return []
-
-    @property
-    def events(self) -> list['Event']:
-        """One `TaskAdded` per task stamped.
-
-        The date is the migration's, not the task's, so the payload says
-        so: a replay must not read it as an observed fact.
-        """
-        delta = {'ADDED': [None, self.today.isoformat()]}
-        events = []
-        for task in self.tasks:
-            payload = {
-                'delta': delta,
-                'snapshot': task.snapshot,
-                'backfilled': True,
-            }
-            stream = f'task/{self.ids[task.raw_index]}'
-            events.append(Event(ADDED_EVENT, stream, payload))
-        return events
-
-
 class NamedList:
     """The discovered list of a source whose filename stem is a name.
 
@@ -1194,6 +1074,14 @@ class SuppliedFields:
                 )
 
 
+class Event(NamedTuple):
+    """One journal event a write records."""
+
+    type: str
+    stream: str
+    payload: dict[str, Any]
+
+
 class AddedLine:
     """A task line an add writes, as its `TaskAdded` records it."""
 
@@ -1249,3 +1137,115 @@ class LogEntry:
         """The SCHEMA.md fields of the task, in SCHEMA.md order."""
         ordered = self.ancestry.node.schema_fields
         return ' '.join(f'[{name}:{value}]' for name, value in ordered.items())
+
+
+class ListBackfill:
+    """The backfill of one list: `[ADDED:today]` where a task has none.
+
+    `today` is the migration date, not the real add date: that is not
+    recoverable from the files (ADR 0005). Age accrues from here.
+    """
+
+    def __init__(self, path: Path, today: date) -> None:
+        self.path = path
+        self.today = today
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        changes = Changeset(
+            self.text,
+            self.entries,
+            self.events,
+            self.path,
+            self.source,
+        )
+        changes.write()
+
+    @property
+    def source(self) -> Path:
+        """The source directory that holds the list."""
+        return self.path.parent
+
+    @property
+    def text(self) -> str:
+        """The list with every stamp written."""
+        return self.document.text
+
+    @property
+    def document(self) -> TodoDocument:
+        """The list as read, each task to stamp given its date and id."""
+        doc = TodoDocument(self.parsed.text)
+        for index, fields in self.stamps.items():
+            doc.set_fields(index, fields)
+        return doc
+
+    @cached_property
+    def parsed(self) -> TodoDocument:
+        """The list as read.
+
+        Cached: one read of the file answers every property.
+        """
+        return TodoDocument(self.path.read_text())
+
+    @property
+    def stamps(self) -> dict[int, dict[str, str]]:
+        """The fields each task to stamp gains, by its line.
+
+        A task with no id gains one beside its add date.
+        """
+        stamps = {}
+        for task in self.tasks:
+            fields = {'ADDED': self.today.isoformat()}
+            if not task.task_id:
+                fields['ID'] = self.ids[task.raw_index]
+            stamps[task.raw_index] = fields
+        return stamps
+
+    @property
+    def tasks(self) -> list[TaskNode]:
+        """The open top-level tasks to stamp, in file order."""
+        return [
+            task
+            for task in self.parsed.tasks
+                if task.needs_added
+        ]  # fmt: skip
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each task to stamp, by its line.
+
+        A task with no id takes a new one. Cached: a new id is drawn at
+        random, so every read names one.
+        """
+        return {
+            task.raw_index: task.task_id or new_task_id()
+            for task in self.tasks
+        }
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a backfill logs no completed-log record."""
+        return []
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskAdded` per task stamped.
+
+        The date is the migration's, not the task's, so the payload says
+        so: a replay must not read it as an observed fact.
+        """
+        delta = {'ADDED': [None, self.today.isoformat()]}
+        events = []
+        for task in self.tasks:
+            payload = {
+                'delta': delta,
+                'snapshot': task.snapshot,
+                'backfilled': True,
+            }
+            stream = f'task/{self.ids[task.raw_index]}'
+            events.append(Event(ADDED_EVENT, stream, payload))
+        return events
