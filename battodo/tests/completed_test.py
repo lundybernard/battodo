@@ -302,6 +302,11 @@ class DigestViewTests(TestCase):
             ret = DigestView(t.digest).widths
             t.assertEqual(ret, [10, len('TASK')])
 
+        with t.subTest('and with no records, the names alone'):
+            t.digest.records = []
+            ret = DigestView(t.digest).widths
+            t.assertEqual(ret, [len('DATE'), len('TASK')])
+
     def test_tables(t) -> None:
         ret = t.v.tables
         t.assertEqual([table.group for table in ret], t.digest.groups)

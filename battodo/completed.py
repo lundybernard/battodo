@@ -232,10 +232,12 @@ class DigestView:
         all of the tables and the columns line up down the whole page.
         """
         records = self.digest.records
-        return [
-            max([len(name), *(len(record.cells[index]) for record in records)])
-            for index, name in enumerate(COLUMNS)
-        ]
+        widths = []
+        for index, name in enumerate(COLUMNS):
+            cells = [len(record.cells[index]) for record in records]
+            width = max([len(name), *cells])
+            widths.append(width)
+        return widths
 
     @cached_property
     def tables(self) -> list['Table']:
