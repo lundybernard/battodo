@@ -163,6 +163,10 @@ class TodoDocumentTests(TestCase):
             ret = t.td.set_field(OVERDUE_INDEX, 'P', '2')
             t.assertEqual(ret, STAMPED.replace('[P:4]', '[P:2]'))
 
+        with t.subTest('a value is written as given, a backslash too'):
+            ret = t.td.set_field(OVERDUE_INDEX, 'P', r'a\nb')
+            t.assertEqual(ret, STAMPED.replace('[P:4]', r'[P:a\nb]'))
+
     def test_set_title(t) -> None:
         renamed = OVERDUE.replace('Overdue task', 'Renamed task')
 

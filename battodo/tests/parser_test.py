@@ -262,6 +262,11 @@ class TodoDocumentTests(TestCase):
             ret = spaced.set_field(1, 'ID', 'zz01ab')
             t.assertEqual(ret, '- [ ] X [P:2] [ID:zz01ab]')
 
+        with t.subTest('a replacing value keeps its backslashes'):
+            tagged = TodoDocument('## Open\n- [ ] X [TAGS:a-tag]\n')
+            ret = tagged.set_field(1, 'TAGS', r'\1\n')
+            t.assertEqual(ret, r'- [ ] X [TAGS:\1\n]')
+
     def test_set_title(t) -> None:
         renamed = BETA.replace('Beta', 'Gamma')
 
