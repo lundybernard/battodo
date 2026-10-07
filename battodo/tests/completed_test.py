@@ -1,20 +1,23 @@
 from datetime import date, datetime, timezone
-from json import loads
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..completed import (
     DEFAULT_PERIOD,
     CompletedError,
     Digest,
+    DigestJsonView,
     DigestView,
     Group,
+    GroupJsonView,
     Record,
+    RecordJsonView,
     Table,
     read_record,
 )
 
+SRC = 'battodo.completed'
 TODAY = date(2026, 8, 5)
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
 # Two records of one category, one of another, one outside every
@@ -29,102 +32,6 @@ LOG = """\
 """
 # Wide enough to lay a short record out.
 WIDTHS = [10, 20]
-
-
-class ReadRecordTests(TestCase):
-    """Unit tests for battodo.completed.read_record."""
-
-    def test_record(t) -> None:
-        ret = read_record('2026-08-04 | chores | DONE | A completed task')
-
-        t.assertEqual(
-            ret,
-            Record(date(2026, 8, 4), 'chores', 'A completed task'),
-        )
-
-    def test_title(t) -> None:
-        titles = {
-            'the title keeps its ancestry, and loses its fields': (
-                '2026-08-04 | work | DONE | Deck > Chip [LOE:2] [P:4]',
-                'Deck > Chip',
-            ),
-            'a field inside a title leaves no gap behind': (
-                '2026-08-04 | work | DONE | Ship [P:4] it',
-                'Ship it',
-            ),
-            'a separator inside a title is part of the title': (
-                '2026-08-04 | work | DONE | Ship it | today',
-                'Ship it | today',
-            ),
-        }
-
-        for name, (line, title) in titles.items():
-            with t.subTest(name):
-                ret = read_record(line)
-
-                t.assertEqual(
-                    ret,
-                    Record(date(2026, 8, 4), 'work', title),
-                )
-
-    def test_skipped(t) -> None:
-        skipped = {
-            'an abandoned task is no completion': (
-                '2026-08-04 | work | SCRATCHED | Drop it'
-            ),
-            'a comment carries no date': (
-                '<!-- YYYY-MM-DD | CATEGORY | DONE | TITLE -->'
-            ),
-            'a heading is not a record': '# Completed Tasks',
-            'a blank line holds nothing': '',
-            'and neither does prose': 'this line is not a record',
-        }
-
-        for name, line in skipped.items():
-            with t.subTest(name):
-                ret = read_record(line)
-                t.assertIsNone(ret)
-
-
-class RecordTests(TestCase):
-    """Unit tests for battodo.completed.Record."""
-
-    def setUp(t) -> None:
-        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
-
-    def test_cells(t) -> None:
-        ret = t.r.cells
-        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
-
-    def test_entry(t) -> None:
-        ret = t.r.entry
-
-        t.assertEqual(
-            ret,
-            {'date': '2026-08-04', 'title': 'A parent > A record'},
-        )
-
-
-class GroupTests(TestCase):
-    """Unit tests for battodo.completed.Group."""
-
-    def setUp(t) -> None:
-        t.g = Group(
-            'side-quests',
-            [Record(date(2026, 8, 4), 'side-quests', 'A record')],
-        )
-
-    def test_title(t) -> None:
-        ret = t.g.title
-        t.assertEqual(ret, 'Side quests')
-
-    def test_entries(t) -> None:
-        ret = t.g.entries
-
-        t.assertEqual(
-            ret,
-            [{'date': '2026-08-04', 'title': 'A record'}],
-        )
 
 
 class DigestTests(TestCase):
@@ -229,49 +136,6 @@ class DigestTests(TestCase):
                 ['Oldest in the week', 'Completed today'],
             )
 
-    def test_data(t) -> None:
-        ret = t.d.data
-
-        t.assertEqual(
-            ret,
-            {
-                'period': 'week',
-                'start': '2026-07-30',
-                'end': '2026-08-05',
-                'total': 3,
-                'categories': [
-                    {
-                        'name': 'work',
-                        'entries': [
-                            {
-                                'date': '2026-07-30',
-                                'title': 'Oldest in the week',
-                            },
-                            {'date': '2026-08-05', 'title': 'Completed today'},
-                        ],
-                    },
-                    {
-                        'name': 'unlisted',
-                        'entries': [
-                            {
-                                'date': '2026-08-02',
-                                'title': 'In the other category',
-                            }
-                        ],
-                    },
-                ],
-            },
-        )
-
-    def test_json(t) -> None:
-        ret = t.d.json
-
-        with t.subTest('what comes back is the digest, serialized'):
-            t.assertEqual(loads(ret), t.d.data)
-
-        with t.subTest('indented for a person to read as well'):
-            t.assertIn('\n  "period": "week"', ret)
-
 
 class DigestFromConfigTests(TestCase):
     """Unit tests for battodo.completed.Digest.from_config.
@@ -309,42 +173,81 @@ class DigestFromConfigTests(TestCase):
             t.assertEqual(ret.period, DEFAULT_PERIOD)
 
 
-class TableTests(TestCase):
-    """Unit tests for battodo.completed.Table."""
+class RecordTests(TestCase):
+    """Unit tests for battodo.completed.Record."""
 
     def setUp(t) -> None:
-        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
-        t.table = Table(t.group, WIDTHS)
+        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
 
-    def test_heading(t) -> None:
-        with t.subTest('a titled rule spanning the table'):
-            ret = t.table.heading
-            t.assertEqual(ret, '── Work ' + '─' * 26)
+    def test_cells(t) -> None:
+        ret = t.r.cells
+        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
 
-        with t.subTest('a title of its own length rules no further'):
-            wide = Table(Group('a' * 40, []), WIDTHS)
-            ret = wide.heading
-            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
 
-    def test_line(t) -> None:
-        with t.subTest('each cell padded to its column'):
-            ret = t.table.line(('a', 'b'))
-            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
+class ReadRecordTests(TestCase):
+    """Unit tests for battodo.completed.read_record."""
 
-        with t.subTest('trailing space is stripped'):
-            ret = t.table.line(('', ''))
-            t.assertEqual(ret, '')
-
-    def test_lines(t) -> None:
-        ret = t.table.lines
+    def test_record(t) -> None:
+        ret = read_record('2026-08-04 | chores | DONE | A completed task')
 
         t.assertEqual(
             ret,
-            [
-                '  DATE        TASK',
-                '  2026-08-05  Ship it',
-            ],
+            Record(date(2026, 8, 4), 'chores', 'A completed task'),
         )
+
+    def test_title(t) -> None:
+        titles = {
+            'the title keeps its ancestry, and loses its fields': (
+                '2026-08-04 | work | DONE | Deck > Chip [LOE:2] [P:4]',
+                'Deck > Chip',
+            ),
+            'a field inside a title leaves no gap behind': (
+                '2026-08-04 | work | DONE | Ship [P:4] it',
+                'Ship it',
+            ),
+            'a separator inside a title is part of the title': (
+                '2026-08-04 | work | DONE | Ship it | today',
+                'Ship it | today',
+            ),
+        }
+
+        for name, (line, title) in titles.items():
+            with t.subTest(name):
+                ret = read_record(line)
+
+                t.assertEqual(
+                    ret,
+                    Record(date(2026, 8, 4), 'work', title),
+                )
+
+    def test_skipped(t) -> None:
+        skipped = {
+            'an abandoned task is no completion': (
+                '2026-08-04 | work | SCRATCHED | Drop it'
+            ),
+            'a comment carries no date': (
+                '<!-- YYYY-MM-DD | CATEGORY | DONE | TITLE -->'
+            ),
+            'a heading is not a record': '# Completed Tasks',
+            'a blank line holds nothing': '',
+            'and neither does prose': 'this line is not a record',
+        }
+
+        for name, line in skipped.items():
+            with t.subTest(name):
+                ret = read_record(line)
+                t.assertIsNone(ret)
+
+
+class GroupTests(TestCase):
+    """Unit tests for battodo.completed.Group."""
+
+    def setUp(t) -> None:
+        t.g = Group('side-quests', [])
+
+    def test_title(t) -> None:
+        ret = t.g.title
+        t.assertEqual(ret, 'Side quests')
 
 
 class DigestViewTests(TestCase):
@@ -399,6 +302,11 @@ class DigestViewTests(TestCase):
             ret = DigestView(t.digest).widths
             t.assertEqual(ret, [10, len('TASK')])
 
+        with t.subTest('and with no records, the names alone'):
+            t.digest.records = []
+            ret = DigestView(t.digest).widths
+            t.assertEqual(ret, [len('DATE'), len('TASK')])
+
     def test_tables(t) -> None:
         ret = t.v.tables
         t.assertEqual([table.group for table in ret], t.digest.groups)
@@ -427,3 +335,148 @@ class DigestViewTests(TestCase):
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
+
+
+class TableTests(TestCase):
+    """Unit tests for battodo.completed.Table."""
+
+    def setUp(t) -> None:
+        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
+        t.table = Table(t.group, WIDTHS)
+
+    def test_heading(t) -> None:
+        with t.subTest('a titled rule spanning the table'):
+            ret = t.table.heading
+            t.assertEqual(ret, '── Work ' + '─' * 26)
+
+        with t.subTest('a title of its own length rules no further'):
+            wide = Table(Group('a' * 40, []), WIDTHS)
+            ret = wide.heading
+            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
+
+    def test_line(t) -> None:
+        with t.subTest('each cell padded to its column'):
+            ret = t.table.line(('a', 'b'))
+            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
+
+        with t.subTest('trailing space is stripped'):
+            ret = t.table.line(('', ''))
+            t.assertEqual(ret, '')
+
+    def test_lines(t) -> None:
+        ret = t.table.lines
+
+        t.assertEqual(
+            ret,
+            [
+                '  DATE        TASK',
+                '  2026-08-05  Ship it',
+            ],
+        )
+
+
+class DigestJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.DigestJsonView."""
+
+    def setUp(t) -> None:
+        t.digest = Mock(spec=Digest)
+        t.digest.period = 'week'
+        t.digest.start = date(2026, 7, 30)
+        t.digest.end = TODAY
+        t.digest.records = [sentinel.record] * 3
+        t.djv = DigestJsonView(t.digest)
+
+    @patch(f'{SRC}.dumps', autospec=True)
+    @patch.object(DigestJsonView, 'data', new_callable=PropertyMock)
+    def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
+        ret = t.djv.json
+        # Serialized, indented for a person to read too.
+        dumps.assert_called_once_with(data.return_value, indent=2)
+        t.assertIs(ret, dumps.return_value)
+
+    @patch.object(DigestJsonView, 'groups', new_callable=PropertyMock)
+    def test_data(t, groups: PropertyMock) -> None:
+        group = Mock(spec=GroupJsonView)
+        group.data = {'name': 'work'}
+        groups.return_value = [group]
+
+        ret = t.djv.data
+
+        # A digest abridges nothing: the total counts every record.
+        t.assertEqual(
+            ret,
+            {
+                'period': 'week',
+                'start': '2026-07-30',
+                'end': '2026-08-05',
+                'total': 3,
+                'categories': [{'name': 'work'}],
+            },
+        )
+
+    @patch(f'{SRC}.GroupJsonView', autospec=True)
+    def test_groups(t, group_json_view: MagicMock) -> None:
+        first = Mock(spec=Group)
+        second = Mock(spec=Group)
+        t.digest.groups = [first, second]
+
+        ret = t.djv.groups
+
+        # One per group, in the digest's order.
+        t.assertEqual(ret, [group_json_view.return_value] * 2)
+        t.assertEqual(
+            group_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class GroupJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.GroupJsonView."""
+
+    def setUp(t) -> None:
+        t.group = Mock(spec=Group)
+        t.group.name = 'side-quests'
+        t.gjv = GroupJsonView(t.group)
+
+    @patch.object(GroupJsonView, 'records', new_callable=PropertyMock)
+    def test_data(t, records: PropertyMock) -> None:
+        record = Mock(spec=RecordJsonView)
+        record.data = {'title': 'A record'}
+        records.return_value = [record]
+
+        ret = t.gjv.data
+
+        t.assertEqual(
+            ret,
+            {'name': 'side-quests', 'entries': [{'title': 'A record'}]},
+        )
+
+    @patch(f'{SRC}.RecordJsonView', autospec=True)
+    def test_records(t, record_json_view: MagicMock) -> None:
+        first = Mock(spec=Record)
+        second = Mock(spec=Record)
+        t.group.records = [first, second]
+
+        ret = t.gjv.records
+
+        # One per record, in the group's order.
+        t.assertEqual(ret, [record_json_view.return_value] * 2)
+        t.assertEqual(
+            record_json_view.call_args_list,
+            [call(first), call(second)],
+        )
+
+
+class RecordJsonViewTests(TestCase):
+    """Unit tests for battodo.completed.RecordJsonView."""
+
+    def setUp(t) -> None:
+        t.record = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
+        t.rjv = RecordJsonView(t.record)
+
+    def test_data(t) -> None:
+        ret = t.rjv.data
+        t.assertEqual(
+            ret,
+            {'date': '2026-08-04', 'title': 'A parent > A record'},
+        )

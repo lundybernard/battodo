@@ -9,8 +9,9 @@ A title keeps the `Parent > Child` ancestry the log stores, and loses
 its `[FIELD:]` markup. Categories sort in the view's order, so a
 category leads in both.
 
-`Digest` decides what one digest holds; `DigestView` lays the same
-digest out as aligned text. `lib.get_completed` composes them.
+`Digest` decides what one digest holds. Each form reads it through its
+attributes: `DigestView` lays it out as aligned text, and
+`DigestJsonView` as JSON. `lib.get_completed` composes them.
 """
 
 from collections.abc import Callable
@@ -57,70 +58,6 @@ class CompletedError(Exception):
     directory, a digest would read as "nothing done". The message
     always carries the resolved path.
     """
-
-
-def clean_title(title: str) -> str:
-    """The title as a digest shows it: no fields, no double spaces."""
-    return ' '.join(FIELD_RE.sub('', title).split())
-
-
-def table_width(widths: list[int]) -> int:
-    """How wide a table laid out to `widths` comes out."""
-    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
-
-
-@dataclass(frozen=True)
-class Record:
-    """One DONE line of the log: when, which list, what."""
-
-    day: date
-    category: str
-    title: str
-
-    @property
-    def cells(self) -> tuple[str, ...]:
-        """The record's two values, in COLUMNS order."""
-        return (self.day.isoformat(), self.title)
-
-    @property
-    def entry(self) -> dict[str, str]:
-        """The record as `Digest.data` publishes it."""
-        return {'date': self.day.isoformat(), 'title': self.title}
-
-
-def read_record(line: str) -> Record | None:
-    """One log line as a record, or None where it is not one.
-
-    Comments, blank lines and SCRATCHED records all read as None, as
-    does any line the four fields cannot be read from. The log is
-    hand-edited, so a line btodo cannot parse is skipped rather than
-    raised on.
-    """
-    parts = line.split(SEPARATOR, RECORD_FIELDS - 1)
-    if len(parts) != RECORD_FIELDS:
-        return None
-    stamp, category, status, title = (part.strip() for part in parts)
-    day = parse_date(stamp)
-    if day is None or status != DONE_STATUS:
-        return None
-    return Record(day, category, clean_title(title))
-
-
-class Group:
-    """One category's records within a digest."""
-
-    def __init__(self, name: str, records: list[Record]) -> None:
-        self.name = name
-        self.records = records
-
-    @property
-    def title(self) -> str:
-        return self.name.replace('-', ' ').capitalize()
-
-    @property
-    def entries(self) -> list[dict[str, str]]:
-        """The records as `Digest.data` publishes them."""
-        return [record.entry for record in self.records]
 
 
 class Digest:
@@ -186,7 +123,7 @@ class Digest:
         return self.path.read_text(encoding='utf-8')
 
     @cached_property
-    def records(self) -> list[Record]:
+    def records(self) -> list['Record']:
         """The period's DONE records, oldest first.
 
         Sorted here rather than trusted from the file: the log is
@@ -202,7 +139,7 @@ class Digest:
         return sorted(found, key=lambda record: record.day)
 
     @cached_property
-    def groups(self) -> list[Group]:
+    def groups(self) -> list['Group']:
         """The records by category, in the order a view shows them."""
         names = sorted(
             {record.category for record in self.records},
@@ -216,64 +153,54 @@ class Digest:
             for name in names
         ]
 
-    @cached_property
-    def data(self) -> dict[str, Any]:
-        """The machine-readable form of this digest.
 
-        Shaped as::
+@dataclass(frozen=True)
+class Record:
+    """One DONE line of the log: when, which list, what."""
 
-            {"period": "week", "start": "2026-07-30",
-             "end": "2026-08-05", "total": 6,
-             "categories": [{"name": "work", "entries": [
-                 {"date": "2026-08-05", "title": "Deck > Chip it"}]}]}
-
-        `total` counts every record the period holds, which is the sum
-        of the entries: a digest abridges nothing.
-        """
-        return {
-            'period': self.period,
-            'start': self.start.isoformat(),
-            'end': self.end.isoformat(),
-            'total': len(self.records),
-            'categories': [
-                {'name': group.name, 'entries': group.entries}
-                for group in self.groups
-            ],
-        }
-
-    @cached_property
-    def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
-
-        The schema is a contract for agents; see `data` for its shape.
-        """
-        return dumps(self.data, indent=2)
-
-
-class Table:
-    """One group's records, at a width the whole digest shares."""
-
-    def __init__(self, group: Group, widths: list[int]) -> None:
-        self.group = group
-        self.widths = widths
+    day: date
+    category: str
+    title: str
 
     @property
-    def heading(self) -> str:
-        """A titled rule spanning the table, e.g. `── Work ────`."""
-        prefix = f'{RULE * 2} {self.group.title} '
-        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
+    def cells(self) -> tuple[str, ...]:
+        """The record's two values, in COLUMNS order."""
+        return (self.day.isoformat(), self.title)
 
-    def line(self, cells: tuple[str, ...]) -> str:
-        """Pad one row's cells. Trailing space is stripped."""
-        laid = (f'{cell:<{size}}' for cell, size in zip(cells, self.widths))
-        return f'{INDENT}{GAP.join(laid)}'.rstrip()
+
+def read_record(line: str) -> Record | None:
+    """One log line as a record, or None where it is not one.
+
+    Comments, blank lines and SCRATCHED records all read as None, as
+    does any line the four fields cannot be read from. The log is
+    hand-edited, so a line btodo cannot parse is skipped rather than
+    raised on.
+    """
+    parts = line.split(SEPARATOR, RECORD_FIELDS - 1)
+    if len(parts) != RECORD_FIELDS:
+        return None
+    stamp, category, status, title = (part.strip() for part in parts)
+    day = parse_date(stamp)
+    if day is None or status != DONE_STATUS:
+        return None
+    return Record(day, category, clean_title(title))
+
+
+class Group:
+    """One category's records within a digest."""
+
+    def __init__(self, name: str, records: list[Record]) -> None:
+        self.name = name
+        self.records = records
 
     @property
-    def lines(self) -> list[str]:
-        """Everything under the heading: the column names, then the rows."""
-        out = [self.line(COLUMNS)]
-        out.extend(self.line(record.cells) for record in self.group.records)
-        return out
+    def title(self) -> str:
+        return self.name.replace('-', ' ').capitalize()
+
+
+def clean_title(title: str) -> str:
+    """The title as a digest shows it: no fields, no double spaces."""
+    return ' '.join(FIELD_RE.sub('', title).split())
 
 
 class DigestView:
@@ -305,13 +232,15 @@ class DigestView:
         all of the tables and the columns line up down the whole page.
         """
         records = self.digest.records
-        return [
-            max([len(name), *(len(record.cells[index]) for record in records)])
-            for index, name in enumerate(COLUMNS)
-        ]
+        widths = []
+        for index, name in enumerate(COLUMNS):
+            cells = [len(record.cells[index]) for record in records]
+            width = max([len(name), *cells])
+            widths.append(width)
+        return widths
 
     @cached_property
-    def tables(self) -> list[Table]:
+    def tables(self) -> list['Table']:
         return [Table(group, self.widths) for group in self.digest.groups]
 
     @cached_property
@@ -325,3 +254,111 @@ class DigestView:
 
     def __str__(self) -> str:
         return self.text
+
+
+class Table:
+    """One group's records, at a width the whole digest shares."""
+
+    def __init__(self, group: Group, widths: list[int]) -> None:
+        self.group = group
+        self.widths = widths
+
+    @property
+    def heading(self) -> str:
+        """A titled rule spanning the table, e.g. `── Work ────`."""
+        prefix = f'{RULE * 2} {self.group.title} '
+        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
+
+    def line(self, cells: tuple[str, ...]) -> str:
+        """Pad one row's cells. Trailing space is stripped."""
+        laid = (f'{cell:<{size}}' for cell, size in zip(cells, self.widths))
+        return f'{INDENT}{GAP.join(laid)}'.rstrip()
+
+    @property
+    def lines(self) -> list[str]:
+        """Everything under the heading: the column names, then the rows."""
+        out = [self.line(COLUMNS)]
+        out.extend(self.line(record.cells) for record in self.group.records)
+        return out
+
+
+def table_width(widths: list[int]) -> int:
+    """How wide a table laid out to `widths` comes out."""
+    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
+
+
+class DigestJsonView:
+    """A digest laid out as JSON, for an agent to read."""
+
+    def __init__(self, digest: Digest) -> None:
+        self.digest = digest
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        return dumps(self.data, indent=2)
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The machine-readable form of the digest.
+
+        Shaped as::
+
+            {"period": "week", "start": "2026-07-30",
+             "end": "2026-08-05", "total": 6,
+             "categories": [{"name": "work", "entries": [
+                 {"date": "2026-08-05", "title": "Deck > Chip it"}]}]}
+
+        `total` counts every record the period holds, which is the sum
+        of the entries: a digest abridges nothing.
+        """
+        return {
+            'period': self.digest.period,
+            'start': self.digest.start.isoformat(),
+            'end': self.digest.end.isoformat(),
+            'total': len(self.digest.records),
+            'categories': [group.data for group in self.groups],
+        }
+
+    @property
+    def groups(self) -> list['GroupJsonView']:
+        """The digest's groups, each laid out as JSON."""
+        return [GroupJsonView(group) for group in self.digest.groups]
+
+
+class GroupJsonView:
+    """One category's records within a digest, laid out as JSON."""
+
+    def __init__(self, group: Group) -> None:
+        self.group = group
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The group as `DigestJsonView.data` records it."""
+        return {
+            'name': self.group.name,
+            'entries': [record.data for record in self.records],
+        }
+
+    @property
+    def records(self) -> list['RecordJsonView']:
+        """The group's records, each laid out as JSON."""
+        return [RecordJsonView(record) for record in self.group.records]
+
+
+class RecordJsonView:
+    """One record of a digest laid out as JSON."""
+
+    def __init__(self, record: Record) -> None:
+        self.record = record
+
+    @property
+    def data(self) -> dict[str, str]:
+        """The record as `GroupJsonView.data` records it."""
+        return {
+            'date': self.record.day.isoformat(),
+            'title': self.record.title,
+        }

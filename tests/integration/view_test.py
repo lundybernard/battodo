@@ -17,7 +17,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.conf import TZ
-from battodo.view import Selection, View
+from battodo.view import Selection, SelectionJsonView, View
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
@@ -179,15 +179,15 @@ class RenderedViewTests(TestCase):
                 t.assertIn('active: career, events, study, work', out)
 
 
-class SelectionDocumentTests(TestCase):
-    """Contract tests for battodo.view.Selection.json."""
+class SelectionJsonViewTests(TestCase):
+    """Contract tests for battodo.view.SelectionJsonView.json."""
 
     def setUp(t) -> None:
         t.source = source_dir(t)
 
     def categories(t, **kwargs: object) -> list[dict]:
         selection = Selection(t.source, NOW, **kwargs)  # type: ignore[arg-type]
-        return loads(selection.json)['categories']
+        return loads(SelectionJsonView(selection).json)['categories']
 
     def test_json(t) -> None:
         write(
@@ -195,7 +195,8 @@ class SelectionDocumentTests(TestCase):
             'career',
             *(f'- [ ] Item {n} [P:3]' for n in range(1, 8)),
         )
-        abridged = loads(Selection(t.source, NOW, show_all=False).json)
+        selection = Selection(t.source, NOW, show_all=False)
+        abridged = loads(SelectionJsonView(selection).json)
 
         with t.subTest('five tasks by default'):
             tasks = abridged['categories'][0]['tasks']
@@ -230,7 +231,8 @@ class SelectionDocumentTests(TestCase):
                 'career',
                 '- [ ] A fractional rank task [ADDED:2026-07-29]',
             )
-            document = loads(Selection(source, NOW, show_all=False).json)
+            selection = Selection(source, NOW, show_all=False)
+            document = loads(SelectionJsonView(selection).json)
             task = document['categories'][0]['tasks'][0]
 
             with t.subTest('the published rank carries two decimals'):
@@ -241,7 +243,8 @@ class SelectionDocumentTests(TestCase):
 
         with empty_source() as source:
             write(source, 'career', '- [ ] A single task [P:2]')
-            lines = Selection(source, NOW, show_all=False).json.split('\n')
+            selection = Selection(source, NOW, show_all=False)
+            lines = SelectionJsonView(selection).json.split('\n')
 
             with t.subTest('the document spans more than one line'):
                 t.assertGreater(len(lines), 1)

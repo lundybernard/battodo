@@ -66,14 +66,12 @@ def descend(
 def selectors(ancestries: list[list[TaskNode]]) -> st.SearchStrategy[str]:
     """A drawn task's title or id, or a title no task need carry."""
     tasks = [ancestry[-1] for ancestry in ancestries]
-    # fmt: off
     names = [
         name
         for task in tasks
         for name in (task.title, task.task_id)
             if name
-    ]
-    # fmt: on
+    ]  # fmt: skip
     if not names:
         return grammar.titles
     return st.one_of(grammar.titles, st.sampled_from(names))
@@ -88,7 +86,6 @@ def outcome(
 
     An `[ID:]` match narrows out the title matches.
     """
-    # fmt: off
     found = [
         ancestry
         for ancestry in ancestries
@@ -97,13 +94,12 @@ def outcome(
                 ancestry[-1].task_id == selector
                 or selector.lower() in ancestry[-1].title.lower()
             )
-    ]
+    ]  # fmt: skip
     by_id = [
         ancestry
         for ancestry in found
             if ancestry[-1].task_id == selector
-    ]
-    # fmt: on
+    ]  # fmt: skip
     named = by_id or found
     if not named:
         return f'no open task matches {selector!r}'

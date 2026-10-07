@@ -104,9 +104,11 @@ object instead.
 
 ## Slice 6 — item
 
-Convert the dict threaded through six functions into an object with the
-same shape as the completed digest and the view, built on the task
-object from slice 5.
+Convert the dict threaded through six functions into a value object,
+built on the task object from slice 5. The value object builds no
+output form: a text view and a JSON view each read it through its
+attributes. The completed digest and the view take the same split
+for their JSON forms (#80).
 
 ## Slice 7 — mutate
 
@@ -123,6 +125,9 @@ Filed as follow-ups rather than absorbed:
 
 - The table machinery duplicated between the completed digest and the
   view renderer.
+- The text forms the view and the completed digest still build on
+  their value objects: the cells, badge and due label of a view row,
+  and the cells and title of a digest record and group.
 - The configuration inputs that reach the config object through
   fallback lookup without being declared.
 - Type annotations on the CLI module, which belong upstream as
@@ -136,6 +141,8 @@ Filed as follow-ups rather than absorbed:
 - #52 records the undeclared-configuration-inputs gap.
 - #28 is re-scoped to the assertion-layer remainder (slice 0).
 - #43 rides in slice 1 and #47 in slice 5.
+- #80 splits the JSON form of the view and the completed digest into
+  view objects of their own.
 
 ## Risks
 

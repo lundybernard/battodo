@@ -2,8 +2,9 @@
 
 Layout has no say in what is chosen: the table module reads this one,
 and never the other way about. The machine-readable form (R2) lives
-here as `Selection.json`, and a row carries the table's cells too,
-because both forms come out of the same rank, priority and children.
+here as `SelectionJsonView`, which reads a selection through its
+attributes. A row carries the table's cells, and the published form
+reads the same row, so the two never derive a task apart.
 
 A view holds open items only, and suppresses future-dated *recurring*
 items. SCHEMA.md's prose is stricter -- it would also hide future-dated
@@ -44,187 +45,6 @@ PARKED_MARKER = 'battodo:parked'
 TOP_N = 5
 # How many decimal places a published rank carries.
 RANK_PLACES = 2
-
-
-class Row:
-    """One task as a view carries it: a record, and a line of a table.
-
-    The two forms differ in what they say -- the record keeps every
-    stored field verbatim, while the table labels the due date and
-    marks the open children -- but both derive from the same rank,
-    priority and children.
-    """
-
-    def __init__(self, task: TaskNode, today: date) -> None:
-        self.task = task
-        self.today = today
-
-    @cached_property
-    def key(self) -> tuple[float, str, str]:
-        """Rank descending, then nearest due, undated last, then title."""
-        return (
-            -self.rank,
-            self.task.due or NO_DUE_SORTS_LAST,
-            self.task.title,
-        )
-
-    @cached_property
-    def rank(self) -> float:
-        """The task's rank on the day the view was asked for."""
-        return rank(self.task, self.today)
-
-    @cached_property
-    def data(self) -> dict[str, object]:
-        """One task as `Selection.json` records it.
-
-        Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
-        `rank` is rounded for display and must not be used to re-sort;
-        the array order is the rank order.
-        """
-        return {
-            'id': self.task.task_id,
-            'title': self.task.title,
-            'rank': round(self.rank, RANK_PLACES),
-            'priority': self.priority,
-            'loe': self.task.loe,
-            'due': self.task.due,
-            'added': self.task.added,
-            'repeat': self.task.repeat,
-            'tags': self.task.tags,
-            'subtasks': self.subtasks,
-        }
-
-    @cached_property
-    def priority(self) -> float:
-        """The task's stored priority, as a multiplier."""
-        return multiplier(self.task)
-
-    @cached_property
-    def subtasks(self) -> int:
-        """How many of the task's children are still open."""
-        return len(self.children)
-
-    @cached_property
-    def children(self) -> list[TaskNode]:
-        """The task's incomplete children: subtasks and checklist items."""
-        return [child for child in self.task.children if not child.done]
-
-    @cached_property
-    def cells(self) -> tuple[str, ...]:
-        """The five values a table shows, in the order its columns run."""
-        return (
-            f'{self.rank:.1f}',
-            f'{self.priority:.1f}',
-            '' if self.task.loe is None else str(self.task.loe),
-            f'{self.task.title}{self.badge}',
-            self.due_label,
-        )
-
-    @cached_property
-    def badge(self) -> str:
-        """The outstanding-children mark, if the task has any.
-
-        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
-        the count needs no plural.
-        """
-        return f' (+{self.subtasks})' if self.subtasks else ''
-
-    @cached_property
-    def due_label(self) -> str:
-        """How the due date reads in a table: a label, or the date.
-
-        Named apart from the stored `due` field, which the record
-        carries verbatim.
-        """
-        if self.task.due is None:
-            return ''
-        if self.parsed_due is None:
-            # a placeholder such as YYYY-MM-DD: show it verbatim
-            return self.task.due
-        if self.parsed_due < self.today:
-            return 'OVERDUE'
-        if self.parsed_due == self.today:
-            return 'TODAY'
-        return self.task.due
-
-    @cached_property
-    def parsed_due(self) -> date | None:
-        """The stored due date as a date, or None if it cannot be read."""
-        return parse_date(self.task.due)
-
-
-class TodoList:
-    """One discovered list file: where it sorts, and what is open in it."""
-
-    def __init__(self, path: Path, today: date) -> None:
-        self.path = path
-        self.today = today
-
-    @cached_property
-    def category(self) -> str:
-        """The list's name: the file's name without its extension."""
-        return self.path.stem
-
-    @cached_property
-    def text(self) -> str:
-        return self.path.read_text()
-
-    @cached_property
-    def document(self) -> TodoDocument:
-        """The list file, parsed."""
-        return TodoDocument(self.text)
-
-    @cached_property
-    def visible(self) -> list[Row]:
-        """A row per open top-level task, future recurrences aside."""
-        rows = []
-        for task in self.document.tasks:
-            if task.done:
-                continue
-            row = Row(task, self.today)
-            due = row.parsed_due
-            if due and task.repeat and due > self.today:
-                continue
-            rows.append(row)
-        return rows
-
-    @cached_property
-    def parked(self) -> bool:
-        return PARKED_MARKER in self.text
-
-    @cached_property
-    def rows(self) -> list[Row]:
-        """A row per open task, in the order a view shows them."""
-        return sorted(self.visible, key=lambda row: row.key)
-
-    @property
-    def order(self) -> tuple[int, str]:
-        """Where this list sits among the others."""
-        return category_order(self.category)
-
-
-class Category:
-    """One list's place in a view: what it shows, and what it holds back."""
-
-    def __init__(
-        self,
-        name: str,
-        rows: list[Row],
-        limit: int | None,
-    ) -> None:
-        self.name = name
-        self.rows = rows
-        self.limit = limit
-
-    @property
-    def shown(self) -> list[Row]:
-        """The rows that make it into the view."""
-        return self.rows if self.limit is None else self.rows[: self.limit]
-
-    @property
-    def hidden(self) -> int:
-        """How many rows the limit held back."""
-        return len(self.rows) - len(self.shown)
 
 
 class Selection:
@@ -313,7 +133,7 @@ class Selection:
         return self.now.hour
 
     @cached_property
-    def lists(self) -> list[TodoList]:
+    def lists(self) -> list['TodoList']:
         """Every list in the source, in display order.
 
         Raises
@@ -330,7 +150,7 @@ class Selection:
         found = [TodoList(path, self.today) for path in paths]
         return sorted(found, key=lambda todo: todo.order)
 
-    def shows(self, todo: TodoList) -> bool:
+    def shows(self, todo: 'TodoList') -> bool:
         """Whether `todo` has any place in this view.
 
         A named category is shown while its window is open, or whenever
@@ -348,7 +168,7 @@ class Selection:
         return not todo.parked
 
     @cached_property
-    def categories(self) -> list[Category]:
+    def categories(self) -> list['Category']:
         """The categories a view renders, each with its rows."""
         return [
             Category(todo.category, todo.rows, self.limit)
@@ -356,9 +176,184 @@ class Selection:
             if self.shows(todo) and todo.rows
         ]
 
+
+class TodoList:
+    """One discovered list file: where it sorts, and what is open in it."""
+
+    def __init__(self, path: Path, today: date) -> None:
+        self.path = path
+        self.today = today
+
     @cached_property
+    def category(self) -> str:
+        """The list's name: the file's name without its extension."""
+        return self.path.stem
+
+    @cached_property
+    def text(self) -> str:
+        return self.path.read_text()
+
+    @cached_property
+    def document(self) -> TodoDocument:
+        """The list file, parsed."""
+        return TodoDocument(self.text)
+
+    @cached_property
+    def visible(self) -> list['Row']:
+        """A row per open top-level task, future recurrences aside."""
+        rows = []
+        for task in self.document.tasks:
+            if task.done:
+                continue
+            row = Row(task, self.today)
+            due = row.parsed_due
+            if due and task.repeat and due > self.today:
+                continue
+            rows.append(row)
+        return rows
+
+    @cached_property
+    def parked(self) -> bool:
+        return PARKED_MARKER in self.text
+
+    @cached_property
+    def rows(self) -> list['Row']:
+        """A row per open task, in the order a view shows them."""
+        return sorted(self.visible, key=lambda row: row.key)
+
+    @property
+    def order(self) -> tuple[int, str]:
+        """Where this list sits among the others."""
+        return category_order(self.category)
+
+
+class Category:
+    """One list's place in a view: what it shows, and what it holds back."""
+
+    def __init__(
+        self,
+        name: str,
+        rows: list['Row'],
+        limit: int | None,
+    ) -> None:
+        self.name = name
+        self.rows = rows
+        self.limit = limit
+
+    @property
+    def shown(self) -> list['Row']:
+        """The rows that make it into the view."""
+        return self.rows if self.limit is None else self.rows[: self.limit]
+
+    @property
+    def hidden(self) -> int:
+        """How many rows the limit held back."""
+        return len(self.rows) - len(self.shown)
+
+
+class Row:
+    """One task as a view carries it: its rank, priority and children.
+
+    The table's line comes from here, and `RowJsonView` publishes the
+    task's record from the same values. The record keeps every stored
+    field verbatim, while the table labels the due date and marks the
+    open children.
+    """
+
+    def __init__(self, task: TaskNode, today: date) -> None:
+        self.task = task
+        self.today = today
+
+    @cached_property
+    def key(self) -> tuple[float, str, str]:
+        """Rank descending, then nearest due, undated last, then title."""
+        return (
+            -self.rank,
+            self.task.due or NO_DUE_SORTS_LAST,
+            self.task.title,
+        )
+
+    @cached_property
+    def rank(self) -> float:
+        """The task's rank on the day the view was asked for."""
+        return rank(self.task, self.today)
+
+    @cached_property
+    def priority(self) -> float:
+        """The task's stored priority, as a multiplier."""
+        return multiplier(self.task)
+
+    @cached_property
+    def subtasks(self) -> int:
+        """How many of the task's children are still open."""
+        return len(self.children)
+
+    @cached_property
+    def children(self) -> list[TaskNode]:
+        """The task's incomplete children: subtasks and checklist items."""
+        return [child for child in self.task.children if not child.done]
+
+    @cached_property
+    def cells(self) -> tuple[str, ...]:
+        """The five values a table shows, in the order its columns run."""
+        return (
+            f'{self.rank:.1f}',
+            f'{self.priority:.1f}',
+            '' if self.task.loe is None else str(self.task.loe),
+            f'{self.task.title}{self.badge}',
+            self.due_label,
+        )
+
+    @cached_property
+    def badge(self) -> str:
+        """The outstanding-children mark, if the task has any.
+
+        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
+        the count needs no plural.
+        """
+        return f' (+{self.subtasks})' if self.subtasks else ''
+
+    @cached_property
+    def due_label(self) -> str:
+        """How the due date reads in a table: a label, or the date.
+
+        Named apart from the stored `due` field, which `RowJsonView`
+        publishes verbatim.
+        """
+        if self.task.due is None:
+            return ''
+        if self.parsed_due is None:
+            # a placeholder such as YYYY-MM-DD: show it verbatim
+            return self.task.due
+        if self.parsed_due < self.today:
+            return 'OVERDUE'
+        if self.parsed_due == self.today:
+            return 'TODAY'
+        return self.task.due
+
+    @cached_property
+    def parsed_due(self) -> date | None:
+        """The stored due date as a date, or None if it cannot be read."""
+        return parse_date(self.task.due)
+
+
+class SelectionJsonView:
+    """A selection laid out as JSON, for an agent to read."""
+
+    def __init__(self, selection: Selection) -> None:
+        self.selection = selection
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        return dumps(self.data, indent=2)
+
+    @property
     def data(self) -> dict[str, object]:
-        """The machine-readable form of this selection.
+        """The machine-readable form of the selection.
 
         Shaped as::
 
@@ -369,29 +364,73 @@ class Selection:
                   "priority": 2.0, "loe": null, "due": null,
                   "added": "2026-05-10", "repeat": null,
                   "tags": [], "subtasks": 0}]}]}
+        """
+        return {
+            'date': self.selection.today.isoformat(),
+            'active': sorted(self.selection.active),
+            'categories': [category.data for category in self.categories],
+        }
 
-        `hidden` is how many of the category's open items this leaves
-        out. Without it an abridged document reads exactly like a
-        complete one, and a reader has no way of knowing to ask for
+    @property
+    def categories(self) -> list['CategoryJsonView']:
+        """The selection's categories, each laid out as JSON."""
+        return [
+            CategoryJsonView(category)
+            for category in self.selection.categories
+        ]
+
+
+class CategoryJsonView:
+    """One category of a selection laid out as JSON."""
+
+    def __init__(self, category: Category) -> None:
+        self.category = category
+
+    @property
+    def data(self) -> dict[str, object]:
+        """The category as `SelectionJsonView.data` records it.
+
+        `hidden` is how many of the category's open items the view
+        leaves out. Without it an abridged document reads exactly like
+        a complete one, and a reader has no way of knowing to ask for
         the rest.
         """
         return {
-            'date': self.today.isoformat(),
-            'active': sorted(self.active),
-            'categories': [
-                {
-                    'name': category.name,
-                    'hidden': category.hidden,
-                    'tasks': [row.data for row in category.shown],
-                }
-                for category in self.categories
-            ],
+            'name': self.category.name,
+            'hidden': self.category.hidden,
+            'tasks': [row.data for row in self.rows],
         }
 
-    @cached_property
-    def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
+    @property
+    def rows(self) -> list['RowJsonView']:
+        """The rows the category shows, each laid out as JSON."""
+        return [RowJsonView(row) for row in self.category.shown]
 
-        The schema is a contract for agents; see `data` for its shape.
+
+class RowJsonView:
+    """One task of a selection laid out as JSON."""
+
+    def __init__(self, row: Row) -> None:
+        self.row = row
+
+    @property
+    def data(self) -> dict[str, object]:
+        """The task as `CategoryJsonView.data` records it.
+
+        Stored fields are carried verbatim -- no OVERDUE/TODAY labels.
+        `rank` is rounded for display and must not be used to re-sort;
+        the array order is the rank order.
         """
-        return dumps(self.data, indent=2)
+        task = self.row.task
+        return {
+            'id': task.task_id,
+            'title': task.title,
+            'rank': round(self.row.rank, RANK_PLACES),
+            'priority': self.row.priority,
+            'loe': task.loe,
+            'due': task.due,
+            'added': task.added,
+            'repeat': task.repeat,
+            'tags': task.tags,
+            'subtasks': self.row.subtasks,
+        }

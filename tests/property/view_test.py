@@ -27,7 +27,7 @@ from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument, parse_date
 from battodo.rank import multiplier, rank
-from battodo.view import RANK_PLACES, TOP_N, Selection, View
+from battodo.view import RANK_PLACES, TOP_N, Selection, SelectionJsonView, View
 
 from .strategies import document, grammar
 
@@ -111,7 +111,8 @@ def fuzz(test: Callable[..., None]) -> Callable[..., None]:
 def published(lines: list[str]) -> dict[str, Any]:
     """The document a view of the list file `lines` publishes."""
     with source(lines) as directory:
-        return loads(Selection(directory, NOW, show_all=False).json)
+        selection = Selection(directory, NOW, show_all=False)
+        return loads(SelectionJsonView(selection).json)
 
 
 @contextmanager
@@ -304,8 +305,8 @@ def headings(out: list[str]) -> list[str]:
     return [line for line in out[1:] if line and not line.startswith(' ')]
 
 
-class SelectionTests(TestCase):
-    """Property tests for battodo.view.Selection.json."""
+class SelectionJsonViewTests(TestCase):
+    """Property tests for battodo.view.SelectionJsonView.json."""
 
     maxDiff = None
 
@@ -429,7 +430,7 @@ class ViewTests(TestCase):
     def test_text(t, lines: list[str]) -> None:
         with source(lines) as directory:
             selection = Selection(directory, NOW, show_all=False)
-            publication = loads(selection.json)
+            publication = loads(SelectionJsonView(selection).json)
 
             ret = View(selection).text
 
