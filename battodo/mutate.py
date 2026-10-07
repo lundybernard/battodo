@@ -25,13 +25,24 @@ Each write to an existing task consumes the `Task` its caller built,
 so the write edits the document that selection read.
 """
 
+from collections.abc import Sequence
 from datetime import date
+from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from .journal import Journal, new_task_id
 from .lists import discover_lists
-from .parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
+from .parser import (
+    ANCESTRY_SEPARATOR,
+    DATE_FIELDS,
+    OPEN_HEADING,
+    SCHEMA_FIELDS,
+    Ancestry,
+    TaskNode,
+    TodoDocument,
+    parse_date,
+)
 from .repeat import next_due
 from .task import Task
 
@@ -39,17 +50,11 @@ ADDED_EVENT = 'TaskAdded'
 COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
 UPDATED_EVENT = 'TaskUpdated'
-DATE_FIELDS = ('DUE',)
 COMPLETED_LOG = 'completed.md'
 DONE_STATUS = 'DONE'
 SCRATCHED_STATUS = 'SCRATCHED'
-ANCESTRY_SEPARATOR = ' > '
-# SCHEMA.md's own field grammar, in SCHEMA.md's order. `BUMPED` is
-# retired; `ADDED` and `ID` are btodo extensions and so are not in it.
-# Whatever btodo authors -- a `completed.md` record, a brand new task
-# line -- is written in this order, which is what makes those lines
-# canonical where hand-written ones keep whatever order they came with.
-SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
+# Whom every journal event names as its actor.
+ACTOR = 'agent'
 LOE_VALUES = ('1', '2', '3', '5', '8')
 # SCHEMA.md indents every level by two spaces.
 SUBTASK_INDENT = 2
@@ -66,6 +71,902 @@ class ListError(Exception):
     the user already keeps, and a typo that silently spawns `wrk.md`
     hides the task instead of filing it.
     """
+
+
+class Addition:
+    """The add of a top-level task, last in the open section of a list.
+
+    The line carries only the fields the caller supplied, in SCHEMA.md
+    order, then the `[ADDED:]` and `[ID:]` btodo owns. An absent `P`
+    means 0 to the parser, so no field is invented.
+    """
+
+    def __init__(
+        self,
+        source: Path,
+        list_name: str,
+        title: str,
+        fields: dict[str, str],
+        today: date,
+    ) -> None:
+        self.source = source
+        self.list_name = list_name
+        self.title = title
+        self.fields = fields
+        self.today = today
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def path(self) -> Path:
+        """The discovered list whose filename stem is `list_name`.
+
+        Cached: discovery reads every list in the source.
+
+        Raises
+        ------
+        ListError
+            No discovered list carries that stem.
+        """
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with the task in it.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        ValueError
+            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read.
+            `RepeatError`, a ValueError, covers `REPEAT`.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The list as read, with the task last in its open section."""
+        raise NotImplementedError
+
+    @cached_property
+    def parsed(self) -> TodoDocument:
+        """The list as read.
+
+        Cached: one read of the file answers every property.
+        """
+        raise NotImplementedError
+
+    @property
+    def written(self) -> dict[str, str]:
+        """The fields the line carries.
+
+        The supplied fields come first, read and in SCHEMA.md order,
+        then the add date and the id.
+        """
+        raise NotImplementedError
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The supplied fields, read against the add date."""
+        raise NotImplementedError
+
+    @property
+    def index(self) -> int:
+        """Where the task lands: last in the open section."""
+        raise NotImplementedError
+
+    @cached_property
+    def task_id(self) -> str:
+        """A new id. Cached: drawn at random, so every read names one."""
+        raise NotImplementedError
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: an add logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskAdded`, on the stream of the new task."""
+        raise NotImplementedError
+
+
+class SubtaskAddition:
+    """The add of a subtask, last in its parent's block, one level deeper.
+
+    Indentation is the file's only statement of the relation; the
+    `TaskAdded` payload names the parent by id. A parent with no `[ID:]`
+    is stamped first, on an event of its own.
+    """
+
+    def __init__(
+        self,
+        parent: Task,
+        list_name: str,
+        title: str,
+        fields: dict[str, str],
+    ) -> None:
+        self.parent = parent
+        self.list_name = list_name
+        self.title = title
+        self.fields = fields
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the parent."""
+        raise NotImplementedError
+
+    @cached_property
+    def path(self) -> Path:
+        """The discovered list whose filename stem is `list_name`.
+
+        Cached: discovery reads every list in the source.
+
+        Raises
+        ------
+        ListError
+            No discovered list carries that stem.
+        """
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with the subtask in it.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        ValueError
+            `fields` names a field only the top-level task carries, or a
+            supplied value does not read.
+        SelectionError
+            The parent's selector does not name exactly one open task.
+        ValueError
+            The parent is a task in another list, or a checklist item.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The parent's list: the parent stamped, the subtask added.
+
+        The checks run in the order `text` lists them: the list, then
+        the fields, then the parent.
+        """
+        raise NotImplementedError
+
+    @property
+    def written(self) -> dict[str, str]:
+        """The fields the subtask line carries.
+
+        The supplied fields come first, read and in SCHEMA.md order,
+        then the id. No `[ADDED:]` is stamped: rank reads the add date,
+        and only a top-level task is ranked.
+
+        Raises
+        ------
+        ValueError
+            `fields` names a field only the top-level task carries, or a
+            supplied value does not read.
+        """
+        raise NotImplementedError
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The supplied fields, read against the day of the parent."""
+        raise NotImplementedError
+
+    @property
+    def stamped(self) -> bool:
+        """Whether the parent is given an id: it carries none."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The parent as the parser reads it.
+
+        Raises
+        ------
+        ValueError
+            The parent is a checklist item. Any field written to one, an
+            `[ID:]` included, promotes it to a subtask (SCHEMA.md).
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def parent_id(self) -> str:
+        """The parent's id, or a new one.
+
+        Cached: a new id is drawn at random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def index(self) -> int:
+        """Where the subtask lands: after every line the parent owns."""
+        raise NotImplementedError
+
+    @property
+    def indent(self) -> str:
+        """The indent of the subtask: one level deeper than the parent."""
+        raise NotImplementedError
+
+    @cached_property
+    def task_id(self) -> str:
+        """A new id. Cached: drawn at random, so every read names one."""
+        raise NotImplementedError
+
+    @property
+    def entry(self) -> str:
+        """The subtask line as written."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: an add logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """The parent's stamp if it has one, then one `TaskAdded`.
+
+        The `TaskAdded` lands on the stream of the subtask and names the
+        parent by id.
+        """
+        raise NotImplementedError
+
+    @property
+    def stamp(self) -> 'Event':
+        """The `TaskUpdated` that records the parent's new id."""
+        raise NotImplementedError
+
+
+class Update:
+    """The update of a task: the named fields and title over its own.
+
+    Only the fields named are written; the rest of the line, and every
+    other line of the file, stays as it was. A task with no `[ID:]` is
+    given one, so the caller can name it by id from here on.
+    """
+
+    def __init__(
+        self,
+        task: Task,
+        fields: dict[str, str],
+        title: str | None = None,
+    ) -> None:
+        self.task = task
+        self.fields = fields
+        self.title = title
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        raise NotImplementedError
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with the task rewritten.
+
+        Raises
+        ------
+        ValueError
+            Nothing is named to change, or a supplied value does not
+            read.
+        SelectionError
+            The selector does not name exactly one open task.
+        ValueError
+            The task is a checklist item, or a subtask is given a field
+            only the top-level task carries.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The task's list, its line rewritten."""
+        raise NotImplementedError
+
+    @property
+    def written(self) -> dict[str, str]:
+        """The fields written: the named ones, then an id if none."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item, or a subtask is given a field
+            only the top-level task carries.
+        """
+        raise NotImplementedError
+
+    @property
+    def checked(self) -> dict[str, str]:
+        """The named fields, read.
+
+        Raises
+        ------
+        ValueError
+            Neither a field nor a title is named, or a supplied value
+            does not read.
+        """
+        raise NotImplementedError
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The named fields, read against the day of the task."""
+        raise NotImplementedError
+
+    @cached_property
+    def task_id(self) -> str:
+        """The task's id, or a new one.
+
+        Cached: a new id is drawn at random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def nested(self) -> bool:
+        """Whether the task is a subtask, at any depth."""
+        raise NotImplementedError
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: an update logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskUpdated`, on the stream of the task."""
+        raise NotImplementedError
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """What changed, from what, and where a subtask sits.
+
+        A top-level task's ancestry is its own title, which the snapshot
+        already carries.
+        """
+        raise NotImplementedError
+
+    @property
+    def delta(self) -> dict[str, list[Any]]:
+        """Each value written against the one it replaced."""
+        raise NotImplementedError
+
+    @property
+    def ancestry(self) -> Ancestry:
+        """The task and every task above it."""
+        raise NotImplementedError
+
+
+class Completion:
+    """The completion of a task and every ancestor it finishes (SCHEMA.md).
+
+    A task is complete when all its children are, so checking the last
+    open child completes the parent, and that may complete its own
+    parent in turn. Once the top-level task is done its whole block
+    goes, unless it repeats: then it stays with a recomputed `DUE`, and
+    only its children go.
+    """
+
+    def __init__(self, task: Task) -> None:
+        self.task = task
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        raise NotImplementedError
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list once the completion is written.
+
+        Raises
+        ------
+        SelectionError
+            The selector does not name exactly one open task.
+        RepeatError
+            A completed recurring task carries a `[REPEAT:]` btodo cannot
+            read.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The task's list: lines stamped, checked off, or dropped."""
+        raise NotImplementedError
+
+    @property
+    def stamps(self) -> dict[int, dict[str, str]]:
+        """The fields each line gains, by its index.
+
+        A task still in the list gains the id of its stream. A recurring
+        top-level task gains its next due date.
+        """
+        raise NotImplementedError
+
+    @property
+    def checked_off(self) -> list[int]:
+        """The lines whose box is checked: none once the block goes."""
+        raise NotImplementedError
+
+    @property
+    def dropped(self) -> set[int]:
+        """The lines that go: the finished block, a recurrence kept.
+
+        The recurrence is the same task rescheduled, so it keeps its id,
+        its notes and its `[ADDED:]`, which ADR 0005 writes once and
+        never updates. Its children do not carry over.
+        """
+        raise NotImplementedError
+
+    @property
+    def root_done(self) -> bool:
+        """Whether the completion finishes the top-level task."""
+        raise NotImplementedError
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each stream the completions land on, by its line.
+
+        A stream task with no id takes a new one. Cached: a new id is
+        drawn at random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def rescheduled(self) -> date | None:
+        """The next due date of a finished recurring top-level task.
+
+        Raises
+        ------
+        RepeatError
+            Its `[REPEAT:]` does not read.
+        """
+        raise NotImplementedError
+
+    @property
+    def root(self) -> TaskNode:
+        """The top-level task of the block."""
+        raise NotImplementedError
+
+    @property
+    def ancestries(self) -> list[Ancestry]:
+        """The ancestry of the task and of each ancestor it finishes.
+
+        Deepest first, which is the order the completions are logged.
+        """
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """The completed-log records, deepest first.
+
+        SCHEMA.md logs no checklist item.
+        """
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskCompleted` per completion, deepest first.
+
+        The payload carries the state the task changed from, and a
+        rescheduled task records its due date beside the done.
+        """
+        raise NotImplementedError
+
+
+class Scratch:
+    """The scratch of a task: its block dropped without completing it.
+
+    The whole block goes -- the task, its notes, its children -- and
+    nothing cascades: abandoning a child says nothing about its parent.
+    btodo cannot tell a task accepted in an earlier session from one
+    proposed in this one, so every scratch is logged (SCHEMA.md).
+    """
+
+    def __init__(self, task: Task) -> None:
+        self.task = task
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        raise NotImplementedError
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list without the task's block.
+
+        Raises
+        ------
+        SelectionError
+            The selector does not name exactly one open task.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The task's list: its stream stamped, its block dropped.
+
+        A checklist item cannot hold an id, so its event belongs to the
+        stream of an ancestor, and that ancestor's line carries the id.
+        """
+        raise NotImplementedError
+
+    @property
+    def stream(self) -> TaskNode:
+        """The task whose stream records the scratch."""
+        raise NotImplementedError
+
+    @property
+    def ancestry(self) -> Ancestry:
+        """The task and every task above it."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it."""
+        raise NotImplementedError
+
+    @cached_property
+    def stream_id(self) -> str:
+        """The stream task's id, or a new one.
+
+        Cached: a new id is drawn at random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """The one completed-log record, or none for a checklist item."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskScratched`, on the stream task's stream."""
+        raise NotImplementedError
+
+
+class Backfill:
+    """The backfill of a source: each open top-level task given a date.
+
+    Parked lists are included: they opt out of views, not of existing,
+    and an unparked item should carry an add date.
+    """
+
+    def __init__(self, source: Path, today: date) -> None:
+        self.source = source
+        self.today = today
+
+    def write(self) -> None:
+        """Write each list that holds a task to stamp."""
+        raise NotImplementedError
+
+    @cached_property
+    def lists(self) -> list['ListBackfill']:
+        """The discovered lists that hold a task to stamp, by name.
+
+        Cached: the write changes the lists the report of it reads.
+        """
+        raise NotImplementedError
+
+
+class CompletedLog:
+    """The completed log of a source, which is append-only (SCHEMA.md)."""
+
+    def __init__(self, source: Path) -> None:
+        self.source = source
+
+    @property
+    def path(self) -> Path:
+        """The log file in the source directory."""
+        raise NotImplementedError
+
+    @property
+    def lead(self) -> str:
+        """What precedes a new record: a newline if the log ends mid-line."""
+        raise NotImplementedError
+
+    def append(self, entries: Sequence[str]) -> None:
+        """Append `entries`, one per line.
+
+        No entry leaves the log as it was, absent or not.
+        """
+        raise NotImplementedError
+
+
+class Changeset:
+    """What one write changes in a source: a list, the log, the journal.
+
+    A write object passes its values in the order the constructor takes
+    them, so the text is read first and its refusals come first.
+    """
+
+    def __init__(
+        self,
+        text: str,
+        entries: list[str],
+        events: list['Event'],
+        path: Path,
+        source: Path,
+    ) -> None:
+        self.text = text
+        self.entries = entries
+        self.events = events
+        self.path = path
+        self.source = source
+
+    def write(self) -> None:
+        """Write the list, then the log records, then the events."""
+        raise NotImplementedError
+
+
+class Event(NamedTuple):
+    """One journal event a write records."""
+
+    type: str
+    stream: str
+    payload: dict[str, Any]
+
+
+class ListBackfill:
+    """The backfill of one list: `[ADDED:today]` where a task has none.
+
+    `today` is the migration date, not the real add date: that is not
+    recoverable from the files (ADR 0005). Age accrues from here.
+    """
+
+    def __init__(self, path: Path, today: date) -> None:
+        self.path = path
+        self.today = today
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory that holds the list."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with every stamp written."""
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The list as read, each task to stamp given its date and id."""
+        raise NotImplementedError
+
+    @cached_property
+    def parsed(self) -> TodoDocument:
+        """The list as read.
+
+        Cached: one read of the file answers every property.
+        """
+        raise NotImplementedError
+
+    @property
+    def stamps(self) -> dict[int, dict[str, str]]:
+        """The fields each task to stamp gains, by its line.
+
+        A task with no id gains one beside its add date.
+        """
+        raise NotImplementedError
+
+    @property
+    def tasks(self) -> list[TaskNode]:
+        """The open top-level tasks to stamp, in file order."""
+        raise NotImplementedError
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each task to stamp, by its line.
+
+        A task with no id takes a new one. Cached: a new id is drawn at
+        random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a backfill logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskAdded` per task stamped.
+
+        The date is the migration's, not the task's, so the payload says
+        so: a replay must not read it as an observed fact.
+        """
+        raise NotImplementedError
+
+
+class NamedList:
+    """The discovered list of a source whose filename stem is a name.
+
+    Parked lists count: parking opts a file out of *views*, not out of
+    being written to.
+    """
+
+    def __init__(self, source: Path, name: str) -> None:
+        self.source = source
+        self.name = name
+
+    @property
+    def path(self) -> Path:
+        """The list file.
+
+        Raises
+        ------
+        ListError
+            No discovered list carries the name.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def lists(self) -> list[Path]:
+        """Every list in the source. Cached: discovery reads each one."""
+        raise NotImplementedError
+
+
+class SuppliedFields:
+    """The fields a caller supplies to a write, read before any write.
+
+    Only the values with a grammar btodo depends on are checked: a
+    `TAGS` string is free-form and cannot be wrong.
+    """
+
+    def __init__(self, fields: dict[str, str], today: date) -> None:
+        self.fields = fields
+        self.today = today
+
+    @property
+    def ordered(self) -> dict[str, str]:
+        """The fields as read, in SCHEMA.md order."""
+        raise NotImplementedError
+
+    @property
+    def checked(self) -> dict[str, str]:
+        """The fields, each value read, a due date in ISO form.
+
+        Raises
+        ------
+        ValueError
+            A `P`, `LOE`, `DUE` or `REPEAT` does not read, checked in
+            that order. `RepeatError`, a ValueError, covers `REPEAT`.
+        """
+        raise NotImplementedError
+
+    def refuse_root_fields(self) -> None:
+        """Refuse a field that only the top-level task carries.
+
+        Raises
+        ------
+        ValueError
+            The fields name one. Nothing reads such a field on a child,
+            so writing it would read as a change that never happened.
+        """
+        raise NotImplementedError
+
+
+class AddedLine:
+    """A task line an add writes, as its `TaskAdded` records it."""
+
+    def __init__(self, entry: str, written: dict[str, str]) -> None:
+        self.entry = entry
+        self.written = written
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """Each field written against nothing, and the line as written."""
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The line alone in an open section, as the parser reads it."""
+        raise NotImplementedError
+
+
+class LogEntry:
+    """One `completed.md` record: date, category, status, ancestry."""
+
+    def __init__(
+        self,
+        path: Path,
+        ancestry: Ancestry,
+        status: str,
+        today: date,
+    ) -> None:
+        self.path = path
+        self.ancestry = ancestry
+        self.status = status
+        self.today = today
+
+    @property
+    def text(self) -> str:
+        """The record, the SCHEMA.md fields of the task after its path."""
+        raise NotImplementedError
+
+    @property
+    def fields(self) -> str:
+        """The SCHEMA.md fields of the task, in SCHEMA.md order."""
+        raise NotImplementedError
 
 
 def task_snapshot(task: TaskNode) -> dict[str, Any]:

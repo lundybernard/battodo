@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
+from typing import Any
 
 FIELD_NAMES: tuple[str, ...] = (
     'P',
@@ -25,6 +26,14 @@ FIELD_NAMES: tuple[str, ...] = (
 FIELD_RE = re.compile(rf'\[({"|".join(FIELD_NAMES)}):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
 OPEN_HEADING = '## Open'
+# SCHEMA.md's own field grammar, in SCHEMA.md's order. `BUMPED` is
+# retired; `ADDED` and `ID` are btodo extensions and so are not in it.
+# Whatever btodo authors -- a `completed.md` record, a brand new task
+# line -- is written in this order, which is what makes those lines
+# canonical where hand-written ones keep whatever order they came with.
+SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
+DATE_FIELDS = ('DUE',)
+ANCESTRY_SEPARATOR = ' > '
 
 
 @dataclass
@@ -86,12 +95,86 @@ class TaskNode:
         return bool(self.indent) and bool(self.fields)
 
     @property
+    def is_checklist_item(self) -> bool:
+        """A child carrying no fields: plain text, not an entity of its own.
+
+        SCHEMA.md keeps these out of `completed.md`, and they must never
+        be given an `[ID:]` -- carrying a field is exactly what
+        distinguishes a subtask from a checklist item, so injecting one
+        would silently promote the line.
+        """
+        raise NotImplementedError
+
+    @property
     def block(self) -> set[int]:
         """Every line the task owns: its own, its notes, its children's."""
         owned = {self.raw_index, *self.note_indices}
         for child in self.children:
             owned |= child.block
         return owned
+
+    @property
+    def snapshot(self) -> dict[str, Any]:
+        """The task's full state, as a journal event records it.
+
+        Snapshots are what make a later authority flip replayable
+        despite hand-edits that never reached the journal.
+        """
+        raise NotImplementedError
+
+    @property
+    def schema_fields(self) -> dict[str, str]:
+        """The fields SCHEMA.md names, in its order."""
+        raise NotImplementedError
+
+    @property
+    def needs_added(self) -> bool:
+        """Whether an open top-level task with no `[ADDED:]` takes one.
+
+        A task whose date fields cannot be read is never touched.
+        Template files carry placeholders like `[DUE:YYYY-MM-DD]`, and
+        rewriting a line btodo cannot interpret is exactly the
+        corruption the round-trip guarantee exists to prevent.
+        """
+        raise NotImplementedError
+
+    def refuse_checklist_item(self) -> None:
+        """Refuse a field written to the task if it is a checklist item.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item. Any field written to one, an
+            `[ID:]` included, promotes it to a subtask (SCHEMA.md).
+        """
+        raise NotImplementedError
+
+
+class Ancestry:
+    """A task and every task above it, outermost first."""
+
+    def __init__(self, tasks: list[TaskNode]) -> None:
+        self.tasks = tasks
+
+    @property
+    def node(self) -> TaskNode:
+        """The task the ancestry ends at."""
+        raise NotImplementedError
+
+    @property
+    def path(self) -> str:
+        """The `Parent > Child` path SCHEMA.md logs a nested task under."""
+        raise NotImplementedError
+
+    @property
+    def stream(self) -> TaskNode:
+        """The task whose event stream owns a write to the last task.
+
+        Usually that task itself. A checklist item cannot hold an
+        `[ID:]`, so its events are recorded against the nearest ancestor
+        that can -- at worst the top-level task, which never is one.
+        """
+        raise NotImplementedError
 
 
 class TodoDocument:

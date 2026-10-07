@@ -1,7 +1,7 @@
 from datetime import date
 from unittest import TestCase
 
-from ..parser import TaskNode, TodoDocument, parse_date
+from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
 
 OPEN_DOC = """# Work
 
@@ -141,6 +141,26 @@ class TaskNodeTests(TestCase):
             ret = t.tk.is_subtask
             t.assertFalse(ret)
 
+    def test_is_checklist_item(t) -> None:
+        with t.subTest('a top-level task is not one'):
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
+        with t.subTest('nor is a top-level task that carries no field'):
+            t.tk.fields = {}
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
+        with t.subTest('an indented task carrying no field is one'):
+            t.tk.indent = 2
+            ret = t.tk.is_checklist_item
+            t.assertTrue(ret)
+
+        with t.subTest('one carrying a field is a subtask'):
+            t.tk.fields = {'LOE': '1'}
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
     def test_block(t) -> None:
         with t.subTest('a task alone owns its own line'):
             ret = t.tk.block
@@ -172,6 +192,101 @@ class TaskNodeTests(TestCase):
 
             t.assertEqual(ret, {2, 3, 4, 5, 6})
 
+    def test_snapshot(t) -> None:
+        ret = t.tk.snapshot
+
+        with t.subTest('the title, the check mark and the fields'):
+            t.assertEqual(
+                ret,
+                {
+                    'title': 'A task',
+                    'done': False,
+                    'fields': {'P': '2', 'LOE': '1'},
+                },
+            )
+
+        with t.subTest('the fields are a copy of the task fields'):
+            t.assertIsNot(ret['fields'], t.tk.fields)
+
+    def test_schema_fields(t) -> None:
+        t.tk.fields = {
+            'TAGS': 'a-tag',
+            'ID': 'zz01ab',
+            'REPEAT': '7d',
+            'ADDED': '2026-07-01',
+            'DUE': '2026-08-20',
+            'LOE': '1',
+            'P': '2',
+        }
+
+        ret = t.tk.schema_fields
+
+        # SCHEMA.md's fields in its order; btodo's own fields left out.
+        t.assertEqual(
+            list(ret.items()),
+            [
+                ('P', '2'),
+                ('LOE', '1'),
+                ('DUE', '2026-08-20'),
+                ('REPEAT', '7d'),
+                ('TAGS', 'a-tag'),
+            ],
+        )
+
+    def test_needs_added(t) -> None:
+        with t.subTest('an open top-level task with no add date'):
+            ret = t.tk.needs_added
+            t.assertTrue(ret)
+
+        with t.subTest('and with a due date that reads'):
+            t.tk.fields = {'P': '2', 'DUE': '2026-08-20'}
+            ret = t.tk.needs_added
+            t.assertTrue(ret)
+
+        with t.subTest('a due date that does not read is left alone'):
+            t.tk.fields = {'P': '2', 'DUE': 'YYYY-MM-DD'}
+            ret = t.tk.needs_added
+            t.assertFalse(ret)
+
+        with t.subTest('a task that carries its add date'):
+            t.tk.fields = {'P': '2', 'ADDED': '2026-07-01'}
+            ret = t.tk.needs_added
+            t.assertFalse(ret)
+
+        with t.subTest('a subtask'):
+            t.tk.fields = {'P': '2'}
+            t.tk.indent = 2
+
+            ret = t.tk.needs_added
+
+            t.assertFalse(ret)
+
+        with t.subTest('a finished task'):
+            t.tk.indent = 0
+            t.tk.done = True
+
+            ret = t.tk.needs_added
+
+            t.assertFalse(ret)
+
+    def test_refuse_checklist_item(t) -> None:
+        with t.subTest('a task that carries a field takes another'):
+            # Nothing to refuse: the call returns.
+            t.tk.refuse_checklist_item()
+
+        with t.subTest('a checklist item is refused'):
+            t.tk.indent = 2
+            t.tk.fields = {}
+
+            with t.assertRaises(ValueError) as caught:
+                t.tk.refuse_checklist_item()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' is a checklist item: a field written to it "
+                'would promote it to a subtask',
+            )
+
     def test_raw_index(t) -> None:
         ret = t.tk.raw_index
         t.assertEqual(ret, 2)
@@ -183,6 +298,57 @@ class TaskNodeTests(TestCase):
     def test_note_indices(t) -> None:
         ret = t.tk.note_indices
         t.assertEqual(ret, [])
+
+
+class AncestryTests(TestCase):
+    """Unit tests for battodo.parser.Ancestry."""
+
+    def setUp(t) -> None:
+        t.task = TaskNode(
+            raw_index=1,
+            indent=0,
+            done=False,
+            title='A task',
+            fields={},
+        )
+        t.subtask = TaskNode(
+            raw_index=2,
+            indent=2,
+            done=False,
+            title='A subtask',
+            fields={'LOE': '1'},
+        )
+        t.item = TaskNode(
+            raw_index=3,
+            indent=4,
+            done=False,
+            title='A checklist item',
+            fields={},
+        )
+        t.an = Ancestry([t.task, t.subtask, t.item])
+
+    def test_node(t) -> None:
+        ret = t.an.node
+        t.assertIs(ret, t.item)
+
+    def test_path(t) -> None:
+        ret = t.an.path
+        t.assertEqual(ret, 'A task > A subtask > A checklist item')
+
+    def test_stream(t) -> None:
+        with t.subTest('a checklist item: the nearest task that can'):
+            ret = t.an.stream
+            t.assertIs(ret, t.subtask)
+
+        with t.subTest('a task that carries a field: the task itself'):
+            t.an.tasks = [t.task, t.subtask]
+            ret = t.an.stream
+            t.assertIs(ret, t.subtask)
+
+        with t.subTest('a top-level task, which always can'):
+            t.an.tasks = [t.task]
+            ret = t.an.stream
+            t.assertIs(ret, t.task)
 
 
 class ParseDateTests(TestCase):
