@@ -315,8 +315,12 @@ class SubtaskAddition:
 
     @property
     def stamped(self) -> bool:
-        """Whether the parent is given an id: it carries none."""
-        return self.node.task_id is None
+        """Whether the parent is given an id: it carries none.
+
+        An `[ID:]` with nothing in it names no stream, so it counts as
+        none.
+        """
+        return not self.node.task_id
 
     @property
     def node(self) -> TaskNode:

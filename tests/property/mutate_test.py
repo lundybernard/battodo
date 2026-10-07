@@ -406,7 +406,7 @@ def added_below(
     node = ancestry[-1]
     refuse_checklist_item(node)
     new = new_ids()
-    stamped = node.task_id is None
+    stamped = not node.task_id
     parent_id = node.task_id or next(new)
     child_fields = {**ordered(values), 'ID': next(new)}
     doc = TodoDocument(text)
