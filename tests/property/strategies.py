@@ -170,9 +170,12 @@ class Grammar:
         Text that short seldom spells an ISO date, a whole number or a
         recurrence, so each is drawn apart. A whole number reads as an
         `LOE` or as a `P`, the legacy scale included. Some dates fall
-        near TODAY, where an age and a due date weigh on a rank.
+        near TODAY, where an age and a due date weigh on a rank. An
+        empty value is drawn apart too: a field present with nothing in
+        it.
         """
         return st.one_of(
+            st.just(''),
             st.text(
                 alphabet=st.characters(
                     codec='utf-8',
