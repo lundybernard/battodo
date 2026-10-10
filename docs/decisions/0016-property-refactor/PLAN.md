@@ -20,6 +20,9 @@ at the front of the branch, before the pin, so the oracle and every
 commit after it read in the final vocabulary. Each slice then runs the
 R4 bracket: pin, declare, red, green, prove parity, cut over, retire.
 
+**Status, 2026-10-10:** every slice is merged: slice 0 in #53, 1 in #54,
+2 in #55, 3 in #59, 4 in #69, 5 in #72, 6 in #77, and 7 in #83.
+
 ## Slice 0 — Test cleanup (R9)
 
 Test-only. It runs before any bracket, because the suites that pin
