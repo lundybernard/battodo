@@ -111,6 +111,12 @@ class UpdateCommandTests(TestCase):
                 '--due',
                 'someday',
             ),
+            'a title with a line break never reaches the file': (
+                'update',
+                SELECTOR,
+                '--title',
+                'Renamed\ntask',
+            ),
         }
         original = (t.source / 'work.md').read_text(encoding='utf-8')
 

@@ -27,6 +27,7 @@ from ..mutate import (
     Scratch,
     SubtaskAddition,
     SuppliedFields,
+    SuppliedTitle,
     TaskNode,
     Update,
 )
@@ -108,6 +109,7 @@ class AdditionTests(TestCase):
         ret = t.ad.text
         t.assertIs(ret, document.return_value.text)
 
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
     @patch.object(Addition, 'index', new_callable=PropertyMock)
     @patch.object(Addition, 'written', new_callable=PropertyMock)
@@ -116,20 +118,23 @@ class AdditionTests(TestCase):
         written: PropertyMock,
         index: PropertyMock,
         todo_document: MagicMock,
+        supplied_title: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         index.return_value = 4
+        supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.ad.parsed = MagicMock(spec=['text'])
 
         ret = t.ad.document
 
         # The bare line goes in last in Open, then its fields go on.
+        supplied_title.assert_called_once_with('A new task')
         todo_document.assert_called_once_with(t.ad.parsed.text)
         t.assertEqual(
             doc.method_calls,
             [
-                call.insert(4, '- [ ] A new task'),
+                call.insert(4, '- [ ] A checked title'),
                 call.set_fields(4, sentinel.written),
             ],
         )
@@ -312,6 +317,7 @@ class SubtaskAdditionTests(TestCase):
         ret = t.sa.text
         t.assertIs(ret, document.return_value.text)
 
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
     @patch.object(SubtaskAddition, 'indent', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'index', new_callable=PropertyMock)
@@ -326,12 +332,14 @@ class SubtaskAdditionTests(TestCase):
         index: PropertyMock,
         indent: PropertyMock,
         todo_document: MagicMock,
+        supplied_title: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         stamped.return_value = False
         node.return_value = t.parent
         index.return_value = 4
         indent.return_value = '  '
+        supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.sa.path = LIST_PATH
         t.sa.parent_id = 'pp02cd'
@@ -339,11 +347,12 @@ class SubtaskAdditionTests(TestCase):
         with t.subTest('the subtask goes in at its index, its fields on it'):
             ret = t.sa.document
 
+            supplied_title.assert_called_once_with('A new subtask')
             todo_document.assert_called_once_with(t.task.doc.text)
             t.assertEqual(
                 doc.method_calls,
                 [
-                    call.insert(4, '  - [ ] A new subtask'),
+                    call.insert(4, '  - [ ] A checked title'),
                     call.set_fields(4, sentinel.written),
                 ],
             )
@@ -640,16 +649,19 @@ class UpdateTests(TestCase):
         t.assertIs(ret, document.return_value.text)
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
     def test_document(
         t,
         written: PropertyMock,
         node: PropertyMock,
+        new_title: PropertyMock,
         todo_document: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         node.return_value = t.parent
+        new_title.return_value = 'A checked title'
         doc = todo_document.return_value
 
         with t.subTest('the fields, then the new title, on the task line'):
@@ -660,14 +672,14 @@ class UpdateTests(TestCase):
                 doc.method_calls,
                 [
                     call.set_fields(1, sentinel.written),
-                    call.set_title(1, 'A new title'),
+                    call.set_title(1, 'A checked title'),
                 ],
             )
             t.assertIs(ret, doc)
 
         with t.subTest('a title left off is not written'):
             doc.reset_mock()
-            t.up.title = None
+            new_title.return_value = None
 
             _ = t.up.document
 
@@ -726,6 +738,22 @@ class UpdateTests(TestCase):
                 _ = t.up.node
 
             refuse_root_fields.assert_not_called()
+
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
+    def test_new_title(t, supplied_title: MagicMock) -> None:
+        with t.subTest('the title the update names, read'):
+            ret = t.up.new_title
+            supplied_title.assert_called_once_with('A new title')
+            t.assertIs(ret, supplied_title.return_value.checked)
+
+        with t.subTest('none, where the update names no title'):
+            supplied_title.reset_mock()
+            t.up.title = None
+
+            ret = t.up.new_title
+
+            supplied_title.assert_not_called()
+            t.assertIsNone(ret)
 
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
     def test_checked(t, supplied: PropertyMock) -> None:
@@ -848,11 +876,18 @@ class UpdateTests(TestCase):
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
+    @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
-    def test_delta(t, written: PropertyMock, node: PropertyMock) -> None:
+    def test_delta(
+        t,
+        written: PropertyMock,
+        node: PropertyMock,
+        new_title: PropertyMock,
+    ) -> None:
         written.return_value = {'P': '5', 'DUE': '2026-09-01'}
         node.return_value = t.parent
+        new_title.return_value = 'A checked title'
 
         with t.subTest('each field written against the one it replaced'):
             ret = t.up.delta
@@ -861,12 +896,12 @@ class UpdateTests(TestCase):
                 {
                     'P': ['4', '5'],
                     'DUE': [None, '2026-09-01'],
-                    'title': ['A task', 'A new title'],
+                    'title': ['A task', 'A checked title'],
                 },
             )
 
         with t.subTest('a title left off names no title change'):
-            t.up.title = None
+            new_title.return_value = None
             ret = t.up.delta
             t.assertNotIn('title', ret)
 
@@ -1639,6 +1674,37 @@ class NamedListTests(TestCase):
         again = t.nl.lists
         t.assertIs(again, ret)
         discover_lists.assert_called_once_with(SOURCE)
+
+
+class SuppliedTitleTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedTitle."""
+
+    def setUp(t) -> None:
+        t.st = SuppliedTitle('A title')
+
+    def test_checked(t) -> None:
+        with t.subTest('a title on one line'):
+            ret = t.st.checked
+            t.assertEqual(ret, 'A title')
+
+        broken = {
+            'a line feed': (
+                'A\ntitle',
+                "title must hold no line break, not 'A\\ntitle'",
+            ),
+            'a carriage return': (
+                'A\rtitle',
+                "title must hold no line break, not 'A\\rtitle'",
+            ),
+        }
+        for name, (text, message) in broken.items():
+            with t.subTest(name):
+                t.st.text = text
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.st.checked
+
+                t.assertEqual(str(caught.exception), message)
 
 
 class SuppliedFieldsTests(TestCase):

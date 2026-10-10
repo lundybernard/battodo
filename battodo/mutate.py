@@ -487,6 +487,17 @@ class Update:
         return node
 
     @property
+    def new_title(self) -> str | None:
+        """The title the update writes, or None where it names none.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line break.
+        """
+        raise NotImplementedError
+
+    @property
     def checked(self) -> dict[str, str]:
         """The named fields, read.
 
@@ -1002,6 +1013,25 @@ class NamedList:
     def lists(self) -> list[Path]:
         """Every list in the source. Cached: discovery reads each one."""
         return discover_lists(self.source)
+
+
+class SuppliedTitle:
+    """A title a caller supplies to a write, read before any write."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def checked(self) -> str:
+        """The title, whole on its task line.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line feed or a carriage return. Either
+            ends the task line when the list is read again.
+        """
+        raise NotImplementedError
 
 
 class SuppliedFields:

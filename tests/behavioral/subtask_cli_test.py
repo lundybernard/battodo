@@ -103,6 +103,10 @@ class SubtaskCommandTests(TestCase):
                 'Open checklist item',
                 'Sand the rails',
             ),
+            'a title with a line break never reaches the file': (
+                PARENT,
+                'Sand the\rrails',
+            ),
         }
         original = (t.source / 'work.md').read_text(encoding='utf-8')
 

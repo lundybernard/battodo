@@ -139,6 +139,25 @@ class AdditionTests(TestCase):
 
                 t.assertEqual(str(caught.exception), message)
 
+        broken = {
+            'a title with a line feed': (
+                'A new\ntask',
+                "title must hold no line break, not 'A new\\ntask'",
+            ),
+            'a title with a carriage return': (
+                'A new\rtask',
+                "title must hold no line break, not 'A new\\rtask'",
+            ),
+        }
+        for name, (title, message) in broken.items():
+            with t.subTest(name):
+                refusal = Addition(t.source, 'a-list', title, {}, TODAY)
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = refusal.text
+
+                t.assertEqual(str(caught.exception), message)
+
     def test_entry(t) -> None:
         ret = t.ad.entry
         # The supplied fields in SCHEMA.md order, then the stamps.
@@ -254,6 +273,11 @@ class SubtaskAdditionTests(TestCase):
                 subtask(t.source, 'nothing'),
                 SelectionError,
                 "no open task matches 'nothing'",
+            ),
+            'a title with a line break': (
+                subtask(t.source, '9o71lx', title='A new\nsubtask'),
+                ValueError,
+                'title must hold no line break',
             ),
         }
         for name, (refusal, error, message) in refused.items():
@@ -402,6 +426,15 @@ class UpdateTests(TestCase):
                 Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
                 SelectionError,
                 "no open task matches 'nothing'",
+            ),
+            'a title with a line break': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    title='A renamed\rtask',
+                ),
+                ValueError,
+                'title must hold no line break',
             ),
         }
         for name, (refusal, error, message) in refused.items():
@@ -822,12 +855,13 @@ def subtask(
     *,
     list_name: str = 'a-list',
     fields: dict[str, str] | None = None,
+    title: str = 'A new subtask',
 ) -> SubtaskAddition:
     """A new subtask under the task `parent` names."""
     return SubtaskAddition(
         Task(source, parent, TODAY),
         list_name,
-        'A new subtask',
+        title,
         fields or {},
     )
 

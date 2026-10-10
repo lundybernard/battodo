@@ -96,7 +96,7 @@ class AddItemTests(TestCase):
     ) -> None:
         text, _ = drawn
         list_name = data.draw(list_names())
-        title = data.draw(grammar.titles)
+        title = data.draw(supplied_titles())
         options = data.draw(supplied_options(ADD_OPTIONS))
         before = Source(source_lists(text), None, [])
         expected = foreseen(added, before, list_name, title, options)
@@ -122,7 +122,7 @@ class AddItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         parent = data.draw(item_selectors(ancestries))
         list_name = data.draw(parent_list_names())
-        title = data.draw(grammar.titles)
+        title = data.draw(supplied_titles())
         options = data.draw(subtask_options())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, parent)
@@ -164,7 +164,7 @@ class UpdateItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
         options = data.draw(supplied_options(UPDATE_OPTIONS))
-        title = data.draw(st.one_of(st.none(), grammar.titles))
+        title = data.draw(st.one_of(st.none(), supplied_titles()))
         named = options if title is None else {**options, 'title': title}
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, selector)
@@ -252,6 +252,20 @@ def list_names() -> st.SearchStrategy[str]:
     return st.one_of(st.sampled_from(['a-list', 'b-list']), grammar.titles)
 
 
+def supplied_titles() -> st.SearchStrategy[str]:
+    """A title a caller supplies.
+
+    One draw in four breaks the title across a line feed, a carriage
+    return, or both.
+    """
+    broken = st.tuples(
+        grammar.titles,
+        st.sampled_from(['\n', '\r', '\r\n']),
+        grammar.titles,
+    ).map(''.join)
+    return either(grammar.titles, either(grammar.titles, broken))
+
+
 def supplied_options(
     table: dict[str, str],
 ) -> st.SearchStrategy[dict[str, str]]:
@@ -311,6 +325,7 @@ def added(
     values = checked(supplied(options, ADD_OPTIONS))
     if 'REPEAT' in values:
         next_due(values['REPEAT'], TODAY)
+    refuse_line_break(title)
     fields = {
         **ordered(values),
         'ADDED': TODAY.isoformat(),
@@ -405,6 +420,7 @@ def added_below(
         raise ValueError(f'{parent!r} names a task in {LIST_FILE}, not {name}')
     node = ancestry[-1]
     refuse_checklist_item(node)
+    refuse_line_break(title)
     new = new_ids()
     stamped = not node.task_id
     parent_id = node.task_id or next(new)
@@ -454,6 +470,8 @@ def updated(
     nested = len(ancestry) > 1
     if nested:
         refuse_root_fields(fields)
+    if title is not None:
+        refuse_line_break(title)
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -715,6 +733,18 @@ def supplied(options: dict[str, str], table: dict[str, str]) -> dict[str, str]:
         for field, option in table.items()
             if option in options
     }  # fmt: skip
+
+
+def refuse_line_break(title: str) -> None:
+    """Refuse a title that would end its task line.
+
+    Raises
+    ------
+    ValueError
+        `title` holds a line feed or a carriage return.
+    """
+    if '\n' in title or '\r' in title:
+        raise ValueError(f'title must hold no line break, not {title!r}')
 
 
 def ordered(fields: dict[str, str]) -> dict[str, str]:
