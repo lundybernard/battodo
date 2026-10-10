@@ -36,3 +36,9 @@ upstream issue candidates against boxed/mutmut.
   hardly rare. Re-verify before filing: upstream #387 (open) and #480
   (closed) may already cover it — check against installed mutmut 3.6 or
   newer.
+  2026-10-10: the property refactor repeats the pattern. After slice
+  7, 76 of the 113 functions in `mutate.py` are `@property` bodies,
+  and the run at the tip reports no survivor in that module (#83).
+  The item slice took the project total from 2000 mutants to 1834
+  (#72, #77). Read a survivor count of zero in a converted module as
+  a smaller target first, and stronger tests second.
