@@ -202,6 +202,19 @@
   answers as the old one after it. The bracket let an 11-commit
   refactor land with the equivalence proof in-history. Rehomed: the
   test-driven-refactor skill, which now owns the oracle-bracket process.
+- 2026-09-04: a work-order scope bullet that restates a rider in
+  other words can contradict it, and the agent follows the concrete
+  bullet. "Convert `test_<fn>_<behavior>` methods to subtests" folded
+  every solo-function class into the grouped shape while the rider
+  beside it said one method per behavior; the PR was rewritten before
+  review. Scope bullets name the target shape per case and never
+  paraphrase a rider. Rehomed: memory function-test-class-convention.
+- 2026-09-04: a pre-refactor audit split by lens list — code lenses to
+  one agent, test lenses to another, run in parallel — returned a
+  plan-ready inventory in one round: import graph, per-module
+  classification, misplaced suites, baseline gate exits, and
+  open-issue reconciliation. The plan (ADR group 0016) was drafted
+  from the two reports without a second reading pass.
 - 2026-10-03: a value object builds no output form. Review of the item
   slice (#77) found an `Item` member that returned all of its data as
   one dict for every consumer. The ruling: the value object holds
