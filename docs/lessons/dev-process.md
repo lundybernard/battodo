@@ -238,6 +238,20 @@
   needed a fix (PR #57) before a second run could succeed: its
   pre-delete list named test directories one by one and missed a
   nested package.
+- 2026-09-09: test suites compose, never inherit. Review of the
+  test-cleanup PR (#53) found six shared base TestCases carrying setUp
+  and helper methods, plus `reset` helpers that cleared a shared
+  fixture between subtests. Every TestCase now inherits only TestCase:
+  shared fixtures are module-level functions called from each setUp,
+  shared helpers take the fixture as an argument, and a subtest that
+  needs its own fixture builds it through a context manager. The
+  `reset` helpers disappeared by shape — solo-function classes
+  unfolded to per-behavior methods with a fresh per-method fixture,
+  and subject classes gave each subtest its own directory. Rehomed:
+  the work-order test riders and the python-style unittest idioms.
+  Expectation on record: as production code moves to the
+  property-based style, test complexity falls with it, and each slice
+  looks for that.
 - 2026-10-03: a value object builds no output form. Review of the item
   slice (#77) found an `Item` member that returned all of its data as
   one dict for every consumer. The ruling: the value object holds
