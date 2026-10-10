@@ -226,6 +226,18 @@
   surface; the retire diff is read for durable-suite deletions; a
   recorded bug's pin lives in a durable suite, never only in the
   oracle.
+- 2026-09-08: mutation testing becomes an informational gate. The five
+  blocking gates hold a 100% coverage floor that still admits weak
+  assertions; the test-cleanup PR (#53) had to prove its rewritten
+  assertions with fourteen hand-placed mutants. `pixi run mutate` now
+  runs once at each PR tip (ADR group 0016 REQUIREMENTS R3, PR #56),
+  the verification line reports surviving mutants, and a survivor is a
+  test-improvement finding rather than a block. First measurements: 96
+  survivors on the pre-cleanup main, 87 after the test cleanup,
+  unchanged by the in-place rewrite of that PR. The `_mutate` task
+  needed a fix (PR #57) before a second run could succeed: its
+  pre-delete list named test directories one by one and missed a
+  nested package.
 - 2026-10-03: a value object builds no output form. Review of the item
   slice (#77) found an `Item` member that returned all of its data as
   one dict for every consumer. The ruling: the value object holds
