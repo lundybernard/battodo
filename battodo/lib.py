@@ -29,12 +29,12 @@ from .conf import TZ
 from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
 from .mutate import (
-    add_subtask,
-    add_task,
-    backfill_all,
-    complete,
-    scratch,
-    update_task,
+    Addition,
+    Backfill,
+    Completion,
+    Scratch,
+    SubtaskAddition,
+    Update,
 )
 from .task import Task
 from .view import Selection, SelectionJsonView, View
@@ -203,28 +203,25 @@ def add_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The parent does not name exactly one open task.
     ValueError
-        A supplied field is unreadable, or the parent cannot hold a
-        subtask. Raised before anything is written.
+        A supplied field is unreadable, the title holds a line break,
+        or the parent cannot hold a subtask. Raised before anything is
+        written.
     """
     source = _source(conf)
     fields = _fields(conf, ADD_FIELDS)
     parent = getattr(conf, 'parent', None)
+    addition: Addition | SubtaskAddition
     if parent is None:
-        path, entry = add_task(
-            source,
-            conf.list,
-            conf.title,
-            fields,
-            now.date(),
-        )
+        addition = Addition(source, conf.list, conf.title, fields, now.date())
     else:
-        path, entry = add_subtask(
+        addition = SubtaskAddition(
             Task(source, parent, now.date()),
             conf.list,
             conf.title,
             fields,
         )
-    return f'{entry}\n{path}'
+    addition.write()
+    return f'{addition.entry}\n{addition.path}'
 
 
 def update_item(conf: Configuration, now: datetime) -> str:
@@ -249,16 +246,17 @@ def update_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     ValueError
-        Nothing was named to change, the task cannot carry a field, or
-        a supplied value is unreadable. Raised before anything is
-        written.
+        Nothing was named to change, the task cannot carry a field, a
+        supplied value is unreadable, or the title holds a line break.
+        Raised before anything is written.
     """
-    path, entry = update_task(
+    update = Update(
         Task(_source(conf), conf.selector, now.date()),
         _fields(conf, UPDATE_FIELDS),
         title=getattr(conf, 'title', None),
     )
-    return f'{entry}\n{path}'
+    update.write()
+    return f'{update.entry}\n{update.path}'
 
 
 def complete_item(conf: Configuration, now: datetime) -> str:
@@ -290,7 +288,9 @@ def complete_item(conf: Configuration, now: datetime) -> str:
         The configured date is not an ISO date. Raised before anything
         is written.
     """
-    entries = complete(Task.from_config(conf, now))
+    completion = Completion(Task.from_config(conf, now))
+    completion.write()
+    entries = completion.entries
     return '\n'.join(entries) if entries else 'checked off'
 
 
@@ -315,7 +315,9 @@ def scratch_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    entries = scratch(Task(_source(conf), conf.selector, now.date()))
+    scratch = Scratch(Task(_source(conf), conf.selector, now.date()))
+    scratch.write()
+    entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'
 
 
@@ -335,10 +337,12 @@ def backfill_items(conf: Configuration, now: datetime) -> str:
         A count for each list that changed, one per line, by list
         name. A run that stamped nothing says so instead.
     """
-    stamped = backfill_all(_source(conf), now.date())
+    backfill = Backfill(_source(conf), now.date())
+    backfill.write()
+    stamped = backfill.lists
     if not stamped:
         return 'nothing to backfill'
     return '\n'.join(
-        f'{name}: stamped {len(titles)}'
-        for name, titles in sorted(stamped.items())
+        f'{listed.path.name}: stamped {len(listed.tasks)}'
+        for listed in stamped
     )

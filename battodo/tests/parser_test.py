@@ -1,7 +1,7 @@
 from datetime import date
 from unittest import TestCase
 
-from ..parser import TaskNode, TodoDocument, parse_date
+from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
 
 OPEN_DOC = """# Work
 
@@ -25,8 +25,14 @@ OPEN_DOC = """# Work
 # Line indices into OPEN_DOC.
 ALPHA_INDEX = 8
 NOTE_INDEX = 9
+# Alpha's children: the subtask, its checklist item, the checklist child.
+SUB_INDICES = (10, 11, 12)
 BETA_INDEX = 14
 APPEND_INDEX = 15
+ALPHA = (
+    '- [ ] Alpha [P:95] [BUMPED:2026-08-08] [ADDED:2026-07-01] [LOE:8] '
+    '[TAGS:a,b]'
+)
 BETA = '- [x] Beta [P:3] [DUE:2026-01-01] [REPEAT:14d]'
 
 
@@ -135,6 +141,152 @@ class TaskNodeTests(TestCase):
             ret = t.tk.is_subtask
             t.assertFalse(ret)
 
+    def test_is_checklist_item(t) -> None:
+        with t.subTest('a top-level task is not one'):
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
+        with t.subTest('nor is a top-level task that carries no field'):
+            t.tk.fields = {}
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
+        with t.subTest('an indented task carrying no field is one'):
+            t.tk.indent = 2
+            ret = t.tk.is_checklist_item
+            t.assertTrue(ret)
+
+        with t.subTest('one carrying a field is a subtask'):
+            t.tk.fields = {'LOE': '1'}
+            ret = t.tk.is_checklist_item
+            t.assertFalse(ret)
+
+    def test_block(t) -> None:
+        with t.subTest('a task alone owns its own line'):
+            ret = t.tk.block
+            t.assertEqual(ret, {2})
+
+        with t.subTest('its notes and its children join it, at any depth'):
+            t.tk.note_indices = [3]
+            t.tk.children = [
+                TaskNode(
+                    raw_index=4,
+                    indent=2,
+                    done=False,
+                    title='A subtask',
+                    fields={'LOE': '1'},
+                    children=[
+                        TaskNode(
+                            raw_index=6,
+                            indent=4,
+                            done=False,
+                            title='A checklist item',
+                            fields={},
+                        ),
+                    ],
+                    note_indices=[5],
+                ),
+            ]
+
+            ret = t.tk.block
+
+            t.assertEqual(ret, {2, 3, 4, 5, 6})
+
+    def test_snapshot(t) -> None:
+        ret = t.tk.snapshot
+
+        with t.subTest('the title, the check mark and the fields'):
+            t.assertEqual(
+                ret,
+                {
+                    'title': 'A task',
+                    'done': False,
+                    'fields': {'P': '2', 'LOE': '1'},
+                },
+            )
+
+        with t.subTest('the fields are a copy of the task fields'):
+            t.assertIsNot(ret['fields'], t.tk.fields)
+
+    def test_schema_fields(t) -> None:
+        t.tk.fields = {
+            'TAGS': 'a-tag',
+            'ID': 'zz01ab',
+            'REPEAT': '7d',
+            'ADDED': '2026-07-01',
+            'DUE': '2026-08-20',
+            'LOE': '1',
+            'P': '2',
+        }
+
+        ret = t.tk.schema_fields
+
+        # SCHEMA.md's fields in its order; btodo's own fields left out.
+        t.assertEqual(
+            list(ret.items()),
+            [
+                ('P', '2'),
+                ('LOE', '1'),
+                ('DUE', '2026-08-20'),
+                ('REPEAT', '7d'),
+                ('TAGS', 'a-tag'),
+            ],
+        )
+
+    def test_needs_added(t) -> None:
+        with t.subTest('an open top-level task with no add date'):
+            ret = t.tk.needs_added
+            t.assertTrue(ret)
+
+        with t.subTest('and with a due date that reads'):
+            t.tk.fields = {'P': '2', 'DUE': '2026-08-20'}
+            ret = t.tk.needs_added
+            t.assertTrue(ret)
+
+        with t.subTest('a due date that does not read is left alone'):
+            t.tk.fields = {'P': '2', 'DUE': 'YYYY-MM-DD'}
+            ret = t.tk.needs_added
+            t.assertFalse(ret)
+
+        with t.subTest('a task that carries its add date'):
+            t.tk.fields = {'P': '2', 'ADDED': '2026-07-01'}
+            ret = t.tk.needs_added
+            t.assertFalse(ret)
+
+        with t.subTest('a subtask'):
+            t.tk.fields = {'P': '2'}
+            t.tk.indent = 2
+
+            ret = t.tk.needs_added
+
+            t.assertFalse(ret)
+
+        with t.subTest('a finished task'):
+            t.tk.indent = 0
+            t.tk.done = True
+
+            ret = t.tk.needs_added
+
+            t.assertFalse(ret)
+
+    def test_refuse_checklist_item(t) -> None:
+        with t.subTest('a task that carries a field takes another'):
+            # Nothing to refuse: the call returns.
+            t.tk.refuse_checklist_item()
+
+        with t.subTest('a checklist item is refused'):
+            t.tk.indent = 2
+            t.tk.fields = {}
+
+            with t.assertRaises(ValueError) as caught:
+                t.tk.refuse_checklist_item()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' is a checklist item: a field written to it "
+                'would promote it to a subtask',
+            )
+
     def test_raw_index(t) -> None:
         ret = t.tk.raw_index
         t.assertEqual(ret, 2)
@@ -146,6 +298,57 @@ class TaskNodeTests(TestCase):
     def test_note_indices(t) -> None:
         ret = t.tk.note_indices
         t.assertEqual(ret, [])
+
+
+class AncestryTests(TestCase):
+    """Unit tests for battodo.parser.Ancestry."""
+
+    def setUp(t) -> None:
+        t.task = TaskNode(
+            raw_index=1,
+            indent=0,
+            done=False,
+            title='A task',
+            fields={},
+        )
+        t.subtask = TaskNode(
+            raw_index=2,
+            indent=2,
+            done=False,
+            title='A subtask',
+            fields={'LOE': '1'},
+        )
+        t.item = TaskNode(
+            raw_index=3,
+            indent=4,
+            done=False,
+            title='A checklist item',
+            fields={},
+        )
+        t.an = Ancestry([t.task, t.subtask, t.item])
+
+    def test_node(t) -> None:
+        ret = t.an.node
+        t.assertIs(ret, t.item)
+
+    def test_path(t) -> None:
+        ret = t.an.path
+        t.assertEqual(ret, 'A task > A subtask > A checklist item')
+
+    def test_stream(t) -> None:
+        with t.subTest('a checklist item: the nearest task that can'):
+            ret = t.an.stream
+            t.assertIs(ret, t.subtask)
+
+        with t.subTest('a task that carries a field: the task itself'):
+            t.an.tasks = [t.task, t.subtask]
+            ret = t.an.stream
+            t.assertIs(ret, t.subtask)
+
+        with t.subTest('a top-level task, which always can'):
+            t.an.tasks = [t.task]
+            ret = t.an.stream
+            t.assertIs(ret, t.task)
 
 
 class ParseDateTests(TestCase):
@@ -262,6 +465,25 @@ class TodoDocumentTests(TestCase):
             ret = spaced.set_field(1, 'ID', 'zz01ab')
             t.assertEqual(ret, '- [ ] X [P:2] [ID:zz01ab]')
 
+        with t.subTest('a replacing value keeps its backslashes'):
+            tagged = TodoDocument('## Open\n- [ ] X [TAGS:a-tag]\n')
+            ret = tagged.set_field(1, 'TAGS', r'\1\n')
+            t.assertEqual(ret, r'- [ ] X [TAGS:\1\n]')
+
+    def test_set_fields(t) -> None:
+        with t.subTest('each field in turn, and the edited line returned'):
+            stamped = f'{BETA.replace("[P:3]", "[P:2]")} [ID:zz01ab]'
+
+            ret = t.td.set_fields(BETA_INDEX, {'P': '2', 'ID': 'zz01ab'})
+
+            t.assertEqual(ret, stamped)
+            t.assertEqual(t.td.lines[BETA_INDEX], stamped)
+
+        with t.subTest('no field leaves the line as it stands'):
+            t.td.lines = OPEN_DOC.split('\n')
+            ret = t.td.set_fields(BETA_INDEX, {})
+            t.assertEqual(ret, BETA)
+
     def test_set_title(t) -> None:
         renamed = BETA.replace('Beta', 'Gamma')
 
@@ -315,3 +537,73 @@ class TodoDocumentTests(TestCase):
             headless = TodoDocument('# Work\n\n## Done\n')
             with t.assertRaises(StopIteration):
                 headless.append_open(entry)
+
+    def test_open_end(t) -> None:
+        with t.subTest('after the last line of the open section'):
+            ret = t.td.open_end
+            t.assertEqual(ret, APPEND_INDEX)
+
+        with t.subTest('under the heading of an empty section'):
+            t.td.lines = ['# Work', '', '## Open', '', '## Done', '']
+            ret = t.td.open_end
+            t.assertEqual(ret, 3)
+
+        with t.subTest('a file with no open section raises'):
+            t.td.lines = ['# Work', '', '## Done', '']
+            with t.assertRaises(StopIteration):
+                _ = t.td.open_end
+
+    def test_insert(t) -> None:
+        line = '  - [ ] New child [LOE:1]'
+        expected = OPEN_DOC.split('\n')
+        expected.insert(BETA_INDEX - 1, line)
+
+        t.td.insert(BETA_INDEX - 1, line)
+
+        # The blank after the block, and every line after it, move down.
+        t.assertEqual(t.td.lines, expected)
+
+    def test_drop(t) -> None:
+        lines = OPEN_DOC.split('\n')
+
+        with t.subTest('a span between blank lines takes one along'):
+            t.td.drop({ALPHA_INDEX, *SUB_INDICES, NOTE_INDEX})
+            # The blank after the span goes, the one before it stays.
+            t.assertEqual(t.td.lines, lines[:ALPHA_INDEX] + lines[14:])
+
+        with t.subTest('a span beside a non-blank line leaves its blanks'):
+            t.td.lines = list(lines)
+            t.td.drop(set(SUB_INDICES))
+            t.assertEqual(t.td.lines, lines[:10] + lines[13:])
+
+        with t.subTest('a span at the end has no line after it to take'):
+            t.td.lines = list(lines)
+            t.td.drop({16, 17})
+            t.assertEqual(t.td.lines, lines[:16])
+
+        with t.subTest('a span at the start has no line before it'):
+            t.td.lines = list(lines)
+            t.td.drop({0})
+            t.assertEqual(t.td.lines, lines[1:])
+
+        with t.subTest('no index leaves every line'):
+            t.td.lines = list(lines)
+            t.td.drop(set())
+            t.assertEqual(t.td.lines, lines)
+
+    def test_mark_done(t) -> None:
+        with t.subTest('the box is checked, the rest of the line kept'):
+            t.td.mark_done(ALPHA_INDEX)
+            ret = t.td.lines[ALPHA_INDEX]
+            t.assertEqual(ret, ALPHA.replace('- [ ]', '- [x]'))
+
+        with t.subTest('an indented task keeps its indent'):
+            t.td.mark_done(SUB_INDICES[0])
+            ret = t.td.lines[SUB_INDICES[0]]
+            t.assertEqual(ret, '  - [x] Sub one [LOE:3]')
+
+        with t.subTest('a box quoted in the title is left alone'):
+            t.td.lines = ['## Open', '- [ ] Quote - [ ] in a title']
+            t.td.mark_done(1)
+            ret = t.td.lines[1]
+            t.assertEqual(ret, '- [x] Quote - [ ] in a title')

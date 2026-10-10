@@ -7,7 +7,7 @@ Date: 2026-09-04
 
 The package carries two module styles. `task.py`, `selection.py`,
 `completed.py`, `conf.py` and `view/render.py` are objects: the
-constructor stores the inputs, `cached_property` steps derive state,
+constructor stores the inputs, property steps derive state,
 and methods write. `mutate.py`, `item.py`, `parser.py`, `journal.py`
 and half of `view/selection.py` thread state through loose functions
 instead.
@@ -35,15 +35,24 @@ function and mocks every call across the seam.
 
 **Every module that loads, parses, or transforms state in steps is a
 property-based object.** The constructor stores its inputs and does no
-work. Each `cached_property` derives one step from the step before it.
-Writes are methods.
+work. Each property derives one step from the step before it, so the
+steps form a property chain. A step is a `cached_property` when
+performance or the nature of the value, such as one random draw or one
+file read, requires a single read. Writes are methods.
 
 **An object that holds values builds no output form.** Each output form
 is a view object of its own, which reads the value object through its
 attributes: one view lays it out as text, another as JSON.
 
+**A write object derives with properties and writes with one method.**
+Each write operation is an object that derives the new text of one list
+and the journal events that record it. Its properties stay free of side
+effects, and its `write` method writes what they derive. The `lib`
+entry point composes the object and calls `write`.
+
 **Pure computation stays as functions.** A function that computes a
-value from its arguments and holds nothing keeps its shape.
+value from its arguments and holds nothing keeps its shape. A fact
+derived from the data of one object becomes a property of that object.
 
 `lib.py` keeps the boundary functions the user interfaces call. The
 layering the CLI depends on
@@ -95,6 +104,11 @@ per form depends on the value object's attributes instead: each form
 reads only what it lays out, and a new form adds a class, not a member
 on the value object. The review of #77 set this rule.
 
+A write object reads every value before it writes anything, so a
+refused write leaves the files as they were. Every write passes its
+values to one shared sequence, so each reaches the list, the log and
+the journal in the same order.
+
 Pure computation has no steps to name. Wrapping it buys a container and
 costs a construction at every call site. Option 2 would apply the
 pattern to satisfy consistency rather than to fix anything, and
@@ -106,7 +120,8 @@ happens, and their shape is what makes each change expensive.
 
 ## Consequences
 
-- `mutate.py` becomes one command object per write operation. `item.py`
+- `mutate.py` becomes one command object per write operation, and each
+  writes what it derives when its `lib` entry point calls it. `item.py`
   becomes a value object with a text view and a JSON view. The
   completed digest and the view move their JSON forms to views of
   their own; their value objects still build the table cells.
