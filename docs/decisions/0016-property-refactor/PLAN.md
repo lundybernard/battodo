@@ -128,11 +128,9 @@ file goes through one surface.
 
 Filed as follow-ups rather than absorbed:
 
-- The table machinery duplicated between the completed digest and the
-  view renderer.
-- The text forms the view and the completed digest still build on
-  their value objects: the cells, badge and due label of a view row,
-  and the cells and title of a digest record and group.
+- #86: the table code that the completed digest and the view
+  duplicate.
+- #87: the text forms that `Row`, `Record` and `Group` still build.
 - The configuration inputs that reach the config object through
   fallback lookup without being declared.
 - Type annotations on the CLI module, which belong upstream as
