@@ -131,7 +131,7 @@ Filed as follow-ups rather than absorbed:
 - #86: the table code that the completed digest and the view
   duplicate.
 - #87: the text forms that `Row`, `Record` and `Group` still build.
-- The configuration inputs that reach the config object through
+- #52: the configuration inputs that reach the config object through
   fallback lookup without being declared.
 - Type annotations on the CLI module, which belong upstream as
   template feedback.
@@ -146,6 +146,10 @@ Filed as follow-ups rather than absorbed:
 - #43 rides in slice 1 and #47 in slice 5.
 - #80 splits the JSON form of the view and the completed digest into
   view objects of their own.
+- #86 records the table code that the completed digest and the view
+  duplicate.
+- #87 records the text forms that `Row`, `Record` and `Group` still
+  build on their value objects.
 
 ## Risks
 
