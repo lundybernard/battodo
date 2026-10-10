@@ -215,6 +215,17 @@
   classification, misplaced suites, baseline gate exits, and
   open-issue reconciliation. The plan (ADR group 0016) was drafted
   from the two reports without a second reading pass.
+- 2026-09-04: a retire commit deleted durable tests along with the
+  oracle. The oracle had pinned a type that survived the conversion
+  unchanged, so it had no old code to die with, and the durable
+  assertions it displaced went out in the same commit; six properties
+  and a recorded bug were unpinned at the tip while the coverage
+  floor stayed at 100 percent (statement coverage, executed through
+  other modules). Independent review caught it. Rule candidates for
+  the test-driven-refactor skill: the oracle pins only superseded
+  surface; the retire diff is read for durable-suite deletions; a
+  recorded bug's pin lives in a durable suite, never only in the
+  oracle.
 - 2026-10-03: a value object builds no output form. Review of the item
   slice (#77) found an `Item` member that returned all of its data as
   one dict for every consumer. The ruling: the value object holds
