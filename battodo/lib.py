@@ -203,8 +203,9 @@ def add_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The parent does not name exactly one open task.
     ValueError
-        A supplied field is unreadable, or the parent cannot hold a
-        subtask. Raised before anything is written.
+        A supplied field is unreadable, the title holds a line break,
+        or the parent cannot hold a subtask. Raised before anything is
+        written.
     """
     source = _source(conf)
     fields = _fields(conf, ADD_FIELDS)
@@ -245,9 +246,9 @@ def update_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     ValueError
-        Nothing was named to change, the task cannot carry a field, or
-        a supplied value is unreadable. Raised before anything is
-        written.
+        Nothing was named to change, the task cannot carry a field, a
+        supplied value is unreadable, or the title holds a line break.
+        Raised before anything is written.
     """
     update = Update(
         Task(_source(conf), conf.selector, now.date()),

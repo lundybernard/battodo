@@ -132,8 +132,9 @@ class Addition:
         ListError
             `list_name` names no discovered list.
         ValueError
-            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read.
-            `RepeatError`, a ValueError, covers `REPEAT`.
+            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read, or
+            the title holds a line break. `RepeatError`, a ValueError,
+            covers `REPEAT`.
         """
         return self.document.text
 
@@ -142,7 +143,8 @@ class Addition:
         """The list as read, with the task last in its open section."""
         doc = TodoDocument(self.parsed.text)
         written = self.written
-        doc.insert(self.index, f'- [ ] {self.title}')
+        title = SuppliedTitle(self.title).checked
+        doc.insert(self.index, f'- [ ] {title}')
         doc.set_fields(self.index, written)
         return doc
 
@@ -266,7 +268,8 @@ class SubtaskAddition:
         SelectionError
             The parent's selector does not name exactly one open task.
         ValueError
-            The parent is a task in another list, or a checklist item.
+            The parent is a task in another list or a checklist item,
+            or the title holds a line break.
         """
         return self.document.text
 
@@ -286,7 +289,8 @@ class SubtaskAddition:
         doc = TodoDocument(self.parent.doc.text)
         if self.stamped:
             doc.set_field(self.node.raw_index, 'ID', self.parent_id)
-        doc.insert(self.index, f'{self.indent}- [ ] {self.title}')
+        title = SuppliedTitle(self.title).checked
+        doc.insert(self.index, f'{self.indent}- [ ] {title}')
         doc.set_fields(self.index, written)
         return doc
 
@@ -446,8 +450,9 @@ class Update:
         SelectionError
             The selector does not name exactly one open task.
         ValueError
-            The task is a checklist item, or a subtask is given a field
-            only the top-level task carries.
+            The task is a checklist item, a subtask is given a field
+            only the top-level task carries, or the title holds a line
+            break.
         """
         return self.document.text
 
@@ -458,8 +463,8 @@ class Update:
         index = self.node.raw_index
         doc = TodoDocument(self.task.doc.text)
         doc.set_fields(index, written)
-        if self.title is not None:
-            doc.set_title(index, self.title)
+        if self.new_title is not None:
+            doc.set_title(index, self.new_title)
         return doc
 
     @property
@@ -495,7 +500,9 @@ class Update:
         ValueError
             The title holds a line break.
         """
-        raise NotImplementedError
+        if self.title is None:
+            return None
+        return SuppliedTitle(self.title).checked
 
     @property
     def checked(self) -> dict[str, str]:
@@ -567,8 +574,8 @@ class Update:
             name: [fields.get(name), value]
             for name, value in self.written.items()
         }
-        if self.title is not None:
-            delta['title'] = [self.node.title, self.title]
+        if self.new_title is not None:
+            delta['title'] = [self.node.title, self.new_title]
         return delta
 
     @property
@@ -1031,7 +1038,11 @@ class SuppliedTitle:
             The title holds a line feed or a carriage return. Either
             ends the task line when the list is read again.
         """
-        raise NotImplementedError
+        if '\n' in self.text or '\r' in self.text:
+            raise ValueError(
+                f'title must hold no line break, not {self.text!r}'
+            )
+        return self.text
 
 
 class SuppliedFields:
