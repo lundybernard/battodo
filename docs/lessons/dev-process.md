@@ -202,3 +202,46 @@
   answers as the old one after it. The bracket let an 11-commit
   refactor land with the equivalence proof in-history. Rehomed: the
   test-driven-refactor skill, which now owns the oracle-bracket process.
+- 2026-10-03: a value object builds no output form. Review of the item
+  slice (#77) found an `Item` member that returned all of its data as
+  one dict for every consumer. The ruling: the value object holds
+  values, and each output form is a view class that reads it through
+  its attributes, `ItemView` for text and `ItemJsonView` for JSON. A new
+  form adds a class, not a member on the value object. The owner also
+  asked for the ruling in an issue before the merge, not only in a
+  review reply: #80 carried it, and #82 applied it to the view and the
+  completed digest. Recorded in ADR 0017.
+- 2026-10-10: the 2026-08-28 tree-rebuild rewrite is now the fold for a
+  reviewed branch whose review renamed classes. The item slice (#77)
+  folded eleven review-fix commits into the commits that introduced
+  their code, so the history reads in the final names, and an empty
+  `git diff <review-tip> <folded-tip>` proved that nothing moved. The
+  mutate slice (#83) also folded two approved content edits, so its
+  proof has two parts: a `--stat` diff that shows only those edits, and
+  a `range-diff` that accounts for every commit it marks as changed.
+  Each red commit was run again at its new position and fails only its
+  declared tests. Rehomed: The Engineer's agent memory.
+- 2026-10-10: a rename folded into a parity bracket can give two test
+  classes one name. In the mutate slice (#83) the new `Scratch` class
+  and the retiring `scratch` function both take the test-class name
+  `ScratchTests`, and from the declare commit to the retire commit both
+  classes sit in one test module. Python keeps the later class, so the
+  earlier one stops running and no test fails. Only ruff F811 reports
+  it, so a scripted fold runs the lint gate on every rebuilt commit. The
+  retiring side takes `ScratchFunctionTests` for the bracket window.
+- 2026-10-10: R7 of the property refactor said a slice records the bugs
+  it finds and fixes none. Practice had already left the rule: at the
+  owner's review, #54 fixed the log-level bug it found, and the item
+  slice fixed a rank bug under the old text (#77). 4e373fc amends R7
+  to match: a slice fixes a bug at once or files an issue, case by
+  case. The last two slices fixed four bugs, each as a red
+  reproduction and then the fix (#77, #83). The test-driven-refactor
+  skill still carries the record-only rule.
+- 2026-10-10: review by key question. For the rest of the refactor and
+  the feature that waits on it, the owner reviews by decision, not by
+  line. A report and a PR's reviewer notes lead with the decisions that
+  need a ruling, one line each. Rulings land and fold into their
+  commits before the owner looks again, so one review round ends in a
+  merge: on the mutate slice (#83), one inline comment went to approval
+  the same day. Size is not a concern: more lines with less complexity
+  is a good trade.
