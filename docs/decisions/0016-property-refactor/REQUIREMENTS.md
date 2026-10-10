@@ -80,12 +80,13 @@ A mutation writes one journal event per task stream, never one event
 covering several tasks
 ([ADR 0014](../0014-subtask-journal-events.md)).
 
-### R7 — Refactor changes no behavior
+### R7 — Refactor changes behavior only by decision
 
-A slice records the bugs it finds and fixes none of them. Three
-behavior changes are permitted across the whole refactor. Each lands
-as a marked non-parity commit, after its slice proves parity, and
-updates the oracle in the same commit:
+A slice identifies bugs as the work goes, and decides case by case
+whether to open an issue for each one or to fix it at once. Apart from
+those fixes, three behavior changes are permitted across the whole
+refactor. Each lands as a marked non-parity commit, after its slice
+proves parity, and updates the oracle in the same commit:
 
 1. The explicit table-width argument is removed from the view.
 2. The reserved `prev_hash` and `hash` event fields are removed, as
@@ -112,10 +113,12 @@ member and subtests per code path.
 
 ## Success criteria
 
-- [ ] The modules named in ADR 0017 hold their state in
-      `cached_property` chains, and pure computation is still
-      functions
+- [ ] The modules named in ADR 0017 hold their state in property
+      chains, where a step is a `cached_property` when performance or
+      the nature of the value (one random draw, one file read)
+      requires a single read, and pure computation is still functions
 - [ ] `tests/oracle/` is empty at the end of the last slice
-- [ ] The behavior of the tool differs from today only in the three
-      changes R7 permits
+- [ ] The behavior of the tool differs from today only in the
+      changes R7 permits: the three it names and the bugs a slice
+      fixes
 - [ ] Every commit on every slice branch is green on all five gates

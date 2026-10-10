@@ -7,7 +7,7 @@ Date: 2026-09-04
 
 The package carries two module styles. `task.py`, `selection.py`,
 `completed.py`, `conf.py` and `view/render.py` are objects: the
-constructor stores the inputs, `cached_property` steps derive state,
+constructor stores the inputs, property steps derive state,
 and methods write. `mutate.py`, `item.py`, `parser.py`, `journal.py`
 and half of `view/selection.py` thread state through loose functions
 instead.
@@ -35,8 +35,10 @@ function and mocks every call across the seam.
 
 **Every module that loads, parses, or transforms state in steps is a
 property-based object.** The constructor stores its inputs and does no
-work. Each `cached_property` derives one step from the step before it.
-Writes are methods.
+work. Each property derives one step from the step before it, so the
+steps form a property chain. A step is a `cached_property` when
+performance or the nature of the value, such as one random draw or one
+file read, requires a single read. Writes are methods.
 
 **An object that holds values builds no output form.** Each output form
 is a view object of its own, which reads the value object through its
