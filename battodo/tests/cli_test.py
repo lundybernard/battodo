@@ -236,6 +236,20 @@ class ArgparserTests(TestCase):
                 args = t.parser.parse_args([command, 'brush pile'])
                 t.assertEqual(args.selector, 'brush pile')
 
+    def test_description(t):
+        for argv in (['add', 'chores', 'X'], ['update', 'brush pile']):
+            with t.subTest(f'{argv[0]} holds None when the flag is not given'):
+                args = t.parser.parse_args(argv)
+                t.assertIsNone(args.description)
+
+            with t.subTest(f'{argv[0]} --description holds its text'):
+                args = t.parser.parse_args([*argv, '--description', 'A\nB'])
+                t.assertEqual(args.description, 'A\nB')
+
+            with t.subTest(f'{argv[0]} --description takes an empty text'):
+                args = t.parser.parse_args([*argv, '--description', ''])
+                t.assertEqual(args.description, '')
+
     def test_done_date(t):
         with t.subTest('Default: None'):
             args = t.parser.parse_args(['done', 'brush pile'])
@@ -483,6 +497,7 @@ class CommandsAddTests(TestCase):
             due='a due date',
             repeat='a repeat',
             tags='some tags',
+            description='a description',
         )
 
     def test_add(t):
@@ -500,6 +515,7 @@ class CommandsAddTests(TestCase):
                 due='a due date',
                 repeat='a repeat',
                 tags='some tags',
+                description='a description',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -592,6 +608,7 @@ class CommandsUpdateTests(TestCase):
             priority='a priority',
             due='a due date',
             tags='some tags',
+            description='a description',
         )
 
     def test_update(t):
@@ -606,6 +623,7 @@ class CommandsUpdateTests(TestCase):
                 priority='a priority',
                 due='a due date',
                 tags='some tags',
+                description='a description',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

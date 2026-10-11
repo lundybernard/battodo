@@ -200,6 +200,7 @@ def add_item(
     due: str | None = None,
     repeat: str | None = None,
     tags: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Write the task the inputs describe.
 
@@ -271,6 +272,7 @@ def update_item(
     priority: str | None = None,
     due: str | None = None,
     tags: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Rewrite the task `selector` names.
 

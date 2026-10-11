@@ -200,6 +200,7 @@ class AddItemTests(TestCase):
             'due': '2026-09-01',
             'repeat': '15d',
             'tags': 'yard,summer',
+            'description': 'A description',
         }
 
     def test_forwarded(t):
@@ -216,6 +217,7 @@ class AddItemTests(TestCase):
                 'TAGS': 'yard,summer',
             },
             t.today,
+            description='A description',
         )
 
     def test_written(t):
@@ -230,7 +232,11 @@ class AddItemTests(TestCase):
 
     def test_no_fields(t):
         add_item(t.conf, t.now, list_name='a-list', title='A task title')
-        t.assertEqual(t.Addition.call_args[0][3], {})
+
+        args, kwargs = t.Addition.call_args
+
+        t.assertEqual(args[3], {})
+        t.assertIsNone(kwargs['description'])
 
     def test_subtask(t):
         addition = t.SubtaskAddition.return_value
@@ -244,6 +250,7 @@ class AddItemTests(TestCase):
             title='A subtask title',
             parent='9o71lx',
             loe='2',
+            description='A description',
         )
 
         with t.subTest('a parent sends the add to a subtask'):
@@ -253,6 +260,7 @@ class AddItemTests(TestCase):
                 'a-list',
                 'A subtask title',
                 {'LOE': '2'},
+                description='A description',
             )
 
         with t.subTest('the parent is the task its selector names'):
@@ -288,6 +296,7 @@ class UpdateItemTests(TestCase):
             'priority': '4',
             'due': '2026-09-01',
             'title': 'A task title',
+            'description': 'A description',
         }
 
     def test_forwarded(t):
@@ -298,6 +307,7 @@ class UpdateItemTests(TestCase):
             t.Task.return_value,
             {'P': '4', 'DUE': '2026-09-01'},
             title='A task title',
+            description='A description',
         )
 
     def test_written(t):
@@ -320,6 +330,7 @@ class UpdateItemTests(TestCase):
         args, kwargs = t.Update.call_args
         t.assertEqual(args[1], {'TAGS': 'a-tag,another-tag'})
         t.assertIsNone(kwargs['title'])
+        t.assertIsNone(kwargs['description'])
 
 
 class CompleteItemTests(TestCase):
