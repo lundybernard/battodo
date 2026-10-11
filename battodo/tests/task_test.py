@@ -27,23 +27,12 @@ class TaskTests(TestCase):
         t.selection.record = MagicMock(spec=['path', 'doc', 'ancestry'])
 
         t.now = Mock(spec=datetime)
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'selector'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = CONFIGURED
-        t.conf.selector = 'a selector'
-
-    def dated(t, value):
-        """The same configuration, carrying a completion date."""
-        conf = Mock(spec=['view', 'selector', 'date'])
-        conf.view = t.conf.view
-        conf.selector = t.conf.selector
-        conf.date = value
-        return conf
 
     def test_from_config(t):
-        task = Task.from_config(t.conf, t.now)
+        task = Task.from_config(t.conf, t.now, selector='a selector')
 
         with t.subTest('the source directory is left unexpanded'):
             t.assertEqual(task.directory, Path(CONFIGURED))
@@ -54,10 +43,13 @@ class TaskTests(TestCase):
         with t.subTest('and the clock gives the day it is logged under'):
             t.assertEqual(task.today, t.now.date.return_value)
 
-        with t.subTest('a configured date is that day instead'):
-            conf = t.dated('2026-07-20')
-
-            task = Task.from_config(conf, t.now)
+        with t.subTest('a given date is that day instead'):
+            task = Task.from_config(
+                t.conf,
+                t.now,
+                selector='a selector',
+                date='2026-07-20',
+            )
 
             t.parse_date.assert_called_once_with('2026-07-20')
             t.assertEqual(task.today, t.parse_date.return_value)
@@ -65,7 +57,12 @@ class TaskTests(TestCase):
         with t.subTest('a date btodo cannot read is refused'):
             t.parse_date.return_value = None
             with t.assertRaises(ValueError):
-                Task.from_config(t.dated('yesterday'), t.now)
+                Task.from_config(
+                    t.conf,
+                    t.now,
+                    selector='a selector',
+                    date='yesterday',
+                )
 
     def test_source(t):
         ret = t.tk.source

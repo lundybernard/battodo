@@ -6,11 +6,42 @@ The contract only exists when the real parser and the real
 dependency stood in for.
 """
 
+from contextlib import redirect_stdout
+from datetime import datetime
+from io import StringIO
+from os import environ
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import DEFAULT_PERIOD, argparser, get_config
+from batconf import TomlSource
+from batconf.types import SourceInterfaceP
+
+from battodo.cli import DEFAULT_PERIOD, TZ, argparser, get_config
 from battodo.view import TOP_N
+
+SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
+FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
+# A day other than the clock's, so a value that leaks in shows.
+STRAY_DATE = '2020-01-01'
+# No category window shuts this list: the display order does not name
+# it.
+YARD = (
+    '# Yard\n'
+    '\n'
+    '## Open\n'
+    '\n'
+    '- [ ] Rake leaves [P:3] [ID:rk01lv]\n'
+    '- [ ] Sweep deck [P:2]\n'
+)
+
+
+class NullFileSource:
+    """Stands in for the config file; the filesystem is out of scope."""
+
+    def get(self, key: str, path: str | None = None) -> None:
+        return None
 
 
 class CliArgsResolutionTests(TestCase):
@@ -21,12 +52,6 @@ class CliArgsResolutionTests(TestCase):
     exists when the real parser and the real get_config meet.
     """
 
-    class NullFileSource:
-        """Stands in for the config file; the filesystem is out of scope."""
-
-        def get(self, key: str, path: str | None = None) -> None:
-            return None
-
     def setUp(t):
         # The environment source outranks the schema defaults: an
         # ambient BATTODO_* var would answer before them.
@@ -36,13 +61,9 @@ class CliArgsResolutionTests(TestCase):
 
     def resolve(t, argv):
         args = argparser().parse_args(argv)
-        return get_config(cli_args=args, config_file=t.NullFileSource())
+        return get_config(cli_args=args, config_file=NullFileSource())
 
     def test_cli_args(t):
-        with t.subTest('a positional reaches the command'):
-            conf = t.resolve(['done', 'brush pile'])
-            t.assertEqual(conf.selector, 'brush pile')
-
         with t.subTest('an option reaches the command'):
             conf = t.resolve(['view', '--format', 'json'])
             t.assertEqual(conf.format, 'json')
@@ -109,10 +130,77 @@ class CliArgsResolutionTests(TestCase):
             conf = t.resolve(['completed'])
             t.assertEqual(conf.period, DEFAULT_PERIOD)
 
-        with t.subTest('a completion date reaches the command'):
-            conf = t.resolve(['done', 'brush pile', '--date', '2026-08-15'])
-            t.assertEqual(conf.date, '2026-08-15')
 
-        with t.subTest('and an omitted one is absent, not empty'):
-            conf = t.resolve(['done', 'brush pile'])
-            t.assertIsNone(getattr(conf, 'date', None))
+class CommandInputTests(TestCase):
+    """Contract tests for the command inputs of battodo.cli.Commands.
+
+    A command input passes beside the configuration, so no environment
+    variable and no config file reaches it. Each run reads and writes a
+    real list in a temporary source directory.
+    """
+
+    maxDiff = None
+
+    def setUp(t):
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        t.root = Path(tmp.name)
+        t.source = t.root / 'todo'
+        t.source.mkdir()
+        (t.source / 'yard.md').write_text(YARD, encoding='utf-8')
+
+        patcher = patch('battodo.cli.datetime', autospec=True)
+        t.datetime = patcher.start()
+        t.addCleanup(patcher.stop)
+        t.datetime.now.return_value = FROZEN
+
+    def run_command(
+        t,
+        argv: list[str],
+        env: dict[str, str],
+        config_file: SourceInterfaceP | None = None,
+    ) -> str:
+        """Run one command with `env` as the whole environment.
+
+        The configuration reads its sources lazily, so the command runs
+        inside the patched environment. Returns what the command
+        printed.
+        """
+        args = argparser().parse_args(argv)
+        out = StringIO()
+        with (
+            patch.dict(environ, {SOURCE_VAR: str(t.source)} | env, clear=True),
+            redirect_stdout(out),
+        ):
+            conf = get_config(
+                cli_args=args,
+                config_file=config_file or NullFileSource(),
+            )
+            args.func(conf, args)
+        return out.getvalue()
+
+    def test_done(t):
+        with t.subTest('BATTODO_DATE does not reach done'):
+            ret = t.run_command(
+                ['done', 'rk01lv'],
+                {'BATTODO_DATE': STRAY_DATE},
+            )
+
+            t.assertEqual(
+                ret, '2026-08-05 | yard | DONE | Rake leaves [P:3]\n'
+            )
+
+        with t.subTest('a date in the config file does not reach done'):
+            config_file = t.root / 'battodo.toml'
+            config_file.write_text(
+                f'[test.battodo]\ndate = "{STRAY_DATE}"\n',
+                encoding='utf-8',
+            )
+
+            ret = t.run_command(
+                ['done', 'Sweep deck'],
+                {},
+                TomlSource(str(config_file), config_env='test'),
+            )
+
+            t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')

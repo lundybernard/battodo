@@ -197,8 +197,8 @@ class CompleteItemTests(TestCase):
         expected = foreseen(completed, before, found)
 
         with written(before) as directory:
-            conf = configuration(directory, selector=selector)
-            ret = observed(complete_item, conf, directory)
+            conf = configuration(directory)
+            ret = observed(complete_item, conf, directory, selector=selector)
 
         t.assertEqual(ret, expected)
 
@@ -368,15 +368,19 @@ def configuration(directory: Path, **options: str) -> Mock:
 
 
 def observed(
-    write: Callable[[Mock, datetime], str],
+    write: Callable[..., str],
     conf: Mock,
     directory: Path,
+    **inputs: str,
 ) -> Any:
-    """What `write` answers and leaves in `directory`, canonical."""
+    """What `write` answers and leaves in `directory`, canonical.
+
+    `inputs` are the command inputs `write` takes beside `conf`.
+    """
     with patch(f'{MUTATE}.new_task_id', autospec=True) as new_task_id:
         new_task_id.side_effect = new_ids()
         try:
-            answer = write(conf, NOW)
+            answer = write(conf, NOW, **inputs)
         except REFUSALS as error:
             answer = refusal(error)
     named = answer.replace(str(directory), SOURCE)

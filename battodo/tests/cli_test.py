@@ -218,13 +218,13 @@ class ArgparserTests(TestCase):
     def test_done_date(t):
         with t.subTest('Default: None'):
             args = t.parser.parse_args(['done', 'brush pile'])
-            t.assertIsNone(getattr(args, 'battodo.date'))
+            t.assertIsNone(args.date)
 
         with t.subTest('done --date accepts an ISO date string'):
             args = t.parser.parse_args(
                 ['done', 'brush pile', '--date', '2026-08-15'],
             )
-            t.assertEqual(getattr(args, 'battodo.date'), '2026-08-15')
+            t.assertEqual(args.date, '2026-08-15')
 
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
@@ -575,16 +575,18 @@ class CommandsDoneTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(selector='a selector', date='a date')
 
     def test_done(t):
         Commands.done(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.complete_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
+                date='a date',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

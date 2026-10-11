@@ -314,8 +314,8 @@ class CompleteItemTests(TestCase):
 
         t.now = sentinel.now
         # The task decodes the configuration, so this call reads no
-        # value off it. The spec still names what a `done` carries.
-        t.conf = Mock(spec=['view', 'selector'])
+        # value off it.
+        t.conf = Mock(spec=['view'])
 
     def test_result(t):
         # Completing the last open child completes its parent too, so
@@ -325,7 +325,7 @@ class CompleteItemTests(TestCase):
             '2026-08-08 | a-list | DONE | A parent',
         ]
 
-        logged = complete_item(t.conf, t.now)
+        logged = complete_item(t.conf, t.now, selector='a selector')
 
         t.assertEqual(
             logged,
@@ -334,20 +334,37 @@ class CompleteItemTests(TestCase):
         )
 
     def test_task(t):
-        complete_item(t.conf, t.now)
+        complete_item(t.conf, t.now, selector='a selector', date='a date')
 
-        with t.subTest('the configuration is decoded once, by the task'):
-            t.Task.from_config.assert_called_once_with(t.conf, t.now)
+        with t.subTest('the task decodes the configuration and the inputs'):
+            t.Task.from_config.assert_called_once_with(
+                t.conf,
+                t.now,
+                selector='a selector',
+                date='a date',
+            )
 
         with t.subTest('which the completion is built on'):
             t.Completion.assert_called_once_with(t.task)
 
+        with t.subTest('a date left off is None'):
+            t.Task.from_config.reset_mock()
+
+            complete_item(t.conf, t.now, selector='a selector')
+
+            t.Task.from_config.assert_called_once_with(
+                t.conf,
+                t.now,
+                selector='a selector',
+                date=None,
+            )
+
     def test_written(t):
-        complete_item(t.conf, t.now)
+        complete_item(t.conf, t.now, selector='a selector')
         t.completion.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        logged = complete_item(t.conf, t.now)
+        logged = complete_item(t.conf, t.now, selector='a selector')
         t.assertEqual(logged, 'checked off')
 
 
