@@ -12,10 +12,10 @@ command.
 
 Branch: `adr-event-attributes` — Issue: #79
 
-**Status: deferred.** The work lands after the journal-authority flip
-([ADR group 0008](../0008-journal-authority/README.md)) and after the
-property refactor ([ADR group 0016](../0016-property-refactor/README.md))
-completes.
+**Status: active.** The work lands after the journal-authority flip
+([ADR group 0008](../0008-journal-authority/README.md)). The property
+refactor ([ADR group 0016](../0016-property-refactor/README.md)) is
+complete.
 
 ## Planning docs
 
