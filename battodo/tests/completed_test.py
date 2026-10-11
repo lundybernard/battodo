@@ -120,6 +120,23 @@ class DigestTests(TestCase):
                 ['Completed today'],
             )
 
+        with t.subTest('a line ends at a line feed, and nowhere else'):
+            # The list parser splits at line feeds alone, so a title
+            # may hold any other line break. The title shows it as the
+            # space it collapses to.
+            t.log.read_text.return_value = (
+                '2026-08-05 | work | DONE | Pay\u2028the bill\n'
+                '2026-08-05 | work | DONE | Fix\x85it\n'
+            )
+            digest = Digest(t.directory, NOW, period='today')
+
+            ret = digest.records
+
+            t.assertEqual(
+                [found.title for found in ret],
+                ['Pay the bill', 'Fix it'],
+            )
+
     def test_groups(t) -> None:
         ret = t.d.groups
 
