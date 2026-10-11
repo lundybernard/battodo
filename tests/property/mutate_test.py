@@ -36,7 +36,13 @@ from battodo.lib import (
     update_item,
 )
 from battodo.mutate import ListError
-from battodo.parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
+from battodo.parser import (
+    CHECKBOX_RE,
+    OPEN_HEADING,
+    TaskNode,
+    TodoDocument,
+    parse_date,
+)
 from battodo.repeat import next_due
 from battodo.selector import SelectionError
 
@@ -81,6 +87,18 @@ LOE_VALUES = ('1', '2', '3', '5', '8')
 ROOT_FIELDS = ('P', 'REPEAT')
 # The indent each level of the schema adds.
 INDENT = '  '
+# How far a description line indents past its task line.
+DESCRIPTION_INDENT = ' ' * 6
+# Description lines the parser reads back as something else.
+REFUSED_LINES = (
+    '',
+    '   ',
+    '- [ ] A task line',
+    '  - [x] A done task line',
+    '## A heading',
+    '<!-- A comment -->',
+    'A line\rbroken',
+)
 
 
 class AddItemTests(TestCase):
@@ -98,8 +116,17 @@ class AddItemTests(TestCase):
         list_name = data.draw(list_names())
         title = data.draw(supplied_titles())
         options = data.draw(supplied_options(ADD_OPTIONS))
+        description = data.draw(supplied_descriptions())
+        named = described(options, description)
         before = Source(source_lists(text), None, [])
-        expected = foreseen(added, before, list_name, title, options)
+        expected = foreseen(
+            added,
+            before,
+            list_name,
+            title,
+            options,
+            description,
+        )
 
         with written(before) as directory:
             conf = configuration(directory)
@@ -109,7 +136,7 @@ class AddItemTests(TestCase):
                 directory,
                 list_name=list_name,
                 title=title,
-                **options,
+                **named,
             )
 
         t.assertEqual(ret, expected)
@@ -126,6 +153,8 @@ class AddItemTests(TestCase):
         list_name = data.draw(parent_list_names())
         title = data.draw(supplied_titles())
         options = data.draw(subtask_options())
+        description = data.draw(supplied_descriptions())
+        named = described(options, description)
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, parent)
         expected = foreseen(
@@ -136,6 +165,7 @@ class AddItemTests(TestCase):
             list_name,
             title,
             options,
+            description,
         )
 
         with written(before) as directory:
@@ -147,7 +177,7 @@ class AddItemTests(TestCase):
                 list_name=list_name,
                 title=title,
                 parent=parent,
-                **options,
+                **named,
             )
 
         t.assertEqual(ret, expected)
@@ -169,10 +199,19 @@ class UpdateItemTests(TestCase):
         selector = data.draw(item_selectors(ancestries))
         options = data.draw(supplied_options(UPDATE_OPTIONS))
         title = data.draw(st.one_of(st.none(), supplied_titles()))
-        named = options if title is None else {**options, 'title': title}
+        description = data.draw(supplied_descriptions())
+        titled = options if title is None else {**options, 'title': title}
+        named = described(titled, description)
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, selector)
-        expected = foreseen(updated, before, found, title, options)
+        expected = foreseen(
+            updated,
+            before,
+            found,
+            title,
+            options,
+            description,
+        )
 
         with written(before) as directory:
             conf = configuration(directory)
@@ -290,6 +329,52 @@ def supplied_options(
     return st.fixed_dictionaries(drawn).map(given_options)
 
 
+def supplied_descriptions() -> st.SearchStrategy[str | None]:
+    """A description a caller supplies, or None for none supplied.
+
+    Half the draws supply none. The rest are empty, or one to three
+    lines; one draw in four of those holds a line the parser reads back
+    as something else.
+    """
+    lines = st.lists(description_texts(), min_size=1, max_size=3)
+    refused = st.tuples(lines, st.sampled_from(REFUSED_LINES), st.data())
+    given = either(
+        either(lines, lines),
+        refused.map(with_refused_line),
+    ).map('\n'.join)
+    return either(st.none(), either(st.just(''), given))
+
+
+def description_texts() -> st.SearchStrategy[str]:
+    """One description line as a caller types it, indent and all."""
+    return st.builds(
+        str.__add__,
+        st.sampled_from(['', ' ', '    ']),
+        grammar.titles.filter(
+            lambda text: not text.strip().startswith(('#', '<!--'))
+        ),
+    )
+
+
+def with_refused_line(
+    drawn: tuple[list[str], str, st.DataObject],
+) -> list[str]:
+    """The lines with the refused line at a drawn place among them."""
+    lines, refused, data = drawn
+    place = data.draw(st.integers(min_value=0, max_value=len(lines)))
+    return [*lines[:place], refused, *lines[place:]]
+
+
+def described(
+    options: dict[str, str],
+    description: str | None,
+) -> dict[str, str]:
+    """The options, and the description where one is supplied."""
+    if description is None:
+        return options
+    return {**options, 'description': description}
+
+
 class Source(NamedTuple):
     """What a source directory holds: lists, completed log, events."""
 
@@ -325,17 +410,19 @@ def added(
     list_name: str,
     title: str,
     options: dict[str, str],
+    description: str | None,
 ) -> 'Outcome':
     """A new top-level task, last in the open section of its list.
 
     It carries the supplied fields in SCHEMA.md order, then its add
-    date and a new id.
+    date and a new id. Its description lines follow it.
     """
     name = list_file(before, list_name)
     values = checked(supplied(options, ADD_OPTIONS))
     if 'REPEAT' in values:
         next_due(values['REPEAT'], TODAY)
     refuse_line_break(title)
+    lines = description_lines(description or '')
     fields = {
         **ordered(values),
         'ADDED': TODAY.isoformat(),
@@ -344,8 +431,9 @@ def added(
     doc = TodoDocument(before.lists[name])
     index = doc.append_open(f'- [ ] {title}')
     doc.set_fields(index, fields)
+    describe(doc, index, '', lines)
     entry = doc.lines[index]
-    payload = addition(entry, fields)
+    payload = addition(block(doc, index, lines), fields)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
     lists = {**before.lists, name: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -414,11 +502,13 @@ def added_below(
     list_name: str,
     title: str,
     options: dict[str, str],
+    description: str | None,
 ) -> 'Outcome':
     """A new subtask, last in its parent's block, one level deeper.
 
-    It carries the supplied fields in SCHEMA.md order, then a new id. A
-    parent with no id is stamped first, on an event of its own.
+    It carries the supplied fields in SCHEMA.md order, then a new id,
+    and its description lines follow it. A parent with no id is stamped
+    first, on an event of its own.
     """
     name = list_file(before, list_name)
     fields = supplied(options, ADD_OPTIONS)
@@ -430,6 +520,7 @@ def added_below(
     node = ancestry[-1]
     refuse_checklist_item(node)
     refuse_line_break(title)
+    lines = description_lines(description or '')
     new = new_ids()
     stamped = not node.task_id
     parent_id = node.task_id or next(new)
@@ -441,6 +532,7 @@ def added_below(
     indent = ' ' * (node.indent + len(INDENT))
     doc.insert(index, f'{indent}- [ ] {title}')
     doc.set_fields(index, child_fields)
+    describe(doc, index, indent, lines)
     entry = doc.lines[index]
     events = []
     if stamped:
@@ -451,7 +543,8 @@ def added_below(
         events.append(
             Appended('TaskUpdated', f'task/{parent_id}', stamp, LIST_FILE)
         )
-    child = {**addition(entry, child_fields), 'parent': parent_id}
+    added_block = block(doc, index, lines)
+    child = {**addition(added_block, child_fields), 'parent': parent_id}
     child_stream = f'task/{child_fields["ID"]}'
     events.append(Appended('TaskAdded', child_stream, child, LIST_FILE))
     lists = {**before.lists, LIST_FILE: doc.text}
@@ -464,13 +557,15 @@ def updated(
     found: Answer,
     title: str | None,
     options: dict[str, str],
+    description: str | None,
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
-    A task with no id is given one.
+    A description named replaces its description lines, and an empty
+    one clears them. A task with no id is given one.
     """
     fields = supplied(options, UPDATE_OPTIONS)
-    if not fields and title is None:
+    if not fields and title is None and description is None:
         raise ValueError(
             'nothing to update: name a field, a title or a description'
         )
@@ -483,6 +578,7 @@ def updated(
         refuse_root_fields(fields)
     if title is not None:
         refuse_line_break(title)
+    lines = None if description is None else description_lines(description)
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -491,6 +587,10 @@ def updated(
     doc.set_fields(node.raw_index, written_fields)
     if title is not None:
         doc.set_title(node.raw_index, title)
+    if lines is not None:
+        doc.drop(set(node.note_indices))
+        indent = ' ' * node.indent
+        describe(doc, node.raw_index, indent, lines)
     entry = doc.lines[node.raw_index]
     delta = {
         field: [node.fields.get(field), value]
@@ -498,6 +598,9 @@ def updated(
     }
     if title is not None:
         delta['title'] = [node.title, title]
+    if lines is not None:
+        before_text = '\n'.join(node.description_lines) or None
+        delta['description'] = [before_text, '\n'.join(lines) or None]
     payload: dict[str, Any] = {'delta': delta, 'snapshot': snapshot(node)}
     if nested:
         payload['ancestry'] = path_of(ancestry)
@@ -763,6 +866,51 @@ def refuse_line_break(title: str) -> None:
         raise ValueError(f'title must hold no line break, not {title!r}')
 
 
+def description_lines(description: str) -> list[str]:
+    """The lines of a supplied description, each stripped.
+
+    An empty description holds none.
+
+    Raises
+    ------
+    ValueError
+        A line is blank, reads as a task line, a heading or a comment,
+        or holds a carriage return.
+    """
+    if not description:
+        return []
+    lines = description.split('\n')
+    for line in lines:
+        text = line.strip()
+        reason = (
+            'is blank' if not text
+            else 'reads as a task line' if CHECKBOX_RE.match(text)
+            else 'reads as a heading' if text.startswith('## ')
+            else 'reads as a comment' if text.startswith('<!--')
+            else 'holds a carriage return' if '\r' in line
+            else None
+        )  # fmt: skip
+        if reason is not None:
+            raise ValueError(f'description line {line!r} {reason}')
+    return [line.strip() for line in lines]
+
+
+def describe(
+    doc: TodoDocument,
+    index: int,
+    indent: str,
+    lines: list[str],
+) -> None:
+    """Insert `lines` under the task line at `index`, which `indent` leads."""
+    for offset, line in enumerate(lines, start=1):
+        doc.insert(index + offset, f'{indent}{DESCRIPTION_INDENT}{line}')
+
+
+def block(doc: TodoDocument, index: int, lines: list[str]) -> str:
+    """The task line at `index` and the description lines under it."""
+    return '\n'.join(doc.lines[index : index + 1 + len(lines)])
+
+
 def ordered(fields: dict[str, str]) -> dict[str, str]:
     """The fields SCHEMA.md names, in its order."""
     return {
@@ -777,12 +925,13 @@ def new_ids() -> Iterator[str]:
     return (NEW_ID.format(number) for number in count(1))
 
 
-def addition(entry: str, fields: dict[str, str]) -> dict[str, Any]:
-    """The payload of a new task line: each field against nothing.
+def addition(written: str, fields: dict[str, str]) -> dict[str, Any]:
+    """The payload of a new task: each field against nothing.
 
-    The snapshot is the line as the parser reads it back.
+    The snapshot is the task line and its description lines as the
+    parser reads them back.
     """
-    task = TodoDocument(f'{OPEN_HEADING}\n{entry}').tasks[0]
+    task = TodoDocument(f'{OPEN_HEADING}\n{written}').tasks[0]
     return {
         'delta': {field: [None, value] for field, value in fields.items()},
         'snapshot': snapshot(task),

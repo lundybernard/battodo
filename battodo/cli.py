@@ -164,6 +164,10 @@ def argparser():
         '--parent',
         help=MESSAGES['add.parent.help'],
     )
+    add.add_argument(
+        '--description',
+        help=MESSAGES['add.description.help'],
+    )
 
     show = commands.add_parser(
         'show',
@@ -210,6 +214,10 @@ def argparser():
     update.add_argument(
         '--title',
         help=MESSAGES['update.title.help'],
+    )
+    update.add_argument(
+        '--description',
+        help=MESSAGES['update.description.help'],
     )
 
     done = commands.add_parser(
@@ -310,6 +318,7 @@ class Commands:
                 due=args.due,
                 repeat=args.repeat,
                 tags=args.tags,
+                description=args.description,
             )
         )
 
@@ -328,6 +337,7 @@ class Commands:
                 priority=args.priority,
                 due=args.due,
                 tags=args.tags,
+                description=args.description,
             )
         )
 

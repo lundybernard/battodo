@@ -55,6 +55,8 @@ MESSAGES = {
     'add.tags.help': 'comma-separated tags',
     'add.parent.help': 'add under this task, in the same list: its [ID:]'
     ' value, or part of its title',
+    'add.description.help': 'the task description; each line of it is one'
+    ' description line under the task',
     # show
     'show.description': 'show one item: its fields and its subtasks',
     'show.help': 'for details use show --help',
@@ -70,6 +72,8 @@ MESSAGES = {
     'update.due.help': 'new due date, YYYY-MM-DD',
     'update.tags.help': 'replacement comma-separated tags',
     'update.title.help': 'new title, without any [FIELD:] markup',
+    'update.description.help': 'new description, one description line per'
+    ' line; an empty one clears it',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',
