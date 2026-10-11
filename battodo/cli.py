@@ -39,7 +39,7 @@ def BATCLI(ARGS=None):
     Commands.set_log_level(conf)
     # execute function set for parsed command
     try:
-        args.func(conf)
+        args.func(conf, args)
     # Top-level CLI boundary: any command failure becomes a message on
     # stderr, never a traceback. stdout carries the command's output and
     # nothing else, so a consumer can parse it unconditionally; the help
@@ -301,7 +301,7 @@ def checked_count(value: str) -> str:
 
 
 def get_help(parser):
-    def help(args):
+    def help(conf, args):
         parser.print_help()
 
     return help
@@ -309,35 +309,35 @@ def get_help(parser):
 
 class Commands:
     @staticmethod
-    def add(conf):
+    def add(conf, args):
         print(add_item(conf, datetime.now(TZ)))
 
     @staticmethod
-    def show(conf):
+    def show(conf, args):
         print(get_item(conf, datetime.now(TZ)))
 
     @staticmethod
-    def update(conf):
+    def update(conf, args):
         print(update_item(conf, datetime.now(TZ)))
 
     @staticmethod
-    def done(conf):
+    def done(conf, args):
         print(complete_item(conf, datetime.now(TZ)))
 
     @staticmethod
-    def scratch(conf):
+    def scratch(conf, args):
         print(scratch_item(conf, datetime.now(TZ)))
 
     @staticmethod
-    def backfill(conf):
+    def backfill(conf, args):
         print(backfill_items(conf, datetime.now(TZ)))
 
     @staticmethod
-    def view(conf):
+    def view(conf, args):
         print(get_view(conf, datetime.now(TZ)))
 
     @staticmethod
-    def completed(conf):
+    def completed(conf, args):
         print(get_completed(conf, datetime.now(TZ)))
 
     @staticmethod

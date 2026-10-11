@@ -1,4 +1,4 @@
-from argparse import _HelpAction, _SubParsersAction
+from argparse import Namespace, _HelpAction, _SubParsersAction
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from types import SimpleNamespace
@@ -297,7 +297,7 @@ class BATCLITests(TestCase):
                         config_file_name=args.config_file,
                         config_env=args.config_env,
                     )
-                    m_cmd.assert_called_with(t.get_config.return_value)
+                    m_cmd.assert_called_with(t.get_config.return_value, args)
                     t.exit.assert_called_with(0)
 
     @patch(f'{SRC}.Commands.view', autospec=True)
@@ -332,7 +332,7 @@ class BATCLITests(TestCase):
 
         exc = Exception('boom')
 
-        def fail(conf):
+        def fail(conf, args):
             raise exc
 
         args = argparser().parse_args([])
@@ -390,9 +390,10 @@ class CommandsViewTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'show_all', 'format'])
+        t.args = Namespace()
 
     def test_view(t):
-        Commands.view(t.conf)
+        Commands.view(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_view.assert_called_once_with(
@@ -420,9 +421,10 @@ class CommandsBackfillTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view'])
+        t.args = Namespace()
 
     def test_backfill(t):
-        Commands.backfill(t.conf)
+        Commands.backfill(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.backfill_items.assert_called_once_with(
@@ -450,9 +452,10 @@ class CommandsAddTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.args = Namespace()
 
     def test_add(t):
-        Commands.add(t.conf)
+        Commands.add(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.add_item.assert_called_once_with(
@@ -480,9 +483,10 @@ class CommandsShowTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'selector', 'format'])
+        t.args = Namespace()
 
     def test_show(t):
-        Commands.show(t.conf)
+        Commands.show(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_item.assert_called_once_with(
@@ -510,9 +514,10 @@ class CommandsCompletedTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'period', 'format'])
+        t.args = Namespace()
 
     def test_completed(t):
-        Commands.completed(t.conf)
+        Commands.completed(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.get_completed.assert_called_once_with(
@@ -540,9 +545,10 @@ class CommandsUpdateTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.args = Namespace()
 
     def test_update(t):
-        Commands.update(t.conf)
+        Commands.update(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.update_item.assert_called_once_with(
@@ -570,9 +576,10 @@ class CommandsDoneTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'selector'])
+        t.args = Namespace()
 
     def test_done(t):
-        Commands.done(t.conf)
+        Commands.done(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.complete_item.assert_called_once_with(
@@ -600,9 +607,10 @@ class CommandsScratchTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view', 'selector'])
+        t.args = Namespace()
 
     def test_scratch(t):
-        Commands.scratch(t.conf)
+        Commands.scratch(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.scratch_item.assert_called_once_with(
