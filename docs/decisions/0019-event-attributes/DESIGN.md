@@ -7,11 +7,11 @@
 The specification behind ADRs
 [0020](0020-event-attribute-map.md),
 [0021](0021-task-description-field.md) and
-[0022](0022-history-command.md). It assumes the journal is
-authoritative
-([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
-and extends the event vocabulary of
+[0022](0022-history-command.md). It extends the event vocabulary of
 [DESIGN.md ## Journal](../0000-project-bootstrap/DESIGN.md#journal).
+The work lands before the journal-authority flip; the group README's
+[After the flip](README.md#after-the-flip) lists the part that waits
+for it.
 
 ## Command surface
 
@@ -123,11 +123,6 @@ under the task line, in the form the parser already reads
 rescheduled; `complete` drops the children of a rescheduled task, not
 its description lines. The description survives each completion unchanged, and no
 completion writes to it.
-
-**Flip.** The importer that writes genesis events at the flip
-([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
-reads existing description lines into `snapshot.description`. After
-the flip, no command reads a description line back from the markdown.
 
 ## History command
 

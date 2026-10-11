@@ -74,6 +74,5 @@ which is the split R2 asks for.
 
 - `history` is the first command that resolves a task from the journal
   rather than from the markdown. DESIGN.md states its selector.
-- `history` depends on the flip. Before it, a completion made by hand
-  edit writes no event, so a history read from the journal would miss
-  it.
+- Before the flip, a completion made by hand edit writes no event, so
+  `history` does not list it.

@@ -12,12 +12,6 @@ completion, kept once per completion, and a static description of the
 task itself. The decisions behind these criteria are ADRs 0020–0022,
 and the specification is [DESIGN.md](DESIGN.md).
 
-**Timing.** The work is deferred. It lands after the journal-authority
-flip
-([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
-and after the property refactor
-([ADR group 0016](../0016-property-refactor/README.md)) completes.
-
 ## Requirements
 
 ### R1 — Facts per completion
@@ -39,9 +33,9 @@ to it.
 
 ### R4 — Journal first
 
-Every write is a journal event, and the markdown is a render of the
-journal. The feature lands after the journal-authority flip and after
-the ADR 0016 refactor completes.
+Every write is a journal event that carries the whole fact it records,
+so the journal can rebuild each fact when the markdown becomes a render
+of the journal at the flip.
 
 ### R5 — Open vocabulary
 
@@ -57,7 +51,6 @@ A new kind of fact does not need a schema change or a code change.
       after the task has left its list (R2)
 - [ ] A description set through `add` or `update` survives a completion
       of a repeating task unchanged (R3)
-- [ ] A render from the journal alone restores every description (R4)
 - [ ] A fact under a new key records and reads back without a code
       change (R5)
 - [ ] CI green on the final commit

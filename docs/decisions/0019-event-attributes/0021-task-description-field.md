@@ -28,8 +28,7 @@ them ([R4](REQUIREMENTS.md)).
 completion attributes.** `add` sets it and `update` changes it. Each
 write records it on the task's own event stream, as the title is
 recorded. The renderer writes it as the description lines the parser
-already reads. At the flip, existing description lines enter the
-journal through the genesis events.
+already reads.
 
 [DESIGN.md](DESIGN.md#task-description) specifies the snapshot key, the
 delta, and the render.
@@ -81,8 +80,10 @@ different file.
 - The snapshot gains a description key, and the `update` delta carries
   a changed description beside `title` (DESIGN.md).
 - `add` and `update` gain a description option.
-- The genesis events at the flip carry existing description lines, so
-  the flip loses no description text.
+- The genesis import at the flip carries the existing description
+  lines into the journal
+  ([After the flip](README.md#after-the-flip)), so the flip loses no
+  description text.
 - No completion writes to the description, so a repeating task keeps
   it unchanged across every cycle.
 - After the flip, btodo does not read back a hand edit to a description line,

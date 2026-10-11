@@ -12,10 +12,11 @@ command.
 
 Branch: `adr-event-attributes` — Issue: #79
 
-**Status: active.** The work lands after the journal-authority flip
-([ADR group 0008](../0008-journal-authority/README.md)). The property
-refactor ([ADR group 0016](../0016-property-refactor/README.md)) is
-complete.
+**Status: active.** The group lands before the journal-authority flip
+([ADR group 0008](../0008-journal-authority/README.md)).
+[After the flip](#after-the-flip) lists the two items that wait for it.
+The property refactor
+([ADR group 0016](../0016-property-refactor/README.md)) is complete.
 
 ## Terms
 
@@ -41,6 +42,18 @@ The group uses one word for each meaning:
 | [0020](0020-event-attribute-map.md) | Completion events carry an open attribute map | Proposed |
 | [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
 | [0022](0022-history-command.md) | A history command reads the journal | Proposed |
+
+## After the flip
+
+Two items need the journal-authority flip
+([ADR group 0008](../0008-journal-authority/README.md)) and land with
+it:
+
+- The importer that writes the genesis events at the flip reads the
+  existing description lines into `snapshot.description`. After the
+  flip, no command reads a description line back from the markdown.
+- Success criterion for [R4](REQUIREMENTS.md#r4--journal-first): a
+  render from the journal alone restores every description.
 
 ## AI assistance disclosure
 
