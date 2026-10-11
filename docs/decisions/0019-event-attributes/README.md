@@ -34,7 +34,7 @@ The group uses one word for each meaning:
 | File | Purpose |
 | ---- | ------- |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Testable acceptance criteria |
-| [DESIGN.md](DESIGN.md) | Command surface, payload keys, open questions |
+| [DESIGN.md](DESIGN.md) | Command surface, payload keys, attribute grammar |
 
 ## Component ADRs
 

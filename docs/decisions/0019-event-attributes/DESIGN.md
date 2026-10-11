@@ -16,21 +16,36 @@ for it.
 ## Command surface
 
 ```text
-btodo done <selector> [--attr KEY=VALUE]... [--note TEXT] [--date DATE]
-btodo add <list> <title> [--description TEXT] ...
-btodo update <selector> [--description TEXT] ...
+btodo add <list> <title> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
+btodo update <selector> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
+btodo done <selector> [--attrs ATTRS] [--note TEXT] [--date DATE]
+btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
 btodo history <selector> [--format text|json]
 ```
 
-`--attr` repeats. `--note TEXT` is shorthand for `--attr note=TEXT`.
+`--attrs` takes every attribute in one string. `--note TEXT` enters the
+map as `note=TEXT`.
 
 ## Event attributes
 
-**Grammar.** An attribute splits on its first `=`. The key is a
-lowercase identifier: a letter, then letters, digits or underscores.
-The value is text and may hold `=`. `done` refuses an attribute with no
-`=` or a key outside the grammar before it writes anything, as `add`
-validates before it writes.
+**Grammar.** `--attrs` takes one string of `key=value` segments:
+`--attrs='k=v, k=v'`. The string splits only at a comma followed by
+`key=`, where the key is a lowercase identifier: a letter, then
+letters, digits or underscores. A value may therefore hold `=` and
+commas. `--attrs='place=Main St, Suite 4, cost=45.00'` gives `place`
+the value `Main St, Suite 4` and `cost` the value `45.00`.
+
+`--note TEXT` is sugar for the key `note`. Its text enters the map as
+`note=TEXT` and never runs through the split.
+
+**Refusals.** The command refuses each of these before it writes
+anything, as `add` validates before it writes:
+
+- a key given twice, including `note=` in `--attrs` beside `--note`
+- an empty value
+- a line break in a key or a value
+- a segment with no `=`
+- a key outside the grammar
 
 **Payload.** `payload.attrs` holds the attributes as a JSON object of
 string keys to string values, on every event type. The key is absent
@@ -147,9 +162,3 @@ breaks ties.
 
 **JSON output.** `--format json` serializes the document that the text
 format lays out, as `show --format json` does.
-
-## Open questions
-
-- **A key given twice.** `--attr` given twice with one key, or `--note`
-  beside `--attr note=`: refuse, or keep the last value. Issue #67
-  records the same question for markdown fields.
