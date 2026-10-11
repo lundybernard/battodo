@@ -97,6 +97,14 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   all pass with no source changes — but until the matrix existed that was
   a guess that happened to be right. The template still declares poetry's
   `python = '^3.8'` and has no CI to check it against.
+  2026-10-10: the per-version envs have since caught two defects that
+  the default 3.14 env passed. The quoting of argparse's invalid-choice
+  list differs by interpreter release, and a message assertion failed
+  on 3.12 only (#62). And a top-down reorder left annotations that name
+  a class defined further down: 3.14 defers annotations, while 3.10 to
+  3.13 evaluate them at import and raise `NameError` (#82, fixed by
+  quoting them). A default env pins the newest interpreter, so the
+  floor version's unit task belongs in the local gate as well as in CI.
 - **Message catalog for CLI strings:** extracting every user-facing
   argparse string into a pure-data module (`messages.py`, stable
   namespaced keys) gave three wins at once: a future localization
@@ -144,3 +152,17 @@ Fixed upstream, from both cycles above:
   convention now also lives in the shared python-style skill.
 
 Resolved: merged upstream in PR #5.
+
+Found during the property-refactor cycle (2026-09-04 to 2026-10-10):
+
+- **Property-suite scaffold (contingent):** battodo's Hypothesis suite
+  in `tests/property/` loads its settings profile in the package
+  `__init__`. `HYPOTHESIS_PROFILE` picks `dev` (100 examples) for the
+  edit loop or `ci` (1000 examples, with `print_blob` because CI keeps
+  no example database), and `HYPOTHESIS_EXAMPLES` overrides the count.
+  CI runs one `fuz` leg, on the newest interpreter, with the `ci`
+  profile. The split earns its place: a strategy that drew surrogate
+  code points passed at 100 examples and failed at 1000 once a test
+  wrote the draw to a file (fixed in c6e16c3). Worth upstreaming on
+  the condition the mutation feature above states: pixi stays
+  optional.

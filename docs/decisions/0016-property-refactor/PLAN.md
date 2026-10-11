@@ -20,6 +20,9 @@ at the front of the branch, before the pin, so the oracle and every
 commit after it read in the final vocabulary. Each slice then runs the
 R4 bracket: pin, declare, red, green, prove parity, cut over, retire.
 
+**Status, 2026-10-10:** every slice is merged: slice 0 in #53, 1 in #54,
+2 in #55, 3 in #59, 4 in #69, 5 in #72, 6 in #77, and 7 in #83.
+
 ## Slice 0 — Test cleanup (R9)
 
 Test-only. It runs before any bracket, because the suites that pin
@@ -125,12 +128,10 @@ file goes through one surface.
 
 Filed as follow-ups rather than absorbed:
 
-- The table machinery duplicated between the completed digest and the
-  view renderer.
-- The text forms the view and the completed digest still build on
-  their value objects: the cells, badge and due label of a view row,
-  and the cells and title of a digest record and group.
-- The configuration inputs that reach the config object through
+- #86: the table code that the completed digest and the view
+  duplicate.
+- #87: the text forms that `Row`, `Record` and `Group` still build.
+- #52: the configuration inputs that reach the config object through
   fallback lookup without being declared.
 - Type annotations on the CLI module, which belong upstream as
   template feedback.
@@ -145,6 +146,10 @@ Filed as follow-ups rather than absorbed:
 - #43 rides in slice 1 and #47 in slice 5.
 - #80 splits the JSON form of the view and the completed digest into
   view objects of their own.
+- #86 records the table code that the completed digest and the view
+  duplicate.
+- #87 records the text forms that `Row`, `Record` and `Group` still
+  build on their value objects.
 
 ## Risks
 

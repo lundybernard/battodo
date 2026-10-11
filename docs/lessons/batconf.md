@@ -165,3 +165,21 @@ package:
   recipe depends on unbounded `batconf`, losing both the `>=0.4.0`
   bound and the `[toml]` extra that `[project.dependencies]` states.
   A conda-forge package (batconf#208) removes all three at once.
+
+Found during the property-refactor cycle, looking for exemplars of the
+cached_property state-machine pattern:
+
+- **batconf does not yet exemplify its own target pattern cleanly.**
+  The clearest chain, `TomlSource` in `sources/toml.py`, stores its
+  inputs in `__init__`, does I/O in `_raw_data`, and derives `_data`,
+  but the chain routes through `_config_env`, a hand-rolled
+  property-with-setter fired from `__init__`, and none of the
+  descriptors carries a docstring. `manager.py`, `sources/ini.py`, and
+  `sources/yaml.py` construct eagerly and recursively in `__init__`
+  and thread state through free functions. The layered application
+  (boundary module, application objects, tools) appears only in the
+  test fixture `tests/example/project/`, whose CLI module is
+  unannotated throughout. Upstream candidates: a property-chain pass
+  over the sources, docstrings on every descriptor, annotations in the
+  example project. Until then the cleaner in-repo exemplars are
+  battodo's own `Digest` and `ConfigFile`.

@@ -202,3 +202,96 @@
   answers as the old one after it. The bracket let an 11-commit
   refactor land with the equivalence proof in-history. Rehomed: the
   test-driven-refactor skill, which now owns the oracle-bracket process.
+- 2026-09-04: a work-order scope bullet that restates a rider in
+  other words can contradict it, and the agent follows the concrete
+  bullet. "Convert `test_<fn>_<behavior>` methods to subtests" folded
+  every solo-function class into the grouped shape while the rider
+  beside it said one method per behavior; the PR was rewritten before
+  review. Scope bullets name the target shape per case and never
+  paraphrase a rider. Rehomed: memory function-test-class-convention.
+- 2026-09-04: a pre-refactor audit split by lens list — code lenses to
+  one agent, test lenses to another, run in parallel — returned a
+  plan-ready inventory in one round: import graph, per-module
+  classification, misplaced suites, baseline gate exits, and
+  open-issue reconciliation. The plan (ADR group 0016) was drafted
+  from the two reports without a second reading pass.
+- 2026-09-04: a retire commit deleted durable tests along with the
+  oracle. The oracle had pinned a type that survived the conversion
+  unchanged, so it had no old code to die with, and the durable
+  assertions it displaced went out in the same commit; six properties
+  and a recorded bug were unpinned at the tip while the coverage
+  floor stayed at 100 percent (statement coverage, executed through
+  other modules). Independent review caught it. Rule candidates for
+  the test-driven-refactor skill: the oracle pins only superseded
+  surface; the retire diff is read for durable-suite deletions; a
+  recorded bug's pin lives in a durable suite, never only in the
+  oracle.
+- 2026-09-08: mutation testing becomes an informational gate. The five
+  blocking gates hold a 100% coverage floor that still admits weak
+  assertions; the test-cleanup PR (#53) had to prove its rewritten
+  assertions with fourteen hand-placed mutants. `pixi run mutate` now
+  runs once at each PR tip (ADR group 0016 REQUIREMENTS R3, PR #56),
+  the verification line reports surviving mutants, and a survivor is a
+  test-improvement finding rather than a block. First measurements: 96
+  survivors on the pre-cleanup main, 87 after the test cleanup,
+  unchanged by the in-place rewrite of that PR. The `_mutate` task
+  needed a fix (PR #57) before a second run could succeed: its
+  pre-delete list named test directories one by one and missed a
+  nested package.
+- 2026-09-09: test suites compose, never inherit. Review of the
+  test-cleanup PR (#53) found six shared base TestCases carrying setUp
+  and helper methods, plus `reset` helpers that cleared a shared
+  fixture between subtests. Every TestCase now inherits only TestCase:
+  shared fixtures are module-level functions called from each setUp,
+  shared helpers take the fixture as an argument, and a subtest that
+  needs its own fixture builds it through a context manager. The
+  `reset` helpers disappeared by shape — solo-function classes
+  unfolded to per-behavior methods with a fresh per-method fixture,
+  and subject classes gave each subtest its own directory. Rehomed:
+  the work-order test riders and the python-style unittest idioms.
+  Expectation on record: as production code moves to the
+  property-based style, test complexity falls with it, and each slice
+  looks for that.
+- 2026-10-03: a value object builds no output form. Review of the item
+  slice (#77) found an `Item` member that returned all of its data as
+  one dict for every consumer. The ruling: the value object holds
+  values, and each output form is a view class that reads it through
+  its attributes, `ItemView` for text and `ItemJsonView` for JSON. A new
+  form adds a class, not a member on the value object. The owner also
+  asked for the ruling in an issue before the merge, not only in a
+  review reply: #80 carried it, and #82 applied it to the view and the
+  completed digest. Recorded in ADR 0017.
+- 2026-10-10: the 2026-08-28 tree-rebuild rewrite is now the fold for a
+  reviewed branch whose review renamed classes. The item slice (#77)
+  folded eleven review-fix commits into the commits that introduced
+  their code, so the history reads in the final names, and an empty
+  `git diff <review-tip> <folded-tip>` proved that nothing moved. The
+  mutate slice (#83) also folded two approved content edits, so its
+  proof has two parts: a `--stat` diff that shows only those edits, and
+  a `range-diff` that accounts for every commit it marks as changed.
+  Each red commit was run again at its new position and fails only its
+  declared tests. Rehomed: The Engineer's agent memory.
+- 2026-10-10: a rename folded into a parity bracket can give two test
+  classes one name. In the mutate slice (#83) the new `Scratch` class
+  and the retiring `scratch` function both take the test-class name
+  `ScratchTests`, and from the declare commit to the retire commit both
+  classes sit in one test module. Python keeps the later class, so the
+  earlier one stops running and no test fails. Only ruff F811 reports
+  it, so a scripted fold runs the lint gate on every rebuilt commit. The
+  retiring side takes `ScratchFunctionTests` for the bracket window.
+- 2026-10-10: R7 of the property refactor said a slice records the bugs
+  it finds and fixes none. Practice had already left the rule: at the
+  owner's review, #54 fixed the log-level bug it found, and the item
+  slice fixed a rank bug under the old text (#77). 4e373fc amends R7
+  to match: a slice fixes a bug at once or files an issue, case by
+  case. The last two slices fixed four bugs, each as a red
+  reproduction and then the fix (#77, #83). The test-driven-refactor
+  skill still carries the record-only rule.
+- 2026-10-10: review by key question. For the rest of the refactor and
+  the feature that waits on it, the owner reviews by decision, not by
+  line. A report and a PR's reviewer notes lead with the decisions that
+  need a ruling, one line each. Rulings land and fold into their
+  commits before the owner looks again, so one review round ends in a
+  merge: on the mutate slice (#83), one inline comment went to approval
+  the same day. Size is not a concern: more lines with less complexity
+  is a good trade.
