@@ -59,6 +59,21 @@ RENAMED_TASK = (
 # A description, and its lines as a top-level task carries them.
 DESCRIPTION = 'A first line.\n  A second line.'
 DESCRIPTION_LINES = ['      A first line.', '      A second line.']
+# A recurring task with a description line and a child, before and
+# after its completion on TODAY.
+DESCRIBED_RECURRENCE = (
+    '## Open\n'
+    '- [ ] A described recurring task [DUE:2026-08-05] [REPEAT:7d] '
+    '[ID:dr01ab]\n'
+    '      A description line.\n'
+    '  - [ ] A subtask that does not recur [LOE:1]\n'
+)
+RESCHEDULED_RECURRENCE = (
+    '## Open\n'
+    '- [ ] A described recurring task [DUE:2026-08-15] [REPEAT:7d] '
+    '[ID:dr01ab]\n'
+    '      A description line.\n'
+)
 # A second list, its open section empty.
 ANOTHER_LIST = '# Another list\n\n## Open\n'
 # A list whose one task carries an `[ID:]` with nothing in it.
@@ -741,6 +756,15 @@ class CompletionTests(TestCase):
                 str(caught.exception),
                 "unrecognised REPEAT value: 'often'",
             )
+
+        with t.subTest('a rescheduled task keeps its description lines'):
+            described = t.source / 'a-list.md'
+            described.write_text(DESCRIBED_RECURRENCE, encoding='utf-8')
+            completed = completion_of(t.source, 'dr01ab')
+
+            ret = completed.text
+
+            t.assertEqual(ret, RESCHEDULED_RECURRENCE)
 
     def test_entries(t) -> None:
         with t.subTest('the task and each ancestor it ends, deepest first'):
