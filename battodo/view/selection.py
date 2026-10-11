@@ -64,11 +64,17 @@ class Selection:
         self.top_n = top_n
 
     @classmethod
-    def from_config(cls, conf: Configuration, now: datetime) -> 'Selection':
+    def from_config(
+        cls,
+        conf: Configuration,
+        now: datetime,
+        *,
+        show_all: bool,
+    ) -> 'Selection':
         """Build a selection from a resolved configuration.
 
         Every configuration value is a string, so the item count is
-        decoded here. A flag the user left off is absent, not false.
+        decoded here.
 
         Raises
         ------
@@ -78,7 +84,7 @@ class Selection:
         return cls(
             Path(conf.view.source_dir),
             now,
-            show_all=bool(getattr(conf, 'show_all', False)),
+            show_all=show_all,
             top_n=item_count(conf.view.top),
         )
 

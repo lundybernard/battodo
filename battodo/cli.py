@@ -104,7 +104,7 @@ def argparser():
     # bare dest. Arguments read straight off `args` stay unprefixed.
     view.add_argument(
         '--all',
-        dest=f'{CONFIG_ROOT}.show_all',
+        dest='show_all',
         action='store_true',
         help=MESSAGES['view.all.help'],
     )
@@ -353,7 +353,7 @@ class Commands:
 
     @staticmethod
     def view(conf, args):
-        print(get_view(conf, datetime.now(TZ)))
+        print(get_view(conf, datetime.now(TZ), show_all=args.show_all))
 
     @staticmethod
     def completed(conf, args):

@@ -74,7 +74,12 @@ def _supplied(fields: dict[str, str | None]) -> dict[str, str]:
     }  # fmt: skip
 
 
-def get_view(conf: Configuration, now: datetime) -> str:
+def get_view(
+    conf: Configuration,
+    now: datetime,
+    *,
+    show_all: bool,
+) -> str:
     """The view the configuration asks for.
 
     Parameters
@@ -83,6 +88,9 @@ def get_view(conf: Configuration, now: datetime) -> str:
         The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, which decides both the active set and every rank.
+    show_all : bool
+        Whether to show every item, whatever the time window and the
+        item count.
 
     Returns
     -------
@@ -97,7 +105,7 @@ def get_view(conf: Configuration, now: datetime) -> str:
     ValueError
         The configured item count is not a whole number of one or more.
     """
-    selection = Selection.from_config(conf, now)
+    selection = Selection.from_config(conf, now, show_all=show_all)
     if _is_json(conf):
         return SelectionJsonView(selection).json
     return View(selection).text
