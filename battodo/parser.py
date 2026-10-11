@@ -38,7 +38,11 @@ ANCESTRY_SEPARATOR = ' > '
 
 @dataclass
 class TaskNode:
-    """One `- [ ]` line, plus its children and note lines."""
+    """One `- [ ]` line, plus its children and note lines.
+
+    A note line is a description line: its text, stripped, is one line
+    of the task's description.
+    """
 
     raw_index: int
     indent: int
@@ -116,7 +120,8 @@ class TaskNode:
 
     @property
     def description(self) -> str | None:
-        raise NotImplementedError
+        """The description lines joined by newlines, or None if none."""
+        return '\n'.join(self.description_lines) or None
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -125,11 +130,15 @@ class TaskNode:
         Snapshots are what make a later authority flip replayable
         despite hand-edits that never reached the journal.
         """
-        return {
+        snapshot: dict[str, Any] = {
             'title': self.title,
             'done': self.done,
             'fields': dict(self.fields),
         }
+        description = self.description
+        if description is not None:
+            snapshot['description'] = description
+        return snapshot
 
     @property
     def schema_fields(self) -> dict[str, str]:
@@ -249,6 +258,7 @@ class TodoDocument:
             if match is None:
                 if stripped and not stripped.startswith('<!--') and stack:
                     stack[-1][1].note_indices.append(index)
+                    stack[-1][1].description_lines.append(stripped)
                 continue
 
             indent = len(match.group(1))

@@ -24,6 +24,15 @@ def walk(tasks: list[TaskNode]) -> list[TaskNode]:
     return found
 
 
+def drawn(nodes: list[Node]) -> list[Node]:
+    """Every drawn node in the tree, parents before children."""
+    found = []
+    for node in nodes:
+        found.append(node)
+        found.extend(drawn(node.children))
+    return found
+
+
 def shape(tasks: list[TaskNode], lines: list[str]) -> list[Node]:
     """The task tree as the node shape the strategies draw."""
     return [
@@ -69,4 +78,18 @@ class TodoDocumentTests(TestCase):
 
         ret = shape(doc.tasks, doc.lines)
 
+        t.assertEqual(ret, expected)
+
+    @given(grammar.documents)
+    def test_description_lines_read_back(
+        t, case: tuple[str, list[Node]]
+    ) -> None:
+        source, nodes = case
+        doc = TodoDocument(source)
+
+        ret = [task.description_lines for task in walk(doc.tasks)]
+
+        expected = [
+            [note.strip() for note in node.notes] for node in drawn(nodes)
+        ]
         t.assertEqual(ret, expected)

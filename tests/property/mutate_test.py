@@ -880,8 +880,15 @@ def refuse_checklist_item(task: TaskNode) -> None:
 
 
 def snapshot(task: TaskNode) -> dict[str, Any]:
-    """The task as the file states it before the write."""
-    return {'title': task.title, 'done': task.done, 'fields': task.fields}
+    """The task as the file states it before the write.
+
+    Its description lines join into its description, absent when it
+    has none.
+    """
+    found = {'title': task.title, 'done': task.done, 'fields': task.fields}
+    if task.description_lines:
+        found['description'] = '\n'.join(task.description_lines)
+    return found
 
 
 def path_of(ancestry: list[TaskNode]) -> str:
