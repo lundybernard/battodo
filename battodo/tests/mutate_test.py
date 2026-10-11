@@ -750,6 +750,7 @@ class UpdateTests(TestCase):
         t.assertIs(ret, document.return_value.text)
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
@@ -758,11 +759,13 @@ class UpdateTests(TestCase):
         written: PropertyMock,
         node: PropertyMock,
         new_title: PropertyMock,
+        new_description: PropertyMock,
         todo_document: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         node.return_value = t.parent
         new_title.return_value = 'A checked title'
+        new_description.return_value = None
         doc = todo_document.return_value
 
         with t.subTest('the fields, then the new title, on the task line'):
@@ -787,6 +790,22 @@ class UpdateTests(TestCase):
             t.assertEqual(
                 doc.method_calls,
                 [call.set_fields(1, sentinel.written)],
+            )
+
+        with t.subTest('a description replaces the description lines'):
+            doc.reset_mock()
+            new_description.return_value = MagicMock(spec=['lines'])
+            new_description.return_value.lines = sentinel.lines
+
+            _ = t.up.document
+
+            t.assertEqual(
+                doc.method_calls,
+                [
+                    call.set_fields(1, sentinel.written),
+                    call.drop({2}),
+                    call.insert_description(1, sentinel.lines),
+                ],
             )
 
     @patch.object(Update, 'node', new_callable=PropertyMock)
@@ -856,6 +875,21 @@ class UpdateTests(TestCase):
             supplied_title.assert_not_called()
             t.assertIsNone(ret)
 
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_new_description(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where the update names no description'):
+            ret = t.up.new_description
+            supplied_description.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('the description the update names'):
+            t.up.description = 'A description'
+
+            ret = t.up.new_description
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value)
+
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
     def test_checked(t, supplied: PropertyMock) -> None:
         supplied.return_value = MagicMock(spec=['checked'])
@@ -870,7 +904,12 @@ class UpdateTests(TestCase):
             ret = t.up.checked
             t.assertIs(ret, sentinel.checked)
 
-        with t.subTest('neither a field nor a title, before any value'):
+        with t.subTest('nor does a description alone, an empty one too'):
+            t.up = Update(t.task, {}, description='')
+            ret = t.up.checked
+            t.assertIs(ret, sentinel.checked)
+
+        with t.subTest('no field, title or description, before any value'):
             supplied.reset_mock()
             t.up = Update(t.task, {})
 
@@ -879,7 +918,7 @@ class UpdateTests(TestCase):
 
             t.assertEqual(
                 str(caught.exception),
-                'nothing to update: name a field or a title',
+                'nothing to update: name a field, a title or a description',
             )
             supplied.assert_not_called()
 
@@ -977,6 +1016,7 @@ class UpdateTests(TestCase):
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
+    @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
@@ -985,10 +1025,12 @@ class UpdateTests(TestCase):
         written: PropertyMock,
         node: PropertyMock,
         new_title: PropertyMock,
+        new_description: PropertyMock,
     ) -> None:
         written.return_value = {'P': '5', 'DUE': '2026-09-01'}
         node.return_value = t.parent
         new_title.return_value = 'A checked title'
+        new_description.return_value = None
 
         with t.subTest('each field written against the one it replaced'):
             ret = t.up.delta
@@ -1005,6 +1047,15 @@ class UpdateTests(TestCase):
             new_title.return_value = None
             ret = t.up.delta
             t.assertNotIn('title', ret)
+
+        with t.subTest('a description, against the one it replaced'):
+            t.parent.description_lines = ['A line.']
+            new_description.return_value = MagicMock(spec=['checked'])
+            new_description.return_value.checked = 'A new line.'
+
+            ret = t.up.delta
+
+            t.assertEqual(ret['description'], ['A line.', 'A new line.'])
 
     @patch(f'{SRC}.Ancestry', autospec=True)
     def test_ancestry(t, ancestry: MagicMock) -> None:

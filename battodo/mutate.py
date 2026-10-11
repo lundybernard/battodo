@@ -461,10 +461,12 @@ class Update:
         task: Task,
         fields: dict[str, str],
         title: str | None = None,
+        description: str | None = None,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -556,6 +558,10 @@ class Update:
         if self.title is None:
             return None
         return SuppliedTitle(self.title).checked
+
+    @property
+    def new_description(self) -> 'SuppliedDescription | None':
+        raise NotImplementedError
 
     @property
     def checked(self) -> dict[str, str]:

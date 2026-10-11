@@ -511,6 +511,24 @@ class UpdateTests(TestCase):
             line = f'- [ ] A task with no id [P:5] [ID:{unidentified.task_id}]'
             t.assertEqual(ret, A_LIST.replace(NO_ID_TASK, line))
 
+        with t.subTest('a description replaces the description lines'):
+            described = described_update(t.source, '9o71lx', DESCRIPTION)
+
+            ret = described.text
+
+            replaced = with_lines(without(A_LIST, 5), 5, DESCRIPTION_LINES)
+            t.assertEqual(ret, replaced)
+
+        with t.subTest('an empty description clears them'):
+            cleared = described_update(t.source, '9o71lx', '')
+            ret = cleared.text
+            t.assertEqual(ret, without(A_LIST, 5))
+
+        with t.subTest('a task with none takes them before its children'):
+            described = described_update(t.source, 'rr01ab', DESCRIPTION)
+            ret = described.text
+            t.assertEqual(ret, with_lines(A_LIST, 10, DESCRIPTION_LINES))
+
         refused = {
             'an update that names nothing': (
                 Update(Task(t.source, '9o71lx', TODAY), {}),
@@ -548,6 +566,16 @@ class UpdateTests(TestCase):
                 ),
                 ValueError,
                 'title must hold no line break',
+            ),
+            'a description line that reads as a task': (
+                described_update(t.source, '9o71lx', '- [ ] A task'),
+                ValueError,
+                r"description line '- \[ \] A task' reads as a task line",
+            ),
+            'a checklist item, which takes no description': (
+                described_update(t.source, 'A checklist item', 'A line.'),
+                ValueError,
+                'is a checklist item',
             ),
         }
         for name, (refusal, error, message) in refused.items():
@@ -587,6 +615,31 @@ class UpdateTests(TestCase):
                         },
                     )
                 ],
+            )
+
+        with t.subTest('a description, against the one it replaced'):
+            described = described_update(t.source, '9o71lx', DESCRIPTION)
+
+            (event,) = described.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {
+                    'description': [
+                        'A note that stays put.',
+                        'A first line.\nA second line.',
+                    ],
+                },
+            )
+
+        with t.subTest('a cleared description, against null'):
+            cleared = described_update(t.source, '9o71lx', '')
+
+            (event,) = cleared.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {'description': ['A note that stays put.', None]},
             )
 
         with t.subTest('a subtask records where it sits, and its new id'):
@@ -1006,6 +1059,11 @@ def described_addition(source: Path, description: str) -> Addition:
         TODAY,
         description=description,
     )
+
+
+def described_update(source: Path, selector: str, description: str) -> Update:
+    """An update that names only a description."""
+    return Update(Task(source, selector, TODAY), {}, description=description)
 
 
 def id_on(line: str) -> str:
