@@ -127,11 +127,12 @@ class Digest:
 
         Sorted here rather than trusted from the file: the log is
         appended to as tasks complete, and a hand-edited one is in no
-        order at all.
+        order at all. A line feed alone ends a line: a title may hold
+        any other line break, as the list it came from does.
         """
         found = [
             record
-            for line in self.text.splitlines()
+            for line in self.text.split('\n')
             if (record := read_record(line)) is not None
             if self.start <= record.day <= self.end
         ]
