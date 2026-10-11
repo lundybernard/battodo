@@ -126,17 +126,21 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        with t.subTest('an unknown format exits with a usage error'):
-            stderr = StringIO()
+        for argv in (['view'], ['show', 'brush pile'], ['completed']):
+            with t.subTest(f'an unknown {argv[0]} format is a usage error'):
+                stderr = StringIO()
 
-            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
-                t.parser.parse_args(['view', '--format', 'xml'])
+                with (
+                    redirect_stderr(stderr),
+                    t.assertRaises(SystemExit) as caught,
+                ):
+                    t.parser.parse_args([*argv, '--format', 'xml'])
 
-            t.assertEqual(caught.exception.code, 2)
-            t.assertIn(
-                "error: argument --format: invalid choice: 'xml'",
-                stderr.getvalue(),
-            )
+                t.assertEqual(caught.exception.code, 2)
+                t.assertIn(
+                    "error: argument --format: invalid choice: 'xml'",
+                    stderr.getvalue(),
+                )
 
         with t.subTest('show holds the same two values'):
             # Two cycles: each one checks one of the two accepted values.
@@ -225,6 +229,12 @@ class ArgparserTests(TestCase):
             with t.subTest(flag):
                 args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
                 t.assertEqual(args.priority, '4')
+
+    def test_selector(t):
+        for command in ('show', 'update', 'done', 'scratch'):
+            with t.subTest(command):
+                args = t.parser.parse_args([command, 'brush pile'])
+                t.assertEqual(args.selector, 'brush pile')
 
     def test_done_date(t):
         with t.subTest('Default: None'):
