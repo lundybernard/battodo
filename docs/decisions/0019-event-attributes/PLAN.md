@@ -26,10 +26,10 @@ the CLI split and subtask schedules.
 | S3 — history command | S2 | Planned |
 | S4 — notes in `show` | S3, subtask schedules | Planned |
 | S5 — attributes in the completed log | S1b | Planned |
-| S6 — task description | serial with #88 on `Update` | Planned |
+| S6 — task description | — (runs before #88) | Planned |
 
 Subtask schedules (owner design, 2026-10-11) run after S1a and before
-S4. #88 runs after subtask schedules.
+S4. #88 runs after subtask schedules and after S6.
 
 ## S1a — Completion event payload
 
@@ -78,8 +78,8 @@ slice ([DESIGN.md](DESIGN.md#event-attributes)).
 The `description` snapshot key, `--description` on `add` and `update`,
 the refusals, the render and the `show` row
 ([ADR 0021](0021-task-description-field.md)). S6 does not depend on
-another slice, but it changes `Update`, as #88 does, so the two run
-one after the other.
+another slice. It changes `Update`, as #88 does, so S6 runs first and
+issue #88 follows it.
 
 ## After the flip
 
