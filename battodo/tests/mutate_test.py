@@ -43,6 +43,14 @@ GIVEN_DAY = date(2026, 8, 1)
 SOURCE = Path('/a-source')
 LIST_PATH = SOURCE / 'a-list.md'
 ANOTHER_PATH = SOURCE / 'another-list.md'
+# A document as an add writes it: the new line at index 1, one
+# description line under it, then the line that follows the block.
+BLOCK_LINES = [
+    OPEN_HEADING,
+    'the line as written',
+    '      A line.',
+    'the next line',
+]
 
 
 class AdditionTests(TestCase):
@@ -115,24 +123,28 @@ class AdditionTests(TestCase):
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Addition, 'description_lines', new_callable=PropertyMock)
     @patch.object(Addition, 'index', new_callable=PropertyMock)
     @patch.object(Addition, 'written', new_callable=PropertyMock)
     def test_document(
         t,
         written: PropertyMock,
         index: PropertyMock,
+        description_lines: PropertyMock,
         todo_document: MagicMock,
         supplied_title: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         index.return_value = 4
+        description_lines.return_value = sentinel.description_lines
         supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.ad.parsed = MagicMock(spec=['text'])
 
         ret = t.ad.document
 
-        # The bare line goes in last in Open, then its fields go on.
+        # The bare line goes in last in Open, then its fields go on,
+        # then its description lines go under it.
         supplied_title.assert_called_once_with('A new task')
         todo_document.assert_called_once_with(t.ad.parsed.text)
         t.assertEqual(
@@ -140,6 +152,7 @@ class AdditionTests(TestCase):
             [
                 call.insert(4, '- [ ] A checked title'),
                 call.set_fields(4, sentinel.written),
+                call.insert_description(4, sentinel.description_lines),
             ],
         )
         t.assertIs(ret, doc)
@@ -175,6 +188,39 @@ class AdditionTests(TestCase):
         ret = t.ad.entry
 
         t.assertEqual(ret, 'the line as written')
+
+    @patch.object(Addition, 'description_lines', new_callable=PropertyMock)
+    @patch.object(Addition, 'index', new_callable=PropertyMock)
+    @patch.object(Addition, 'document', new_callable=PropertyMock)
+    def test_block(
+        t,
+        document: PropertyMock,
+        index: PropertyMock,
+        description_lines: PropertyMock,
+    ) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = BLOCK_LINES
+        index.return_value = 1
+        description_lines.return_value = ['A line.']
+
+        ret = t.ad.block
+
+        t.assertEqual(ret, 'the line as written\n      A line.')
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_description_lines(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.ad.description_lines
+            supplied_description.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description given, read'):
+            t.ad.description = 'A description'
+
+            ret = t.ad.description_lines
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value.lines)
 
     def test_entries(t) -> None:
         ret = t.ad.entries
@@ -223,14 +269,17 @@ class AdditionTests(TestCase):
 
     @patch(f'{SRC}.AddedLine', autospec=True)
     @patch.object(Addition, 'written', new_callable=PropertyMock)
+    @patch.object(Addition, 'block', new_callable=PropertyMock)
     @patch.object(Addition, 'entry', new_callable=PropertyMock)
     def test_events(
         t,
         entry: PropertyMock,
+        block: PropertyMock,
         written: PropertyMock,
         added_line: MagicMock,
     ) -> None:
         entry.return_value = 'the line as written'
+        block.return_value = 'the block as written'
         written.return_value = sentinel.written
         t.ad.task_id = 'zz01ab'
 
@@ -238,7 +287,7 @@ class AdditionTests(TestCase):
 
         # One TaskAdded, on the stream of the new task.
         added_line.assert_called_once_with(
-            'the line as written',
+            'the block as written',
             sentinel.written,
         )
         t.assertEqual(
@@ -323,6 +372,11 @@ class SubtaskAdditionTests(TestCase):
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(
+        SubtaskAddition,
+        'description_lines',
+        new_callable=PropertyMock,
+    )
     @patch.object(SubtaskAddition, 'indent', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'index', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'node', new_callable=PropertyMock)
@@ -335,6 +389,7 @@ class SubtaskAdditionTests(TestCase):
         node: PropertyMock,
         index: PropertyMock,
         indent: PropertyMock,
+        description_lines: PropertyMock,
         todo_document: MagicMock,
         supplied_title: MagicMock,
     ) -> None:
@@ -343,6 +398,7 @@ class SubtaskAdditionTests(TestCase):
         node.return_value = t.parent
         index.return_value = 4
         indent.return_value = '  '
+        description_lines.return_value = sentinel.description_lines
         supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.sa.path = LIST_PATH
@@ -358,6 +414,7 @@ class SubtaskAdditionTests(TestCase):
                 [
                     call.insert(4, '  - [ ] A checked title'),
                     call.set_fields(4, sentinel.written),
+                    call.insert_description(4, sentinel.description_lines),
                 ],
             )
             t.assertIs(ret, doc)
@@ -518,6 +575,43 @@ class SubtaskAdditionTests(TestCase):
 
         t.assertEqual(ret, 'the line as written')
 
+    @patch.object(
+        SubtaskAddition,
+        'description_lines',
+        new_callable=PropertyMock,
+    )
+    @patch.object(SubtaskAddition, 'index', new_callable=PropertyMock)
+    @patch.object(SubtaskAddition, 'document', new_callable=PropertyMock)
+    def test_block(
+        t,
+        document: PropertyMock,
+        index: PropertyMock,
+        description_lines: PropertyMock,
+    ) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = BLOCK_LINES
+        index.return_value = 1
+        description_lines.return_value = ['A line.']
+
+        ret = t.sa.block
+
+        t.assertEqual(ret, 'the line as written\n      A line.')
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_description_lines(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.sa.description_lines
+            supplied_description.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description given, read'):
+            t.sa.description = 'A description'
+
+            ret = t.sa.description_lines
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value.lines)
+
     def test_entries(t) -> None:
         ret = t.sa.entries
         # An add logs no completed-log record.
@@ -527,16 +621,19 @@ class SubtaskAdditionTests(TestCase):
     @patch.object(SubtaskAddition, 'stamp', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'stamped', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'written', new_callable=PropertyMock)
+    @patch.object(SubtaskAddition, 'block', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'entry', new_callable=PropertyMock)
     def test_events(
         t,
         entry: PropertyMock,
+        block: PropertyMock,
         written: PropertyMock,
         stamped: PropertyMock,
         stamp: PropertyMock,
         added_line: MagicMock,
     ) -> None:
         entry.return_value = 'the line as written'
+        block.return_value = 'the block as written'
         written.return_value = sentinel.written
         stamped.return_value = False
         stamp.return_value = sentinel.stamp
@@ -548,7 +645,7 @@ class SubtaskAdditionTests(TestCase):
             ret = t.sa.events
 
             added_line.assert_called_once_with(
-                'the line as written',
+                'the block as written',
                 sentinel.written,
             )
             t.assertEqual(

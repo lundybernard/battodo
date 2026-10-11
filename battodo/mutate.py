@@ -89,12 +89,14 @@ class Addition:
         title: str,
         fields: dict[str, str],
         today: date,
+        description: str | None = None,
     ) -> None:
         self.source = source
         self.list_name = list_name
         self.title = title
         self.fields = fields
         self.today = today
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -176,6 +178,10 @@ class Addition:
         return SuppliedFields(self.fields, self.today)
 
     @property
+    def description_lines(self) -> list[str]:
+        raise NotImplementedError
+
+    @property
     def index(self) -> int:
         """Where the task lands: last in the open section."""
         return self.parsed.open_end
@@ -189,6 +195,10 @@ class Addition:
     def entry(self) -> str:
         """The task line as written."""
         return self.document.lines[self.index]
+
+    @property
+    def block(self) -> str:
+        raise NotImplementedError
 
     @property
     def entries(self) -> list[str]:
@@ -216,11 +226,13 @@ class SubtaskAddition:
         list_name: str,
         title: str,
         fields: dict[str, str],
+        description: str | None = None,
     ) -> None:
         self.parent = parent
         self.list_name = list_name
         self.title = title
         self.fields = fields
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -350,6 +362,10 @@ class SubtaskAddition:
         return self.node.task_id or new_task_id()
 
     @property
+    def description_lines(self) -> list[str]:
+        raise NotImplementedError
+
+    @property
     def index(self) -> int:
         """Where the subtask lands: after every line the parent owns."""
         return max(self.node.block) + 1
@@ -368,6 +384,10 @@ class SubtaskAddition:
     def entry(self) -> str:
         """The subtask line as written."""
         return self.document.lines[self.index]
+
+    @property
+    def block(self) -> str:
+        raise NotImplementedError
 
     @property
     def entries(self) -> list[str]:

@@ -264,6 +264,37 @@ class TodoDocumentTests(TestCase):
         with t.subTest('the line takes the index, every later line moves'):
             t.assertEqual(t.td.text, '\n'.join(expected))
 
+    def test_insert_description(t) -> None:
+        lines = ['A first line.', 'A second line.']
+
+        with t.subTest('under a task line, past its checkbox'):
+            t.td.insert_description(OVERDUE_INDEX, lines)
+
+            ret = t.td.lines[OVERDUE_INDEX : OVERDUE_INDEX + 4]
+
+            t.assertEqual(
+                ret,
+                [
+                    OVERDUE,
+                    '      A first line.',
+                    '      A second line.',
+                    '- [ ] Due today task [P:3] [LOE:1] [DUE:2026-08-05]',
+                ],
+            )
+
+        with t.subTest('and the parser reads them back as its description'):
+            (overdue, *_) = TodoDocument(t.td.text).tasks
+            t.assertEqual(overdue.description, 'A first line.\nA second line.')
+
+        with t.subTest('a subtask line takes them one level deeper'):
+            fresh = TodoDocument(t.source)
+            subtask_index = PARENT_INDEX + 2
+
+            fresh.insert_description(subtask_index, ['A line.'])
+
+            written = fresh.lines[subtask_index + 1]
+            t.assertEqual(written, '        A line.')
+
     def test_drop(t) -> None:
         with t.subTest('the lines go, and every other line stays'):
             kept = [

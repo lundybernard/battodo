@@ -590,6 +590,31 @@ class TodoDocumentTests(TestCase):
         # The blank after the block, and every line after it, move down.
         t.assertEqual(t.td.lines, expected)
 
+    def test_insert_description(t) -> None:
+        with t.subTest('each line in order, past the checkbox of the task'):
+            expected = OPEN_DOC.split('\n')
+            expected[NOTE_INDEX:NOTE_INDEX] = [
+                '      A line.',
+                '      Another line.',
+            ]
+
+            t.td.insert_description(ALPHA_INDEX, ['A line.', 'Another line.'])
+
+            t.assertEqual(t.td.lines, expected)
+
+        with t.subTest('an indented task line indents them as deep again'):
+            t.td = TodoDocument(OPEN_DOC)
+            sub_index = SUB_INDICES[0]
+
+            t.td.insert_description(sub_index, ['A line.'])
+
+            t.assertEqual(t.td.lines[sub_index + 1], '        A line.')
+
+        with t.subTest('no line, no edit'):
+            t.td = TodoDocument(OPEN_DOC)
+            t.td.insert_description(ALPHA_INDEX, [])
+            t.assertEqual(t.td.lines, OPEN_DOC.split('\n'))
+
     def test_drop(t) -> None:
         lines = OPEN_DOC.split('\n')
 

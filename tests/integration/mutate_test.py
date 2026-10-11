@@ -56,6 +56,9 @@ RENAMED_TASK = (
     '- [ ] A renamed task [P:5] [LOE:8] [ADDED:2026-07-06] [ID:9o71lx] '
     '[DUE:2026-09-01]'
 )
+# A description, and its lines as a top-level task carries them.
+DESCRIPTION = 'A first line.\n  A second line.'
+DESCRIPTION_LINES = ['      A first line.', '      A second line.']
 # A second list, its open section empty.
 ANOTHER_LIST = '# Another list\n\n## Open\n'
 # A list whose one task carries an `[ID:]` with nothing in it.
@@ -114,6 +117,32 @@ class AdditionTests(TestCase):
             ret = empty.text
             t.assertEqual(ret, f'{ANOTHER_LIST}{empty.entry}\n')
 
+        with t.subTest('a description goes under the task line'):
+            described = described_addition(t.source, DESCRIPTION)
+
+            ret = described.text
+
+            lines = [described.entry, *DESCRIPTION_LINES]
+            t.assertEqual(ret, with_lines(A_LIST, 13, lines))
+
+        with t.subTest('an empty description writes no line'):
+            undescribed = described_addition(t.source, '')
+
+            ret = undescribed.text
+
+            t.assertEqual(ret, with_line(A_LIST, 13, undescribed.entry))
+
+        with t.subTest('a description with a blank line is refused'):
+            blank = described_addition(t.source, 'A line.\n\nA line.')
+
+            with t.assertRaises(ValueError) as caught:
+                _ = blank.text
+
+            t.assertEqual(
+                str(caught.exception),
+                "description line '' is blank",
+            )
+
         refused = {
             'a priority that is not a number': (
                 {'P': 'high'},
@@ -170,35 +199,70 @@ class AdditionTests(TestCase):
         )
 
     def test_events(t) -> None:
-        task_id = id_on(t.ad.entry)
+        with t.subTest('one TaskAdded, on the stream of the new task'):
+            task_id = id_on(t.ad.entry)
 
-        (ret,) = t.ad.events
+            (ret,) = t.ad.events
 
-        t.assertEqual(
-            ret,
-            (
-                'TaskAdded',
-                f'task/{task_id}',
-                {
-                    'delta': {
-                        'P': [None, '3'],
-                        'TAGS': [None, 'a-tag'],
-                        'ADDED': [None, '2026-08-08'],
-                        'ID': [None, task_id],
-                    },
-                    'snapshot': {
-                        'title': 'A new task',
-                        'done': False,
-                        'fields': {
-                            'P': '3',
-                            'TAGS': 'a-tag',
-                            'ADDED': '2026-08-08',
-                            'ID': task_id,
+            t.assertEqual(
+                ret,
+                (
+                    'TaskAdded',
+                    f'task/{task_id}',
+                    {
+                        'delta': {
+                            'P': [None, '3'],
+                            'TAGS': [None, 'a-tag'],
+                            'ADDED': [None, '2026-08-08'],
+                            'ID': [None, task_id],
+                        },
+                        'snapshot': {
+                            'title': 'A new task',
+                            'done': False,
+                            'fields': {
+                                'P': '3',
+                                'TAGS': 'a-tag',
+                                'ADDED': '2026-08-08',
+                                'ID': task_id,
+                            },
                         },
                     },
-                },
-            ),
-        )
+                ),
+            )
+
+        with t.subTest('the snapshot holds the description, not the delta'):
+            described = described_addition(t.source, DESCRIPTION)
+
+            (ret,) = described.events
+
+            t.assertEqual(
+                ret.payload['snapshot']['description'],
+                'A first line.\nA second line.',
+            )
+            t.assertNotIn('description', ret.payload['delta'])
+
+    def test_block(t) -> None:
+        with t.subTest('the task line alone, where it has no description'):
+            ret = t.ad.block
+            t.assertEqual(ret, t.ad.entry)
+
+        with t.subTest('and its description lines under it'):
+            described = described_addition(t.source, DESCRIPTION)
+
+            ret = described.block
+
+            lines = [described.entry, *DESCRIPTION_LINES]
+            t.assertEqual(ret, '\n'.join(lines))
+
+    def test_description_lines(t) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.ad.description_lines
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description, stripped'):
+            described = described_addition(t.source, DESCRIPTION)
+            ret = described.description_lines
+            t.assertEqual(ret, ['A first line.', 'A second line.'])
 
 
 class SubtaskAdditionTests(TestCase):
@@ -242,6 +306,18 @@ class SubtaskAdditionTests(TestCase):
             expected = A_LIST.replace(NO_ID_TASK, stamp)
             t.assertEqual(ret, with_line(expected, 9, unidentified.entry))
 
+        with t.subTest('a description goes under the subtask line'):
+            described = subtask(t.source, '9o71lx', description=DESCRIPTION)
+
+            ret = described.text
+
+            lines = [
+                described.entry,
+                '        A first line.',
+                '        A second line.',
+            ]
+            t.assertEqual(ret, with_lines(A_LIST, 8, lines))
+
         with t.subTest('a subtask nests one level under a subtask'):
             deeper = subtask(t.source, 'A subtask of it')
             ret = deeper.entry
@@ -281,6 +357,11 @@ class SubtaskAdditionTests(TestCase):
                 ValueError,
                 'title must hold no line break',
             ),
+            'a description line that reads as a heading': (
+                subtask(t.source, '9o71lx', description='## A heading'),
+                ValueError,
+                "description line '## A heading' reads as a heading",
+            ),
         }
         for name, (refusal, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
@@ -300,6 +381,26 @@ class SubtaskAdditionTests(TestCase):
     def test_entry(t) -> None:
         ret = t.sa.entry
         t.assertRegex(ret, r'^  - \[ \] A new subtask \[LOE:2\] \[ID:\w{6}\]$')
+
+    def test_block(t) -> None:
+        with t.subTest('the subtask line alone, where it has no description'):
+            ret = t.sa.block
+            t.assertEqual(ret, t.sa.entry)
+
+        with t.subTest('and its description lines under it'):
+            described = subtask(t.source, '9o71lx', description='A line.')
+            ret = described.block
+            t.assertEqual(ret, f'{described.entry}\n        A line.')
+
+    def test_description_lines(t) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.sa.description_lines
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description, stripped'):
+            described = subtask(t.source, '9o71lx', description=DESCRIPTION)
+            ret = described.description_lines
+            t.assertEqual(ret, ['A first line.', 'A second line.'])
 
     def test_events(t) -> None:
         with t.subTest('one TaskAdded, which names the parent by id'):
@@ -322,6 +423,16 @@ class SubtaskAdditionTests(TestCase):
                         'parent': '9o71lx',
                     },
                 ),
+            )
+
+        with t.subTest('the snapshot carries the description'):
+            described = subtask(t.source, '9o71lx', description=DESCRIPTION)
+
+            (event,) = described.events
+
+            t.assertEqual(
+                event.payload['snapshot']['description'],
+                'A first line.\nA second line.',
             )
 
         with t.subTest('a parent stamped first records the stamp first'):
@@ -878,6 +989,25 @@ def with_line(text: str, index: int, line: str) -> str:
     return '\n'.join(lines)
 
 
+def with_lines(text: str, index: int, lines: list[str]) -> str:
+    """`text` with `lines` inserted in order from `index`."""
+    found = text.split('\n')
+    found[index:index] = lines
+    return '\n'.join(found)
+
+
+def described_addition(source: Path, description: str) -> Addition:
+    """A new task in `a-list` that carries `description`."""
+    return Addition(
+        source,
+        'a-list',
+        'A new task',
+        {},
+        TODAY,
+        description=description,
+    )
+
+
 def id_on(line: str) -> str:
     """The `[ID:]` value a write stamped on `line`."""
     return line.split('[ID:')[1].removesuffix(']')
@@ -890,6 +1020,7 @@ def subtask(
     list_name: str = 'a-list',
     fields: dict[str, str] | None = None,
     title: str = 'A new subtask',
+    description: str | None = None,
 ) -> SubtaskAddition:
     """A new subtask under the task `parent` names."""
     return SubtaskAddition(
@@ -897,6 +1028,7 @@ def subtask(
         list_name,
         title,
         fields or {},
+        description=description,
     )
 
 

@@ -410,6 +410,9 @@ class TodoDocument:
         """Insert `line` at `index`. Every later line moves down one."""
         self.lines.insert(index, line)
 
+    def insert_description(self, index: int, lines: list[str]) -> None:
+        raise NotImplementedError
+
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.
 
