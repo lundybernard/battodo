@@ -42,6 +42,12 @@ of the journal at the flip.
 
 A new kind of fact does not need a schema change or a code change.
 
+### R6 — Facts on any write
+
+A user records facts on an add, an update, a scratch or a completion,
+on the event of the task the user names. A user also records a note on
+an open task without a change to that task.
+
 ## Success criteria
 
 - [ ] Two completions of a repeating task, each with different facts,
@@ -57,4 +63,10 @@ A new kind of fact does not need a schema change or a code change.
       of a repeating task unchanged (R3)
 - [ ] A fact under a new key records and reads back without a code
       change (R5)
+- [ ] Attributes given to `add`, `update`, `scratch` or `done` appear on
+      the event of the task the user named (R6)
+- [ ] A refused attribute or note input writes no event and changes no
+      list file (R6)
+- [ ] A note on an open task that has an `[ID:]` writes one journal
+      event and changes no list text (R6)
 - [ ] CI green on the final commit

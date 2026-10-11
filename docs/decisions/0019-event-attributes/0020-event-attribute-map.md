@@ -23,7 +23,7 @@ lists: a technician's name on a support call, an appointment date, a
 cost or an estimate on a purchase, time spent on a chore. A fixed
 schema for these grows with every new kind of fact
 ([R5](REQUIREMENTS.md)). A fact can also arise at a write other than a
-completion: an add, an update, or a scratch.
+completion: an add, an update, or a scratch ([R6](REQUIREMENTS.md)).
 
 ## Decision
 

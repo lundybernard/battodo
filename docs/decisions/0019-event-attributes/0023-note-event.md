@@ -10,10 +10,10 @@ an open attribute map, and the key `note` carries a note. A note can
 therefore ride on an add, an update, a completion or a scratch.
 
 A user also records a note on an open task between those writes: a step
-taken toward the task, or a reason it waits. Such a note belongs to no
-change of task state, so no existing event fits it. An `update` that
-carries only a note would write a `TaskUpdated` event that changes
-nothing.
+taken toward the task, or a reason it waits ([R6](REQUIREMENTS.md)).
+Such a note belongs to no change of task state, so no existing event
+fits it. An `update` that carries only a note would write a
+`TaskUpdated` event that changes nothing.
 
 The journal already stamps every event with its time, as `occurred_at`
 ([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md)), so
