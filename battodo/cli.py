@@ -403,6 +403,10 @@ class Commands:
         )
 
     @staticmethod
+    def note(conf, args):
+        raise NotImplementedError
+
+    @staticmethod
     def backfill(conf, args):
         print(backfill_items(conf, datetime.now(TZ)))
 

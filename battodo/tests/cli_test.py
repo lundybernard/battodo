@@ -203,6 +203,7 @@ class ArgparserTests(TestCase):
             (['update', 'brush pile', '-p', '3'], Commands.update),
             (['done', 'brush pile'], Commands.done),
             (['scratch', 'brush pile'], Commands.scratch),
+            (['note', 'brush pile', 'Too wet'], Commands.note),
             (['backfill'], Commands.backfill),
             (['completed'], Commands.completed),
         ]
@@ -231,7 +232,7 @@ class ArgparserTests(TestCase):
                 t.assertEqual(args.priority, '4')
 
     def test_selector(t):
-        for command in ('show', 'update', 'done', 'scratch'):
+        for command in ('show', 'update', 'done', 'scratch', 'note'):
             with t.subTest(command):
                 args = t.parser.parse_args([command, 'brush pile'])
                 t.assertEqual(args.selector, 'brush pile')
@@ -278,6 +279,28 @@ class ArgparserTests(TestCase):
                 t.assertEqual(
                     (args.attrs, args.note), ('cost=45.00', 'a note')
                 )
+
+    def test_note(t):
+        with t.subTest('None when neither is given'):
+            args = t.parser.parse_args(['note', 'brush pile'])
+            t.assertEqual((args.text, args.attrs), (None, None))
+
+        with t.subTest('the text and the attributes'):
+            given = ['note', 'brush pile', 'Too wet', '--attrs', 'cost=0']
+            args = t.parser.parse_args(given)
+            t.assertEqual((args.text, args.attrs), ('Too wet', 'cost=0'))
+
+        with t.subTest('note takes no --note'):
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
+                t.parser.parse_args(['note', 'brush pile', '--note', 'Wet'])
+
+            t.assertEqual(caught.exception.code, 2)
+            t.assertIn(
+                'error: unrecognized arguments: --note',
+                stderr.getvalue(),
+            )
 
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
@@ -735,6 +758,44 @@ class CommandsScratchTests(TestCase):
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.scratch_item.return_value)
+
+
+class CommandsNoteTests(TestCase):
+    """Unit tests for battodo.cli.Commands.note."""
+
+    def setUp(t):
+        t.datetime = clock(t)
+        patcher = patch(f'{SRC}.annotate_item', autospec=True)
+        t.annotate_item = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(
+            selector='a selector',
+            text='a note',
+            attrs='some attrs',
+        )
+
+    def test_note(t):
+        Commands.note(t.conf, t.args)
+
+        with t.subTest('the inputs reach the library beside the config'):
+            t.annotate_item.assert_called_once_with(
+                t.conf,
+                t.datetime.now.return_value,
+                selector='a selector',
+                text='a note',
+                attrs='some attrs',
+            )
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.annotate_item.return_value)
 
 
 class CommandsSetLogLevelTests(TestCase):
