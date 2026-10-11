@@ -1,6 +1,6 @@
 # 0017 — Property objects as the module design
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09-04
 
 ## Context
