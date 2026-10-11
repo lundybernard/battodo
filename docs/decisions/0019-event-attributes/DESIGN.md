@@ -174,16 +174,28 @@ completion writes to it.
 
 **Selector.** `history` resolves its selector against the journal, not
 the markdown. An `[ID:]` names a stream. A case-insensitive part of a
-title matches against the latest snapshot title of each stream and must
-match exactly one stream. A finished one-shot task stays reachable
-after its block leaves the list.
+title matches against the current title of each stream, the snapshot
+title with the title deltas applied, and must match exactly one stream.
+A finished one-shot task stays reachable after its block leaves the
+list. A task with no stream is an error.
 
 **Text output.** A header line with the task's title and `[ID:]`, then
-one entry per `TaskCompleted` event on the stream. Each entry shows the
-completion day and each attribute as `key=value`, in recorded order.
-Entries run newest first by completion day; journal order
-([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md))
-breaks ties.
+one entry per completion on the stream and one per other event that
+carries attributes. Each entry shows its kind, its day, and each
+attribute as `key=value`, in recorded order. The kind is the event
+type; the checklist marker labels the completion of a checklist item.
+A completion's day is `completed_on`; any other entry's day is the
+local day of `occurred_at`. Entries run newest first by day; journal
+order ([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md))
+breaks ties. A stream with no entries gives the header and an empty
+list.
 
 **JSON output.** `--format json` serializes the document that the text
 format lays out, as `show --format json` does.
+
+## Show
+
+**Notes.** `show` lists the notes of the task's current cycle: every
+note that the stream's events carry after its last completion, newest
+first, each with its day. `show --format json` gains a `notes` key.
+`view` does not change.

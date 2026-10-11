@@ -5,10 +5,11 @@ Date: 2026-10-01
 
 ## Context
 
-Completion attributes ([ADR 0020](0020-event-attribute-map.md))
-leave a per-completion history in the journal. A details view must list
-that history for one task, and the ranked view must not show it
-([R2](REQUIREMENTS.md)).
+Event attributes ([ADR 0020](0020-event-attribute-map.md)) and note
+events ([ADR 0023](0023-note-event.md)) leave a history in the
+journal: the completions of a task, and every other event that carries
+attributes. A details view must list that history for one task, and
+the ranked view must not show it ([R2](REQUIREMENTS.md)).
 
 Two existing surfaces read one task or many, and neither reaches the
 history:
@@ -19,21 +20,24 @@ history:
 - `view` ranks open tasks, one row each, and R2 keeps history out of
   it.
 
+The journal holds this history, and the markdown holds none of it.
 After the flip
 ([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
-the journal is the record and the markdown a render of it. The history
-exists in the journal and nowhere else.
+the journal is the record and the markdown a render of it.
 
 ## Decision
 
-**A `history` command lists one task's completion events from the
-journal.** It shows them newest first, each with its day and its
-attributes. It resolves its task from the journal, so it reaches a
-finished one-shot task that no longer appears in any list. `show` and
-`view` do not change.
+**A `history` command lists one task's completions, and every other
+event that carries attributes, from the journal.** It shows them newest
+first, each labelled by its kind, with its day and its attributes. It
+resolves its task from the journal, so it reaches a finished one-shot
+task that no longer appears in any list.
+
+`show` lists the notes of the task's current cycle: the notes since
+the stream's last completion, newest first. `view` does not change.
 
 [DESIGN.md](DESIGN.md#history-command) specifies the selector and the
-output.
+output, and [DESIGN.md](DESIGN.md#show) the notes in `show`.
 
 ## Options considered
 
@@ -41,7 +45,7 @@ output.
 
 - reads the record, not a render of it [pro]
 - reaches finished tasks, which only the journal still holds [pro]
-- leaves `view` and `show` as they are [pro]
+- leaves `view` as it is, and keeps earlier cycles out of `show` [pro]
 - one more command, with a selector that resolves against the journal
   instead of the markdown [con]
 
@@ -50,7 +54,7 @@ output.
 - one command per task and no new name to learn [pro]
 - its selector reaches open tasks only, so finished tasks stay out of
   reach [con]
-- it reads the markdown, which holds no history [con]
+- it reads the task from the markdown, which holds no history [con]
 
 ### Render the history under the item in the markdown
 
@@ -68,11 +72,15 @@ markdown carry a growing copy of what the journal already holds, and
 the item that repeats most grows the longest block.
 
 A separate command also keeps the details out of the ranked view,
-which is the split R2 asks for.
+which is the split R2 asks for. `show` takes only the notes of the
+current cycle, which describe the open task it shows, and leaves the
+earlier cycles to `history`.
 
 ## Consequences
 
 - `history` is the first command that resolves a task from the journal
   rather than from the markdown. DESIGN.md states its selector.
+- `show` reads the notes from the journal, beside the task from the
+  markdown, and its JSON gains a `notes` key.
 - Before the flip, a completion made by hand edit writes no event, so
   `history` does not list it.

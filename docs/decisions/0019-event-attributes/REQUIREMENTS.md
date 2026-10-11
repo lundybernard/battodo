@@ -46,8 +46,11 @@ A new kind of fact does not need a schema change or a code change.
 
 - [ ] Two completions of a repeating task, each with different facts,
       leave both sets in the journal (R1)
-- [ ] The history of a task lists every completion, newest first, with
+- [ ] The history of a task lists every completion and every other
+      event that carries attributes, newest first, each with its kind,
       its day and its facts, and `view` output does not change (R2)
+- [ ] `show` lists the notes since the last completion of a task,
+      newest first (R2)
 - [ ] The history of a finished one-shot task lists its completion
       after the task has left its list (R2)
 - [ ] A description set through `add` or `update` survives a completion
