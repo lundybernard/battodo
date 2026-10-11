@@ -52,10 +52,10 @@ to learn how many open items the selection left out.
 
 ```
 btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
-                         [--repeat R] [--tags a,b]
+                         [--repeat R] [--tags a,b] [--description TEXT]
 btodo add <list> <title> --parent <selector>
 btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
-                        [--title TITLE]
+                        [--title TITLE] [--description TEXT]
 btodo done <selector> [--date YYYY-MM-DD]
 btodo scratch <selector>
 ```
@@ -66,6 +66,12 @@ btodo scratch <selector>
   `monthly:N`. `--tags` is a comma-separated list.
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
+- `--description` sets the static description of a task: each line of
+  `TEXT` becomes one description line under the task.
+  `update --description ''` clears it. A line that is blank, reads as
+  a task, a heading or a comment, or holds a carriage return is
+  refused. `show` prints the description, and its JSON carries it as
+  `description`.
 - `add` echoes the line it wrote and the file it wrote to. Read that
   echo to confirm the write. A task with no `-p` gets a neutral
   priority and still ranks by its dates; an explicit `-p 0` parks the
