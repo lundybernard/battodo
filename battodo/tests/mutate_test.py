@@ -1412,6 +1412,7 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
@@ -1422,6 +1423,7 @@ class CompletionTests(TestCase):
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
         completed_on: PropertyMock,
+        refuse_attributes: MagicMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
@@ -1430,17 +1432,21 @@ class CompletionTests(TestCase):
         completed_on.return_value = GIVEN_DAY
         task_completion.return_value.payload = {'delta': sentinel.delta}
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        t.co.attrs = sentinel.attrs
 
         with t.subTest('one TaskCompleted a completion, deepest first'):
             recurrence.return_value = None
 
             ret = t.co.events
 
-            # Each payload carries the day the completion is for.
+            # Each payload carries the day the completion is for. Only
+            # the task the caller named carries the attributes, once the
+            # task has checked that it takes them.
             payload = {'delta': sentinel.delta, 'completed_on': '2026-08-01'}
+            refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None), call(top, None)],
+                [call(below, None, sentinel.attrs), call(top, None, None)],
             )
             t.assertEqual(
                 ret,
@@ -1458,7 +1464,10 @@ class CompletionTests(TestCase):
 
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None), call(top, date(2026, 8, 15))],
+                [
+                    call(below, None, sentinel.attrs),
+                    call(top, date(2026, 8, 15), None),
+                ],
             )
 
         with t.subTest('the recurrence, whichever task it is'):
@@ -1469,7 +1478,10 @@ class CompletionTests(TestCase):
 
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, date(2026, 8, 15)), call(top, None)],
+                [
+                    call(below, date(2026, 8, 15), sentinel.attrs),
+                    call(top, None, None),
+                ],
             )
 
 
@@ -2310,6 +2322,22 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                },
+            )
+
+        with t.subTest('the attributes of the named task'):
+            t.tc.ancestry = ancestry_of(t.node, path='a path')
+            t.tc.attrs = {'cost': '45.00'}
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'done': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
                 },
             )
 

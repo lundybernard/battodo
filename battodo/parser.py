@@ -184,6 +184,9 @@ class TaskNode:
                 'would promote it to a subtask'
             )
 
+    def refuse_attributes(self, attrs: dict[str, str] | None) -> None:
+        raise NotImplementedError
+
 
 class Ancestry:
     """A task and every task above it, outermost first."""

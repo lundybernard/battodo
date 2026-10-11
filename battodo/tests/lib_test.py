@@ -337,7 +337,7 @@ class CompleteItemTests(TestCase):
     """Unit tests for battodo.lib.complete_item."""
 
     def setUp(t):
-        patches = ['Task', 'Completion']
+        patches = ['Task', 'Completion', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -383,7 +383,10 @@ class CompleteItemTests(TestCase):
             )
 
         with t.subTest('which the completion is built on'):
-            t.Completion.assert_called_once_with(t.task)
+            t.Completion.assert_called_once_with(
+                t.task,
+                attrs=t.SuppliedAttributes.return_value.checked,
+            )
 
         with t.subTest('a date left off is None'):
             t.Task.from_config.reset_mock()
@@ -396,6 +399,36 @@ class CompleteItemTests(TestCase):
                 selector='a selector',
                 date=None,
             )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            complete_item(
+                t.conf,
+                t.now,
+                selector='a selector',
+                attrs='cost=45.00',
+                note='a note',
+            )
+
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            complete_item(t.conf, t.now, selector='a selector')
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.from_config.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                complete_item(t.conf, t.now, selector='a selector')
+
+            t.Task.from_config.assert_not_called()
 
     def test_written(t):
         complete_item(t.conf, t.now, selector='a selector')

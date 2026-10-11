@@ -681,8 +681,13 @@ class Completion:
     only its children go.
     """
 
-    def __init__(self, task: Task) -> None:
+    def __init__(
+        self,
+        task: Task,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.task = task
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -1387,9 +1392,15 @@ class TaskCompletion:
     marks it as a checklist item.
     """
 
-    def __init__(self, ancestry: Ancestry, rescheduled: date | None) -> None:
+    def __init__(
+        self,
+        ancestry: Ancestry,
+        rescheduled: date | None,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
+        self.attrs = attrs
 
     @property
     def payload(self) -> dict[str, Any]:

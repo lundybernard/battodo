@@ -836,6 +836,33 @@ class CompletionTests(TestCase):
             t.assertEqual(ret.payload['ancestry'], 'A task > A checklist item')
             t.assertIs(ret.payload['checklist_item'], True)
 
+        with t.subTest('the attributes go on the named task alone'):
+            completed = completion_of(
+                t.source,
+                'A subtask that does not',
+                attrs={'cost': '45.00'},
+            )
+
+            child, parent = completed.events
+
+            t.assertEqual(child.payload['attrs'], {'cost': '45.00'})
+            t.assertNotIn('attrs', parent.payload)
+
+        with t.subTest('a checklist item takes no attributes'):
+            completed = completion_of(
+                t.source,
+                'A checklist item',
+                attrs={'note': 'a note'},
+            )
+
+            with t.assertRaises(ValueError) as caught:
+                _ = completed.events
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
+
 
 class ScratchTests(TestCase):
     """Contract tests for battodo.mutate.Scratch."""
@@ -1123,9 +1150,13 @@ def without(text: str, *indices: int) -> str:
     )  # fmt: skip
 
 
-def completion_of(source: Path, selector: str) -> Completion:
+def completion_of(
+    source: Path,
+    selector: str,
+    attrs: dict[str, str] | None = None,
+) -> Completion:
     """The completion of the task `selector` names."""
-    return Completion(Task(source, selector, TODAY))
+    return Completion(Task(source, selector, TODAY), attrs=attrs)
 
 
 def under_an_empty_id(source: Path) -> SubtaskAddition:

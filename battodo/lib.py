@@ -338,6 +338,8 @@ def complete_item(
     *,
     selector: str,
     date: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Complete the task `selector` names.
 
