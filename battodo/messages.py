@@ -81,6 +81,9 @@ MESSAGES = {
     'done.selector.help': "the task's [ID:] value, or part of its title",
     'done.date.help': 'the day the task was completed, YYYY-MM-DD;'
     ' default today',
+    'done.attrs.help': 'attributes of the completion: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'done.note.help': 'a note on the completion; the attribute note',
     # scratch
     'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
     'scratch.help': 'for details use scratch --help',

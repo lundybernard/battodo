@@ -32,6 +32,7 @@ from .mutate import (
     Completion,
     Scratch,
     SubtaskAddition,
+    SuppliedAttributes,
     Update,
 )
 from .task import Task
@@ -353,6 +354,10 @@ def complete_item(
         Names the task.
     date : str or None
         The ISO day the task was completed.
+    attrs : str or None
+        The attributes of the completion, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -368,10 +373,13 @@ def complete_item(
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
     ValueError
-        `date` is not an ISO date. Raised before anything is written.
+        The attributes do not read, a checklist item is given
+        attributes, or `date` is not an ISO date. Raised before
+        anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     task = Task.from_config(conf, now, selector=selector, date=date)
-    completion = Completion(task)
+    completion = Completion(task, attrs=checked)
     completion.write()
     entries = completion.entries
     return '\n'.join(entries) if entries else 'checked off'

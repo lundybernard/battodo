@@ -235,6 +235,14 @@ def argparser():
         '--date',
         help=MESSAGES['done.date.help'],
     )
+    done.add_argument(
+        '--attrs',
+        help=MESSAGES['done.attrs.help'],
+    )
+    done.add_argument(
+        '--note',
+        help=MESSAGES['done.note.help'],
+    )
 
     drop = commands.add_parser(
         'scratch',
@@ -349,6 +357,8 @@ class Commands:
                 datetime.now(TZ),
                 selector=args.selector,
                 date=args.date,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 

@@ -15,6 +15,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
+from functools import cache
 from itertools import count
 from json import dumps, loads
 from pathlib import Path
@@ -244,13 +245,21 @@ class CompleteItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
         log = data.draw(logs())
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), log, [])
         found = outcome(text, ancestries, selector)
-        expected = foreseen(completed, before, found)
+        expected = foreseen(completed, before, found, given)
 
         with written(before) as directory:
             conf = configuration(directory)
-            ret = observed(complete_item, conf, directory, selector=selector)
+            ret = observed(
+                complete_item,
+                conf,
+                directory,
+                selector=selector,
+                attrs=given.text,
+                note=given.note,
+            )
 
         t.assertEqual(ret, expected)
 
@@ -362,6 +371,72 @@ def attribute_values() -> st.SearchStrategy[str]:
 def separated(text: str) -> bool:
     """Whether `text` holds no comma-then-key, so it stays one segment."""
     return SEPARATOR_RE.search(text) is None
+
+
+# Cached: the strategy is a deep tree, and a draw is cheap only once it
+# is built.
+@cache
+def supplied_attributes() -> st.SearchStrategy['Attributes']:
+    """The attribute inputs of a write, each left off or given.
+
+    One first segment in four, and one note in four, does not read.
+    """
+    first = either(
+        attribute_segments(),
+        either(attribute_segments(), odd_first_segments()),
+    )
+    segments = st.tuples(
+        first,
+        st.lists(attribute_segments(), max_size=2),
+    ).map(lambda drawn: [drawn[0], *drawn[1]])
+    notes = either(
+        attribute_values(), either(attribute_values(), odd_values())
+    )
+    return st.builds(
+        Attributes,
+        st.one_of(st.none(), segments),
+        st.one_of(st.none(), notes),
+    )
+
+
+def attribute_segments() -> st.SearchStrategy[str]:
+    """A `key=value` segment with a key of the grammar.
+
+    The keys repeat often, `note` among them, and one value in eight
+    does not read.
+    """
+    keys = either(
+        st.from_regex(ATTRIBUTE_KEY, fullmatch=True),
+        st.sampled_from(['cost', 'note']),
+    )
+    odd = either(attribute_values(), odd_values())
+    values = either(attribute_values(), either(attribute_values(), odd))
+    return st.builds('{}={}'.format, keys, values).filter(separated)
+
+
+def odd_first_segments() -> st.SearchStrategy[str]:
+    """A first segment that does not read: no `=`, or an odd key.
+
+    Only the first segment can hold one: the split takes a later
+    segment from its own key.
+    """
+    text = st.text(
+        st.characters(codec='utf-8', exclude_characters='='),
+        max_size=6,
+    )
+    odd_keys = text.filter(lambda key: not re.fullmatch(ATTRIBUTE_KEY, key))
+    keyed = st.builds('{}={}'.format, odd_keys, attribute_values())
+    return st.one_of(text, keyed).filter(separated)
+
+
+def odd_values() -> st.SearchStrategy[str]:
+    """A value that does not read: empty, or broken across lines."""
+    broken = st.tuples(
+        attribute_values(),
+        st.sampled_from(['\n', '\r', '\r\n']),
+        attribute_values(),
+    ).map(''.join)
+    return st.one_of(st.just(''), broken.filter(separated))
 
 
 def supplied_options(
@@ -513,7 +588,7 @@ def observed(
     write: Callable[..., str],
     conf: Mock,
     directory: Path,
-    **inputs: str,
+    **inputs: str | None,
 ) -> Any:
     """What `write` answers and leaves in `directory`, canonical.
 
@@ -668,19 +743,27 @@ def logs() -> st.SearchStrategy[str | None]:
     return st.sampled_from([None, '', f'{heading}\n', heading])
 
 
-def completed(before: Source, found: Answer) -> 'Outcome':
+def completed(
+    before: Source,
+    found: Answer,
+    given: 'Attributes',
+) -> 'Outcome':
     """The task checked off, logged and journaled, per SCHEMA.md.
 
     Completing the last open child completes its parent. A finished
     top-level task loses its block, unless it repeats: then it stays
-    with a new due date, and only its children go.
+    with a new due date, and only its children go. The attributes go
+    on the event of the named task, which is not a checklist item.
     """
+    attrs = attributes(given)
     text, ancestry = reached(found)
     ancestries = cascade(ancestry)
     root = ancestry[0]
     root_done = len(ancestries[-1]) == 1
     repeats = root_done and bool(root.repeat)
     rescheduled = next_due(root.repeat or '', TODAY) if repeats else None
+    if attrs:
+        refuse_checklist_attributes(ancestry[-1])
     ids = stream_ids(ancestries)
     doc = TodoDocument(text)
     if rescheduled is not None:
@@ -713,6 +796,8 @@ def completed(before: Source, found: Answer) -> 'Outcome':
         }
         if is_checklist_item(node):
             payload['checklist_item'] = True
+        if attrs and each is ancestry:
+            payload['attrs'] = attrs
         stream = ids[stream_task(each).raw_index]
         events.append(
             Appended('TaskCompleted', f'task/{stream}', payload, LIST_FILE)
@@ -828,6 +913,68 @@ def given_options(options: dict[str, str | None]) -> dict[str, str]:
         for option, value in options.items()
             if value is not None
     }  # fmt: skip
+
+
+class Attributes(NamedTuple):
+    """The attribute inputs of a write, the segments not yet joined."""
+
+    segments: list[str] | None
+    note: str | None
+
+    @property
+    def text(self) -> str | None:
+        """The `attrs` input: the segments joined, or None."""
+        if self.segments is None:
+            return None
+        return ', '.join(self.segments)
+
+
+def attributes(given: Attributes) -> dict[str, str]:
+    """The attributes a write carries: each key against its value.
+
+    Raises
+    ------
+    ValueError
+        A segment holds no `=`, a key is outside the grammar, a value
+        is empty or broken across lines, or a key repeats, checked in
+        that order.
+    """
+    pairs = []
+    for segment in given.segments or []:
+        key, sign, value = segment.partition('=')
+        if not sign:
+            raise ValueError(f'attribute must read key=value, not {segment!r}')
+        pairs.append((key, value))
+    if given.note is not None:
+        pairs.append(('note', given.note))
+    found: dict[str, str] = {}
+    for key, value in pairs:
+        if not re.fullmatch(ATTRIBUTE_KEY, key):
+            raise ValueError(
+                f'attribute key must be a lowercase identifier, not {key!r}'
+            )
+        if not value:
+            raise ValueError(f'attribute {key!r} must hold a value')
+        if '\n' in value or '\r' in value:
+            raise ValueError(
+                f'attribute {key!r} must hold no line break, not {value!r}'
+            )
+        if key in found:
+            raise ValueError(f'attribute {key!r} is given twice')
+        found[key] = value
+    return found
+
+
+def refuse_checklist_attributes(task: TaskNode) -> None:
+    """Refuse attributes on a checklist item.
+
+    Raises
+    ------
+    ValueError
+        `task` is a checklist item.
+    """
+    if is_checklist_item(task):
+        raise ValueError('a checklist item takes no attributes')
 
 
 class Outcome(NamedTuple):

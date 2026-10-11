@@ -865,14 +865,23 @@ class Completion:
 
         The payload carries the state the task changed from and the day
         the completion is for. A rescheduled task records its due date
-        beside the done.
+        beside the done. The attributes go on the event of the named
+        task alone.
+
+        Raises
+        ------
+        ValueError
+            The named task is a checklist item and attributes are given.
         """
+        self.task.node.refuse_attributes(self.attrs)
         completed_on = self.completed_on.isoformat()
         recurrence, rescheduled = self.recurrence, self.rescheduled
+        ancestries = self.ancestries
         events = []
-        for ancestry in self.ancestries:
+        for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
-            completed = TaskCompletion(ancestry, due).payload
+            attrs = self.attrs if ancestry is ancestries[0] else None
+            completed = TaskCompletion(ancestry, due, attrs).payload
             payload = {**completed, 'completed_on': completed_on}
             stream = self.ids[ancestry.stream.raw_index]
             events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
@@ -1387,9 +1396,10 @@ class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
     `rescheduled` is the next due date of a task the completion
-    reschedules, and None for every other task. The event of a
-    checklist item lands on the stream of an ancestor, so its payload
-    marks it as a checklist item.
+    reschedules, and None for every other task. `attrs` holds the
+    attributes of the named task, and None for every other task. The
+    event of a checklist item lands on the stream of an ancestor, so
+    its payload marks it as a checklist item.
     """
 
     def __init__(
@@ -1406,7 +1416,8 @@ class TaskCompletion:
     def payload(self) -> dict[str, Any]:
         """The done, a new due date beside it, the task and its path.
 
-        A checklist item also carries its mark.
+        A checklist item also carries its mark, and the named task its
+        attributes.
         """
         node = self.ancestry.node
         delta: dict[str, list[Any]] = {'done': [False, True]}
@@ -1419,6 +1430,8 @@ class TaskCompletion:
         }
         if node.is_checklist_item:
             payload['checklist_item'] = True
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return payload
 
 
