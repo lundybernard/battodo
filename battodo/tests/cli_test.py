@@ -229,12 +229,12 @@ class ArgparserTests(TestCase):
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
             args = t.parser.parse_args(['completed'])
-            t.assertEqual(getattr(args, 'battodo.period'), DEFAULT_PERIOD)
+            t.assertEqual(args.period, DEFAULT_PERIOD)
 
         for period in PERIODS:
             with t.subTest(period):
                 args = t.parser.parse_args(['completed', period])
-                t.assertEqual(getattr(args, 'battodo.period'), period)
+                t.assertEqual(args.period, period)
 
         with t.subTest('a period with no definition is a usage error'):
             stderr = StringIO()
@@ -531,16 +531,17 @@ class CommandsCompletedTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'period', 'format'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(period='a period')
 
     def test_completed(t):
         Commands.completed(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_completed.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                period='a period',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

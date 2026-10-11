@@ -254,7 +254,7 @@ def argparser():
     )
     completed.set_defaults(func=Commands.completed)
     completed.add_argument(
-        f'{CONFIG_ROOT}.period',
+        'period',
         nargs='?',
         choices=PERIODS,
         default=DEFAULT_PERIOD,
@@ -357,7 +357,7 @@ class Commands:
 
     @staticmethod
     def completed(conf, args):
-        print(get_completed(conf, datetime.now(TZ)))
+        print(get_completed(conf, datetime.now(TZ), period=args.period))
 
     @staticmethod
     def set_log_level(conf):

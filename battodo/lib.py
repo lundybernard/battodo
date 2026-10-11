@@ -103,8 +103,8 @@ def get_view(conf: Configuration, now: datetime) -> str:
     return View(selection).text
 
 
-def get_completed(conf: Configuration, now: datetime) -> str:
-    """The completed digest the configuration asks for.
+def get_completed(conf: Configuration, now: datetime, *, period: str) -> str:
+    """The completed digest of `period`.
 
     Parameters
     ----------
@@ -112,6 +112,8 @@ def get_completed(conf: Configuration, now: datetime) -> str:
         The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, whose local day ends the period.
+    period : str
+        One of PERIODS.
 
     Returns
     -------
@@ -124,9 +126,9 @@ def get_completed(conf: Configuration, now: datetime) -> str:
     CompletedError
         The source directory holds no completed log.
     ValueError
-        The configured period has no definition.
+        `period` has no definition.
     """
-    digest = Digest.from_config(conf, now)
+    digest = Digest.from_config(conf, now, period=period)
     if _is_json(conf):
         return DigestJsonView(digest).json
     return DigestView(digest).text

@@ -78,12 +78,16 @@ class GetCompletedTests(TestCase):
         t.conf.format = 'text'
 
     def test_digest(t):
-        get_completed(t.conf, t.now)
+        get_completed(t.conf, t.now, period='a period')
         # The configuration is decoded once, by the digest.
-        t.Digest.from_config.assert_called_once_with(t.conf, t.now)
+        t.Digest.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            period='a period',
+        )
 
     def test_text(t):
-        rendered = get_completed(t.conf, t.now)
+        rendered = get_completed(t.conf, t.now, period='a period')
         t.DigestView.assert_called_once_with(t.digest)
         t.assertEqual(rendered, t.DigestView.return_value.text)
 
@@ -91,7 +95,7 @@ class GetCompletedTests(TestCase):
     def test_json(t, digest_json_view):
         t.conf.format = 'json'
 
-        rendered = get_completed(t.conf, t.now)
+        rendered = get_completed(t.conf, t.now, period='a period')
 
         digest_json_view.assert_called_once_with(t.digest)
         t.assertEqual(rendered, digest_json_view.return_value.json)
@@ -100,7 +104,7 @@ class GetCompletedTests(TestCase):
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view'])
-        rendered = get_completed(conf, t.now)
+        rendered = get_completed(conf, t.now, period='a period')
         t.assertEqual(rendered, t.DigestView.return_value.text)
 
 

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 from batconf import TomlSource
 from batconf.types import SourceInterfaceP
 
-from battodo.cli import DEFAULT_PERIOD, TZ, argparser, get_config
+from battodo.cli import TZ, argparser, get_config
 from battodo.view import TOP_N
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
@@ -87,14 +87,6 @@ class CliArgsResolutionTests(TestCase):
         with t.subTest('and the schema answers when no source does'):
             conf = t.resolve(['view'])
             t.assertEqual(conf.view.top, str(TOP_N))
-
-        with t.subTest('an optional positional reaches the command'):
-            conf = t.resolve(['completed', 'month'])
-            t.assertEqual(conf.period, 'month')
-
-        with t.subTest('and an omitted one falls back to the default'):
-            conf = t.resolve(['completed'])
-            t.assertEqual(conf.period, DEFAULT_PERIOD)
 
 
 class CommandInputTests(TestCase):

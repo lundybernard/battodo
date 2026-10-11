@@ -4,7 +4,6 @@ from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..completed import (
-    DEFAULT_PERIOD,
     CompletedError,
     Digest,
     DigestJsonView,
@@ -144,15 +143,12 @@ class DigestFromConfigTests(TestCase):
     """
 
     def setUp(t) -> None:
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'period'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.period = 'month'
 
     def test_from_config(t) -> None:
-        digest = Digest.from_config(t.conf, NOW)
+        digest = Digest.from_config(t.conf, NOW, period='month')
 
         with t.subTest('the source directory is left unexpanded'):
             t.assertEqual(digest.directory, Path('~/a-source-dir'))
@@ -160,17 +156,8 @@ class DigestFromConfigTests(TestCase):
         with t.subTest('the clock is the one it was given'):
             t.assertEqual(digest.now, NOW)
 
-        with t.subTest('and the period is the configured one'):
+        with t.subTest('and the period is the one given'):
             t.assertEqual(digest.period, 'month')
-
-        with t.subTest('an unsupplied period reads as the default'):
-            conf = Mock(spec=['view'])
-            conf.view = Mock(spec=['source_dir'])
-            conf.view.source_dir = '~/a-source-dir'
-
-            ret = Digest.from_config(conf, NOW)
-
-            t.assertEqual(ret.period, DEFAULT_PERIOD)
 
 
 class RecordTests(TestCase):
