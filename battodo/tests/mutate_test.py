@@ -36,6 +36,8 @@ from ..mutate import (
 SRC = 'battodo.mutate'
 
 TODAY = date(2026, 8, 8)
+# A completion day the user gives, earlier than TODAY.
+GIVEN_DAY = date(2026, 8, 1)
 # The source directory, the list a task lives in, and another list.
 SOURCE = Path('/a-source')
 LIST_PATH = SOURCE / 'a-list.md'
@@ -1144,20 +1146,23 @@ class CompletionTests(TestCase):
             new_task_id.assert_called_once_with()
 
     @patch(f'{SRC}.next_due', autospec=True)
+    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     def test_rescheduled(
         t,
         recurrence: PropertyMock,
+        completed_on: PropertyMock,
         next_due: MagicMock,
     ) -> None:
         t.parent.fields = {'P': '3', 'REPEAT': '7d', 'ID': '9o71lx'}
+        completed_on.return_value = GIVEN_DAY
 
         with t.subTest('a recurrence that repeats, against the day'):
             recurrence.return_value = t.parent
 
             ret = t.co.rescheduled
 
-            next_due.assert_called_once_with('7d', TODAY)
+            next_due.assert_called_once_with('7d', GIVEN_DAY)
             t.assertIs(ret, next_due.return_value)
 
         with t.subTest('none where there is no recurrence'):
@@ -1189,6 +1194,10 @@ class CompletionTests(TestCase):
         ret = t.co.root
         t.assertIs(ret, t.parent)
 
+    def test_completed_on(t) -> None:
+        ret = t.co.completed_on
+        t.assertIs(ret, t.task.today)
+
     @patch(f'{SRC}.Ancestry', autospec=True)
     def test_ancestries(t, ancestry: MagicMock) -> None:
         # Each ancestry stands in as the tuple of the tasks it holds.
@@ -1217,11 +1226,16 @@ class CompletionTests(TestCase):
             )
 
     @patch(f'{SRC}.LogEntry', autospec=True)
+    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     def test_entries(
-        t, ancestries: PropertyMock, log_entry: MagicMock
+        t,
+        ancestries: PropertyMock,
+        completed_on: PropertyMock,
+        log_entry: MagicMock,
     ) -> None:
         log_entry.return_value.text = 'a record'
+        completed_on.return_value = GIVEN_DAY
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
 
         with t.subTest('one record a completion, deepest first'):
@@ -1232,8 +1246,8 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 log_entry.call_args_list,
                 [
-                    call(LIST_PATH, below, 'DONE', TODAY),
-                    call(LIST_PATH, top, 'DONE', TODAY),
+                    call(LIST_PATH, below, 'DONE', GIVEN_DAY),
+                    call(LIST_PATH, top, 'DONE', GIVEN_DAY),
                 ],
             )
             t.assertEqual(ret, ['a record', 'a record'])
@@ -1248,6 +1262,7 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
+    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
@@ -1256,12 +1271,14 @@ class CompletionTests(TestCase):
         ancestries: PropertyMock,
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
+        completed_on: PropertyMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
         ancestries.return_value = [below, top]
         rescheduled.return_value = date(2026, 8, 15)
-        task_completion.return_value.payload = sentinel.payload
+        completed_on.return_value = GIVEN_DAY
+        task_completion.return_value.payload = {'delta': sentinel.delta}
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
 
         with t.subTest('one TaskCompleted a completion, deepest first'):
@@ -1269,6 +1286,8 @@ class CompletionTests(TestCase):
 
             ret = t.co.events
 
+            # Each payload carries the day the completion is for.
+            payload = {'delta': sentinel.delta, 'completed_on': '2026-08-01'}
             t.assertEqual(
                 task_completion.call_args_list,
                 [call(below, None), call(top, None)],
@@ -1276,8 +1295,8 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 ret,
                 [
-                    Event('TaskCompleted', 'task/zz01ab', sentinel.payload),
-                    Event('TaskCompleted', 'task/9o71lx', sentinel.payload),
+                    Event('TaskCompleted', 'task/zz01ab', payload),
+                    Event('TaskCompleted', 'task/9o71lx', payload),
                 ],
             )
 

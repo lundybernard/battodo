@@ -736,6 +736,10 @@ class Completion:
         return self.task.ancestry[0]
 
     @property
+    def completed_on(self) -> date:
+        raise NotImplementedError
+
+    @property
     def ancestries(self) -> list[Ancestry]:
         """The ancestry of the task and of each ancestor it finishes.
 
