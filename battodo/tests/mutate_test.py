@@ -2711,7 +2711,7 @@ class LogEntryTests(TestCase):
     """Unit tests for battodo.mutate.LogEntry."""
 
     def setUp(t) -> None:
-        t.logged = MagicMock(spec=['ancestry', 'day', 'status'])
+        t.logged = MagicMock(spec=['ancestry', 'day', 'status', 'attrs'])
         t.logged.ancestry = MagicMock(spec=['path', 'node'])
         t.logged.ancestry.path = 'A task > A subtask of it'
         t.logged.ancestry.node = MagicMock(spec=['schema_fields'])
@@ -2721,10 +2721,18 @@ class LogEntryTests(TestCase):
         }
         t.logged.day = TODAY
         t.logged.status = 'DONE'
+        t.logged.attrs = None
         t.le = LogEntry(LIST_PATH, t.logged)
 
+    @patch.object(LogEntry, 'attributes', new_callable=PropertyMock)
     @patch.object(LogEntry, 'fields', new_callable=PropertyMock)
-    def test_text(t, fields: PropertyMock) -> None:
+    def test_text(
+        t,
+        fields: PropertyMock,
+        attributes: PropertyMock,
+    ) -> None:
+        attributes.return_value = ''
+
         with t.subTest('the day, the list, the status, the path, the fields'):
             fields.return_value = '[LOE:2]'
 
@@ -2743,6 +2751,17 @@ class LogEntryTests(TestCase):
             t.assertEqual(
                 ret,
                 '2026-08-08 | a-list | DONE | A task > A subtask of it',
+            )
+
+        with t.subTest('the attributes come last'):
+            attributes.return_value = '[attrs:{}]'
+
+            ret = t.le.text
+
+            t.assertEqual(
+                ret,
+                '2026-08-08 | a-list | DONE | A task > A subtask of it '
+                '[attrs:{}]',
             )
 
     def test_day(t) -> None:
@@ -2764,6 +2783,32 @@ class LogEntryTests(TestCase):
     def test_fields(t) -> None:
         ret = t.le.fields
         t.assertEqual(ret, '[LOE:2] [DUE:2026-08-20]')
+
+    def test_attributes(t) -> None:
+        with t.subTest('a JSON object in a block of its own'):
+            t.logged.attrs = {'cost': '45.00', 'note': 'Paid] "cash", cost=5'}
+
+            ret = t.le.attributes
+
+            t.assertEqual(
+                ret,
+                '[attrs:{"cost": "45.00", "note": "Paid] \\"cash\\", cost=5"}]',
+            )
+
+        with t.subTest('in ASCII, so no character can break the line'):
+            t.logged.attrs = {'note': 'caf\u00e9\u2028'}
+            ret = t.le.attributes
+            t.assertEqual(ret, '[attrs:{"note": "caf\\u00e9\\u2028"}]')
+
+        cases: dict[str, dict[str, str] | None] = {
+            'no attributes': None,
+            'an empty map': {},
+        }
+        for name, attrs in cases.items():
+            with t.subTest(f'{name} write no block'):
+                t.logged.attrs = attrs
+                ret = t.le.attributes
+                t.assertEqual(ret, '')
 
 
 class ListBackfillTests(TestCase):

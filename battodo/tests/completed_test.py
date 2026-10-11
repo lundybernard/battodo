@@ -13,7 +13,9 @@ from ..completed import (
     Record,
     RecordJsonView,
     Table,
+    read_attributes,
     read_record,
+    split_attributes,
 )
 
 SRC = 'battodo.completed'
@@ -240,6 +242,79 @@ class ReadRecordTests(TestCase):
         for name, line in skipped.items():
             with t.subTest(name):
                 ret = read_record(line)
+                t.assertIsNone(ret)
+
+    def test_attributes(t) -> None:
+        line = (
+            '2026-08-04 | work | DONE | Deck > Chip [LOE:2] '
+            '[attrs:{"cost": "45.00"}]'
+        )
+
+        ret = read_record(line)
+
+        t.assertEqual(
+            ret,
+            Record(date(2026, 8, 4), 'work', 'Deck > Chip', {'cost': '45.00'}),
+        )
+
+
+class SplitAttributesTests(TestCase):
+    """Unit tests for battodo.completed.split_attributes."""
+
+    def test_block(t) -> None:
+        cases = {
+            'the block after the fields leaves the text': (
+                'Ship | it, x=1 [P:4] [attrs:{"cost": "45.00"}]',
+                ('Ship | it, x=1 [P:4] ', {'cost': '45.00'}),
+            ),
+            'a value may hold the mark and a bracket': (
+                'Ship [attrs:{"note": "[attrs:{} ]"}]',
+                ('Ship ', {'note': '[attrs:{} ]'}),
+            ),
+            'a mark in the text before the block stays text': (
+                'Read [attrs:{"a": "b"} later [attrs:{"cost": "4"}]',
+                ('Read [attrs:{"a": "b"} later ', {'cost': '4'}),
+            ),
+        }
+
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                ret = split_attributes(text)
+                t.assertEqual(ret, expected)
+
+    def test_text(t) -> None:
+        cases = {
+            'a text with no mark': 'Ship it [P:4]',
+            'a mark that opens no block': 'Keep [attrs:x] as text',
+            'a block that is not the end of the text': (
+                'Read [attrs:{"a": "b"}] later'
+            ),
+        }
+
+        for name, text in cases.items():
+            with t.subTest(name):
+                ret = split_attributes(text)
+                t.assertEqual(ret, (text, {}))
+
+
+class ReadAttributesTests(TestCase):
+    """Unit tests for battodo.completed.read_attributes."""
+
+    def test_attributes(t) -> None:
+        ret = read_attributes('{"cost": "45.00", "note": "Paid]"}]')
+        t.assertEqual(ret, {'cost': '45.00', 'note': 'Paid]'})
+
+    def test_unread(t) -> None:
+        cases = {
+            'no closing bracket': '{"cost": "45.00"}',
+            'no JSON before it': '{cost=45.00}]',
+            'JSON that is not an object': '["cost"]]',
+            'a value that is not text': '{"cost": 45}]',
+        }
+
+        for name, block in cases.items():
+            with t.subTest(name):
+                ret = read_attributes(block)
                 t.assertIsNone(ret)
 
 

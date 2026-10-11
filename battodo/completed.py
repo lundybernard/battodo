@@ -186,6 +186,14 @@ def read_record(line: str) -> Record | None:
     return Record(day, category, clean_title(title))
 
 
+def split_attributes(text: str) -> tuple[str, dict[str, str]]:
+    raise NotImplementedError
+
+
+def read_attributes(block: str) -> dict[str, str] | None:
+    raise NotImplementedError
+
+
 class Group:
     """One category's records within a digest."""
 

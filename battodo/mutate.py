@@ -1694,6 +1694,10 @@ class LogEntry:
         ordered = self.logged.ancestry.node.schema_fields
         return ' '.join(f'[{name}:{value}]' for name, value in ordered.items())
 
+    @property
+    def attributes(self) -> str:
+        raise NotImplementedError
+
 
 class LogSource(Protocol):
     """A write to one task, as its completed-log record reads it."""

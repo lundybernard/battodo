@@ -101,7 +101,13 @@ class DoneCommandTests(TestCase):
             t.assertEqual((t.read('work.md'), t.read('completed.md')), before)
 
     def test_done_with_attributes(t) -> None:
-        t.run_ok(
+        entry = (
+            '2026-08-05 | work | DONE | Overdue task [P:4] [LOE:2] '
+            '[DUE:2026-08-01] [attrs:{"confirmation": "A1B2C3", '
+            '"place": "Main St, Suite 4", "note": "Renewed online"}]'
+        )
+
+        logged = t.run_ok(
             'done',
             'Overdue task',
             '--attrs',
@@ -110,15 +116,22 @@ class DoneCommandTests(TestCase):
             'Renewed online',
         )
 
-        event = Journal(t.source).events[-1]
-        t.assertEqual(
-            event['payload']['attrs'],
-            {
-                'confirmation': 'A1B2C3',
-                'place': 'Main St, Suite 4',
-                'note': 'Renewed online',
-            },
-        )
+        with t.subTest('the journal records the attributes'):
+            event = Journal(t.source).events[-1]
+            t.assertEqual(
+                event['payload']['attrs'],
+                {
+                    'confirmation': 'A1B2C3',
+                    'place': 'Main St, Suite 4',
+                    'note': 'Renewed online',
+                },
+            )
+
+        with t.subTest('the entry carries them after its fields'):
+            t.assertIn(entry, logged)
+
+        with t.subTest('and the log records them on its line'):
+            t.assertIn(f'{entry}\n', t.read('completed.md'))
 
     def test_done_with_refused_attributes(t) -> None:
         """A refused attribute reports on stderr and writes nothing."""
