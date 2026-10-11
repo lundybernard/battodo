@@ -28,6 +28,7 @@ from ..mutate import (
     SubtaskAddition,
     SuppliedFields,
     SuppliedTitle,
+    TaskCompletion,
     TaskNode,
     Update,
 )
@@ -1007,21 +1008,21 @@ class CompletionTests(TestCase):
         t.assertIs(ret, doc)
 
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
-    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
+    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     def test_stamps(
         t,
-        root_done: PropertyMock,
+        recurrence: PropertyMock,
         rescheduled: PropertyMock,
     ) -> None:
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
 
         with t.subTest('a block that stays: each stream gains its id'):
-            root_done.return_value = False
+            recurrence.return_value = None
             ret = t.co.stamps
             t.assertEqual(ret, {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}})
 
         with t.subTest('a finished block that goes: nothing'):
-            root_done.return_value = True
+            recurrence.return_value = t.parent
             rescheduled.return_value = None
 
             ret = t.co.stamps
@@ -1029,11 +1030,19 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, {})
 
         with t.subTest('a recurrence: its next due date, and its id'):
+            recurrence.return_value = t.parent
             rescheduled.return_value = date(2026, 8, 15)
 
             ret = t.co.stamps
 
             t.assertEqual(ret, {1: {'DUE': '2026-08-15', 'ID': '9o71lx'}})
+
+        with t.subTest('the line of the recurrence, whichever task it is'):
+            recurrence.return_value = t.child
+
+            ret = t.co.stamps
+
+            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
 
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     @patch.object(Completion, 'root_done', new_callable=PropertyMock)
@@ -1135,33 +1144,45 @@ class CompletionTests(TestCase):
             new_task_id.assert_called_once_with()
 
     @patch(f'{SRC}.next_due', autospec=True)
-    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
+    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     def test_rescheduled(
         t,
-        root_done: PropertyMock,
+        recurrence: PropertyMock,
         next_due: MagicMock,
     ) -> None:
         t.parent.fields = {'P': '3', 'REPEAT': '7d', 'ID': '9o71lx'}
 
-        with t.subTest('a finished recurring task, against the day'):
-            root_done.return_value = True
+        with t.subTest('a recurrence that repeats, against the day'):
+            recurrence.return_value = t.parent
 
             ret = t.co.rescheduled
 
             next_due.assert_called_once_with('7d', TODAY)
             t.assertIs(ret, next_due.return_value)
 
-        with t.subTest('none while the top-level task stays open'):
-            root_done.return_value = False
+        with t.subTest('none where there is no recurrence'):
+            recurrence.return_value = None
             ret = t.co.rescheduled
             t.assertIsNone(ret)
 
-        with t.subTest('none for a task that does not repeat'):
-            root_done.return_value = True
+        with t.subTest('none for a recurrence that does not repeat'):
+            recurrence.return_value = t.parent
             t.parent.fields = {'P': '3'}
 
             ret = t.co.rescheduled
 
+            t.assertIsNone(ret)
+
+    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
+    def test_recurrence(t, root_done: PropertyMock) -> None:
+        with t.subTest('the top-level task, once the completion finishes it'):
+            root_done.return_value = True
+            ret = t.co.recurrence
+            t.assertIs(ret, t.parent)
+
+        with t.subTest('none while the top-level task stays open'):
+            root_done.return_value = False
+            ret = t.co.recurrence
             t.assertIsNone(ret)
 
     def test_root(t) -> None:
@@ -1226,60 +1247,60 @@ class CompletionTests(TestCase):
             log_entry.assert_not_called()
             t.assertEqual(ret, [])
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch(f'{SRC}.TaskCompletion', autospec=True)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
+    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     def test_events(
         t,
         ancestries: PropertyMock,
+        recurrence: PropertyMock,
         rescheduled: PropertyMock,
-        snapshot: PropertyMock,
+        task_completion: MagicMock,
     ) -> None:
-        ancestries.return_value = [
-            ancestry_of(t.parent, t.child, path='a path to the subtask'),
-            ancestry_of(t.parent, path='a path to the task'),
-        ]
-        rescheduled.return_value = None
+        below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
+        ancestries.return_value = [below, top]
+        rescheduled.return_value = date(2026, 8, 15)
+        task_completion.return_value.payload = sentinel.payload
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
 
         with t.subTest('one TaskCompleted a completion, deepest first'):
-            snapshot.side_effect = [sentinel.subtask, sentinel.task]
+            recurrence.return_value = None
 
             ret = t.co.events
 
+            t.assertEqual(
+                task_completion.call_args_list,
+                [call(below, None), call(top, None)],
+            )
             t.assertEqual(
                 ret,
                 [
-                    Event(
-                        'TaskCompleted',
-                        'task/zz01ab',
-                        {
-                            'delta': {'done': [False, True]},
-                            'snapshot': sentinel.subtask,
-                            'ancestry': 'a path to the subtask',
-                        },
-                    ),
-                    Event(
-                        'TaskCompleted',
-                        'task/9o71lx',
-                        {
-                            'delta': {'done': [False, True]},
-                            'snapshot': sentinel.task,
-                            'ancestry': 'a path to the task',
-                        },
-                    ),
+                    Event('TaskCompleted', 'task/zz01ab', sentinel.payload),
+                    Event('TaskCompleted', 'task/9o71lx', sentinel.payload),
                 ],
             )
 
-        with t.subTest('a recurrence records its new due date too'):
-            snapshot.side_effect = [sentinel.subtask, sentinel.task]
-            rescheduled.return_value = date(2026, 8, 15)
+        with t.subTest('a recurrence takes its next due date'):
+            task_completion.reset_mock()
+            recurrence.return_value = t.parent
 
-            ret = t.co.events
+            _ = t.co.events
 
             t.assertEqual(
-                ret[1].payload['delta'],
-                {'done': [False, True], 'DUE': [None, '2026-08-15']},
+                task_completion.call_args_list,
+                [call(below, None), call(top, date(2026, 8, 15))],
+            )
+
+        with t.subTest('the recurrence, whichever task it is'):
+            task_completion.reset_mock()
+            recurrence.return_value = t.child
+
+            _ = t.co.events
+
+            t.assertEqual(
+                task_completion.call_args_list,
+                [call(below, date(2026, 8, 15)), call(top, None)],
             )
 
 
@@ -1857,6 +1878,40 @@ class AddedLineTests(TestCase):
             f'{OPEN_HEADING}\nthe line as written'
         )
         t.assertIs(ret, sentinel.node)
+
+
+class TaskCompletionTests(TestCase):
+    """Unit tests for battodo.mutate.TaskCompletion."""
+
+    def setUp(t) -> None:
+        t.node = parent_node()
+        t.tc = TaskCompletion(ancestry_of(t.node, path='a path'), None)
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_payload(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = sentinel.snapshot
+
+        with t.subTest('the done, the task as it was, and its path'):
+            ret = t.tc.payload
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'done': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                },
+            )
+
+        with t.subTest('a recurrence records its new due date too'):
+            t.node.fields['DUE'] = '2026-08-05'
+            t.tc.rescheduled = date(2026, 8, 15)
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret['delta'],
+                {'done': [False, True], 'DUE': ['2026-08-05', '2026-08-15']},
+            )
 
 
 class LogEntryTests(TestCase):
