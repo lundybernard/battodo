@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from datetime import date
 from functools import cached_property
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol
 
 from .journal import Journal, new_task_id
 from .lists import discover_lists
@@ -861,9 +861,9 @@ class Completion:
         SCHEMA.md logs no checklist item.
         """
         return [
-            LogEntry(self.path, ancestry, DONE_STATUS, self.completed_on).text
-            for ancestry in self.ancestries
-                if not ancestry.node.is_checklist_item
+            LogEntry(self.path, completion).text
+            for completion in self.completions
+                if not completion.ancestry.node.is_checklist_item
         ]  # fmt: skip
 
     @property
@@ -995,13 +995,17 @@ class Scratch:
         """The one completed-log record, or none for a checklist item."""
         if self.node.is_checklist_item:
             return []
-        entry = LogEntry(
-            self.path,
-            self.ancestry,
-            SCRATCHED_STATUS,
-            self.task.today,
-        )
-        return [entry.text]
+        return [LogEntry(self.path, self).text]
+
+    @property
+    def day(self) -> date:
+        """The day the scratch is logged under."""
+        return self.task.today
+
+    @property
+    def status(self) -> str:
+        """The status the log records a scratch under."""
+        return SCRATCHED_STATUS
 
     @property
     def events(self) -> list['Event']:
@@ -1640,37 +1644,68 @@ class TaskCompletion:
         payload['completed_on'] = self.day.isoformat()
         return payload
 
+    @property
+    def status(self) -> str:
+        """The status the log records a completion under."""
+        return DONE_STATUS
+
 
 class LogEntry:
-    """One `completed.md` record: date, category, status, ancestry."""
+    """One `completed.md` record of a write to one task, in `path`.
 
-    def __init__(
-        self,
-        path: Path,
-        ancestry: Ancestry,
-        status: str,
-        today: date,
-    ) -> None:
+    The record reads the object that also builds the event of the
+    write, so the log renders what the journal records.
+    """
+
+    def __init__(self, path: Path, logged: 'LogSource') -> None:
         self.path = path
-        self.ancestry = ancestry
-        self.status = status
-        self.today = today
+        self.logged = logged
 
     @property
     def text(self) -> str:
         """The record, the SCHEMA.md fields of the task after its path."""
-        entry = (
-            f'{self.today.isoformat()} | {self.path.stem} | {self.status} | '
-            f'{self.ancestry.path}'
-        )
+        entry = f'{self.day} | {self.category} | {self.status} | {self.title}'
         fields = self.fields
         return f'{entry} {fields}' if fields else entry
 
     @property
+    def day(self) -> date:
+        """The day the record is logged under."""
+        return self.logged.day
+
+    @property
+    def category(self) -> str:
+        """The list that holds the task, by its name."""
+        return self.path.stem
+
+    @property
+    def status(self) -> str:
+        """DONE or SCRATCHED."""
+        return self.logged.status
+
+    @property
+    def title(self) -> str:
+        """The `Parent > Child` path of the task."""
+        return self.logged.ancestry.path
+
+    @property
     def fields(self) -> str:
         """The SCHEMA.md fields of the task, in SCHEMA.md order."""
-        ordered = self.ancestry.node.schema_fields
+        ordered = self.logged.ancestry.node.schema_fields
         return ' '.join(f'[{name}:{value}]' for name, value in ordered.items())
+
+
+class LogSource(Protocol):
+    """A write to one task, as its completed-log record reads it."""
+
+    @property
+    def ancestry(self) -> Ancestry: ...
+
+    @property
+    def day(self) -> date: ...
+
+    @property
+    def status(self) -> str: ...
 
 
 class ListBackfill:
