@@ -135,20 +135,25 @@ class Addition:
         ListError
             `list_name` names no discovered list.
         ValueError
-            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read, or
-            the title holds a line break. `RepeatError`, a ValueError,
-            covers `REPEAT`.
+            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read, the
+            title holds a line break, or a description line is refused.
+            `RepeatError`, a ValueError, covers `REPEAT`.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
-        """The list as read, with the task last in its open section."""
+        """The list as read, the task last in its open section.
+
+        Its description lines go under it.
+        """
         doc = TodoDocument(self.parsed.text)
         written = self.written
         title = SuppliedTitle(self.title).checked
+        description_lines = self.description_lines
         doc.insert(self.index, f'- [ ] {title}')
         doc.set_fields(self.index, written)
+        doc.insert_description(self.index, description_lines)
         return doc
 
     @cached_property
@@ -179,7 +184,16 @@ class Addition:
 
     @property
     def description_lines(self) -> list[str]:
-        raise NotImplementedError
+        """The lines of the given description, read; none if none is given.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return []
+        return SuppliedDescription(self.description).lines
 
     @property
     def index(self) -> int:
@@ -198,7 +212,9 @@ class Addition:
 
     @property
     def block(self) -> str:
-        raise NotImplementedError
+        """The task line and its description lines, as written."""
+        end = self.index + 1 + len(self.description_lines)
+        return '\n'.join(self.document.lines[self.index : end])
 
     @property
     def entries(self) -> list[str]:
@@ -208,7 +224,7 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.entry, self.written).payload
+        payload = AddedLine(self.block, self.written).payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -282,13 +298,16 @@ class SubtaskAddition:
             The parent's selector does not name exactly one open task.
         ValueError
             The parent is a task in another list or a checklist item,
-            or the title holds a line break.
+            the title holds a line break, or a description line is
+            refused.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
         """The parent's list: the parent stamped, the subtask added.
+
+        The subtask's description lines go under it.
 
         The checks run in the order `text` lists them: the list, then
         the fields, then the parent.
@@ -303,8 +322,10 @@ class SubtaskAddition:
         if self.stamped:
             doc.set_field(self.node.raw_index, 'ID', self.parent_id)
         title = SuppliedTitle(self.title).checked
+        description_lines = self.description_lines
         doc.insert(self.index, f'{self.indent}- [ ] {title}')
         doc.set_fields(self.index, written)
+        doc.insert_description(self.index, description_lines)
         return doc
 
     @property
@@ -363,7 +384,16 @@ class SubtaskAddition:
 
     @property
     def description_lines(self) -> list[str]:
-        raise NotImplementedError
+        """The lines of the given description, read; none if none is given.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return []
+        return SuppliedDescription(self.description).lines
 
     @property
     def index(self) -> int:
@@ -387,7 +417,9 @@ class SubtaskAddition:
 
     @property
     def block(self) -> str:
-        raise NotImplementedError
+        """The subtask line and its description lines, as written."""
+        end = self.index + 1 + len(self.description_lines)
+        return '\n'.join(self.document.lines[self.index : end])
 
     @property
     def entries(self) -> list[str]:
@@ -401,7 +433,7 @@ class SubtaskAddition:
         The `TaskAdded` lands on the stream of the subtask and names the
         parent by id.
         """
-        added = AddedLine(self.entry, self.written).payload
+        added = AddedLine(self.block, self.written).payload
         payload = {**added, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
@@ -1217,28 +1249,31 @@ class Event(NamedTuple):
 
 
 class AddedLine:
-    """A task line an add writes, as its `TaskAdded` records it."""
+    """A task an add writes, as its `TaskAdded` records it.
 
-    def __init__(self, entry: str, written: dict[str, str]) -> None:
-        self.entry = entry
+    `block` is the task line and its description lines.
+    """
+
+    def __init__(self, block: str, written: dict[str, str]) -> None:
+        self.block = block
         self.written = written
 
     @property
     def payload(self) -> dict[str, Any]:
-        """Each field written against nothing, and the line as written."""
+        """Each field written against nothing, and the task as written."""
         delta = {name: [None, value] for name, value in self.written.items()}
         return {
             'delta': delta,
             # Post-state, unlike every other event here: an add has no
-            # prior state for a snapshot to describe. Taken from the line
+            # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
             'snapshot': self.node.snapshot,
         }
 
     @property
     def node(self) -> TaskNode:
-        """The line alone in an open section, as the parser reads it."""
-        return TodoDocument(f'{OPEN_HEADING}\n{self.entry}').tasks[0]
+        """The block alone in an open section, as the parser reads it."""
+        return TodoDocument(f'{OPEN_HEADING}\n{self.block}').tasks[0]
 
 
 class TaskCompletion:

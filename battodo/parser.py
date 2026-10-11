@@ -33,6 +33,9 @@ OPEN_HEADING = '## Open'
 # canonical where hand-written ones keep whatever order they came with.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 DATE_FIELDS = ('DUE',)
+# How far a description line indents past its task line: under the
+# title, clear of the checkbox.
+DESCRIPTION_INDENT = len('- [ ] ')
 ANCESTRY_SEPARATOR = ' > '
 
 
@@ -220,7 +223,8 @@ class TodoDocument:
     state, so `text` gives the source back byte for byte until a write.
     The document performs every edit of a list itself: `set_fields`,
     `set_field`, `set_title` and `mark_done` rewrite one raw line where
-    it stands, `append_open` and `insert` add a line, and `drop` removes
+    it stands, `append_open` and `insert` add a line,
+    `insert_description` adds description lines, and `drop` removes
     lines. An edit leaves `tasks` as it was read.
     """
 
@@ -411,7 +415,16 @@ class TodoDocument:
         self.lines.insert(index, line)
 
     def insert_description(self, index: int, lines: list[str]) -> None:
-        raise NotImplementedError
+        """Insert `lines` as description lines of the task line at `index`.
+
+        They go directly under the task line, in order, each indented
+        DESCRIPTION_INDENT past the task line's own indent.
+        """
+        raw = self.lines[index]
+        indent = raw[: len(raw) - len(raw.lstrip())]
+        lead = indent + ' ' * DESCRIPTION_INDENT
+        for offset, line in enumerate(lines, start=1):
+            self.insert(index + offset, f'{lead}{line}')
 
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.
