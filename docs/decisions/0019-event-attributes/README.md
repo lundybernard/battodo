@@ -7,9 +7,9 @@ fact does not need a schema change. A fact about one completion rides
 on that completion's event. The static description of a task is a field
 on the task's own stream.
 
-ADRs 0020–0022 are the component decisions: the attribute map on every
-event, the journaled task description, and the history
-command.
+ADRs 0020–0023 are the component decisions: the attribute map on every
+event, the journaled task description, the history command, and the
+note event.
 
 Branch: `adr-event-attributes` — Issue: #79
 
@@ -27,7 +27,7 @@ The group uses one word for each meaning:
   indented lines under the task line that carry no checkbox
   ([ADR 0021](0021-task-description-field.md)).
 - **note:** a dated annotation in the journal, and the attribute key
-  `note` that carries it.
+  `note` that carries it ([ADR 0023](0023-note-event.md)).
 
 ## Planning docs
 
@@ -43,6 +43,7 @@ The group uses one word for each meaning:
 | [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Proposed |
 | [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
 | [0022](0022-history-command.md) | A history command reads the journal | Proposed |
+| [0023](0023-note-event.md) | A note event annotates an open task | Proposed |
 
 ## After the flip
 

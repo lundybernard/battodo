@@ -10,7 +10,7 @@
 Let a user record facts about a task in the journal: facts on any
 write, facts about one completion kept once per completion, and a
 static description of the task itself. The decisions behind these
-criteria are ADRs 0020–0022, and the specification is
+criteria are ADRs 0020–0023, and the specification is
 [DESIGN.md](DESIGN.md).
 
 ## Requirements

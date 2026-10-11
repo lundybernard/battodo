@@ -6,8 +6,9 @@
 
 The specification behind ADRs
 [0020](0020-event-attribute-map.md),
-[0021](0021-task-description-field.md) and
-[0022](0022-history-command.md). It extends the event vocabulary of
+[0021](0021-task-description-field.md),
+[0022](0022-history-command.md) and
+[0023](0023-note-event.md). It extends the event vocabulary of
 [DESIGN.md ## Journal](../0000-project-bootstrap/DESIGN.md#journal).
 The work lands before the journal-authority flip; the group README's
 [After the flip](README.md#after-the-flip) lists the part that waits
@@ -20,6 +21,7 @@ btodo add <list> <title> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
 btodo update <selector> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
 btodo done <selector> [--attrs ATTRS] [--note TEXT] [--date DATE]
 btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
+btodo note <selector> [TEXT] [--attrs ATTRS] [--note TEXT]
 btodo history <selector> [--format text|json]
 ```
 
@@ -129,6 +131,22 @@ so attributes on the line would read as title text or vanish. The
 implementing work sets the attribute syntax on the line and changes the
 reader in the same change. The four-field split is a render detail, not
 a compatibility constraint.
+
+## Note event
+
+**Event.** `TaskAnnotated` goes on the stream of the task the user
+named. Its payload carries `attrs` and no `delta`. `occurred_at` dates
+the note, and `note` takes no `--date`.
+
+**Write.** The write object `Annotation` builds the event, and the
+`lib` entry point `annotate_item` writes it. The selector reaches an
+open task. A task without an `[ID:]` gets its id stamped first, on an
+event of its own, as a subtask add stamps its parent.
+
+**Open.** `note` takes a positional `TEXT` and `--note TEXT`. Two
+questions wait for a ruling: whether `TEXT` enters the map as
+`note=TEXT`, and so counts as a key given twice beside `--note`; and
+whether `note` refuses a call with neither text nor attributes.
 
 ## Task description
 
