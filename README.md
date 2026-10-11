@@ -60,6 +60,17 @@ twice, an empty value, a line break, a segment with no `=` or a key
 outside the grammar is refused before anything is written. A checklist
 item takes no attributes.
 
+`done` and `scratch` also write the attributes on the record they add
+to `completed.md`, as one JSON block after the fields:
+
+```text
+2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
+```
+
+`btodo completed` shows them after the title as `key=value` pairs, and
+`--format json` gives each entry an `attrs` object, empty where the
+record carries none.
+
 ### Notes on a task
 
 `note` records a note on an open task between its writes

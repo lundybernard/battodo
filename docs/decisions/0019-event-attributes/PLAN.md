@@ -25,7 +25,7 @@ the CLI split and subtask schedules.
 | S2 — note event and command | S1b | In progress |
 | S3 — history command | S2 | Planned |
 | S4 — notes in `show` | S3, subtask schedules | Planned |
-| S5 — attributes in the completed log | S1b | Planned |
+| S5 — attributes in the completed log | S1b | In progress (#97) |
 | S6 — task description | — (runs before #88) | In review |
 
 Subtask schedules (owner design, 2026-10-11) run after S1a and before
