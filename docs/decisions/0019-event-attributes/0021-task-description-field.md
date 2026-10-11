@@ -64,7 +64,7 @@ questions. A completion attribute says what happened on one cycle and
 never changes after. A description says what the task is and changes
 only when the user edits it. Two mechanisms keep each fact where its
 lifetime puts it: the description on the item, the attributes on the
-completion ([ADR 0020](0020-completion-attribute-map.md)).
+completion ([ADR 0020](0020-event-attribute-map.md)).
 
 The title already sets the pattern for item text that is not a field.
 `update` records a rename on the task's stream, and a reverse-applier

@@ -5,7 +5,7 @@
 > Branch: adr-event-attributes
 
 The specification behind ADRs
-[0020](0020-completion-attribute-map.md),
+[0020](0020-event-attribute-map.md),
 [0021](0021-task-description-field.md) and
 [0022](0022-history-command.md). It assumes the journal is
 authoritative

@@ -5,7 +5,7 @@ Date: 2026-10-01
 
 ## Context
 
-Completion attributes ([ADR 0020](0020-completion-attribute-map.md))
+Completion attributes ([ADR 0020](0020-event-attribute-map.md))
 leave a per-completion history in the journal. A details view must list
 that history for one task, and the ranked view must not show it
 ([R2](REQUIREMENTS.md)).

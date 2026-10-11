@@ -28,7 +28,7 @@ complete.
 
 | # | Title | Status |
 | - | ----- | ------ |
-| [0020](0020-completion-attribute-map.md) | Completion events carry an open attribute map | Proposed |
+| [0020](0020-event-attribute-map.md) | Completion events carry an open attribute map | Proposed |
 | [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
 | [0022](0022-history-command.md) | A history command reads the journal | Proposed |
 
