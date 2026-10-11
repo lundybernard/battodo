@@ -36,12 +36,16 @@ class GetViewTests(TestCase):
         t.conf.format = 'text'
 
     def test_selection(t):
-        get_view(t.conf, t.now)
+        get_view(t.conf, t.now, show_all=True)
         # The configuration is decoded once, by the selection.
-        t.Selection.from_config.assert_called_once_with(t.conf, t.now)
+        t.Selection.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            show_all=True,
+        )
 
     def test_text(t):
-        rendered = get_view(t.conf, t.now)
+        rendered = get_view(t.conf, t.now, show_all=True)
         t.View.assert_called_once_with(t.selection)
         t.assertEqual(rendered, t.View.return_value.text)
 
@@ -49,7 +53,7 @@ class GetViewTests(TestCase):
     def test_json(t, selection_json_view):
         t.conf.format = 'json'
 
-        rendered = get_view(t.conf, t.now)
+        rendered = get_view(t.conf, t.now, show_all=True)
 
         selection_json_view.assert_called_once_with(t.selection)
         t.assertEqual(rendered, selection_json_view.return_value.json)
@@ -59,7 +63,7 @@ class GetViewTests(TestCase):
 
     def test_unconfigured_format(t):
         conf = Mock(spec=['view'])
-        rendered = get_view(conf, t.now)
+        rendered = get_view(conf, t.now, show_all=True)
         t.assertEqual(rendered, t.View.return_value.text)
 
 

@@ -180,6 +180,15 @@ class ArgparserTests(TestCase):
                     stderr.getvalue(),
                 )
 
+    def test_view_all(t):
+        with t.subTest('Default: False'):
+            args = t.parser.parse_args(['view'])
+            t.assertFalse(args.show_all)
+
+        with t.subTest('view --all asks for every item'):
+            args = t.parser.parse_args(['view', '--all'])
+            t.assertTrue(args.show_all)
+
     def test_every_subcommand_reaches_its_command(t):
         cases = [
             (['view'], Commands.view),
@@ -389,16 +398,17 @@ class CommandsViewTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'show_all', 'format'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(show_all=True)
 
     def test_view(t):
         Commands.view(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_view.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                show_all=True,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

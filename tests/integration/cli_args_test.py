@@ -9,6 +9,7 @@ dependency stood in for.
 from contextlib import redirect_stdout
 from datetime import datetime
 from io import StringIO
+from json import loads
 from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -67,10 +68,6 @@ class CliArgsResolutionTests(TestCase):
         with t.subTest('an option reaches the command'):
             conf = t.resolve(['view', '--format', 'json'])
             t.assertEqual(conf.format, 'json')
-
-        with t.subTest('a flag reaches the command'):
-            conf = t.resolve(['view', '--all'])
-            t.assertTrue(conf.show_all)
 
         with t.subTest('the log level reaches the command'):
             conf = t.resolve(['--debug', 'view'])
@@ -163,6 +160,16 @@ class CommandInputTests(TestCase):
                 ret,
                 f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
             )
+
+    def test_view(t):
+        with t.subTest('BATTODO_SHOW_ALL does not reach view'):
+            ret = t.run_command(
+                ['view', '--format', 'json'],
+                {'BATTODO_SHOW_ALL': 'false', 'BATTODO_VIEW_TOP': '1'},
+            )
+
+            # One of the two open tasks shows. The other is abridged.
+            t.assertEqual(loads(ret)['categories'][0]['hidden'], 1)
 
     def test_done(t):
         with t.subTest('BATTODO_DATE does not reach done'):
