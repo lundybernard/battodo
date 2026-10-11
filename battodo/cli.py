@@ -129,44 +129,38 @@ def argparser():
     )
     add.set_defaults(func=Commands.add)
     add.add_argument(
-        f'{CONFIG_ROOT}.list',
+        'list_name',
         metavar=MESSAGES['add.list.metavar'],
         help=MESSAGES['add.list.help'],
     )
     add.add_argument(
-        f'{CONFIG_ROOT}.title',
+        'title',
         metavar=MESSAGES['add.title.metavar'],
         help=MESSAGES['add.title.help'],
     )
     add.add_argument(
         '-p',
         '--priority',
-        dest=f'{CONFIG_ROOT}.priority',
         help=MESSAGES['add.priority.help'],
     )
     add.add_argument(
         '--loe',
-        dest=f'{CONFIG_ROOT}.loe',
         help=MESSAGES['add.loe.help'],
     )
     add.add_argument(
         '--due',
-        dest=f'{CONFIG_ROOT}.due',
         help=MESSAGES['add.due.help'],
     )
     add.add_argument(
         '--repeat',
-        dest=f'{CONFIG_ROOT}.repeat',
         help=MESSAGES['add.repeat.help'],
     )
     add.add_argument(
         '--tags',
-        dest=f'{CONFIG_ROOT}.tags',
         help=MESSAGES['add.tags.help'],
     )
     add.add_argument(
         '--parent',
-        dest=f'{CONFIG_ROOT}.parent',
         help=MESSAGES['add.parent.help'],
     )
 
@@ -305,7 +299,20 @@ def get_help(parser):
 class Commands:
     @staticmethod
     def add(conf, args):
-        print(add_item(conf, datetime.now(TZ)))
+        print(
+            add_item(
+                conf,
+                datetime.now(TZ),
+                list_name=args.list_name,
+                title=args.title,
+                parent=args.parent,
+                priority=args.priority,
+                loe=args.loe,
+                due=args.due,
+                repeat=args.repeat,
+                tags=args.tags,
+            )
+        )
 
     @staticmethod
     def show(conf, args):

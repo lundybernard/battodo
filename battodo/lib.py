@@ -54,16 +54,6 @@ __all__ = [
     'update_item',
 ]
 
-# The SCHEMA.md fields an add can write, by the option that supplies
-# each. Every one is optional.
-ADD_FIELDS = {
-    'P': 'priority',
-    'LOE': 'loe',
-    'DUE': 'due',
-    'REPEAT': 'repeat',
-    'TAGS': 'tags',
-}
-
 
 def _source(conf: Configuration) -> Path:
     """The source directory the configuration names, `~` expanded."""
@@ -73,19 +63,6 @@ def _source(conf: Configuration) -> Path:
 def _is_json(conf: Configuration) -> bool:
     """Whether the configuration asks for the machine-readable form."""
     return getattr(conf, 'format', 'text') == 'json'
-
-
-def _fields(conf: Configuration, options: dict[str, str]) -> dict[str, str]:
-    """The fields `options` names and the configuration carries.
-
-    An option the user left off is absent from the Configuration
-    rather than None, so only the supplied ones are passed on.
-    """
-    return {
-        name: value
-        for name, option in options.items()
-        if (value := getattr(conf, option, None)) is not None
-    }
 
 
 def _supplied(fields: dict[str, str | None]) -> dict[str, str]:
@@ -183,18 +160,39 @@ def get_item(conf: Configuration, now: datetime) -> str:
     return ItemView(item).text
 
 
-def add_item(conf: Configuration, now: datetime) -> str:
-    """Write the task the configuration describes.
+def add_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    list_name: str,
+    title: str,
+    parent: str | None = None,
+    priority: str | None = None,
+    loe: str | None = None,
+    due: str | None = None,
+    repeat: str | None = None,
+    tags: str | None = None,
+) -> str:
+    """Write the task the inputs describe.
+
+    Only the field inputs that are not None are written.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `list` and `title` name the task,
-        and `parent` makes it a subtask of the task named there. Each
-        ADD_FIELDS option the user supplied is written.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day is the add date. A subtask carries
         no add date, so none is written for one.
+    list_name : str
+        The list that receives the task.
+    title : str
+        The title of the task.
+    parent : str or None
+        A selector. The task becomes a subtask of the task it names.
+    priority, loe, due, repeat, tags : str or None
+        The values of the `P`, `LOE`, `DUE`, `REPEAT` and `TAGS`
+        fields.
 
     Returns
     -------
@@ -204,7 +202,7 @@ def add_item(conf: Configuration, now: datetime) -> str:
     Raises
     ------
     ListError
-        The configured list does not exist.
+        `list_name` names no list.
     SelectionError
         The parent does not name exactly one open task.
     ValueError
@@ -213,16 +211,23 @@ def add_item(conf: Configuration, now: datetime) -> str:
         written.
     """
     source = _source(conf)
-    fields = _fields(conf, ADD_FIELDS)
-    parent = getattr(conf, 'parent', None)
+    fields = _supplied(
+        {
+            'P': priority,
+            'LOE': loe,
+            'DUE': due,
+            'REPEAT': repeat,
+            'TAGS': tags,
+        }
+    )
     addition: Addition | SubtaskAddition
     if parent is None:
-        addition = Addition(source, conf.list, conf.title, fields, now.date())
+        addition = Addition(source, list_name, title, fields, now.date())
     else:
         addition = SubtaskAddition(
             Task(source, parent, now.date()),
-            conf.list,
-            conf.title,
+            list_name,
+            title,
             fields,
         )
     addition.write()
