@@ -57,6 +57,9 @@ MESSAGES = {
     ' value, or part of its title',
     'add.description.help': 'the task description; each line of it is one'
     ' description line under the task',
+    'add.attrs.help': 'attributes of the add: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'add.note.help': 'a note on the add; the attribute note',
     # show
     'show.description': 'show one item: its fields and its subtasks',
     'show.help': 'for details use show --help',

@@ -233,7 +233,7 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.block, self.written).payload
+        payload = AddedLine(self.block, self.written, self.attrs).payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -441,10 +441,10 @@ class SubtaskAddition:
     def events(self) -> list['Event']:
         """The parent's stamp if it has one, then one `TaskAdded`.
 
-        The `TaskAdded` lands on the stream of the subtask and names the
-        parent by id.
+        The `TaskAdded` lands on the stream of the subtask, names the
+        parent by id and carries the attributes.
         """
-        added = AddedLine(self.block, self.written).payload
+        added = AddedLine(self.block, self.written, self.attrs).payload
         payload = {**added, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
@@ -1389,7 +1389,8 @@ class Event(NamedTuple):
 class AddedLine:
     """A task an add writes, as its `TaskAdded` records it.
 
-    `block` is the task line and its description lines.
+    `block` is the task line and its description lines. `attrs` holds
+    the attributes of the add, or None.
     """
 
     def __init__(
@@ -1404,15 +1405,18 @@ class AddedLine:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """Each field written against nothing, and the task as written."""
+        """Each field written against nothing, the task, the attributes."""
         delta = {name: [None, value] for name, value in self.written.items()}
-        return {
+        payload = {
             'delta': delta,
             # Post-state, unlike every other event here: an add has no
             # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
             'snapshot': self.node.snapshot,
         }
+        if self.attrs:
+            payload['attrs'] = self.attrs
+        return payload
 
     @property
     def node(self) -> TaskNode:

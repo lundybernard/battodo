@@ -227,6 +227,10 @@ def add_item(
         fields.
     description : str or None
         The description of the task, one description line per line.
+    attrs : str or None
+        The attributes of the add, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -240,10 +244,11 @@ def add_item(
     SelectionError
         The parent does not name exactly one open task.
     ValueError
-        A supplied field is unreadable, the title holds a line break, a
-        description line is refused, or the parent cannot hold a
-        subtask. Raised before anything is written.
+        The attributes do not read, a supplied field is unreadable, the
+        title holds a line break, a description line is refused, or the
+        parent cannot hold a subtask. Raised before anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     source = _source(conf)
     fields = _supplied(
         {
@@ -263,6 +268,7 @@ def add_item(
             fields,
             now.date(),
             description=description,
+            attrs=checked,
         )
     else:
         addition = SubtaskAddition(
@@ -271,6 +277,7 @@ def add_item(
             title,
             fields,
             description=description,
+            attrs=checked,
         )
     addition.write()
     return f'{addition.entry}\n{addition.path}'

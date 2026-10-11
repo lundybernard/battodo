@@ -122,6 +122,7 @@ class AddItemTests(TestCase):
         options = data.draw(supplied_options(ADD_OPTIONS))
         description = data.draw(supplied_descriptions())
         named = described(options, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         expected = foreseen(
             added,
@@ -130,6 +131,7 @@ class AddItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -141,6 +143,8 @@ class AddItemTests(TestCase):
                 list_name=list_name,
                 title=title,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -159,6 +163,7 @@ class AddItemTests(TestCase):
         options = data.draw(subtask_options())
         description = data.draw(supplied_descriptions())
         named = described(options, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, parent)
         expected = foreseen(
@@ -170,6 +175,7 @@ class AddItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -182,6 +188,8 @@ class AddItemTests(TestCase):
                 title=title,
                 parent=parent,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -547,12 +555,15 @@ def added(
     title: str,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """A new top-level task, last in the open section of its list.
 
     It carries the supplied fields in SCHEMA.md order, then its add
-    date and a new id. Its description lines follow it.
+    date and a new id. Its description lines follow it. Its event
+    carries the attributes.
     """
+    attrs = attributes(given)
     name = list_file(before, list_name)
     values = checked(supplied(options, ADD_OPTIONS))
     if 'REPEAT' in values:
@@ -569,7 +580,7 @@ def added(
     doc.set_fields(index, fields)
     describe(doc, index, '', lines)
     entry = doc.lines[index]
-    payload = addition(block(doc, index, lines), fields)
+    payload = addition(block(doc, index, lines), fields, attrs)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
     lists = {**before.lists, name: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -639,13 +650,16 @@ def added_below(
     title: str,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """A new subtask, last in its parent's block, one level deeper.
 
     It carries the supplied fields in SCHEMA.md order, then a new id,
     and its description lines follow it. A parent with no id is stamped
-    first, on an event of its own.
+    first, on an event of its own. The event of the subtask carries the
+    attributes.
     """
+    attrs = attributes(given)
     name = list_file(before, list_name)
     fields = supplied(options, ADD_OPTIONS)
     refuse_root_fields(fields)
@@ -680,7 +694,7 @@ def added_below(
             Appended('TaskUpdated', f'task/{parent_id}', stamp, LIST_FILE)
         )
     added_block = block(doc, index, lines)
-    child = {**addition(added_block, child_fields), 'parent': parent_id}
+    child = {**addition(added_block, child_fields, attrs), 'parent': parent_id}
     child_stream = f'task/{child_fields["ID"]}'
     events.append(Appended('TaskAdded', child_stream, child, LIST_FILE))
     lists = {**before.lists, LIST_FILE: doc.text}
@@ -1148,17 +1162,24 @@ def new_ids() -> Iterator[str]:
     return (NEW_ID.format(number) for number in count(1))
 
 
-def addition(written: str, fields: dict[str, str]) -> dict[str, Any]:
+def addition(
+    written: str,
+    fields: dict[str, str],
+    attrs: dict[str, str],
+) -> dict[str, Any]:
     """The payload of a new task: each field against nothing.
 
     The snapshot is the task line and its description lines as the
-    parser reads them back.
+    parser reads them back. The attributes go in where any are given.
     """
     task = TodoDocument(f'{OPEN_HEADING}\n{written}').tasks[0]
-    return {
+    payload = {
         'delta': {field: [None, value] for field, value in fields.items()},
         'snapshot': snapshot(task),
     }
+    if attrs:
+        payload['attrs'] = attrs
+    return payload
 
 
 class Appended(NamedTuple):

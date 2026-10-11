@@ -168,6 +168,14 @@ def argparser():
         '--description',
         help=MESSAGES['add.description.help'],
     )
+    add.add_argument(
+        '--attrs',
+        help=MESSAGES['add.attrs.help'],
+    )
+    add.add_argument(
+        '--note',
+        help=MESSAGES['add.note.help'],
+    )
 
     show = commands.add_parser(
         'show',
@@ -343,6 +351,8 @@ class Commands:
                 repeat=args.repeat,
                 tags=args.tags,
                 description=args.description,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 
