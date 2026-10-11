@@ -26,6 +26,7 @@ from ..mutate import (
     NamedList,
     Scratch,
     SubtaskAddition,
+    SuppliedAttributes,
     SuppliedDescription,
     SuppliedFields,
     SuppliedTitle,
@@ -2086,6 +2087,141 @@ class SuppliedFieldsTests(TestCase):
                     t.sf.refuse_root_fields()
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class SuppliedAttributesTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedAttributes."""
+
+    def setUp(t) -> None:
+        t.sa = SuppliedAttributes('a_key=a value', 'a note')
+
+    @patch.object(SuppliedAttributes, 'pairs', new_callable=PropertyMock)
+    def test_checked(t, pairs: PropertyMock) -> None:
+        with t.subTest('each key against its value, in the order given'):
+            pairs.return_value = [('cost', '45.00'), ('note', 'a note')]
+            ret = t.sa.checked
+            t.assertEqual(list(ret.items()), pairs.return_value)
+
+        with t.subTest('no pair: no attribute'):
+            pairs.return_value = []
+            ret = t.sa.checked
+            t.assertEqual(ret, {})
+
+        refused = {
+            'a key with a capital': (
+                [('Place', 'Main St')],
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'a key that starts with a digit': (
+                [('1st', 'Main St')],
+                "attribute key must be a lowercase identifier, not '1st'",
+            ),
+            'a key with a line break': (
+                [('cost\n', '45.00')],
+                "attribute key must be a lowercase identifier, not 'cost\\n'",
+            ),
+            'an empty value': (
+                [('cost', '')],
+                "attribute 'cost' must hold a value",
+            ),
+            'a value with a line feed': (
+                [('note', 'a\nnote')],
+                "attribute 'note' must hold no line break, not 'a\\nnote'",
+            ),
+            'a value with a carriage return': (
+                [('note', 'a\rnote')],
+                "attribute 'note' must hold no line break, not 'a\\rnote'",
+            ),
+            'a key given twice': (
+                [('note', 'a note'), ('cost', '45.00'), ('note', 'another')],
+                "attribute 'note' is given twice",
+            ),
+        }
+        for name, (given, message) in refused.items():
+            with t.subTest(name):
+                pairs.return_value = given
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sa.checked
+
+                t.assertEqual(str(caught.exception), message)
+
+    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
+    def test_pairs(t, segments: PropertyMock) -> None:
+        with t.subTest('each segment split at its first =, then the note'):
+            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+            ret = t.sa.pairs
+            t.assertEqual(
+                ret,
+                [('a_key', 'a value'), ('sum', '1+1=2'), ('note', 'a note')],
+            )
+
+        with t.subTest('the note enters whole, never split'):
+            segments.return_value = []
+            t.sa.note = 'a note, cost=45.00'
+
+            ret = t.sa.pairs
+
+            t.assertEqual(ret, [('note', 'a note, cost=45.00')])
+
+        with t.subTest('no note: the segments alone'):
+            segments.return_value = ['a_key=a value']
+            t.sa.note = None
+
+            ret = t.sa.pairs
+
+            t.assertEqual(ret, [('a_key', 'a value')])
+
+        with t.subTest('a segment with no = is refused'):
+            segments.return_value = ['a value']
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sa.pairs
+
+            t.assertEqual(
+                str(caught.exception),
+                "attribute must read key=value, not 'a value'",
+            )
+
+    def test_segments(t) -> None:
+        with t.subTest('the text the write was given'):
+            ret = t.sa.segments
+            t.assertEqual(ret, ['a_key=a value'])
+
+        with t.subTest('no text: no segment'):
+            t.sa.text = None
+            ret = t.sa.segments
+            t.assertEqual(ret, [])
+
+        split = {
+            'one segment': ('place=Main St', ['place=Main St']),
+            'a value holds commas and =': (
+                'place=Main St, Suite 4, sum=1+1=2',
+                ['place=Main St, Suite 4', 'sum=1+1=2'],
+            ),
+            'the split takes every space after the comma': (
+                'a_key=a value,  cost=45.00',
+                ['a_key=a value', 'cost=45.00'],
+            ),
+            'and needs none': (
+                'a_key=a value,cost=45.00',
+                ['a_key=a value', 'cost=45.00'],
+            ),
+            'a comma before a key outside the grammar stays': (
+                'a_key=a value, Cost=45.00, 2nd=b',
+                ['a_key=a value, Cost=45.00, 2nd=b'],
+            ),
+            'a comma before a word with no = stays': (
+                'a_key=a value, cost',
+                ['a_key=a value, cost'],
+            ),
+            'an empty text is one empty segment': ('', ['']),
+        }
+        for name, (text, expected) in split.items():
+            with t.subTest(name):
+                t.sa.text = text
+                ret = t.sa.segments
+                t.assertEqual(ret, expected)
 
 
 class AddedLineTests(TestCase):

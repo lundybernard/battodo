@@ -27,6 +27,7 @@ A write to an existing task is built on the `Task` its caller built,
 so the write edits the document that selection read.
 """
 
+import re
 from collections.abc import Sequence
 from datetime import date
 from functools import cached_property
@@ -63,6 +64,12 @@ SUBTASK_INDENT = 2
 # its own, and only the root task is rescheduled, so a `[REPEAT:]` on a
 # child never fires.
 ROOT_ONLY_FIELDS = ('P', 'REPEAT')
+# An attribute key: a letter, then letters, digits or underscores.
+ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
+# The one place `--attrs` splits: a comma, then the next `key=`.
+ATTRIBUTE_SEPARATOR = re.compile(rf',\s*(?={ATTRIBUTE_KEY.pattern}=)')
+# The key the text of `--note` enters the attributes under.
+NOTE_KEY = 'note'
 
 
 class ListError(Exception):
@@ -1265,6 +1272,30 @@ class SuppliedFields:
                 raise ValueError(
                     f'{name} belongs to the top-level task, not to a subtask'
                 )
+
+
+class SuppliedAttributes:
+    """The attributes a caller supplies to a write, read before any write.
+
+    `text` holds `key=value` segments. The text of `note` enters as the
+    key `note` and never runs through the split.
+    """
+
+    def __init__(self, text: str | None, note: str | None) -> None:
+        self.text = text
+        self.note = note
+
+    @property
+    def checked(self) -> dict[str, str]:
+        raise NotImplementedError
+
+    @property
+    def pairs(self) -> list[tuple[str, str]]:
+        raise NotImplementedError
+
+    @property
+    def segments(self) -> list[str]:
+        raise NotImplementedError
 
 
 class Event(NamedTuple):

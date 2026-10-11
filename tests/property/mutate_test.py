@@ -35,7 +35,7 @@ from battodo.lib import (
     scratch_item,
     update_item,
 )
-from battodo.mutate import ListError
+from battodo.mutate import ListError, SuppliedAttributes
 from battodo.parser import (
     CHECKBOX_RE,
     OPEN_HEADING,
@@ -99,6 +99,9 @@ REFUSED_LINES = (
     '<!-- A comment -->',
     'A line\rbroken',
 )
+# An attribute key, and the comma-then-key that ends a segment.
+ATTRIBUTE_KEY = r'[a-z][a-z0-9_]*'
+SEPARATOR_RE = re.compile(rf',\s*{ATTRIBUTE_KEY}=')
 
 
 class AddItemTests(TestCase):
@@ -296,6 +299,24 @@ class BackfillItemsTests(TestCase):
         t.assertEqual(ret, expected)
 
 
+class SuppliedAttributesTests(TestCase):
+    """Property tests for battodo.mutate.SuppliedAttributes."""
+
+    maxDiff = None
+
+    @given(st.data())
+    def test_checked(t, data: st.DataObject) -> None:
+        attrs = data.draw(attribute_maps())
+        note = data.draw(st.one_of(st.none(), attribute_values()))
+        text = ', '.join(f'{key}={value}' for key, value in attrs.items())
+        expected = attrs if note is None else {**attrs, 'note': note}
+
+        ret = SuppliedAttributes(text or None, note).checked
+
+        # Every value comes back whole, in the order given.
+        t.assertEqual(list(ret.items()), list(expected.items()))
+
+
 def list_names() -> st.SearchStrategy[str]:
     """A list the source holds, or a name no list need carry."""
     return st.one_of(st.sampled_from(['a-list', 'b-list']), grammar.titles)
@@ -313,6 +334,34 @@ def supplied_titles() -> st.SearchStrategy[str]:
         grammar.titles,
     ).map(''.join)
     return either(grammar.titles, either(grammar.titles, broken))
+
+
+def attribute_maps() -> st.SearchStrategy[dict[str, str]]:
+    """Up to four attributes, none of them keyed `note`."""
+    keys = st.from_regex(ATTRIBUTE_KEY, fullmatch=True).filter(
+        lambda key: key != 'note'
+    )
+    return st.dictionaries(keys, attribute_values(), max_size=4)
+
+
+def attribute_values() -> st.SearchStrategy[str]:
+    """A value on one line, rich in commas, `=` and spaces.
+
+    A comma followed by a key and `=` ends a segment by design, so no
+    value holds one.
+    """
+    text = st.text(
+        st.characters(codec='utf-8', exclude_characters='\n\r'),
+        max_size=4,
+    )
+    pieces = st.one_of(st.sampled_from([',', '=', ', ', ' Suite 4']), text)
+    values = st.lists(pieces, min_size=1, max_size=4).map(''.join)
+    return values.filter(lambda value: value and separated(value))
+
+
+def separated(text: str) -> bool:
+    """Whether `text` holds no comma-then-key, so it stays one segment."""
+    return SEPARATOR_RE.search(text) is None
 
 
 def supplied_options(
