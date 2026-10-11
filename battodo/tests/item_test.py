@@ -40,16 +40,14 @@ class ItemTests(TestCase):
 
     @patch(f'{SRC}.Task', autospec=True)
     def test_from_config(t, task: MagicMock) -> None:
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        conf = Mock(spec=['view', 'selector'])
+        conf = Mock(spec=['view'])
         conf.view = Mock(spec=['source_dir'])
         conf.view.source_dir = '~/a-source-dir'
-        conf.selector = 'a selector'
 
         ret = Item.from_config(
             conf,
             datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc),
+            selector='a selector',
         )
 
         # The task expands the directory. The clock's day ranks it.

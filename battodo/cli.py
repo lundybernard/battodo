@@ -171,7 +171,7 @@ def argparser():
     )
     show.set_defaults(func=Commands.show)
     show.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['show.selector.metavar'],
         help=MESSAGES['show.selector.help'],
     )
@@ -316,7 +316,7 @@ class Commands:
 
     @staticmethod
     def show(conf, args):
-        print(get_item(conf, datetime.now(TZ)))
+        print(get_item(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
     def update(conf, args):

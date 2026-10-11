@@ -122,12 +122,16 @@ class GetItemTests(TestCase):
         t.conf.format = 'text'
 
     def test_item(t):
-        get_item(t.conf, t.now)
+        get_item(t.conf, t.now, selector='a selector')
         # The configuration is decoded once, by the item.
-        t.Item.from_config.assert_called_once_with(t.conf, t.now)
+        t.Item.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            selector='a selector',
+        )
 
     def test_text(t):
-        rendered = get_item(t.conf, t.now)
+        rendered = get_item(t.conf, t.now, selector='a selector')
         t.ItemView.assert_called_once_with(t.item)
         t.assertEqual(rendered, t.ItemView.return_value.text)
 
@@ -135,7 +139,7 @@ class GetItemTests(TestCase):
     def test_json(t, item_json_view):
         t.conf.format = 'json'
 
-        rendered = get_item(t.conf, t.now)
+        rendered = get_item(t.conf, t.now, selector='a selector')
 
         item_json_view.assert_called_once_with(t.item)
         t.assertEqual(rendered, item_json_view.return_value.json)
@@ -144,7 +148,7 @@ class GetItemTests(TestCase):
 
     def test_unconfigured_format(t):
         conf = Mock(spec=[])
-        rendered = get_item(conf, t.now)
+        rendered = get_item(conf, t.now, selector='a selector')
         t.assertEqual(rendered, t.ItemView.return_value.text)
 
 

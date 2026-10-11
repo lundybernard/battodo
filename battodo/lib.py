@@ -132,16 +132,17 @@ def get_completed(conf: Configuration, now: datetime) -> str:
     return DigestView(digest).text
 
 
-def get_item(conf: Configuration, now: datetime) -> str:
-    """The one item the configuration names.
+def get_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+    """The one item `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the item and
-        `format` chooses the form.
+        The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, whose local day decides the rank.
+    selector : str
+        Names the item.
 
     Returns
     -------
@@ -154,7 +155,7 @@ def get_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    item = Item.from_config(conf, now)
+    item = Item.from_config(conf, now, selector=selector)
     if _is_json(conf):
         return ItemJsonView(item).json
     return ItemView(item).text

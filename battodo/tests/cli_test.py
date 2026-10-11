@@ -499,16 +499,17 @@ class CommandsShowTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector', 'format'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(selector='a selector')
 
     def test_show(t):
         Commands.show(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
