@@ -259,17 +259,25 @@ def update_item(conf: Configuration, now: datetime) -> str:
     return f'{update.entry}\n{update.path}'
 
 
-def complete_item(conf: Configuration, now: datetime) -> str:
-    """Complete the task the configuration names.
+def complete_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    date: str | None = None,
+) -> str:
+    """Complete the task `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task, and
-        `date` is the day it was completed.
+        The resolved configuration. Only the source directory is read.
     now : datetime
-        The clock, whose local day stamps the log where the
-        configuration names no date.
+        The clock, whose local day stamps the log when `date` is None.
+    selector : str
+        Names the task.
+    date : str or None
+        The ISO day the task was completed.
 
     Returns
     -------
@@ -285,10 +293,10 @@ def complete_item(conf: Configuration, now: datetime) -> str:
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
     ValueError
-        The configured date is not an ISO date. Raised before anything
-        is written.
+        `date` is not an ISO date. Raised before anything is written.
     """
-    completion = Completion(Task.from_config(conf, now))
+    task = Task.from_config(conf, now, selector=selector, date=date)
+    completion = Completion(task)
     completion.write()
     entries = completion.entries
     return '\n'.join(entries) if entries else 'checked off'

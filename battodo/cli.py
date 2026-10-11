@@ -229,13 +229,12 @@ def argparser():
     )
     done.set_defaults(func=Commands.done)
     done.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['done.selector.metavar'],
         help=MESSAGES['done.selector.help'],
     )
     done.add_argument(
         '--date',
-        dest=f'{CONFIG_ROOT}.date',
         help=MESSAGES['done.date.help'],
     )
 
@@ -322,7 +321,14 @@ class Commands:
 
     @staticmethod
     def done(conf, args):
-        print(complete_item(conf, datetime.now(TZ)))
+        print(
+            complete_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                date=args.date,
+            )
+        )
 
     @staticmethod
     def scratch(conf, args):

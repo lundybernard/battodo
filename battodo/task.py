@@ -42,22 +42,28 @@ class Task:
         self.today = today
 
     @classmethod
-    def from_config(cls, conf: Configuration, now: datetime) -> 'Task':
-        """Build a task from a resolved configuration.
+    def from_config(
+        cls,
+        conf: Configuration,
+        now: datetime,
+        *,
+        selector: str,
+        date: str | None = None,
+    ) -> 'Task':
+        """Build a task from a resolved configuration and its inputs.
 
-        A date the user left off is absent, not None, and the clock
-        answers for it.
+        The clock answers for a `date` of None.
 
         Raises
         ------
         ValueError
-            The configured date is not an ISO date. Raised before
-            anything is written.
+            `date` is not an ISO date. Raised before anything is
+            written.
         """
         return cls(
             Path(conf.view.source_dir),
-            conf.selector,
-            _completion_day(getattr(conf, 'date', None), now),
+            selector,
+            _completion_day(date, now),
         )
 
     @cached_property
