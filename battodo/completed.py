@@ -17,8 +17,10 @@ its `[FIELD:]` markup. Categories sort in the view's order, so a
 category leads in both.
 
 `Digest` decides what one digest holds. Each form reads it through its
-attributes: `DigestView` lays it out as aligned text, and
-`DigestJsonView` as JSON. `lib.get_completed` composes them.
+attributes: `DigestView` lays it out as aligned text, with the record
+attributes as `key=value` after the title, and `DigestJsonView` as
+JSON, with an `attrs` object on each entry. `lib.get_completed`
+composes them.
 """
 
 import re
@@ -175,12 +177,19 @@ class Record:
 
     @property
     def cells(self) -> tuple[str, ...]:
-        """The record's two values, in COLUMNS order."""
-        return (self.day.isoformat(), self.title)
+        """The record's two values, in COLUMNS order.
+
+        The attributes follow the title in its cell.
+        """
+        attributes = self.attributes
+        task = f'{self.title} {attributes}' if attributes else self.title
+        return (self.day.isoformat(), task)
 
     @property
     def attributes(self) -> str:
-        raise NotImplementedError
+        """Each attribute as `key=value`, in the order logged."""
+        pairs = (f'{key}={value}' for key, value in self.attrs.items())
+        return ', '.join(pairs)
 
 
 def read_record(line: str) -> Record | None:
@@ -354,7 +363,8 @@ class DigestJsonView:
             {"period": "week", "start": "2026-07-30",
              "end": "2026-08-05", "total": 6,
              "categories": [{"name": "work", "entries": [
-                 {"date": "2026-08-05", "title": "Deck > Chip it"}]}]}
+                 {"date": "2026-08-05", "title": "Deck > Chip it",
+                  "attrs": {"cost": "45.00"}}]}]}
 
         `total` counts every record the period holds, which is the sum
         of the entries: a digest abridges nothing.
@@ -400,9 +410,13 @@ class RecordJsonView:
         self.record = record
 
     @property
-    def data(self) -> dict[str, str]:
-        """The record as `GroupJsonView.data` records it."""
+    def data(self) -> dict[str, Any]:
+        """The record as `GroupJsonView.data` records it.
+
+        `attrs` is an empty object where the record carries none.
+        """
         return {
             'date': self.record.day.isoformat(),
             'title': self.record.title,
+            'attrs': self.record.attrs,
         }

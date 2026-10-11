@@ -145,6 +145,11 @@ hold `|`, `=`, commas and brackets. A record without attributes carries
 no block and reads as before. A cascade ancestor's record carries none.
 A SCRATCHED record carries the attributes of its scratch the same way.
 
+The `completed` text shows the attributes of a record after its title,
+as `key=value` pairs joined by a comma and a space, the form `--attrs`
+reads. Each entry of its JSON gains an `attrs` object, empty where the
+record carries none.
+
 ## Note event
 
 **Event.** `TaskAnnotated` goes on the stream of the task the user
