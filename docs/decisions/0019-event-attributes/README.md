@@ -35,6 +35,7 @@ The group uses one word for each meaning:
 | ---- | ------- |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Testable acceptance criteria |
 | [DESIGN.md](DESIGN.md) | Command surface, payload keys, attribute grammar |
+| [PLAN.md](PLAN.md) | One PR per slice, with dependencies |
 
 ## Component ADRs
 
