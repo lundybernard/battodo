@@ -21,12 +21,13 @@ btodo add <list> <title> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
 btodo update <selector> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
 btodo done <selector> [--attrs ATTRS] [--note TEXT] [--date DATE]
 btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
-btodo note <selector> [TEXT] [--attrs ATTRS] [--note TEXT]
+btodo note <selector> [TEXT] [--attrs ATTRS]
 btodo history <selector> [--format text|json]
 ```
 
 `--attrs` takes every attribute in one string. `--note TEXT` enters the
-map as `note=TEXT`.
+map as `note=TEXT`. The `TEXT` of `note` is its note
+([Note event](#note-event)).
 
 **Inputs.** The selector, `--date`, `--attrs` and `--note` are command
 inputs, not configuration. The CLI passes them to the command beside
@@ -47,7 +48,8 @@ the value `Main St, Suite 4` and `cost` the value `45.00`.
 **Refusals.** The command refuses each of these before it writes
 anything, as `add` validates before it writes:
 
-- a key given twice, including `note=` in `--attrs` beside `--note`
+- a key given twice, including `note=` in `--attrs` beside `--note`, or
+  beside the `TEXT` of `note`
 - an empty value
 - a line break in a key or a value
 - a segment with no `=`
@@ -147,10 +149,10 @@ the note, and `note` takes no `--date`.
 open task. A task without an `[ID:]` gets its id stamped first, on an
 event of its own, as a subtask add stamps its parent.
 
-**Open.** `note` takes a positional `TEXT` and `--note TEXT`. Two
-questions wait for a ruling: whether `TEXT` enters the map as
-`note=TEXT`, and so counts as a key given twice beside `--note`; and
-whether `note` refuses a call with neither text nor attributes.
+**Input.** `note` takes a positional `TEXT` and `--attrs`, and no
+`--note`. `TEXT` is the note: it enters the map as `note=TEXT` and
+never runs through the split. `note` refuses a call with no `TEXT` and
+no `--attrs` before it writes anything.
 
 ## Task description
 
