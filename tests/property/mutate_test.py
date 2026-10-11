@@ -102,13 +102,15 @@ class AddItemTests(TestCase):
         expected = foreseen(added, before, list_name, title, options)
 
         with written(before) as directory:
-            conf = configuration(
+            conf = configuration(directory)
+            ret = observed(
+                add_item,
+                conf,
                 directory,
-                list=list_name,
+                list_name=list_name,
                 title=title,
                 **options,
             )
-            ret = observed(add_item, conf, directory)
 
         t.assertEqual(ret, expected)
 
@@ -137,14 +139,16 @@ class AddItemTests(TestCase):
         )
 
         with written(before) as directory:
-            conf = configuration(
+            conf = configuration(directory)
+            ret = observed(
+                add_item,
+                conf,
                 directory,
-                list=list_name,
+                list_name=list_name,
                 title=title,
                 parent=parent,
                 **options,
             )
-            ret = observed(add_item, conf, directory)
 
         t.assertEqual(ret, expected)
 
@@ -360,16 +364,11 @@ def written(before: Source) -> Iterator[Path]:
         yield directory
 
 
-def configuration(directory: Path, **options: str) -> Mock:
-    """A resolved configuration carrying `options` and nothing else.
-
-    An option the user left off is absent, as batconf leaves it.
-    """
-    conf = Mock(spec=['view', *options])
+def configuration(directory: Path) -> Mock:
+    """A resolved configuration that names `directory` as the source."""
+    conf = Mock(spec=['view'])
     conf.view = Mock(spec=['source_dir'])
     conf.view.source_dir = str(directory)
-    for name, value in options.items():
-        setattr(conf, name, value)
     return conf
 
 

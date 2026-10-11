@@ -213,7 +213,7 @@ class ArgparserTests(TestCase):
         for flag in ('-p', '--priority'):
             with t.subTest(flag):
                 args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
-                t.assertEqual(getattr(args, 'battodo.priority'), '4')
+                t.assertEqual(args.priority, '4')
 
     def test_done_date(t):
         with t.subTest('Default: None'):
@@ -451,16 +451,33 @@ class CommandsAddTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(
+            list_name='a list',
+            title='a title',
+            parent='a parent',
+            priority='a priority',
+            loe='a loe',
+            due='a due date',
+            repeat='a repeat',
+            tags='some tags',
+        )
 
     def test_add(t):
         Commands.add(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.add_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                list_name='a list',
+                title='a title',
+                parent='a parent',
+                priority='a priority',
+                loe='a loe',
+                due='a due date',
+                repeat='a repeat',
+                tags='some tags',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

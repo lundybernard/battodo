@@ -13,7 +13,7 @@ from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from batconf import TomlSource
 from batconf.types import SourceInterfaceP
@@ -88,40 +88,6 @@ class CliArgsResolutionTests(TestCase):
             conf = t.resolve(['view'])
             t.assertEqual(conf.view.top, str(TOP_N))
 
-        with t.subTest('both add positionals reach the command'):
-            conf = t.resolve(['add', 'chores', 'Water it'])
-            t.assertEqual(conf.list, 'chores')
-            t.assertEqual(conf.title, 'Water it')
-
-        with t.subTest('every add field reaches the command'):
-            conf = t.resolve(
-                [
-                    'add',
-                    'chores',
-                    'X',
-                    '-p',
-                    '4',
-                    '--loe',
-                    '2',
-                    '--due',
-                    '2026-09-01',
-                    '--repeat',
-                    '15d',
-                    '--tags',
-                    'yard,summer',
-                ]
-            )
-
-            t.assertEqual(conf.priority, '4')
-            t.assertEqual(conf.loe, '2')
-            t.assertEqual(conf.due, '2026-09-01')
-            t.assertEqual(conf.repeat, '15d')
-            t.assertEqual(conf.tags, 'yard,summer')
-
-        with t.subTest('an omitted add field is absent, not empty'):
-            conf = t.resolve(['add', 'chores', 'X'])
-            t.assertIsNone(getattr(conf, 'due', None))
-
         with t.subTest('an optional positional reaches the command'):
             conf = t.resolve(['completed', 'month'])
             t.assertEqual(conf.period, 'month')
@@ -178,6 +144,33 @@ class CommandInputTests(TestCase):
             )
             args.func(conf, args)
         return out.getvalue()
+
+    @patch('battodo.mutate.new_task_id', autospec=True)
+    def test_add(t, new_task_id: MagicMock):
+        new_task_id.return_value = 'nw01id'
+        listed = t.source / 'yard.md'
+
+        with t.subTest('BATTODO_PARENT does not reach add'):
+            ret = t.run_command(
+                ['add', 'yard', 'Water it'],
+                {'BATTODO_PARENT': 'rk01lv'},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Water it [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
+            )
+
+        with t.subTest('BATTODO_LOE does not reach add'):
+            ret = t.run_command(
+                ['add', 'yard', 'Mow lawn'],
+                {'BATTODO_LOE': '8'},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
+            )
 
     def test_done(t):
         with t.subTest('BATTODO_DATE does not reach done'):

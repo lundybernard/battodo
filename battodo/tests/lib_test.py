@@ -163,60 +163,62 @@ class AddItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        # spec models batconf: an argument the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.list = 'a-list'
-        t.conf.title = 'A task title'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
+        t.inputs = {
+            'list_name': 'a-list',
+            'title': 'A task title',
+            'priority': '4',
+            'loe': '2',
+            'due': '2026-09-01',
+            'repeat': '15d',
+            'tags': 'yard,summer',
+        }
 
     def test_forwarded(t):
-        add_item(t.conf, t.now)
+        add_item(t.conf, t.now, **t.inputs)
         t.Addition.assert_called_once_with(
             SOURCE,
             'a-list',
             'A task title',
-            {'P': '4', 'DUE': '2026-09-01'},
+            {
+                'P': '4',
+                'LOE': '2',
+                'DUE': '2026-09-01',
+                'REPEAT': '15d',
+                'TAGS': 'yard,summer',
+            },
             t.today,
         )
 
     def test_written(t):
-        add_item(t.conf, t.now)
+        add_item(t.conf, t.now, **t.inputs)
         t.addition.write.assert_called_once_with()
 
     def test_result(t):
-        written = add_item(t.conf, t.now)
+        written = add_item(t.conf, t.now, **t.inputs)
         # A P-less add ranks near 0 and will not show in a view, so
         # this is the only confirmation of the write.
         t.assertEqual(written, f'{t.addition.entry}\n{t.addition.path}')
 
     def test_no_fields(t):
-        conf = Mock(spec=['view', 'list', 'title'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'a-list'
-        conf.title = 'A task title'
-
-        add_item(conf, t.now)
-
+        add_item(t.conf, t.now, list_name='a-list', title='A task title')
         t.assertEqual(t.Addition.call_args[0][3], {})
 
     def test_subtask(t):
-        conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'a-list'
-        conf.title = 'A subtask title'
-        conf.parent = '9o71lx'
-        conf.loe = '2'
         addition = t.SubtaskAddition.return_value
         addition.path = Path('~/a-source-dir/a-list.md')
         addition.entry = '  - [ ] A subtask title [LOE:2] [ID:cd34ef]'
 
-        written = add_item(conf, t.now)
+        written = add_item(
+            t.conf,
+            t.now,
+            list_name='a-list',
+            title='A subtask title',
+            parent='9o71lx',
+            loe='2',
+        )
 
         with t.subTest('a parent sends the add to a subtask'):
             t.Addition.assert_not_called()
