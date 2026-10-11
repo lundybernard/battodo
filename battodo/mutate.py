@@ -886,12 +886,18 @@ class Scratch:
 
     @property
     def events(self) -> list['Event']:
-        """One `TaskScratched`, on the stream task's stream."""
-        payload = {
+        """One `TaskScratched`, on the stream task's stream.
+
+        The stream of a checklist item is an ancestor's, so its payload
+        marks it as a checklist item.
+        """
+        payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
             'snapshot': self.node.snapshot,
             'ancestry': self.ancestry.path,
         }
+        if self.node.is_checklist_item:
+            payload['checklist_item'] = True
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
 
 
@@ -1171,7 +1177,9 @@ class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
     `rescheduled` is the next due date of a task the completion
-    reschedules, and None for every other task.
+    reschedules, and None for every other task. The event of a
+    checklist item lands on the stream of an ancestor, so its payload
+    marks it as a checklist item.
     """
 
     def __init__(self, ancestry: Ancestry, rescheduled: date | None) -> None:
@@ -1180,16 +1188,22 @@ class TaskCompletion:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """The done, a new due date beside it, the task and its path."""
+        """The done, a new due date beside it, the task and its path.
+
+        A checklist item also carries its mark.
+        """
         node = self.ancestry.node
         delta: dict[str, list[Any]] = {'done': [False, True]}
         if self.rescheduled is not None:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-        return {
+        payload: dict[str, Any] = {
             'delta': delta,
             'snapshot': node.snapshot,
             'ancestry': self.ancestry.path,
         }
+        if node.is_checklist_item:
+            payload['checklist_item'] = True
+        return payload
 
 
 class LogEntry:
