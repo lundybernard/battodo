@@ -453,11 +453,7 @@ class SubtaskAddition:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the parent's new id."""
-        payload = {
-            'delta': {'ID': [None, self.parent_id]},
-            'snapshot': self.node.snapshot,
-        }
-        return Event(UPDATED_EVENT, f'task/{self.parent_id}', payload)
+        return IdAssignment(self.node, self.parent_id).event
 
 
 class Update:
@@ -1423,6 +1419,23 @@ class AddedLine:
     def node(self) -> TaskNode:
         """The block alone in an open section, as the parser reads it."""
         return TodoDocument(f'{OPEN_HEADING}\n{self.block}').tasks[0]
+
+
+class IdAssignment:
+    """The `TaskUpdated` that records an id given to a task with none."""
+
+    def __init__(self, node: TaskNode, task_id: str) -> None:
+        self.node = node
+        self.task_id = task_id
+
+    @property
+    def event(self) -> Event:
+        """The new id against nothing, on the stream it names."""
+        payload = {
+            'delta': {'ID': [None, self.task_id]},
+            'snapshot': self.node.snapshot,
+        }
+        return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
 
 class TaskCompletion:

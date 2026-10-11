@@ -20,6 +20,7 @@ from ..mutate import (
     CompletedLog,
     Completion,
     Event,
+    IdAssignment,
     ListBackfill,
     ListError,
     LogEntry,
@@ -674,26 +675,16 @@ class SubtaskAdditionTests(TestCase):
             t.assertEqual(len(ret), 2)
             t.assertIs(ret[0], sentinel.stamp)
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch(f'{SRC}.IdAssignment', autospec=True)
     @patch.object(SubtaskAddition, 'node', new_callable=PropertyMock)
-    def test_stamp(t, node: PropertyMock, snapshot: PropertyMock) -> None:
+    def test_stamp(t, node: PropertyMock, id_assignment: MagicMock) -> None:
         node.return_value = bare_node()
-        snapshot.return_value = sentinel.snapshot
         t.sa.parent_id = 'pp02cd'
 
         ret = t.sa.stamp
 
-        t.assertEqual(
-            ret,
-            Event(
-                'TaskUpdated',
-                'task/pp02cd',
-                {
-                    'delta': {'ID': [None, 'pp02cd']},
-                    'snapshot': sentinel.snapshot,
-                },
-            ),
-        )
+        id_assignment.assert_called_once_with(node.return_value, 'pp02cd')
+        t.assertIs(ret, id_assignment.return_value.event)
 
 
 class UpdateTests(TestCase):
@@ -2325,6 +2316,31 @@ class AddedLineTests(TestCase):
             f'{OPEN_HEADING}\nthe line as written'
         )
         t.assertIs(ret, sentinel.node)
+
+
+class IdAssignmentTests(TestCase):
+    """Unit tests for battodo.mutate.IdAssignment."""
+
+    def setUp(t) -> None:
+        t.ia = IdAssignment(bare_node(), 'pp02cd')
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_event(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = sentinel.snapshot
+
+        ret = t.ia.event
+
+        t.assertEqual(
+            ret,
+            Event(
+                'TaskUpdated',
+                'task/pp02cd',
+                {
+                    'delta': {'ID': [None, 'pp02cd']},
+                    'snapshot': sentinel.snapshot,
+                },
+            ),
+        )
 
 
 class TaskCompletionTests(TestCase):
