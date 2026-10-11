@@ -63,10 +63,6 @@ ADD_FIELDS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
-# The subset an update writes. `LOE` and `REPEAT` are left out: R3
-# names neither, and a changed `REPEAT` reschedules the task on its
-# next completion, which is a decision of its own.
-UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
 
 
 def _source(conf: Configuration) -> Path:
@@ -90,6 +86,15 @@ def _fields(conf: Configuration, options: dict[str, str]) -> dict[str, str]:
         for name, option in options.items()
         if (value := getattr(conf, option, None)) is not None
     }
+
+
+def _supplied(fields: dict[str, str | None]) -> dict[str, str]:
+    """The fields of `fields` that hold a value. None means not given."""
+    return {
+        name: value
+        for name, value in fields.items()
+            if value is not None
+    }  # fmt: skip
 
 
 def get_view(conf: Configuration, now: datetime) -> str:
@@ -224,17 +229,35 @@ def add_item(conf: Configuration, now: datetime) -> str:
     return f'{addition.entry}\n{addition.path}'
 
 
-def update_item(conf: Configuration, now: datetime) -> str:
-    """Rewrite the task the configuration names.
+def update_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    title: str | None = None,
+    priority: str | None = None,
+    due: str | None = None,
+    tags: str | None = None,
+) -> str:
+    """Rewrite the task `selector` names.
+
+    Only the inputs that are not None are written. An update writes
+    no `LOE` and no `REPEAT`: R3 names neither, and a changed `REPEAT`
+    reschedules the task on its next completion, which is a decision
+    of its own.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task, `title`
-        renames it, and each UPDATE_FIELDS option the user supplied is
-        written.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day validates a `REPEAT`.
+    selector : str
+        Names the task.
+    title : str or None
+        The new title.
+    priority, due, tags : str or None
+        The new values of the `P`, `DUE` and `TAGS` fields.
 
     Returns
     -------
@@ -251,9 +274,9 @@ def update_item(conf: Configuration, now: datetime) -> str:
         Raised before anything is written.
     """
     update = Update(
-        Task(_source(conf), conf.selector, now.date()),
-        _fields(conf, UPDATE_FIELDS),
-        title=getattr(conf, 'title', None),
+        Task(_source(conf), selector, now.date()),
+        _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
+        title=title,
     )
     update.write()
     return f'{update.entry}\n{update.path}'

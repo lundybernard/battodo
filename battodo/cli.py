@@ -196,29 +196,25 @@ def argparser():
     )
     update.set_defaults(func=Commands.update)
     update.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['update.selector.metavar'],
         help=MESSAGES['update.selector.help'],
     )
     update.add_argument(
         '-p',
         '--priority',
-        dest=f'{CONFIG_ROOT}.priority',
         help=MESSAGES['update.priority.help'],
     )
     update.add_argument(
         '--due',
-        dest=f'{CONFIG_ROOT}.due',
         help=MESSAGES['update.due.help'],
     )
     update.add_argument(
         '--tags',
-        dest=f'{CONFIG_ROOT}.tags',
         help=MESSAGES['update.tags.help'],
     )
     update.add_argument(
         '--title',
-        dest=f'{CONFIG_ROOT}.title',
         help=MESSAGES['update.title.help'],
     )
 
@@ -317,7 +313,17 @@ class Commands:
 
     @staticmethod
     def update(conf, args):
-        print(update_item(conf, datetime.now(TZ)))
+        print(
+            update_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                title=args.title,
+                priority=args.priority,
+                due=args.due,
+                tags=args.tags,
+            )
+        )
 
     @staticmethod
     def done(conf, args):
