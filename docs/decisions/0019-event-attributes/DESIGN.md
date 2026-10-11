@@ -51,15 +51,22 @@ anything, as `add` validates before it writes:
 string keys to string values, on every event type. The key is absent
 when the event carries no attributes.
 
-`TaskCompleted.payload.completed_on` holds the completion day as an ISO
-date in the user's local day: the `--date` value when the user gives
-one, today otherwise. `done --date` reaches the completed log today but
-not the event. The event carries the time the command ran, as
-`occurred_at`, and no completion day.
+`TaskCompleted.payload.completed_on` holds the local day the completion
+is for, as an ISO date: the `--date` value when the user gives one, the
+clock's local day otherwise. Every event of a cascade carries it.
+`occurred_at` keeps the time the command ran.
 [ADR 0010](../0008-journal-authority/0010-event-ordering-key.md) makes
 `occurred_at` the ordering key, so a backdated `occurred_at` would
 reorder the journal. The completion day is therefore a payload key of
 its own.
+
+**Reschedule.** The reschedule of a repeating task reads `completed_on`
+as its anchor, so the day on the event and the new `DUE` agree. A
+`TaskCompleted` that reschedules its own stream carries the `DUE`
+change in its delta, so a reader finds the new `DUE` from the event
+alone. The rescheduling node is one property of the completion: today
+it returns the root, and a later slice, subtask schedules, changes
+which node it returns.
 
 ```json
 {
