@@ -471,7 +471,9 @@ def updated(
     """
     fields = supplied(options, UPDATE_OPTIONS)
     if not fields and title is None:
-        raise ValueError('nothing to update: name a field or a title')
+        raise ValueError(
+            'nothing to update: name a field, a title or a description'
+        )
     values = checked(fields)
     text, ancestry = reached(found)
     node = ancestry[-1]

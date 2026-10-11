@@ -449,10 +449,10 @@ class SubtaskAddition:
 
 
 class Update:
-    """The update of a task: the named fields and title over its own.
+    """The update of a task: the named fields, title and description.
 
-    Only the fields named are written; the rest of the line, and every
-    other line of the file, stays as it was. A task with no `[ID:]` is
+    Only what the update names is written; the rest of the task, and
+    every other line of the file, stays as it was. A task with no `[ID:]` is
     given one, so the caller can name it by id from here on.
     """
 
@@ -506,20 +506,27 @@ class Update:
             The selector does not name exactly one open task.
         ValueError
             The task is a checklist item, a subtask is given a field
-            only the top-level task carries, or the title holds a line
-            break.
+            only the top-level task carries, the title holds a line
+            break, or a description line is refused.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
-        """The task's list, its line rewritten."""
+        """The task's list, its line rewritten.
+
+        A description given replaces the task's description lines.
+        """
         written = self.written
         index = self.node.raw_index
         doc = TodoDocument(self.task.doc.text)
         doc.set_fields(index, written)
         if self.new_title is not None:
             doc.set_title(index, self.new_title)
+        new_description = self.new_description
+        if new_description is not None:
+            doc.drop(set(self.node.note_indices))
+            doc.insert_description(index, new_description.lines)
         return doc
 
     @property
@@ -561,7 +568,13 @@ class Update:
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
-        raise NotImplementedError
+        """The description the update writes, or None where it names none.
+
+        An empty description clears the description lines.
+        """
+        if self.description is None:
+            return None
+        return SuppliedDescription(self.description)
 
     @property
     def checked(self) -> dict[str, str]:
@@ -570,11 +583,13 @@ class Update:
         Raises
         ------
         ValueError
-            Neither a field nor a title is named, or a supplied value
+            No field, title or description is named, or a supplied value
             does not read.
         """
-        if not self.fields and self.title is None:
-            raise ValueError('nothing to update: name a field or a title')
+        if not self.fields and self.title is None and self.description is None:
+            raise ValueError(
+                'nothing to update: name a field, a title or a description'
+            )
         return self.supplied.checked
 
     @property
@@ -635,6 +650,12 @@ class Update:
         }
         if self.new_title is not None:
             delta['title'] = [self.node.title, self.new_title]
+        new_description = self.new_description
+        if new_description is not None:
+            delta['description'] = [
+                self.node.description,
+                new_description.checked,
+            ]
         return delta
 
     @property
