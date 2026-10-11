@@ -48,6 +48,7 @@ class TaskNode:
     raw: str = ''
     children: list['TaskNode'] = field(default_factory=list)
     note_indices: list[int] = field(default_factory=list)
+    description_lines: list[str] = field(default_factory=list)
 
     @property
     def loe(self) -> int | None:
@@ -112,6 +113,10 @@ class TaskNode:
         for child in self.children:
             owned |= child.block
         return owned
+
+    @property
+    def description(self) -> str | None:
+        raise NotImplementedError
 
     @property
     def snapshot(self) -> dict[str, Any]:

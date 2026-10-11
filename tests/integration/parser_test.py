@@ -25,6 +25,15 @@ APPENDED_INDEX = 15
 PARENT_INDEX = 6
 PARENT_BLOCK = {6, 7, 8, 9}
 
+# A task with description lines, and a child with one of its own.
+DESCRIBED = (
+    '## Open\n\n- [ ] Parent task [P:1]\n'
+    '      A first line.\n'
+    '        A second line.\n'
+    '  - [ ] Child task [LOE:2]\n'
+    '        A line of the child.\n'
+)
+
 # Every construct the parser branches on, one case each. The titles
 # name the role the line plays, not any real task.
 SHAPES = {
@@ -95,6 +104,22 @@ class TaskNodeTests(TestCase):
         ret = t.tk.block
         # The task line, then its three children, one level down.
         t.assertEqual(ret, PARENT_BLOCK)
+
+    def test_snapshot(t) -> None:
+        with t.subTest('a task with no description lines has no description'):
+            ret = t.tk.snapshot
+            t.assertNotIn('description', ret)
+
+        (parent,) = TodoDocument(DESCRIBED).tasks
+        (child,) = parent.children
+
+        with t.subTest('the description lines, stripped and joined'):
+            ret = parent.snapshot
+            t.assertEqual(ret['description'], 'A first line.\nA second line.')
+
+        with t.subTest('a child holds its own'):
+            ret = child.snapshot
+            t.assertEqual(ret['description'], 'A line of the child.')
 
 
 class TodoDocumentTests(TestCase):

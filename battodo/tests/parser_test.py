@@ -1,5 +1,6 @@
 from datetime import date
 from unittest import TestCase
+from unittest.mock import PropertyMock, patch
 
 from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
 
@@ -49,6 +50,7 @@ class TaskNodeTests(TestCase):
             raw='- [ ] A task [P:2] [LOE:1]',
             # Default: children=[],
             # Default: note_indices=[],
+            # Default: description_lines=[],
         )
 
     def test_loe(t) -> None:
@@ -192,7 +194,21 @@ class TaskNodeTests(TestCase):
 
             t.assertEqual(ret, {2, 3, 4, 5, 6})
 
-    def test_snapshot(t) -> None:
+    def test_description(t) -> None:
+        with t.subTest('the description lines, joined by newlines'):
+            t.tk.description_lines = ['A line.', 'Another line.']
+            ret = t.tk.description
+            t.assertEqual(ret, 'A line.\nAnother line.')
+
+        with t.subTest('none, where the task has no description lines'):
+            t.tk.description_lines = []
+            ret = t.tk.description
+            t.assertIsNone(ret)
+
+    @patch.object(TaskNode, 'description', new_callable=PropertyMock)
+    def test_snapshot(t, description: PropertyMock) -> None:
+        description.return_value = None
+
         ret = t.tk.snapshot
 
         with t.subTest('the title, the check mark and the fields'):
@@ -207,6 +223,11 @@ class TaskNodeTests(TestCase):
 
         with t.subTest('the fields are a copy of the task fields'):
             t.assertIsNot(ret['fields'], t.tk.fields)
+
+        with t.subTest('and the description, where the task has one'):
+            description.return_value = 'A description.'
+            ret = t.tk.snapshot
+            t.assertEqual(ret['description'], 'A description.')
 
     def test_schema_fields(t) -> None:
         t.tk.fields = {
@@ -421,6 +442,12 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('a note line is an index on its task, not a child'):
             t.assertEqual(ret[0].note_indices, [NOTE_INDEX])
+
+        with t.subTest('and its text, stripped, is a description line'):
+            t.assertEqual(
+                ret[0].description_lines,
+                ['A note line, six-space indented.'],
+            )
 
         with t.subTest('a section that is not Open yields no task'):
             outside = TodoDocument(

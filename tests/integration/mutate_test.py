@@ -471,6 +471,7 @@ class UpdateTests(TestCase):
                                     'ADDED': '2026-07-06',
                                     'ID': '9o71lx',
                                 },
+                                'description': 'A note that stays put.',
                             },
                         },
                     )
@@ -723,6 +724,7 @@ class ScratchTests(TestCase):
                                 'ADDED': '2026-07-06',
                                 'ID': '9o71lx',
                             },
+                            'description': 'A note that stays put.',
                         },
                         'ancestry': 'A task',
                     },
