@@ -636,7 +636,7 @@ class Update:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """What changed, from what, and where a subtask sits.
+        """What changed, from what, where a subtask sits, and attributes.
 
         A top-level task's ancestry is its own title, which the snapshot
         already carries.
@@ -647,6 +647,8 @@ class Update:
         }
         if self.nested:
             payload['ancestry'] = self.ancestry.path
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return payload
 
     @property

@@ -309,6 +309,10 @@ def update_item(
     description : str or None
         The new description, one description line per line. An empty
         one clears the description.
+    attrs : str or None
+        The attributes of the update, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -320,16 +324,18 @@ def update_item(
     SelectionError
         The selector does not name exactly one open task.
     ValueError
-        Nothing was named to change, the task cannot carry a field, a
-        supplied value is unreadable, the title holds a line break, or
-        a description line is refused. Raised before anything is
-        written.
+        The attributes do not read, nothing was named to change, the
+        task cannot carry a field, a supplied value is unreadable, the
+        title holds a line break, or a description line is refused.
+        Raised before anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     update = Update(
         Task(_source(conf), selector, now.date()),
         _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
         title=title,
         description=description,
+        attrs=checked,
     )
     update.write()
     return f'{update.entry}\n{update.path}'

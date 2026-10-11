@@ -206,6 +206,7 @@ class UpdateItemTests(TestCase):
         description = data.draw(supplied_descriptions())
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, selector)
         expected = foreseen(
@@ -215,6 +216,7 @@ class UpdateItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -225,6 +227,8 @@ class UpdateItemTests(TestCase):
                 directory,
                 selector=selector,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -690,12 +694,15 @@ def updated(
     title: str | None,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A task with no id is given one.
+    one clears them. A task with no id is given one. The event carries
+    the attributes.
     """
+    attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
     if not fields and title is None and description is None:
         raise ValueError(
@@ -736,6 +743,8 @@ def updated(
     payload: dict[str, Any] = {'delta': delta, 'snapshot': snapshot(node)}
     if nested:
         payload['ancestry'] = path_of(ancestry)
+    if attrs:
+        payload['attrs'] = attrs
     event = Appended('TaskUpdated', f'task/{task_id}', payload, LIST_FILE)
     lists = {**before.lists, LIST_FILE: doc.text}
     after = Source(lists, before.log, journal([event]))

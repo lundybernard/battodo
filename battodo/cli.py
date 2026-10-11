@@ -219,6 +219,14 @@ def argparser():
         '--description',
         help=MESSAGES['update.description.help'],
     )
+    update.add_argument(
+        '--attrs',
+        help=MESSAGES['update.attrs.help'],
+    )
+    update.add_argument(
+        '--note',
+        help=MESSAGES['update.note.help'],
+    )
 
     done = commands.add_parser(
         'done',
@@ -354,6 +362,8 @@ class Commands:
                 due=args.due,
                 tags=args.tags,
                 description=args.description,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 
