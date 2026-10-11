@@ -36,6 +36,7 @@ from typing import Any, NamedTuple
 from .journal import Journal, new_task_id
 from .lists import discover_lists
 from .parser import (
+    CHECKBOX_RE,
     OPEN_HEADING,
     SCHEMA_FIELDS,
     Ancestry,
@@ -1065,16 +1066,50 @@ class SuppliedTitle:
 
 
 class SuppliedDescription:
+    """A description a caller supplies to a write, read before any write.
+
+    Each line of the text is one description line. An empty text holds
+    no line, so an update that supplies one clears the description.
+    """
+
     def __init__(self, text: str) -> None:
         self.text = text
 
     @property
     def checked(self) -> str | None:
-        raise NotImplementedError
+        """The description as a snapshot stores it, or None if empty."""
+        return '\n'.join(self.lines) or None
 
     @property
     def lines(self) -> list[str]:
-        raise NotImplementedError
+        """The description lines, each stripped of its indent.
+
+        Raises
+        ------
+        ValueError
+            A line is blank, reads as a task line, a heading or a
+            comment, or holds a carriage return. The parser reads such
+            a line back as something other than a description line.
+        """
+        if not self.text:
+            return []
+        lines = self.text.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                refusal = 'is blank'
+            elif CHECKBOX_RE.match(stripped):
+                refusal = 'reads as a task line'
+            elif stripped.startswith('## '):
+                refusal = 'reads as a heading'
+            elif stripped.startswith('<!--'):
+                refusal = 'reads as a comment'
+            elif '\r' in line:
+                refusal = 'holds a carriage return'
+            else:
+                continue
+            raise ValueError(f'description line {line!r} {refusal}')
+        return [line.strip() for line in lines]
 
 
 class SuppliedFields:
