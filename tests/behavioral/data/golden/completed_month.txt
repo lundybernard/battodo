@@ -1,14 +1,15 @@
-Completed month: 2026-08-01 to 2026-08-05 — 4 done
+Completed month: 2026-08-01 to 2026-08-05 — 5 done
 
-── Work ───────────────────────────────────────
+── Work ───────────────────────────────────────────────────────────────────────────
   DATE        TASK
   2026-08-05  The one record of today
 
-── Chores ─────────────────────────────────────
+── Chores ─────────────────────────────────────────────────────────────────────────
   DATE        TASK
+  2026-08-01  Renew the permit | online confirmation=A1B2C3, place=Main St, Suite 4
   2026-08-04  A parent > Its child
   2026-08-04  A record carrying no fields
 
-── Van ────────────────────────────────────────
+── Van ────────────────────────────────────────────────────────────────────────────
   DATE        TASK
   2026-08-02  The record of the ad-hoc category

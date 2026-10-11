@@ -43,6 +43,12 @@ LEGACY_LOG = """\
 2026-08-05 | van | DONE | Keep [attrs:x] as text [DUE:2026-08-05]
 """
 
+# One record with attributes, its title holding a separator.
+ATTRIBUTED_LOG = """\
+2026-08-04 | chores | DONE | Renew it | online [P:3] \
+[attrs:{"confirmation": "A1B2C3", "place": "Main St, Suite 4"}]
+"""
+
 
 def source_dir(t: TestCase, log: str = LOG) -> Path:
     """A source directory holding `log`, removed when the test ends."""
@@ -114,6 +120,14 @@ class RenderedDigestTests(TestCase):
         with t.subTest('and so is an abandoned one'):
             t.assertNotIn('Rewrite the formula again', digest)
 
+        with t.subTest('a record shows its attributes after its title'):
+            attributed = t.rendered(source_dir(t, ATTRIBUTED_LOG), 'week')
+            t.assertIn(
+                '  2026-08-04  Renew it | online '
+                'confirmation=A1B2C3, place=Main St, Suite 4',
+                attributed,
+            )
+
         with t.subTest('a shorter period reads as one day'):
             today = t.rendered(t.source, 'today')
             t.assertIn('Completed today: 2026-08-05 — 1 done', today)
@@ -172,6 +186,18 @@ class DigestJsonViewTests(TestCase):
                     {
                         'date': '2026-08-04',
                         'title': 'Deck > Chip the brush pile',
+                        'attrs': {},
                     }
                 ],
+            )
+
+        with t.subTest('an entry holds the attributes of its record'):
+            source = source_dir(t, ATTRIBUTED_LOG)
+            attributed = Digest(source, NOW, period='week')
+
+            found = loads(DigestJsonView(attributed).json)
+
+            t.assertEqual(
+                found['categories'][0]['entries'][0]['attrs'],
+                {'confirmation': 'A1B2C3', 'place': 'Main St, Suite 4'},
             )

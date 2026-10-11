@@ -9,7 +9,8 @@ The clock is pinned: every period is measured back from it.
 Each fixture record pins one behaviour: a record outside every period,
 a record one day outside the week, a date out of file order, the pair
 inside the week but outside the month, a SCRATCHED record, an ancestry
-title, a title carrying fields, an ad-hoc category, and a line that is
+title, a title carrying fields, an ad-hoc category, a record carrying
+attributes behind a title that holds a separator, and a line that is
 no record at all.
 """
 

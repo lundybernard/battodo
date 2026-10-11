@@ -178,6 +178,10 @@ class Record:
         """The record's two values, in COLUMNS order."""
         return (self.day.isoformat(), self.title)
 
+    @property
+    def attributes(self) -> str:
+        raise NotImplementedError
+
 
 def read_record(line: str) -> Record | None:
     """One log line as a record, or None where it is not one.

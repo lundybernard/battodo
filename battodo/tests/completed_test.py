@@ -185,9 +185,39 @@ class RecordTests(TestCase):
     def setUp(t) -> None:
         t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
 
-    def test_cells(t) -> None:
-        ret = t.r.cells
-        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+    @patch.object(Record, 'attributes', new_callable=PropertyMock)
+    def test_cells(t, attributes: PropertyMock) -> None:
+        with t.subTest('the date and the title'):
+            attributes.return_value = ''
+            ret = t.r.cells
+            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+
+        with t.subTest('the attributes follow the title'):
+            attributes.return_value = 'cost=45.00'
+
+            ret = t.r.cells
+
+            t.assertEqual(
+                ret,
+                ('2026-08-04', 'A parent > A record cost=45.00'),
+            )
+
+    def test_attributes(t) -> None:
+        with t.subTest('none'):
+            ret = t.r.attributes
+            t.assertEqual(ret, '')
+
+        with t.subTest('each as key=value, in the order logged'):
+            t.r = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'place': 'Main St, Suite 4', 'cost': '45.00'},
+            )
+
+            ret = t.r.attributes
+
+            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
 
 
 class ReadRecordTests(TestCase):
@@ -554,8 +584,25 @@ class RecordJsonViewTests(TestCase):
         t.rjv = RecordJsonView(t.record)
 
     def test_data(t) -> None:
-        ret = t.rjv.data
-        t.assertEqual(
-            ret,
-            {'date': '2026-08-04', 'title': 'A parent > A record'},
-        )
+        with t.subTest('a record without attributes holds an empty map'):
+            ret = t.rjv.data
+            t.assertEqual(
+                ret,
+                {
+                    'date': '2026-08-04',
+                    'title': 'A parent > A record',
+                    'attrs': {},
+                },
+            )
+
+        with t.subTest('and one with them holds each'):
+            t.rjv.record = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'cost': '45.00'},
+            )
+
+            ret = t.rjv.data
+
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
