@@ -995,8 +995,15 @@ class Scratch:
         """One `TaskScratched`, on the stream task's stream.
 
         The stream of a checklist item is an ancestor's, so its payload
-        marks it as a checklist item.
+        marks it as a checklist item. The payload carries the
+        attributes.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item and attributes are given.
         """
+        self.node.refuse_attributes(self.attrs)
         payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
             'snapshot': self.node.snapshot,
@@ -1004,6 +1011,8 @@ class Scratch:
         }
         if self.node.is_checklist_item:
             payload['checklist_item'] = True
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
 
 

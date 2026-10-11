@@ -255,6 +255,14 @@ def argparser():
         metavar=MESSAGES['scratch.selector.metavar'],
         help=MESSAGES['scratch.selector.help'],
     )
+    drop.add_argument(
+        '--attrs',
+        help=MESSAGES['scratch.attrs.help'],
+    )
+    drop.add_argument(
+        '--note',
+        help=MESSAGES['scratch.note.help'],
+    )
 
     backfill = commands.add_parser(
         'backfill',
@@ -364,7 +372,15 @@ class Commands:
 
     @staticmethod
     def scratch(conf, args):
-        print(scratch_item(conf, datetime.now(TZ), selector=args.selector))
+        print(
+            scratch_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                attrs=args.attrs,
+                note=args.note,
+            )
+        )
 
     @staticmethod
     def backfill(conf, args):

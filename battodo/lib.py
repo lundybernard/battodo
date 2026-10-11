@@ -403,6 +403,10 @@ def scratch_item(
         The clock, whose local day stamps the log.
     selector : str
         Names the task.
+    attrs : str or None
+        The attributes of the scratch, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -414,8 +418,13 @@ def scratch_item(
     ------
     SelectionError
         The selector does not name exactly one open task.
+    ValueError
+        The attributes do not read, or a checklist item is given
+        attributes. Raised before anything is written.
     """
-    scratch = Scratch(Task(_source(conf), selector, now.date()))
+    checked = SuppliedAttributes(attrs, note).checked
+    task = Task(_source(conf), selector, now.date())
+    scratch = Scratch(task, attrs=checked)
     scratch.write()
     entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'

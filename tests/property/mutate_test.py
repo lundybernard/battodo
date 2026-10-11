@@ -279,13 +279,21 @@ class ScratchItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
         log = data.draw(logs())
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), log, [])
         found = outcome(text, ancestries, selector)
-        expected = foreseen(scratched, before, found)
+        expected = foreseen(scratched, before, found, given)
 
         with written(before) as directory:
             conf = configuration(directory)
-            ret = observed(scratch_item, conf, directory, selector=selector)
+            ret = observed(
+                scratch_item,
+                conf,
+                directory,
+                selector=selector,
+                attrs=given.text,
+                note=given.note,
+            )
 
         t.assertEqual(ret, expected)
 
@@ -808,14 +816,22 @@ def completed(
     return Outcome('\n'.join(entries) or 'checked off', after)
 
 
-def scratched(before: Source, found: Answer) -> 'Outcome':
+def scratched(
+    before: Source,
+    found: Answer,
+    given: 'Attributes',
+) -> 'Outcome':
     """The task's whole block dropped, logged and journaled.
 
     Nothing cascades. A checklist item is not logged, and its event
     lands on the stream of the nearest ancestor that can carry an id.
+    The event carries the attributes; a checklist item takes none.
     """
+    attrs = attributes(given)
     text, ancestry = reached(found)
     node = ancestry[-1]
+    if attrs:
+        refuse_checklist_attributes(node)
     stream = stream_task(ancestry)
     stream_id = stream.task_id or next(new_ids())
     doc = TodoDocument(text)
@@ -832,6 +848,8 @@ def scratched(before: Source, found: Answer) -> 'Outcome':
     }
     if is_checklist_item(node):
         payload['checklist_item'] = True
+    if attrs:
+        payload['attrs'] = attrs
     event = Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
     lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
