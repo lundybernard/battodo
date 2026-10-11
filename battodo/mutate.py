@@ -655,14 +655,16 @@ class Completion:
         A task still in the list gains the id of its stream. A recurring
         top-level task gains its next due date.
         """
-        if not self.root_done:
+        recurrence = self.recurrence
+        if recurrence is None:
             return {
                 index: {'ID': task_id} for index, task_id in self.ids.items()
             }
-        if self.rescheduled is None:
+        rescheduled = self.rescheduled
+        if rescheduled is None:
             return {}
-        index = self.root.raw_index
-        due = self.rescheduled.isoformat()
+        index = recurrence.raw_index
+        due = rescheduled.isoformat()
         return {index: {'DUE': due, 'ID': self.ids[index]}}
 
     @property
@@ -707,22 +709,36 @@ class Completion:
 
     @property
     def rescheduled(self) -> date | None:
-        """The next due date of a finished recurring top-level task.
+        """The next due date of the recurrence, where it repeats.
 
         Raises
         ------
         RepeatError
             Its `[REPEAT:]` does not read.
         """
-        repeat = self.root.repeat
-        if not (self.root_done and repeat):
+        recurrence = self.recurrence
+        repeat = recurrence and recurrence.repeat
+        if not repeat:
             return None
-        return next_due(repeat, self.task.today)
+        return next_due(repeat, self.completed_on)
+
+    @property
+    def recurrence(self) -> TaskNode | None:
+        """The task the completion reschedules if it repeats, or None.
+
+        The top-level task, once the completion finishes it.
+        """
+        return self.root if self.root_done else None
 
     @property
     def root(self) -> TaskNode:
         """The top-level task of the block."""
         return self.task.ancestry[0]
+
+    @property
+    def completed_on(self) -> date:
+        """The day the completion is for: the given day, or the clock's."""
+        return self.task.today
 
     @property
     def ancestries(self) -> list[Ancestry]:
@@ -746,7 +762,7 @@ class Completion:
         SCHEMA.md logs no checklist item.
         """
         return [
-            LogEntry(self.path, ancestry, DONE_STATUS, self.task.today).text
+            LogEntry(self.path, ancestry, DONE_STATUS, self.completed_on).text
             for ancestry in self.ancestries
                 if not ancestry.node.is_checklist_item
         ]  # fmt: skip
@@ -755,20 +771,17 @@ class Completion:
     def events(self) -> list['Event']:
         """One `TaskCompleted` per completion, deepest first.
 
-        The payload carries the state the task changed from, and a
-        rescheduled task records its due date beside the done.
+        The payload carries the state the task changed from and the day
+        the completion is for. A rescheduled task records its due date
+        beside the done.
         """
+        completed_on = self.completed_on.isoformat()
+        recurrence, rescheduled = self.recurrence, self.rescheduled
         events = []
         for ancestry in self.ancestries:
-            node = ancestry.node
-            delta: dict[str, list[Any]] = {'done': [False, True]}
-            if node is self.root and self.rescheduled is not None:
-                delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-            payload = {
-                'delta': delta,
-                'snapshot': node.snapshot,
-                'ancestry': ancestry.path,
-            }
+            due = rescheduled if ancestry.node is recurrence else None
+            completed = TaskCompletion(ancestry, due).payload
+            payload = {**completed, 'completed_on': completed_on}
             stream = self.ids[ancestry.stream.raw_index]
             events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
         return events
@@ -873,12 +886,18 @@ class Scratch:
 
     @property
     def events(self) -> list['Event']:
-        """One `TaskScratched`, on the stream task's stream."""
-        payload = {
+        """One `TaskScratched`, on the stream task's stream.
+
+        The stream of a checklist item is an ancestor's, so its payload
+        marks it as a checklist item.
+        """
+        payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
             'snapshot': self.node.snapshot,
             'ancestry': self.ancestry.path,
         }
+        if self.node.is_checklist_item:
+            payload['checklist_item'] = True
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
 
 
@@ -1152,6 +1171,39 @@ class AddedLine:
     def node(self) -> TaskNode:
         """The line alone in an open section, as the parser reads it."""
         return TodoDocument(f'{OPEN_HEADING}\n{self.entry}').tasks[0]
+
+
+class TaskCompletion:
+    """One task a completion finishes, as its `TaskCompleted` records it.
+
+    `rescheduled` is the next due date of a task the completion
+    reschedules, and None for every other task. The event of a
+    checklist item lands on the stream of an ancestor, so its payload
+    marks it as a checklist item.
+    """
+
+    def __init__(self, ancestry: Ancestry, rescheduled: date | None) -> None:
+        self.ancestry = ancestry
+        self.rescheduled = rescheduled
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """The done, a new due date beside it, the task and its path.
+
+        A checklist item also carries its mark.
+        """
+        node = self.ancestry.node
+        delta: dict[str, list[Any]] = {'done': [False, True]}
+        if self.rescheduled is not None:
+            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
+        payload: dict[str, Any] = {
+            'delta': delta,
+            'snapshot': node.snapshot,
+            'ancestry': self.ancestry.path,
+        }
+        if node.is_checklist_item:
+            payload['checklist_item'] = True
+        return payload
 
 
 class LogEntry:

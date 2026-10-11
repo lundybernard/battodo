@@ -18,6 +18,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.cli import TZ
+from battodo.journal import Journal
 
 from .cli_runner import run_cli
 
@@ -65,6 +66,10 @@ class DoneCommandTests(TestCase):
 
         with t.subTest('and the log records it under that date'):
             t.assertIn(entry, t.read('completed.md'))
+
+        with t.subTest('and the journal records it as the completion day'):
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['completed_on'], BACKDATE)
 
     def test_done_defaults_to_the_clock(t) -> None:
         logged = t.run_ok('done', 'Due today task')

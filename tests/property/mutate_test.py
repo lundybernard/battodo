@@ -542,11 +542,14 @@ def completed(before: Source, found: Answer) -> 'Outcome':
         delta: dict[str, Any] = {'done': [False, True]}
         if node is root and rescheduled is not None:
             delta['DUE'] = [root.due, rescheduled.isoformat()]
-        payload = {
+        payload: dict[str, Any] = {
             'delta': delta,
             'snapshot': snapshot(node),
             'ancestry': path_of(each),
+            'completed_on': TODAY.isoformat(),
         }
+        if is_checklist_item(node):
+            payload['checklist_item'] = True
         stream = ids[stream_task(each).raw_index]
         events.append(
             Appended('TaskCompleted', f'task/{stream}', payload, LIST_FILE)
@@ -574,11 +577,13 @@ def scratched(before: Source, found: Answer) -> 'Outcome':
     entries = (
         [] if is_checklist_item(node) else [log_entry(ancestry, 'SCRATCHED')]
     )
-    payload = {
+    payload: dict[str, Any] = {
         'delta': {'removed': [False, True]},
         'snapshot': snapshot(node),
         'ancestry': path_of(ancestry),
     }
+    if is_checklist_item(node):
+        payload['checklist_item'] = True
     event = Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
     lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
