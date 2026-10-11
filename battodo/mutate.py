@@ -720,7 +720,7 @@ class Completion:
         repeat = recurrence and recurrence.repeat
         if not repeat:
             return None
-        return next_due(repeat, self.task.today)
+        return next_due(repeat, self.completed_on)
 
     @property
     def recurrence(self) -> TaskNode | None:
@@ -737,7 +737,8 @@ class Completion:
 
     @property
     def completed_on(self) -> date:
-        raise NotImplementedError
+        """The day the completion is for: the given day, or the clock's."""
+        return self.task.today
 
     @property
     def ancestries(self) -> list[Ancestry]:
@@ -761,7 +762,7 @@ class Completion:
         SCHEMA.md logs no checklist item.
         """
         return [
-            LogEntry(self.path, ancestry, DONE_STATUS, self.task.today).text
+            LogEntry(self.path, ancestry, DONE_STATUS, self.completed_on).text
             for ancestry in self.ancestries
                 if not ancestry.node.is_checklist_item
         ]  # fmt: skip
@@ -770,14 +771,17 @@ class Completion:
     def events(self) -> list['Event']:
         """One `TaskCompleted` per completion, deepest first.
 
-        The payload carries the state the task changed from, and a
-        rescheduled task records its due date beside the done.
+        The payload carries the state the task changed from and the day
+        the completion is for. A rescheduled task records its due date
+        beside the done.
         """
+        completed_on = self.completed_on.isoformat()
         recurrence, rescheduled = self.recurrence, self.rescheduled
         events = []
         for ancestry in self.ancestries:
             due = rescheduled if ancestry.node is recurrence else None
-            payload = TaskCompletion(ancestry, due).payload
+            completed = TaskCompletion(ancestry, due).payload
+            payload = {**completed, 'completed_on': completed_on}
             stream = self.ids[ancestry.stream.raw_index]
             events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
         return events

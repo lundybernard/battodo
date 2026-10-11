@@ -546,6 +546,7 @@ def completed(before: Source, found: Answer) -> 'Outcome':
             'delta': delta,
             'snapshot': snapshot(node),
             'ancestry': path_of(each),
+            'completed_on': TODAY.isoformat(),
         }
         stream = ids[stream_task(each).raw_index]
         events.append(
