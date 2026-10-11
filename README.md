@@ -92,6 +92,10 @@ argument, then an environment variable, then a config file, then the
 built-in default. Every value is a string, which is all the environment
 can hold; the command that reads one decodes it.
 
+A command input, such as a selector, `--date` or `--all`, is not
+configuration: it comes from the command line only
+([ADR 0024](docs/decisions/0024-cli-inputs-config-and-command.md)).
+
 - `view.source_dir` — the directory the lists are read from. `~/todo`.
 - `view.top` — how many items a category shows. `5`, and `--top` on the
   command line overrides it.
