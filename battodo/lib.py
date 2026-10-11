@@ -202,6 +202,8 @@ def add_item(
     repeat: str | None = None,
     tags: str | None = None,
     description: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Write the task the inputs describe.
 

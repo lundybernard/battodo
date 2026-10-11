@@ -174,6 +174,32 @@ class CommandInputTests(TestCase):
                 f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
             )
 
+        with t.subTest('--attrs and --note reach the event'):
+            t.run_command(
+                ['add', 'yard', 'Trim hedge', '--attrs', 'cost=12.50'],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['attrs'], {'cost': '12.50'})
+
+        with t.subTest('and the event of a subtask'):
+            t.run_command(
+                [
+                    'add',
+                    'yard',
+                    'Bag them',
+                    '--parent',
+                    'rk01lv',
+                    '--note',
+                    'Wet',
+                ],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['attrs'], {'note': 'Wet'})
+
     def test_view(t):
         with t.subTest('BATTODO_SHOW_ALL does not reach view'):
             ret = t.run_command(

@@ -283,13 +283,16 @@ class AdditionTests(TestCase):
         block.return_value = 'the block as written'
         written.return_value = sentinel.written
         t.ad.task_id = 'zz01ab'
+        t.ad.attrs = sentinel.attrs
 
         ret = t.ad.events
 
-        # One TaskAdded, on the stream of the new task.
+        # One TaskAdded, on the stream of the new task, which carries
+        # the attributes.
         added_line.assert_called_once_with(
             'the block as written',
             sentinel.written,
+            sentinel.attrs,
         )
         t.assertEqual(
             ret,
@@ -641,13 +644,16 @@ class SubtaskAdditionTests(TestCase):
         added_line.return_value.payload = {'delta': sentinel.delta}
         t.sa.task_id = 'cc03ef'
         t.sa.parent_id = '9o71lx'
+        t.sa.attrs = sentinel.attrs
 
         with t.subTest('one TaskAdded, which names the parent'):
             ret = t.sa.events
 
+            # The TaskAdded carries the attributes.
             added_line.assert_called_once_with(
                 'the block as written',
                 sentinel.written,
+                sentinel.attrs,
             )
             t.assertEqual(
                 ret,
@@ -2285,16 +2291,20 @@ class AddedLineTests(TestCase):
         node.return_value = MagicMock(spec=['snapshot'])
         node.return_value.snapshot = sentinel.snapshot
 
-        ret = t.al.payload
+        with t.subTest('each field against nothing, and the line'):
+            ret = t.al.payload
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'P': [None, '3'], 'ID': [None, 'zz01ab']},
+                    'snapshot': sentinel.snapshot,
+                },
+            )
 
-        # Each field written against nothing, and the line as written.
-        t.assertEqual(
-            ret,
-            {
-                'delta': {'P': [None, '3'], 'ID': [None, 'zz01ab']},
-                'snapshot': sentinel.snapshot,
-            },
-        )
+        with t.subTest('the attributes, where any are given'):
+            t.al.attrs = {'cost': '45.00'}
+            ret = t.al.payload
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
     def test_node(t, todo_document: MagicMock) -> None:

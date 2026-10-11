@@ -266,6 +266,7 @@ class ArgparserTests(TestCase):
             ['done', 'brush pile'],
             ['scratch', 'brush pile'],
             ['update', 'brush pile'],
+            ['add', 'chores', 'Water it'],
         ]:
             with t.subTest(f'{argv[0]}: None when not given'):
                 args = t.parser.parse_args(argv)
@@ -515,6 +516,8 @@ class CommandsAddTests(TestCase):
             repeat='a repeat',
             tags='some tags',
             description='a description',
+            attrs='some attrs',
+            note='a note',
         )
 
     def test_add(t):
@@ -533,6 +536,8 @@ class CommandsAddTests(TestCase):
                 repeat='a repeat',
                 tags='some tags',
                 description='a description',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

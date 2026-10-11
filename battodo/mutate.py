@@ -97,6 +97,7 @@ class Addition:
         fields: dict[str, str],
         today: date,
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.source = source
         self.list_name = list_name
@@ -104,6 +105,7 @@ class Addition:
         self.fields = fields
         self.today = today
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -250,12 +252,14 @@ class SubtaskAddition:
         title: str,
         fields: dict[str, str],
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.parent = parent
         self.list_name = list_name
         self.title = title
         self.fields = fields
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -1388,9 +1392,15 @@ class AddedLine:
     `block` is the task line and its description lines.
     """
 
-    def __init__(self, block: str, written: dict[str, str]) -> None:
+    def __init__(
+        self,
+        block: str,
+        written: dict[str, str],
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.block = block
         self.written = written
+        self.attrs = attrs
 
     @property
     def payload(self) -> dict[str, Any]:

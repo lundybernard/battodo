@@ -256,6 +256,20 @@ class AdditionTests(TestCase):
             )
             t.assertNotIn('description', ret.payload['delta'])
 
+        with t.subTest('the attributes go on its event'):
+            added = Addition(
+                t.source,
+                'a-list',
+                'A new task',
+                {},
+                TODAY,
+                attrs={'cost': '45.00'},
+            )
+
+            (event,) = added.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
     def test_block(t) -> None:
         with t.subTest('the task line alone, where it has no description'):
             ret = t.ad.block
@@ -472,6 +486,20 @@ class SubtaskAdditionTests(TestCase):
                 ),
             )
             t.assertEqual(added.payload['parent'], parent_id)
+
+        with t.subTest('the attributes go on the TaskAdded alone'):
+            unidentified = SubtaskAddition(
+                Task(t.source, 'A task with no id', TODAY),
+                'a-list',
+                'A new subtask',
+                {},
+                attrs={'cost': '45.00'},
+            )
+
+            stamp, added = unidentified.events
+
+            t.assertNotIn('attrs', stamp.payload)
+            t.assertEqual(added.payload['attrs'], {'cost': '45.00'})
 
         with t.subTest('a parent whose id is empty is stamped first too'):
             unrecorded = under_an_empty_id(t.source)
