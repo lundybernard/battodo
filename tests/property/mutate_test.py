@@ -31,6 +31,7 @@ from battodo.conf import TZ
 from battodo.journal import Journal
 from battodo.lib import (
     add_item,
+    annotate_item,
     backfill_items,
     complete_item,
     scratch_item,
@@ -310,6 +311,40 @@ class ScratchItemTests(TestCase):
         t.assertEqual(ret, expected)
 
 
+class AnnotateItemTests(TestCase):
+    """Property tests for battodo.lib.annotate_item."""
+
+    maxDiff = None
+
+    @given(grammar.documents, st.data())
+    def test_outcome(
+        t,
+        drawn: tuple[str, list[Node]],
+        data: st.DataObject,
+    ) -> None:
+        text, _ = drawn
+        ancestries = descend(TodoDocument(text).tasks, [])
+        selector = data.draw(item_selectors(ancestries))
+        log = data.draw(logs())
+        given = data.draw(note_inputs())
+        before = Source(source_lists(text), log, [])
+        found = outcome(text, ancestries, selector)
+        expected = foreseen(annotated, before, found, given)
+
+        with written(before) as directory:
+            conf = configuration(directory)
+            ret = observed(
+                annotate_item,
+                conf,
+                directory,
+                selector=selector,
+                text=given.note,
+                attrs=given.text,
+            )
+
+        t.assertEqual(ret, expected)
+
+
 class BackfillItemsTests(TestCase):
     """Property tests for battodo.lib.backfill_items."""
 
@@ -417,6 +452,16 @@ def supplied_attributes() -> st.SearchStrategy['Attributes']:
         st.one_of(st.none(), segments),
         st.one_of(st.none(), notes),
     )
+
+
+def note_inputs() -> st.SearchStrategy['Attributes']:
+    """The TEXT and `--attrs` of a note.
+
+    Half the draws give a readable TEXT alone, so most notes reach the
+    task; the rest are any attribute inputs, none at all among them.
+    """
+    alone = st.builds(Attributes, st.none(), attribute_values())
+    return either(supplied_attributes(), alone)
 
 
 def attribute_segments() -> st.SearchStrategy[str]:
@@ -882,6 +927,48 @@ def scratched(
     log = appended(before.log, entries)
     after = Source(lists, log, journal([event]))
     return Outcome('\n'.join(entries) or 'dropped', after)
+
+
+def annotated(
+    before: Source,
+    found: Answer,
+    given: 'Attributes',
+) -> 'Outcome':
+    """The note on the stream of the task, which changes nothing in it.
+
+    A note that carries nothing is refused before the task is read, and
+    a checklist item takes no note. A task with no id is stamped first,
+    on an event of its own.
+    """
+    attrs = attributes(given)
+    if not attrs:
+        raise ValueError('nothing to note: give a note or an attribute')
+    text, ancestry = reached(found)
+    node = ancestry[-1]
+    refuse_checklist_attributes(node)
+    task_id = node.task_id or next(new_ids())
+    doc = TodoDocument(text)
+    events = []
+    if not node.task_id:
+        doc.set_field(node.raw_index, 'ID', task_id)
+        stamp = {
+            'delta': {'ID': [None, task_id]},
+            'snapshot': snapshot(node),
+        }
+        events.append(
+            Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
+        )
+    payload: dict[str, Any] = {'snapshot': snapshot(node)}
+    if len(ancestry) > 1:
+        payload['ancestry'] = path_of(ancestry)
+    payload['attrs'] = attrs
+    events.append(
+        Appended('TaskAnnotated', f'task/{task_id}', payload, LIST_FILE)
+    )
+    entry = doc.lines[node.raw_index]
+    lists = {**before.lists, LIST_FILE: doc.text}
+    after = Source(lists, before.log, journal(events))
+    return Outcome(f'{entry}\n{SOURCE}/{LIST_FILE}', after)
 
 
 def backfilled(before: Source) -> 'Outcome':

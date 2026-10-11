@@ -11,6 +11,7 @@ from battodo.lib import (
     PERIODS,
     TZ,
     add_item,
+    annotate_item,
     backfill_items,
     complete_item,
     get_completed,
@@ -280,6 +281,28 @@ def argparser():
         help=MESSAGES['scratch.note.help'],
     )
 
+    note = commands.add_parser(
+        'note',
+        description=MESSAGES['note.description'],
+        help=MESSAGES['note.help'],
+    )
+    note.set_defaults(func=Commands.note)
+    note.add_argument(
+        'selector',
+        metavar=MESSAGES['note.selector.metavar'],
+        help=MESSAGES['note.selector.help'],
+    )
+    note.add_argument(
+        'text',
+        nargs='?',
+        metavar=MESSAGES['note.text.metavar'],
+        help=MESSAGES['note.text.help'],
+    )
+    note.add_argument(
+        '--attrs',
+        help=MESSAGES['note.attrs.help'],
+    )
+
     backfill = commands.add_parser(
         'backfill',
         description=MESSAGES['backfill.description'],
@@ -404,7 +427,15 @@ class Commands:
 
     @staticmethod
     def note(conf, args):
-        raise NotImplementedError
+        print(
+            annotate_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                text=args.text,
+                attrs=args.attrs,
+            )
+        )
 
     @staticmethod
     def backfill(conf, args):

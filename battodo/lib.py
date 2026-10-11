@@ -28,6 +28,7 @@ from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
 from .mutate import (
     Addition,
+    Annotation,
     Backfill,
     Completion,
     Scratch,
@@ -485,7 +486,11 @@ def annotate_item(
         The attributes do not read, the note carries nothing, or the
         task is a checklist item. Raised before anything is written.
     """
-    raise NotImplementedError
+    checked = SuppliedAttributes(attrs, text).checked
+    task = Task(_source(conf), selector, now.date())
+    annotation = Annotation(task, checked)
+    annotation.write()
+    return f'{annotation.entry}\n{annotation.path}'
 
 
 def backfill_items(conf: Configuration, now: datetime) -> str:
