@@ -608,16 +608,17 @@ class CommandsScratchTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(selector='a selector')
 
     def test_scratch(t):
         Commands.scratch(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.scratch_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

@@ -382,17 +382,16 @@ class ScratchItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        t.conf = Mock(spec=['view', 'selector'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.selector = 'a selector'
 
     def test_result(t):
         t.scratch.entries = [
             '2026-08-08 | a-list | SCRATCHED | A parent > A child',
         ]
 
-        logged = scratch_item(t.conf, t.now)
+        logged = scratch_item(t.conf, t.now, selector='a selector')
 
         t.assertEqual(
             logged,
@@ -400,17 +399,17 @@ class ScratchItemTests(TestCase):
         )
 
     def test_forwarded(t):
-        scratch_item(t.conf, t.now)
+        scratch_item(t.conf, t.now, selector='a selector')
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
         t.Scratch.assert_called_once_with(t.Task.return_value)
 
     def test_written(t):
-        scratch_item(t.conf, t.now)
+        scratch_item(t.conf, t.now, selector='a selector')
         t.scratch.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        logged = scratch_item(t.conf, t.now)
+        logged = scratch_item(t.conf, t.now, selector='a selector')
         t.assertEqual(logged, 'dropped')
 
 

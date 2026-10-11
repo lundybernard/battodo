@@ -302,15 +302,17 @@ def complete_item(
     return '\n'.join(entries) if entries else 'checked off'
 
 
-def scratch_item(conf: Configuration, now: datetime) -> str:
-    """Drop the task the configuration names.
+def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+    """Drop the task `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day stamps the log.
+    selector : str
+        Names the task.
 
     Returns
     -------
@@ -323,7 +325,7 @@ def scratch_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    scratch = Scratch(Task(_source(conf), conf.selector, now.date()))
+    scratch = Scratch(Task(_source(conf), selector, now.date()))
     scratch.write()
     entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'

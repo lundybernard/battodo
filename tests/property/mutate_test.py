@@ -223,8 +223,8 @@ class ScratchItemTests(TestCase):
         expected = foreseen(scratched, before, found)
 
         with written(before) as directory:
-            conf = configuration(directory, selector=selector)
-            ret = observed(scratch_item, conf, directory)
+            conf = configuration(directory)
+            ret = observed(scratch_item, conf, directory, selector=selector)
 
         t.assertEqual(ret, expected)
 

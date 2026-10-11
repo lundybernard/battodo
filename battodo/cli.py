@@ -245,7 +245,7 @@ def argparser():
     )
     drop.set_defaults(func=Commands.scratch)
     drop.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['scratch.selector.metavar'],
         help=MESSAGES['scratch.selector.help'],
     )
@@ -332,7 +332,7 @@ class Commands:
 
     @staticmethod
     def scratch(conf, args):
-        print(scratch_item(conf, datetime.now(TZ)))
+        print(scratch_item(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
     def backfill(conf, args):
