@@ -5,6 +5,13 @@ parser never reaches it. Its records are `DATE | CATEGORY | STATUS |
 TITLE` lines, one per completion, and only DONE records reach a digest:
 a SCRATCHED record reports an abandonment, not work done.
 
+A record with attributes ends with one `[attrs:{...}]` block, which
+holds them as a JSON object of text values. The block starts at the
+first `[attrs:` from which the rest of the line reads as such an object
+and a `]`. JSON escapes every quote in a value, so no `|`, `=` or comma
+in a title or a value moves the block. A line without a block reads as
+before; only a title that ends with a block of its own reads otherwise.
+
 A title keeps the `Parent > Child` ancestry the log stores, and loses
 its `[FIELD:]` markup. Categories sort in the view's order, so a
 category leads in both.
@@ -14,18 +21,19 @@ attributes: `DigestView` lays it out as aligned text, and
 `DigestJsonView` as JSON. `lib.get_completed` composes them.
 """
 
+import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import cached_property
-from json import dumps
+from json import dumps, loads
 from pathlib import Path
 from typing import Any
 
 from batconf import Configuration
 
 from .lists import category_order
-from .mutate import COMPLETED_LOG, DONE_STATUS
+from .mutate import ATTRIBUTES_MARK, COMPLETED_LOG, DONE_STATUS
 from .parser import FIELD_RE, parse_date
 
 # The field separator a completion is written with. The log's name and
@@ -34,6 +42,8 @@ SEPARATOR = ' | '
 # date, category, status, title: the fields one record carries. A
 # separator inside a title belongs to the title.
 RECORD_FIELDS = 4
+# Where an attribute block can start.
+ATTRIBUTES_MARK_RE = re.compile(re.escape(ATTRIBUTES_MARK))
 # How many days a week covers, today included.
 WEEK_DAYS = 7
 PERIOD_STARTS: dict[str, Callable[[date], date]] = {
@@ -156,11 +166,12 @@ class Digest:
 
 @dataclass(frozen=True)
 class Record:
-    """One DONE line of the log: when, which list, what."""
+    """One DONE line of the log: when, which list, what, its attributes."""
 
     day: date
     category: str
     title: str
+    attrs: dict[str, str] = field(default_factory=dict)
 
     @property
     def cells(self) -> tuple[str, ...]:
@@ -179,19 +190,40 @@ def read_record(line: str) -> Record | None:
     parts = line.split(SEPARATOR, RECORD_FIELDS - 1)
     if len(parts) != RECORD_FIELDS:
         return None
-    stamp, category, status, title = (part.strip() for part in parts)
+    stamp, category, status, rest = (part.strip() for part in parts)
     day = parse_date(stamp)
     if day is None or status != DONE_STATUS:
         return None
-    return Record(day, category, clean_title(title))
+    title, attrs = split_attributes(rest)
+    return Record(day, category, clean_title(title), attrs)
 
 
 def split_attributes(text: str) -> tuple[str, dict[str, str]]:
-    raise NotImplementedError
+    """The text before its attribute block, and the attributes in it.
+
+    The block starts at the first mark from which the rest of the text
+    reads as attributes. A text without one keeps all of it.
+    """
+    for found in ATTRIBUTES_MARK_RE.finditer(text):
+        attrs = read_attributes(text[found.end() :])
+        if attrs is not None:
+            return text[: found.start()], attrs
+    return text, {}
 
 
 def read_attributes(block: str) -> dict[str, str] | None:
-    raise NotImplementedError
+    """A JSON object of text values, then `]`, or None where it is not."""
+    if not block.endswith(']'):
+        return None
+    try:
+        found = loads(block[:-1])
+    except ValueError:
+        return None
+    if not isinstance(found, dict):
+        return None
+    if not all(isinstance(value, str) for value in found.values()):
+        return None
+    return found
 
 
 class Group:

@@ -32,6 +32,7 @@ import re
 from collections.abc import Sequence
 from datetime import date
 from functools import cached_property
+from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
@@ -55,6 +56,8 @@ COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
 UPDATED_EVENT = 'TaskUpdated'
 COMPLETED_LOG = 'completed.md'
+# Opens the attribute block that ends a completed-log record.
+ATTRIBUTES_MARK = '[attrs:'
 DONE_STATUS = 'DONE'
 SCRATCHED_STATUS = 'SCRATCHED'
 # Whom every journal event names as its actor.
@@ -1663,10 +1666,14 @@ class LogEntry:
 
     @property
     def text(self) -> str:
-        """The record, the SCHEMA.md fields of the task after its path."""
+        """The record: the path, the SCHEMA.md fields, the attributes."""
         entry = f'{self.day} | {self.category} | {self.status} | {self.title}'
-        fields = self.fields
-        return f'{entry} {fields}' if fields else entry
+        parts = (entry, self.fields, self.attributes)
+        return ' '.join(
+            part
+            for part in parts
+                if part
+        )  # fmt: skip
 
     @property
     def day(self) -> date:
@@ -1696,7 +1703,15 @@ class LogEntry:
 
     @property
     def attributes(self) -> str:
-        raise NotImplementedError
+        """The attributes of the write as one block, or none without them.
+
+        The block holds a JSON object in ASCII, so a value can hold no
+        line break and no character a reader could take for the end.
+        """
+        attrs = self.logged.attrs
+        if not attrs:
+            return ''
+        return f'{ATTRIBUTES_MARK}{dumps(attrs)}]'
 
 
 class LogSource(Protocol):
@@ -1710,6 +1725,9 @@ class LogSource(Protocol):
 
     @property
     def status(self) -> str: ...
+
+    @property
+    def attrs(self) -> dict[str, str] | None: ...
 
 
 class ListBackfill:
