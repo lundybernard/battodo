@@ -10,6 +10,7 @@
   "added": null,
   "repeat": null,
   "tags": [],
+  "description": null,
   "subtasks": [
     {
       "id": null,
@@ -18,6 +19,7 @@
       "loe": null,
       "due": null,
       "tags": [],
+      "description": null,
       "subtasks": []
     },
     {
@@ -27,6 +29,7 @@
       "loe": 1,
       "due": null,
       "tags": [],
+      "description": null,
       "subtasks": []
     },
     {
@@ -36,6 +39,7 @@
       "loe": null,
       "due": null,
       "tags": [],
+      "description": null,
       "subtasks": []
     }
   ]

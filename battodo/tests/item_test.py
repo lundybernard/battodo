@@ -183,6 +183,17 @@ class ItemViewTests(TestCase):
             # Rounded to the published 1.95 first, it would show 1.9.
             t.assertEqual(ret[2], ('rank', '2.0'))
 
+        with t.subTest('a description closes them, a row per line'):
+            t.item.node.description_lines = ['A line.', 'Another line.']
+
+            ret = t.iv.rows
+
+            # Only its first row carries the label.
+            t.assertEqual(
+                ret[4:],
+                [('description', 'A line.'), ('', 'Another line.')],
+            )
+
     @patch.object(ItemView, 'rows', new_callable=PropertyMock)
     def test_width(t, rows: PropertyMock) -> None:
         rows.return_value = [('list', 'a-list'), ('REPEAT', '30d')]
@@ -338,6 +349,7 @@ class ItemJsonViewTests(TestCase):
                     'added': '2026-07-06',
                     'repeat': '30d',
                     'tags': ['yard', 'summer'],
+                    'description': None,
                     'subtasks': [{'title': 'Sweep'}],
                 },
             )
@@ -362,9 +374,15 @@ class ItemJsonViewTests(TestCase):
                     'added': None,
                     'repeat': None,
                     'tags': [],
+                    'description': None,
                     'subtasks': [],
                 },
             )
+
+        with t.subTest('a description joins its lines'):
+            t.item.node.description_lines = ['A line.', 'Another line.']
+            ret = t.ijv.data
+            t.assertEqual(ret['description'], 'A line.\nAnother line.')
 
     @patch(f'{SRC}.SubtaskJsonView', autospec=True)
     def test_subtasks(t, subtask_json_view: MagicMock) -> None:
@@ -409,6 +427,7 @@ class SubtaskJsonViewTests(TestCase):
                     'loe': 2,
                     'due': '2026-09-01',
                     'tags': ['yard', 'summer'],
+                    'description': None,
                     'subtasks': [{'title': 'Buy the lumber'}],
                 },
             )
@@ -434,9 +453,15 @@ class SubtaskJsonViewTests(TestCase):
                     'loe': None,
                     'due': None,
                     'tags': [],
+                    'description': None,
                     'subtasks': [],
                 },
             )
+
+        with t.subTest('a description joins its lines'):
+            t.sjv.node.description_lines = ['A line.', 'Another line.']
+            ret = t.sjv.data
+            t.assertEqual(ret['description'], 'A line.\nAnother line.')
 
     def test_subtasks(t) -> None:
         deeper = Mock(spec=TaskNode)
