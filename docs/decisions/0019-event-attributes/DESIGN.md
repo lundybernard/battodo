@@ -105,7 +105,8 @@ a compatibility constraint.
 ## Task description
 
 **Snapshot.** The snapshot gains `description`: the text of the task's
-note lines, one line of text per note line, joined by newlines. The key
+description lines, one line of text per description line, joined by
+newlines. The key
 is absent when the task has no description.
 
 **Writes.** `add --description` sets it. Like the title, it does not
@@ -114,19 +115,19 @@ appear in an `add` delta; the post-state snapshot carries it.
 records the change as `[before, after]`. It is a pseudo-key on the same
 footing as `title`: not a field, but a value a reverse-applier needs.
 
-**Render.** The renderer writes the description as note lines under the
-task line, in the form the parser already reads
+**Render.** The renderer writes the description as description lines
+under the task line, in the form the parser already reads
 ([DESIGN.md ## Parser](../0000-project-bootstrap/DESIGN.md#parser)).
 
-**Recurrence.** A repeating task keeps its note lines when it is
+**Recurrence.** A repeating task keeps its description lines when it is
 rescheduled; `complete` drops the children of a rescheduled task, not
-its notes. The description survives each completion unchanged, and no
+its description lines. The description survives each completion unchanged, and no
 completion writes to it.
 
 **Flip.** The importer that writes genesis events at the flip
 ([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
-reads existing note lines into `snapshot.description`. After the flip,
-no command reads a note line back from the markdown.
+reads existing description lines into `snapshot.description`. After
+the flip, no command reads a description line back from the markdown.
 
 ## History command
 

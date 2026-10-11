@@ -17,6 +17,16 @@ Branch: `adr-event-attributes` — Issue: #79
 refactor ([ADR group 0016](../0016-property-refactor/README.md)) is
 complete.
 
+## Terms
+
+The group uses one word for each meaning:
+
+- **description:** the static text of a task. In the markdown it is the
+  indented lines under the task line that carry no checkbox
+  ([ADR 0021](0021-task-description-field.md)).
+- **note:** a dated annotation in the journal, and the attribute key
+  `note` that carries it.
+
 ## Planning docs
 
 | File | Purpose |

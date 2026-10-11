@@ -46,7 +46,7 @@ the payload.
 - values carry no type, and a misspelt key starts a new kind of fact
   without warning [con]
 
-### A single free-text note on the event
+### A single free-text field on the event
 
 - the smallest change: one optional string [pro]
 - not queryable; a confirmation number sits inside prose [con]
@@ -78,7 +78,7 @@ every cycle.
 An open map keeps the vocabulary with the user. The facts that motivate
 the feature differ by list, and each list adds kinds that no one can
 list in advance. A fixed schema turns each new kind into a code change;
-a single note turns each new kind into prose that no reader can query.
+a single free-text field turns each new kind into prose that no reader can query.
 A map of named keys avoids both costs.
 
 Text values follow the journal's existing practice: the snapshot
