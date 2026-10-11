@@ -526,6 +526,14 @@ class CompletionTests(TestCase):
             days = [event['payload']['completed_on'] for event in appended]
             t.assertEqual(days, ['2026-08-01', '2026-08-01'])
 
+        with t.subTest('the journal line of a checklist item marks it'):
+            source = a_source(t)
+
+            completion_of(source, 'A checklist item').write()
+
+            (event,) = Journal(source).events
+            t.assertIs(event['payload']['checklist_item'], True)
+
     def test_text(t) -> None:
         with t.subTest('a finished top-level task loses its line'):
             completed = completion_of(t.source, 'A task with no id')
@@ -637,6 +645,7 @@ class CompletionTests(TestCase):
 
             t.assertEqual(ret.stream, 'task/9o71lx')
             t.assertEqual(ret.payload['ancestry'], 'A task > A checklist item')
+            t.assertIs(ret.payload['checklist_item'], True)
 
 
 class ScratchTests(TestCase):
@@ -649,15 +658,22 @@ class ScratchTests(TestCase):
         t.sc = Scratch(Task(t.source, '9o71lx', TODAY))
 
     def test_write(t) -> None:
-        t.sc.write()
+        with t.subTest('the list, the log and the journal hold its values'):
+            t.sc.write()
 
-        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
-        logged = (t.source / 'completed.md').read_text(encoding='utf-8')
-        # The list, the log and the journal hold what the scratch
-        # derives.
-        t.assertEqual(written, t.sc.text)
-        t.assertEqual(logged, '\n'.join(t.sc.entries) + '\n')
-        t.assertEqual(journaled(t.source), as_journaled(t.sc.events))
+            written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+            logged = (t.source / 'completed.md').read_text(encoding='utf-8')
+            t.assertEqual(written, t.sc.text)
+            t.assertEqual(logged, '\n'.join(t.sc.entries) + '\n')
+            t.assertEqual(journaled(t.source), as_journaled(t.sc.events))
+
+        with t.subTest('the journal line of a checklist item marks it'):
+            source = a_source(t)
+
+            Scratch(Task(source, 'A checklist', TODAY)).write()
+
+            (event,) = Journal(source).events
+            t.assertIs(event['payload']['checklist_item'], True)
 
     def test_text(t) -> None:
         with t.subTest('the task, its note and its children go'):

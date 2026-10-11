@@ -1495,22 +1495,37 @@ class ScratchTests(TestCase):
         ancestry.return_value.path = 'a path'
         snapshot.return_value = sentinel.snapshot
 
-        ret = t.sc.events
+        with t.subTest('one TaskScratched, on the stream of its task'):
+            ret = t.sc.events
+            t.assertEqual(
+                ret,
+                [
+                    Event(
+                        'TaskScratched',
+                        'task/9o71lx',
+                        {
+                            'delta': {'removed': [False, True]},
+                            'snapshot': sentinel.snapshot,
+                            'ancestry': 'a path',
+                        },
+                    )
+                ],
+            )
 
-        t.assertEqual(
-            ret,
-            [
-                Event(
-                    'TaskScratched',
-                    'task/9o71lx',
-                    {
-                        'delta': {'removed': [False, True]},
-                        'snapshot': sentinel.snapshot,
-                        'ancestry': 'a path',
-                    },
-                )
-            ],
-        )
+        with t.subTest('a checklist item is marked as one'):
+            t.task.node = checklist_node()
+
+            ret = t.sc.events
+
+            t.assertEqual(
+                ret[0].payload,
+                {
+                    'delta': {'removed': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'checklist_item': True,
+                },
+            )
 
 
 class BackfillTests(TestCase):
@@ -1930,6 +1945,27 @@ class TaskCompletionTests(TestCase):
             t.assertEqual(
                 ret['delta'],
                 {'done': [False, True], 'DUE': ['2026-08-05', '2026-08-15']},
+            )
+
+        with t.subTest('a checklist item is marked as one'):
+            t.tc.rescheduled = None
+            t.tc.ancestry = ancestry_of(
+                t.node,
+                checklist_node(),
+                stream=t.node,
+                path='a path',
+            )
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'done': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'checklist_item': True,
+                },
             )
 
 
