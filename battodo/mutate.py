@@ -897,8 +897,13 @@ class Scratch:
     proposed in this one, so every scratch is logged (SCHEMA.md).
     """
 
-    def __init__(self, task: Task) -> None:
+    def __init__(
+        self,
+        task: Task,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.task = task
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.

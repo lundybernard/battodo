@@ -264,6 +264,7 @@ class ArgparserTests(TestCase):
     def test_attributes(t):
         for argv in [
             ['done', 'brush pile'],
+            ['scratch', 'brush pile'],
         ]:
             with t.subTest(f'{argv[0]}: None when not given'):
                 args = t.parser.parse_args(argv)
@@ -701,16 +702,22 @@ class CommandsScratchTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view'])
-        t.args = Namespace(selector='a selector')
+        t.args = Namespace(
+            selector='a selector',
+            attrs='some attrs',
+            note='a note',
+        )
 
     def test_scratch(t):
         Commands.scratch(t.conf, t.args)
 
-        with t.subTest('the input reaches the library beside the config'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.scratch_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
                 selector='a selector',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

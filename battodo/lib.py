@@ -385,7 +385,14 @@ def complete_item(
     return '\n'.join(entries) if entries else 'checked off'
 
 
-def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+def scratch_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    attrs: str | None = None,
+    note: str | None = None,
+) -> str:
     """Drop the task `selector` names.
 
     Parameters

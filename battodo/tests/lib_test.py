@@ -443,7 +443,7 @@ class ScratchItemTests(TestCase):
     """Unit tests for battodo.lib.scratch_item."""
 
     def setUp(t):
-        patches = ['Scratch', 'Task']
+        patches = ['Scratch', 'Task', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -473,7 +473,40 @@ class ScratchItemTests(TestCase):
         scratch_item(t.conf, t.now, selector='a selector')
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
-        t.Scratch.assert_called_once_with(t.Task.return_value)
+        t.Scratch.assert_called_once_with(
+            t.Task.return_value,
+            attrs=t.SuppliedAttributes.return_value.checked,
+        )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            scratch_item(
+                t.conf,
+                t.now,
+                selector='a selector',
+                attrs='cost=45.00',
+                note='a note',
+            )
+
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            scratch_item(t.conf, t.now, selector='a selector')
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                scratch_item(t.conf, t.now, selector='a selector')
+
+            t.Task.assert_not_called()
 
     def test_written(t):
         scratch_item(t.conf, t.now, selector='a selector')

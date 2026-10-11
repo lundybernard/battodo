@@ -21,6 +21,7 @@ from batconf import TomlSource
 from batconf.types import SourceInterfaceP
 
 from battodo.cli import TZ, argparser, get_config
+from battodo.journal import Journal
 from battodo.view import TOP_N
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
@@ -208,6 +209,26 @@ class CommandInputTests(TestCase):
             )
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+    def test_scratch(t):
+        with t.subTest('--attrs and --note reach the event'):
+            t.run_command(
+                [
+                    'scratch',
+                    'rk01lv',
+                    '--attrs',
+                    'cost=0',
+                    '--note',
+                    'Too wet',
+                ],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(
+                event['payload']['attrs'],
+                {'cost': '0', 'note': 'Too wet'},
+            )
 
     def test_update(t):
         listed = t.source / 'yard.md'

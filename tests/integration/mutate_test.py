@@ -921,31 +921,52 @@ class ScratchTests(TestCase):
             t.assertEqual(ret, [])
 
     def test_events(t) -> None:
-        ret = t.sc.events
-        t.assertEqual(
-            ret,
-            [
-                (
-                    'TaskScratched',
-                    'task/9o71lx',
-                    {
-                        'delta': {'removed': [False, True]},
-                        'snapshot': {
-                            'title': 'A task',
-                            'done': False,
-                            'fields': {
-                                'P': '4',
-                                'LOE': '8',
-                                'ADDED': '2026-07-06',
-                                'ID': '9o71lx',
+        with t.subTest('one TaskScratched, on the stream of the task'):
+            ret = t.sc.events
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        'TaskScratched',
+                        'task/9o71lx',
+                        {
+                            'delta': {'removed': [False, True]},
+                            'snapshot': {
+                                'title': 'A task',
+                                'done': False,
+                                'fields': {
+                                    'P': '4',
+                                    'LOE': '8',
+                                    'ADDED': '2026-07-06',
+                                    'ID': '9o71lx',
+                                },
+                                'description': 'A note that stays put.',
                             },
-                            'description': 'A note that stays put.',
+                            'ancestry': 'A task',
                         },
-                        'ancestry': 'A task',
-                    },
-                )
-            ],
-        )
+                    )
+                ],
+            )
+
+        with t.subTest('the attributes go on its event'):
+            task = Task(t.source, '9o71lx', TODAY)
+            scratched = Scratch(task, attrs={'cost': '45.00'})
+
+            (event,) = scratched.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
+        with t.subTest('a checklist item takes no attributes'):
+            task = Task(t.source, 'A checklist', TODAY)
+            scratched = Scratch(task, attrs={'note': 'a note'})
+
+            with t.assertRaises(ValueError) as caught:
+                _ = scratched.events
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
 
 
 class BackfillTests(TestCase):

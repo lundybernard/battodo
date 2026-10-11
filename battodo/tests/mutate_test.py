@@ -1644,12 +1644,14 @@ class ScratchTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Scratch, 'ancestry', new_callable=PropertyMock)
     @patch.object(Scratch, 'stream_id', new_callable=PropertyMock)
     def test_events(
         t,
         stream_id: PropertyMock,
         ancestry: PropertyMock,
+        refuse_attributes: MagicMock,
         snapshot: PropertyMock,
     ) -> None:
         stream_id.return_value = '9o71lx'
@@ -1686,6 +1688,27 @@ class ScratchTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                },
+            )
+
+        with t.subTest('the attributes, once the task takes them'):
+            refuse_attributes.reset_mock()
+            t.task.node = t.parent
+            t.sc.attrs = {'cost': '45.00'}
+
+            ret = t.sc.events
+
+            refuse_attributes.assert_called_once_with(
+                t.parent,
+                {'cost': '45.00'},
+            )
+            t.assertEqual(
+                ret[0].payload,
+                {
+                    'delta': {'removed': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
                 },
             )
 
