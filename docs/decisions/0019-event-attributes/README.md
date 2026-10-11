@@ -2,12 +2,13 @@
 
 **The decision this group names: facts a user records about a task live
 in the journal, and a command that reads the journal shows them.** Facts
-about one completion ride on that completion's event as an open
-attribute map, so a new kind of fact does not need a schema change. The
-static description of a task is a field on the task's own stream.
+ride on the journal events as an open attribute map, so a new kind of
+fact does not need a schema change. A fact about one completion rides
+on that completion's event. The static description of a task is a field
+on the task's own stream.
 
-ADRs 0020–0022 are the component decisions: the attribute map on
-completion events, the journaled task description, and the history
+ADRs 0020–0022 are the component decisions: the attribute map on every
+event, the journaled task description, and the history
 command.
 
 Branch: `adr-event-attributes` — Issue: #79
@@ -39,7 +40,7 @@ The group uses one word for each meaning:
 
 | # | Title | Status |
 | - | ----- | ------ |
-| [0020](0020-event-attribute-map.md) | Completion events carry an open attribute map | Proposed |
+| [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Proposed |
 | [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
 | [0022](0022-history-command.md) | A history command reads the journal | Proposed |
 

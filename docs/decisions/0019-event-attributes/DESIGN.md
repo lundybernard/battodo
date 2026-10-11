@@ -24,7 +24,7 @@ btodo history <selector> [--format text|json]
 
 `--attr` repeats. `--note TEXT` is shorthand for `--attr note=TEXT`.
 
-## Completion attributes
+## Event attributes
 
 **Grammar.** An attribute splits on its first `=`. The key is a
 lowercase identifier: a letter, then letters, digits or underscores.
@@ -32,9 +32,9 @@ The value is text and may hold `=`. `done` refuses an attribute with no
 `=` or a key outside the grammar before it writes anything, as `add`
 validates before it writes.
 
-**Payload.** `TaskCompleted.payload.attrs` holds the attributes as a
-JSON object of string keys to string values. The key is absent when the
-completion carries no attributes.
+**Payload.** `payload.attrs` holds the attributes as a JSON object of
+string keys to string values, on every event type. The key is absent
+when the event carries no attributes.
 
 `TaskCompleted.payload.completed_on` holds the completion day as an ISO
 date in the user's local day: the `--date` value when the user gives
@@ -88,8 +88,14 @@ rule to the two payload keys: `schema_version` stays `1`.
 **Cascade.** A completion that finishes an ancestor writes one event per
 finished task
 ([ADR 0014](../0014-subtask-journal-events.md)). The attributes go on
-the target's event only. An ancestor that the cascade completes gets
-none.
+the event of the task the user named. Each ancestor event that the
+cascade writes carries `completed_on` and no `attrs`.
+
+**Checklist items.** A checklist item carries no `[ID:]`, so its events
+go on the stream of its nearest ancestor that has one, with the item
+named in the event's `ancestry`. A checklist item takes no attributes.
+Its events carry a checklist marker, so a reader tells them apart from
+the ancestor's own events.
 
 **Completed log.** Completion attributes appear in the completed log.
 The log is a render of the journal: its records derive from journal
@@ -144,12 +150,6 @@ format lays out, as `show --format json` does.
 
 ## Open questions
 
-- **Checklist item completions.** A checklist item carries no `[ID:]`,
-  so its completion event goes on the stream of its nearest ancestor
-  that has one, with the item named in the event's `ancestry`. That
-  stream then holds completion events for the item beside the
-  ancestor's own. Whether the item's completion takes attributes, and
-  how `history` tells the two kinds of entry apart, is open.
 - **A key given twice.** `--attr` given twice with one key, or `--note`
   beside `--attr note=`: refuse, or keep the last value. Issue #67
   records the same question for markdown fields.
