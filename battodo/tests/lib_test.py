@@ -277,7 +277,7 @@ class UpdateItemTests(TestCase):
     """Unit tests for battodo.lib.update_item."""
 
     def setUp(t):
-        patches = ['Update', 'Task']
+        patches = ['Update', 'Task', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -308,7 +308,38 @@ class UpdateItemTests(TestCase):
             {'P': '4', 'DUE': '2026-09-01'},
             title='A task title',
             description='A description',
+            attrs=t.SuppliedAttributes.return_value.checked,
         )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            update_item(
+                t.conf,
+                t.now,
+                **t.inputs,
+                attrs='cost=45.00',
+                note='a note',
+            )
+
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            update_item(t.conf, t.now, **t.inputs)
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                update_item(t.conf, t.now, **t.inputs)
+
+            t.Task.assert_not_called()
 
     def test_written(t):
         update_item(t.conf, t.now, **t.inputs)

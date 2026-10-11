@@ -284,6 +284,8 @@ def update_item(
     due: str | None = None,
     tags: str | None = None,
     description: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Rewrite the task `selector` names.
 

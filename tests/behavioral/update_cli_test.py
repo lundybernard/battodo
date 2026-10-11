@@ -19,6 +19,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.cli import TZ
+from battodo.journal import Journal
 
 from .cli_runner import run_cli
 
@@ -95,6 +96,28 @@ class UpdateCommandTests(TestCase):
             t.assertIsNotNone(after['id'])
             t.assertEqual(by_id, after)
 
+    def test_update_with_attributes(t) -> None:
+        t.run_ok(
+            'update',
+            SELECTOR,
+            '-p',
+            '3',
+            '--attrs',
+            'estimate=2h, reason=moved up, after review',
+            '--note',
+            'Asked by the team',
+        )
+
+        event = Journal(t.source).events[-1]
+        t.assertEqual(
+            event['payload']['attrs'],
+            {
+                'estimate': '2h',
+                'reason': 'moved up, after review',
+                'note': 'Asked by the team',
+            },
+        )
+
     def test_update_rejected(t) -> None:
         """A rejected update reports on stderr and writes nothing."""
         cases = {
@@ -116,6 +139,16 @@ class UpdateCommandTests(TestCase):
                 SELECTOR,
                 '--title',
                 'Renamed\ntask',
+            ),
+            'an attribute given twice never reaches the file': (
+                'update',
+                SELECTOR,
+                '-p',
+                '3',
+                '--attrs',
+                'note=Asked',
+                '--note',
+                'Asked by the team',
             ),
         }
         original = (t.source / 'work.md').read_text(encoding='utf-8')

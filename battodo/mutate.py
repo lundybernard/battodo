@@ -469,11 +469,13 @@ class Update:
         fields: dict[str, str],
         title: str | None = None,
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.

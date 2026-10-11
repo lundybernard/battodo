@@ -1017,6 +1017,21 @@ class UpdateTests(TestCase):
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
+        with t.subTest('the attributes, where any are given'):
+            t.task.ancestry = [t.parent]
+            t.up.attrs = {'cost': '45.00'}
+
+            ret = t.up.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': sentinel.delta,
+                    'snapshot': sentinel.snapshot,
+                    'attrs': {'cost': '45.00'},
+                },
+            )
+
     @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)

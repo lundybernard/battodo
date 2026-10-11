@@ -672,6 +672,17 @@ class UpdateTests(TestCase):
                 'A task > A subtask of it',
             )
 
+        with t.subTest('the attributes go on its event'):
+            updated = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {'P': '5'},
+                attrs={'cost': '45.00'},
+            )
+
+            (event,) = updated.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
 
 class CompletionTests(TestCase):
     """Contract tests for battodo.mutate.Completion."""
