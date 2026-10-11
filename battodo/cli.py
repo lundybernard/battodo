@@ -7,6 +7,7 @@ from logging.config import dictConfig
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.lib import (
     DEFAULT_PERIOD,
+    FORMATS,
     PERIODS,
     TZ,
     add_item,
@@ -117,8 +118,7 @@ def argparser():
     view.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['view.format.help'],
     )
 
@@ -178,8 +178,7 @@ def argparser():
     show.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['show.format.help'],
     )
 
@@ -264,8 +263,7 @@ def argparser():
     completed.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['completed.format.help'],
     )
 

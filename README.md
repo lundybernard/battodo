@@ -97,6 +97,8 @@ can hold; the command that reads one decodes it.
   command line overrides it.
 - `loglevel` — the level records are logged at. `ERROR`, and
   `--verbose` or `--debug` on the command line overrides it.
+- `format` — the form `view`, `show` and `completed` write: `text` or
+  `json`. `text`, and `--format` on the command line overrides it.
 
 An environment variable is the config path in caps:
 

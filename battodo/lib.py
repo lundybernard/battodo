@@ -41,6 +41,7 @@ from .view import Selection, SelectionJsonView, View
 
 __all__ = [
     'DEFAULT_PERIOD',
+    'FORMATS',
     'PERIODS',
     'TZ',
     'add_item',
@@ -54,6 +55,9 @@ __all__ = [
     'update_item',
 ]
 
+# The output forms a command that prints can take.
+FORMATS = ('text', 'json')
+
 
 def _source(conf: Configuration) -> Path:
     """The source directory the configuration names, `~` expanded."""
@@ -61,8 +65,19 @@ def _source(conf: Configuration) -> Path:
 
 
 def _is_json(conf: Configuration) -> bool:
-    """Whether the configuration asks for the machine-readable form."""
-    return getattr(conf, 'format', 'text') == 'json'
+    """Whether the configuration asks for the machine-readable form.
+
+    Raises
+    ------
+    ValueError
+        The configured format is not one of FORMATS.
+    """
+    form = conf.format
+    if form not in FORMATS:
+        raise ValueError(
+            f'unknown format {form!r}; choose one of {", ".join(FORMATS)}'
+        )
+    return form == 'json'
 
 
 def _supplied(fields: dict[str, str | None]) -> dict[str, str]:
@@ -103,7 +118,8 @@ def get_view(
     SourceError
         The source directory is missing, or holds no todo lists.
     ValueError
-        The configured item count is not a whole number of one or more.
+        The configured item count is not a whole number of one or more,
+        or the configured format is not one of FORMATS.
     """
     selection = Selection.from_config(conf, now, show_all=show_all)
     if _is_json(conf):
@@ -134,7 +150,8 @@ def get_completed(conf: Configuration, now: datetime, *, period: str) -> str:
     CompletedError
         The source directory holds no completed log.
     ValueError
-        `period` has no definition.
+        `period` has no definition, or the configured format is not
+        one of FORMATS.
     """
     digest = Digest.from_config(conf, now, period=period)
     if _is_json(conf):
@@ -164,6 +181,8 @@ def get_item(conf: Configuration, now: datetime, *, selector: str) -> str:
     ------
     SelectionError
         The selector does not name exactly one open task.
+    ValueError
+        The configured format is not one of FORMATS.
     """
     item = Item.from_config(conf, now, selector=selector)
     if _is_json(conf):

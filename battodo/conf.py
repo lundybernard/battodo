@@ -56,11 +56,13 @@ class GlobalConfig:
     """What the application reads outside any one command.
 
     `loglevel` names a level for the standard library logger. Its
-    default silences every record below an error.
+    default silences every record below an error. `format` names the
+    form of the output: text for a terminal, json for an agent.
     """
 
     view: ViewConfig
     loglevel: str = 'ERROR'
+    format: str = 'text'
 
 
 class ConfigFile:
