@@ -44,6 +44,7 @@ WIDTH = '80'
 # The environment outranks any config file in the checkout.
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
+FORMAT_VAR = 'BATTODO_FORMAT'
 
 
 def golden(name: str) -> str:
@@ -141,4 +142,24 @@ class ViewCommandTests(TestCase):
 
         with t.subTest('which exits non-zero and writes no view'):
             t.assertNotEqual(code, 0)
+            t.assertEqual(out, '')
+
+    def test_view_format_is_configured(t) -> None:
+        with t.subTest('the environment sets the format'):
+            out = t.render(env={FORMAT_VAR: 'json'})
+            t.assertEqual(out, golden('view_json.json'))
+
+        with t.subTest('the command line outranks the environment'):
+            out = t.render('--format', 'text', env={FORMAT_VAR: 'json'})
+            t.assertEqual(out, golden('view.txt'))
+
+        out, err, code = t.cli(env={FORMAT_VAR: 'xml'})
+
+        with t.subTest('a configured format btodo cannot write is reported'):
+            t.assertEqual(
+                err, "unknown format 'xml'; choose one of text, json\n"
+            )
+
+        with t.subTest('which exits non-zero and writes no view'):
+            t.assertEqual(code, 1)
             t.assertEqual(out, '')

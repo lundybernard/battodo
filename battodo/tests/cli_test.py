@@ -112,9 +112,11 @@ class ArgparserTests(TestCase):
     def test_format(t):
         # TODO: --format cuts across the view and show commands. Move it
         # up one level to serve both, or split the cases per command.
-        with t.subTest('view holds text when the flag is not given'):
+        with t.subTest('view holds None when the flag is not given'):
+            # The schema default answers, below the environment and the
+            # config file.
             args = t.parser.parse_args(['view'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
         with t.subTest('view holds json when json is asked for'):
             args = t.parser.parse_args(['view', '--format', 'json'])
@@ -139,7 +141,7 @@ class ArgparserTests(TestCase):
         with t.subTest('show holds the same two values'):
             # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['show', 'brush pile'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
             args = t.parser.parse_args(
                 ['show', 'brush pile', '--format', 'json']
@@ -149,7 +151,7 @@ class ArgparserTests(TestCase):
         with t.subTest('and so does completed'):
             # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['completed'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
             args = t.parser.parse_args(['completed', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')

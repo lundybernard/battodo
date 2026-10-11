@@ -65,9 +65,20 @@ class CliArgsResolutionTests(TestCase):
         return get_config(cli_args=args, config_file=NullFileSource())
 
     def test_cli_args(t):
-        with t.subTest('an option reaches the command'):
+        with t.subTest('a format reaches the command'):
             conf = t.resolve(['view', '--format', 'json'])
             t.assertEqual(conf.format, 'json')
+
+        with (
+            t.subTest('and the environment answers when no flag is given'),
+            patch.dict(environ, {'BATTODO_FORMAT': 'json'}),
+        ):
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.format, 'json')
+
+        with t.subTest('and the schema answers when no source does'):
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.format, 'text')
 
         with t.subTest('the log level reaches the command'):
             conf = t.resolve(['--debug', 'view'])

@@ -30,8 +30,6 @@ class GetViewTests(TestCase):
         t.selection = t.Selection.from_config.return_value
 
         t.now = sentinel.now
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'format'])
         t.conf.format = 'text'
 
@@ -61,10 +59,16 @@ class GetViewTests(TestCase):
         # built.
         t.View.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=['view'])
-        rendered = get_view(conf, t.now, show_all=True)
-        t.assertEqual(rendered, t.View.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_view(t.conf, t.now, show_all=True)
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class GetCompletedTests(TestCase):
@@ -106,10 +110,16 @@ class GetCompletedTests(TestCase):
         # The JSON view serializes the digest; the text view is not built.
         t.DigestView.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=['view'])
-        rendered = get_completed(conf, t.now, period='a period')
-        t.assertEqual(rendered, t.DigestView.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_completed(t.conf, t.now, period='a period')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class GetItemTests(TestCase):
@@ -124,8 +134,6 @@ class GetItemTests(TestCase):
         t.item = t.Item.from_config.return_value
 
         t.now = sentinel.now
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['format'])
         t.conf.format = 'text'
 
@@ -154,10 +162,16 @@ class GetItemTests(TestCase):
         # The JSON view serializes the item; the text view is not built.
         t.ItemView.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=[])
-        rendered = get_item(conf, t.now, selector='a selector')
-        t.assertEqual(rendered, t.ItemView.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_item(t.conf, t.now, selector='a selector')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class AddItemTests(TestCase):
