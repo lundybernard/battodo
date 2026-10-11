@@ -49,6 +49,7 @@ from .repeat import next_due
 from .task import Task
 
 ADDED_EVENT = 'TaskAdded'
+ANNOTATED_EVENT = 'TaskAnnotated'
 COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
 UPDATED_EVENT = 'TaskUpdated'
@@ -1019,6 +1020,133 @@ class Scratch:
         if self.attrs:
             payload['attrs'] = self.attrs
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
+
+
+class Annotation:
+    """The note on an open task: its attributes on an event of its own.
+
+    The note changes no task state. A task with no `[ID:]` is given one
+    first, on an event of its own, so the note has a stream to land on.
+    """
+
+    def __init__(self, task: Task, attrs: dict[str, str]) -> None:
+        self.task = task
+        self.attrs = attrs
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        raise NotImplementedError
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with the task given an id where it carries none.
+
+        Raises
+        ------
+        ValueError
+            The note carries no attribute.
+        SelectionError
+            The selector does not name exactly one open task.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The task's list, its line stamped with an id where it has none.
+
+        The note is checked before the selector is read.
+        """
+        raise NotImplementedError
+
+    def refuse_empty(self) -> None:
+        """Refuse a note that carries nothing.
+
+        Raises
+        ------
+        ValueError
+            The note holds no attribute, the key `note` included.
+        """
+        raise NotImplementedError
+
+    @property
+    def stamped(self) -> bool:
+        """Whether the task is given an id: it carries none.
+
+        An `[ID:]` with nothing in it names no stream, so it counts as
+        none.
+        """
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it."""
+        raise NotImplementedError
+
+    @cached_property
+    def task_id(self) -> str:
+        """The task's id, or a new one.
+
+        Cached: a new id is drawn at random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a note logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """The task's stamp if it has no id, then one `TaskAnnotated`.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item, which takes no attributes.
+        """
+        raise NotImplementedError
+
+    @property
+    def stamp(self) -> 'Event':
+        """The `TaskUpdated` that records the task's new id."""
+        raise NotImplementedError
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """The task, where a subtask sits, and the attributes.
+
+        No delta: a note changes nothing in the task.
+        """
+        raise NotImplementedError
+
+    @property
+    def nested(self) -> bool:
+        """Whether the task is a subtask, at any depth."""
+        raise NotImplementedError
+
+    @property
+    def ancestry(self) -> Ancestry:
+        """The task and every task above it."""
+        raise NotImplementedError
 
 
 class Backfill:
