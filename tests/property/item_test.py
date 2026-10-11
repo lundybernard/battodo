@@ -119,6 +119,7 @@ def record(name: str, task: TaskNode) -> dict[str, Any]:
         'added': task.added,
         'repeat': task.repeat,
         'tags': task.tags,
+        'description': '\n'.join(task.description_lines) or None,
         'subtasks': [child_record(child) for child in task.children],
     }
 
@@ -132,6 +133,7 @@ def child_record(task: TaskNode) -> dict[str, Any]:
         'loe': task.loe,
         'due': task.due,
         'tags': task.tags,
+        'description': '\n'.join(task.description_lines) or None,
         'subtasks': [child_record(child) for child in task.children],
     }
 
@@ -175,7 +177,8 @@ def labelled(name: str, task: TaskNode) -> list[tuple[str, str]]:
     """The rows of the text form. An absent field has none.
 
     An absent id reads as a dash. The rank reads as a view row shows
-    it, rounded once to one decimal place.
+    it, rounded once to one decimal place. Each description line
+    closes them with a row, and only the first carries a label.
     """
     rows = [
         ('list', name),
@@ -193,6 +196,8 @@ def labelled(name: str, task: TaskNode) -> list[tuple[str, str]]:
         rows.append(('TAGS', ', '.join(task.tags)))
     if task.added is not None:
         rows.append(('ADDED', task.added))
+    labels = ['description'] + [''] * len(task.description_lines)
+    rows.extend(zip(labels, task.description_lines))
     return rows
 
 
