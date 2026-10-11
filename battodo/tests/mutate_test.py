@@ -26,6 +26,7 @@ from ..mutate import (
     NamedList,
     Scratch,
     SubtaskAddition,
+    SuppliedDescription,
     SuppliedFields,
     SuppliedTitle,
     TaskCompletion,
@@ -1760,6 +1761,66 @@ class SuppliedTitleTests(TestCase):
                     _ = t.st.checked
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class SuppliedDescriptionTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedDescription."""
+
+    def setUp(t) -> None:
+        t.sd = SuppliedDescription('A line.\n  An indented line.  ')
+
+    def test_lines(t) -> None:
+        with t.subTest('each line, stripped of its indent'):
+            ret = t.sd.lines
+            t.assertEqual(ret, ['A line.', 'An indented line.'])
+
+        with t.subTest('an empty text is no description'):
+            t.sd.text = ''
+            ret = t.sd.lines
+            t.assertEqual(ret, [])
+
+        refused = {
+            'a blank line': (
+                'A line.\n  \nAnother line.',
+                "description line '  ' is blank",
+            ),
+            'a line that reads as a task': (
+                'A line.\n  - [x] A done task',
+                "description line '  - [x] A done task' reads as a task line",
+            ),
+            'a line that reads as a heading': (
+                '## A heading',
+                "description line '## A heading' reads as a heading",
+            ),
+            'a line that reads as a comment': (
+                '  <!-- A comment -->',
+                "description line '  <!-- A comment -->' reads as a comment",
+            ),
+            'a carriage return': (
+                'A line.\r',
+                "description line 'A line.\\r' holds a carriage return",
+            ),
+        }
+        for name, (text, message) in refused.items():
+            with t.subTest(name):
+                t.sd.text = text
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sd.lines
+
+                t.assertEqual(str(caught.exception), message)
+
+    @patch.object(SuppliedDescription, 'lines', new_callable=PropertyMock)
+    def test_checked(t, lines: PropertyMock) -> None:
+        with t.subTest('the lines, joined by newlines'):
+            lines.return_value = ['A line.', 'Another line.']
+            ret = t.sd.checked
+            t.assertEqual(ret, 'A line.\nAnother line.')
+
+        with t.subTest('none, where the text holds no line'):
+            lines.return_value = []
+            ret = t.sd.checked
+            t.assertIsNone(ret)
 
 
 class SuppliedFieldsTests(TestCase):

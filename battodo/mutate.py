@@ -1064,6 +1064,19 @@ class SuppliedTitle:
         return self.text
 
 
+class SuppliedDescription:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def checked(self) -> str | None:
+        raise NotImplementedError
+
+    @property
+    def lines(self) -> list[str]:
+        raise NotImplementedError
+
+
 class SuppliedFields:
     """The fields a caller supplies to a write, read before any write.
 
