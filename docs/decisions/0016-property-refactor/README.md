@@ -27,8 +27,8 @@ implementing PRs, not here.
 
 | # | Title | Status |
 | - | ----- | ------ |
-| [0017](0017-property-objects-module-design.md) | Property objects as the module design | Proposed |
-| [0018](0018-schedule-and-timezone-config.md) | Schedule and time zone become configuration | Proposed |
+| [0017](0017-property-objects-module-design.md) | Property objects as the module design | Accepted |
+| [0018](0018-schedule-and-timezone-config.md) | Schedule and time zone become configuration | Accepted |
 
 ## AI assistance disclosure
 

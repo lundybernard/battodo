@@ -1,6 +1,6 @@
 # 0018 — Schedule and time zone become configuration
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09-04
 
 ## Context
