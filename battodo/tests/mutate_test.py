@@ -1425,61 +1425,50 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
-    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_events(
+    def test_completions(
         t,
         ancestries: PropertyMock,
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
         completed_on: PropertyMock,
-        refuse_attributes: MagicMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
         ancestries.return_value = [below, top]
         rescheduled.return_value = date(2026, 8, 15)
         completed_on.return_value = GIVEN_DAY
-        task_completion.return_value.payload = {'delta': sentinel.delta}
-        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
         t.co.attrs = sentinel.attrs
 
-        with t.subTest('one TaskCompleted a completion, deepest first'):
+        with t.subTest('one a task finished, deepest first'):
             recurrence.return_value = None
 
-            ret = t.co.events
+            ret = t.co.completions
 
-            # Each payload carries the day the completion is for. Only
-            # the task the caller named carries the attributes, once the
-            # task has checked that it takes them.
-            payload = {'delta': sentinel.delta, 'completed_on': '2026-08-01'}
-            refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+            # Only the task the caller named carries the attributes.
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None, sentinel.attrs), call(top, None, None)],
-            )
-            t.assertEqual(
-                ret,
                 [
-                    Event('TaskCompleted', 'task/zz01ab', payload),
-                    Event('TaskCompleted', 'task/9o71lx', payload),
+                    call(below, None, GIVEN_DAY, sentinel.attrs),
+                    call(top, None, GIVEN_DAY, None),
                 ],
             )
+            t.assertEqual(ret, [task_completion.return_value] * 2)
 
         with t.subTest('a recurrence takes its next due date'):
             task_completion.reset_mock()
             recurrence.return_value = t.parent
 
-            _ = t.co.events
+            _ = t.co.completions
 
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, sentinel.attrs),
-                    call(top, date(2026, 8, 15), None),
+                    call(below, None, GIVEN_DAY, sentinel.attrs),
+                    call(top, date(2026, 8, 15), GIVEN_DAY, None),
                 ],
             )
 
@@ -1487,15 +1476,44 @@ class CompletionTests(TestCase):
             task_completion.reset_mock()
             recurrence.return_value = t.child
 
-            _ = t.co.events
+            _ = t.co.completions
 
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, date(2026, 8, 15), sentinel.attrs),
-                    call(top, None, None),
+                    call(below, date(2026, 8, 15), GIVEN_DAY, sentinel.attrs),
+                    call(top, None, GIVEN_DAY, None),
                 ],
             )
+
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_events(
+        t,
+        completions: PropertyMock,
+        refuse_attributes: MagicMock,
+    ) -> None:
+        below = MagicMock(spec=['ancestry', 'payload'])
+        below.ancestry = ancestry_of(t.parent, t.child)
+        below.payload = sentinel.below
+        top = MagicMock(spec=['ancestry', 'payload'])
+        top.ancestry = ancestry_of(t.parent)
+        top.payload = sentinel.top
+        completions.return_value = [below, top]
+        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        t.co.attrs = sentinel.attrs
+
+        ret = t.co.events
+
+        # The named task checks that it takes the attributes first.
+        refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+        t.assertEqual(
+            ret,
+            [
+                Event('TaskCompleted', 'task/zz01ab', sentinel.below),
+                Event('TaskCompleted', 'task/9o71lx', sentinel.top),
+            ],
+        )
 
 
 class ScratchTests(TestCase):
@@ -2616,13 +2634,17 @@ class TaskCompletionTests(TestCase):
 
     def setUp(t) -> None:
         t.node = parent_node()
-        t.tc = TaskCompletion(ancestry_of(t.node, path='a path'), None)
+        t.tc = TaskCompletion(
+            ancestry_of(t.node, path='a path'),
+            None,
+            GIVEN_DAY,
+        )
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     def test_payload(t, snapshot: PropertyMock) -> None:
         snapshot.return_value = sentinel.snapshot
 
-        with t.subTest('the done, the task as it was, and its path'):
+        with t.subTest('the done, the task as it was, its path, its day'):
             ret = t.tc.payload
             t.assertEqual(
                 ret,
@@ -2630,6 +2652,7 @@ class TaskCompletionTests(TestCase):
                     'delta': {'done': [False, True]},
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
+                    'completed_on': '2026-08-01',
                 },
             )
 
@@ -2662,6 +2685,7 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                    'completed_on': '2026-08-01',
                 },
             )
 
@@ -2678,6 +2702,7 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'attrs': {'cost': '45.00'},
+                    'completed_on': '2026-08-01',
                 },
             )
 
