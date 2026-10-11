@@ -544,16 +544,27 @@ class CommandsUpdateTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
-        t.args = Namespace()
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(
+            selector='a selector',
+            title='a title',
+            priority='a priority',
+            due='a due date',
+            tags='some tags',
+        )
 
     def test_update(t):
         Commands.update(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.update_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
+                title='a title',
+                priority='a priority',
+                due='a due date',
+                tags='some tags',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

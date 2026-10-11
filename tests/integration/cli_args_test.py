@@ -204,3 +204,28 @@ class CommandInputTests(TestCase):
             )
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+    def test_update(t):
+        listed = t.source / 'yard.md'
+
+        with t.subTest('BATTODO_TITLE does not reach update'):
+            ret = t.run_command(
+                ['update', 'rk01lv', '-p', '4'],
+                {'BATTODO_TITLE': 'Renamed'},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:4] [ID:rk01lv]\n{listed}\n',
+            )
+
+        with t.subTest('BATTODO_DUE does not reach update'):
+            ret = t.run_command(
+                ['update', 'rk01lv', '-p', '5'],
+                {'BATTODO_DUE': STRAY_DATE},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
+            )

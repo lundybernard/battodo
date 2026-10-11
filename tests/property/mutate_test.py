@@ -171,8 +171,14 @@ class UpdateItemTests(TestCase):
         expected = foreseen(updated, before, found, title, options)
 
         with written(before) as directory:
-            conf = configuration(directory, selector=selector, **named)
-            ret = observed(update_item, conf, directory)
+            conf = configuration(directory)
+            ret = observed(
+                update_item,
+                conf,
+                directory,
+                selector=selector,
+                **named,
+            )
 
         t.assertEqual(ret, expected)
 

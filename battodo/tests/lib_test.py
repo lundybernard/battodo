@@ -252,18 +252,18 @@ class UpdateItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.selector = 'a selector'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
-        t.conf.title = 'A task title'
+        t.inputs = {
+            'selector': 'a selector',
+            'priority': '4',
+            'due': '2026-09-01',
+            'title': 'A task title',
+        }
 
     def test_forwarded(t):
-        update_item(t.conf, t.now)
+        update_item(t.conf, t.now, **t.inputs)
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
         t.Update.assert_called_once_with(
@@ -273,21 +273,20 @@ class UpdateItemTests(TestCase):
         )
 
     def test_written(t):
-        update_item(t.conf, t.now)
+        update_item(t.conf, t.now, **t.inputs)
         t.update.write.assert_called_once_with()
 
     def test_result(t):
-        written = update_item(t.conf, t.now)
+        written = update_item(t.conf, t.now, **t.inputs)
         t.assertEqual(written, f'{t.update.entry}\n{t.update.path}')
 
     def test_option_left_off(t):
-        conf = Mock(spec=['view', 'selector', 'tags'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.selector = 'a selector'
-        conf.tags = 'a-tag,another-tag'
-
-        update_item(conf, t.now)
+        update_item(
+            t.conf,
+            t.now,
+            selector='a selector',
+            tags='a-tag,another-tag',
+        )
 
         # An option left off names no change to that field.
         args, kwargs = t.Update.call_args
