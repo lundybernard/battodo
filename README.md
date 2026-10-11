@@ -60,6 +60,24 @@ twice, an empty value, a line break, a segment with no `=` or a key
 outside the grammar is refused before anything is written. A checklist
 item takes no attributes.
 
+### Notes on a task
+
+`note` records a note on an open task between its writes
+([ADR 0023](docs/decisions/0019-event-attributes/0023-note-event.md)).
+
+```bash
+btodo note permit 'Waiting on the office'
+btodo note permit 'Called the office' --attrs 'contact=Sam, ext. 4'
+btodo note permit --attrs 'quote=45.00'
+```
+
+`TEXT` enters as the key `note`, beside the `--attrs` grammar above,
+and is not split. The note goes on a `TaskAnnotated` event on the
+stream of the task, and the task does not change. A task with no
+`[ID:]` is given one first, and the echoed line shows it. A call with
+neither `TEXT` nor `--attrs` is refused before anything is written, as
+is a checklist item. A done task is out of reach.
+
 ### Machine-readable output
 
 `btodo view --format json` writes the same selection to stdout as a
