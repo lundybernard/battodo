@@ -1287,15 +1287,59 @@ class SuppliedAttributes:
 
     @property
     def checked(self) -> dict[str, str]:
-        raise NotImplementedError
+        """Each key against its value, in the order given.
+
+        Raises
+        ------
+        ValueError
+            A key is outside the grammar, a value is empty or holds a
+            line break, or a key is given twice.
+        """
+        checked: dict[str, str] = {}
+        for key, value in self.pairs:
+            if not ATTRIBUTE_KEY.fullmatch(key):
+                raise ValueError(
+                    f'attribute key must be a lowercase identifier, '
+                    f'not {key!r}'
+                )
+            if not value:
+                raise ValueError(f'attribute {key!r} must hold a value')
+            if '\n' in value or '\r' in value:
+                raise ValueError(
+                    f'attribute {key!r} must hold no line break, not {value!r}'
+                )
+            if key in checked:
+                raise ValueError(f'attribute {key!r} is given twice')
+            checked[key] = value
+        return checked
 
     @property
     def pairs(self) -> list[tuple[str, str]]:
-        raise NotImplementedError
+        """Each segment split at its first `=`, then the note.
+
+        Raises
+        ------
+        ValueError
+            A segment holds no `=`.
+        """
+        pairs = []
+        for segment in self.segments:
+            key, sign, value = segment.partition('=')
+            if not sign:
+                raise ValueError(
+                    f'attribute must read key=value, not {segment!r}'
+                )
+            pairs.append((key, value))
+        if self.note is not None:
+            pairs.append((NOTE_KEY, self.note))
+        return pairs
 
     @property
     def segments(self) -> list[str]:
-        raise NotImplementedError
+        """The `key=value` segments of `text`, or none without it."""
+        if self.text is None:
+            return []
+        return ATTRIBUTE_SEPARATOR.split(self.text)
 
 
 class Event(NamedTuple):
