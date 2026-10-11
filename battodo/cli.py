@@ -99,10 +99,11 @@ def argparser():
         help=MESSAGES['view.help'],
     )
     view.set_defaults(func=Commands.view)
-    # Arguments read back through the Configuration are named for their
-    # dotted config path: batconf looks up `{path}.{key}` as one flat
-    # attribute (batconf.sources.argparse.NamespaceConfig), never the
-    # bare dest. Arguments read straight off `args` stay unprefixed.
+    # A config option takes its dotted config path as the dest, because
+    # batconf looks up `{path}.{key}` as one flat attribute. It takes no
+    # default: batconf takes the first truthy source, so a default
+    # blocks the environment and the file. A command input takes a bare
+    # dest, and the command passes it beside the configuration.
     view.add_argument(
         '--all',
         dest='show_all',

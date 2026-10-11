@@ -1,16 +1,14 @@
 """The functions a UI calls to do one whole job.
 
-Each takes the resolved configuration and returns finished output, so
-a UI holds only its own input and display. A script imports the same
-functions.
+Each takes the resolved configuration, then the command inputs as
+keyword arguments, and returns finished output, so a UI holds only its
+own input and display. A keyword of None means that the input was not
+given. A script imports the same functions.
 
 Every code path a UI executes runs through this module. The names its
 own input handling needs are re-exported here: the zone of the clock,
-the periods, and the count check. Startup wiring stays out: a UI reads
-its logging configuration from `logconf`.
-
-The interface is provisional: what a function takes, a configuration
-or plain arguments, is not settled.
+the periods, the formats, and the count check. Startup wiring stays
+out: a UI reads its logging configuration from `logconf`.
 """
 
 from datetime import datetime

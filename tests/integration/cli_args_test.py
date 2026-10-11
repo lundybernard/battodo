@@ -1,9 +1,10 @@
-"""Contract test for the seam between the parser and the configuration.
+"""Contract tests for the seam between the parser and the configuration.
 
-Parsed CLI arguments must resolve through the real `Configuration`.
-The contract only exists when the real parser and the real
-`get_config` meet, so both are real here; the config file is the one
-dependency stood in for.
+A config option resolves through the real `Configuration`. A command
+input passes beside it, so no environment variable and no config file
+reaches it. The contract only exists when the real parser and the real
+`get_config` meet, so both are real here. The config file is stood in
+for, unless a test writes one.
 """
 
 from contextlib import redirect_stdout
@@ -46,7 +47,7 @@ class NullFileSource:
 
 
 class CliArgsResolutionTests(TestCase):
-    """Parsed CLI arguments must resolve through the real Configuration.
+    """Parsed config options must resolve through the real Configuration.
 
     Cross-module by necessity: the contract under test is the seam
     between argparse dests and batconf's dotted config paths, which only
