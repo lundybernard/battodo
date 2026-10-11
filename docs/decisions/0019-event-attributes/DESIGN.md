@@ -28,6 +28,10 @@ btodo history <selector> [--format text|json]
 `--attrs` takes every attribute in one string. `--note TEXT` enters the
 map as `note=TEXT`.
 
+**Inputs.** The selector, `--date`, `--attrs` and `--note` are command
+inputs, not configuration. The CLI passes them to the command beside
+`conf`, under the convention of ADR 0024.
+
 ## Event attributes
 
 **Grammar.** `--attrs` takes one string of `key=value` segments:
