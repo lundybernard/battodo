@@ -25,13 +25,13 @@ them ([R4](REQUIREMENTS.md)).
 ## Decision
 
 **A task's description is an item field in the journal, separate from
-completion attributes.** `add` sets it and `update` changes it. Each
-write records it on the task's own event stream, as the title is
-recorded. The renderer writes it as the description lines the parser
-already reads.
+event attributes.** `add` sets it and `update` changes it. Each write
+records it on the task's own event stream, as the title is recorded.
+The renderer writes it as the description lines the parser already
+reads. A subtask may carry a description; a checklist item may not.
 
 [DESIGN.md](DESIGN.md#task-description) specifies the snapshot key, the
-delta, and the render.
+delta, the refusals, and the render.
 
 ## Options considered
 
@@ -79,7 +79,8 @@ different file.
 
 - The snapshot gains a description key, and the `update` delta carries
   a changed description beside `title` (DESIGN.md).
-- `add` and `update` gain a description option.
+- `add` and `update` gain a description option, and an empty
+  description clears it. `show` gains a description row and key.
 - The genesis import at the flip carries the existing description
   lines into the journal
   ([After the flip](README.md#after-the-flip)), so the flip loses no

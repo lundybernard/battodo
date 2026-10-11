@@ -156,7 +156,7 @@ whether `note` refuses a call with neither text nor attributes.
 
 **Snapshot.** The snapshot gains `description`: the text of the task's
 description lines, one line of text per description line, joined by
-newlines. The key
+newlines. btodo stores each line stripped, without its indent. The key
 is absent when the task has no description.
 
 **Writes.** `add --description` sets it. Like the title, it does not
@@ -164,15 +164,31 @@ appear in an `add` delta; the post-state snapshot carries it.
 `update --description` changes it, and `TaskUpdated.delta.description`
 records the change as `[before, after]`. It is a pseudo-key on the same
 footing as `title`: not a field, but a value a reverse-applier needs.
+`update --description ''` clears it, and the delta records the change
+as `[before, null]`.
 
-**Render.** The renderer writes the description as description lines
-under the task line, in the form the parser already reads
+**Refusals.** `add` and `update` refuse a description before any write
+when one of its lines:
+
+- is blank
+- matches the checkbox pattern
+- starts with `##` and a space, or with `<!--`
+- holds `\r`
+
+**Scope.** A subtask may carry a description. A checklist item may not.
+
+**Render.** The renderer writes the description lines directly under
+the task line and before its children, at the task's indent plus the
+field indent, in the form the parser already reads
 ([DESIGN.md ## Parser](../0000-project-bootstrap/DESIGN.md#parser)).
+
+**Show.** `show` gains a description row, and `show --format json` a
+`description` key.
 
 **Recurrence.** A repeating task keeps its description lines when it is
 rescheduled; `complete` drops the children of a rescheduled task, not
-its description lines. The description survives each completion unchanged, and no
-completion writes to it.
+its description lines. The description survives each completion
+unchanged, and no completion writes to it.
 
 ## History command
 
