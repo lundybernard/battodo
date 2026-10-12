@@ -11,7 +11,7 @@ full task snapshot, so a later authority flip replays state without
 having observed each change.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from fcntl import LOCK_EX, LOCK_UN, flock
 from functools import cached_property
 from json import dumps, loads
@@ -40,7 +40,7 @@ def new_task_id() -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class Journal:

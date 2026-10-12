@@ -94,9 +94,8 @@ class ConfigFileSearchTests(TestCase):
 class TomlBackendTests(TestCase):
     """The config file is read for real: no mocked TomlSource.
 
-    Parsing TOML needs a backend batconf only declares under its
-    optional `toml` extra on python < 3.11, and the failure is lazy —
-    importing TomlSource succeeds, only the first read fails. Mocked
+    TomlSource imports its TOML parser lazily: importing TomlSource
+    succeeds, and a missing parser fails only at the first read. Mocked
     tests cannot see that, so this one parses an actual file.
     """
 

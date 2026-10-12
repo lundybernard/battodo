@@ -12,7 +12,7 @@ The cases began as the selection slice's oracle and outlived it (R4).
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
 from json import loads
 from os import environ
@@ -33,7 +33,7 @@ from .strategies import document, grammar
 
 # Wednesday mid-morning: the work window is open and the chores window
 # is shut.
-NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 5, 10, 30, tzinfo=UTC)
 TODAY = NOW.date()
 # The one list a generated source holds. A named category no hour shuts
 # keeps a case independent of the clock.

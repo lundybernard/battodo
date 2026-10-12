@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, patch
 
@@ -175,7 +175,7 @@ class ViewTests(TestCase):
         t.get_terminal_size.return_value.columns = 80
 
         t.selection = Mock(spec=['now', 'today', 'active', 'categories'])
-        t.selection.now = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+        t.selection.now = datetime(2026, 8, 5, 10, 30, tzinfo=UTC)
         t.selection.today = TODAY
         t.selection.active = {'work', 'study'}
         t.selection.categories = [category('work')]

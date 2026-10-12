@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
@@ -46,7 +46,7 @@ class ItemTests(TestCase):
 
         ret = Item.from_config(
             conf,
-            datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc),
+            datetime(2026, 8, 5, 10, 30, tzinfo=UTC),
             selector='a selector',
         )
 

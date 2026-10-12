@@ -5,7 +5,7 @@ real directory holding a real `completed.md`. This layer asserts return
 values; interaction checks stay in the isolation tests beside the code.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from json import loads
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,7 +21,7 @@ from battodo.completed import (
 
 # Wednesday. The week reaches back to 2026-07-30, the month to
 # 2026-08-01.
-NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 5, 10, 30, tzinfo=UTC)
 LOG = """\
 # Completed Tasks
 
