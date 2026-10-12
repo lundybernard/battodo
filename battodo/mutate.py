@@ -887,7 +887,7 @@ class Completion:
             stream = self.ids[completion.ancestry.stream.raw_index]
             payload = completion.payload
             events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
-        return events
+        return [*self.assignments, *events]
 
     @property
     def completions(self) -> list['TaskCompletion']:
@@ -905,6 +905,23 @@ class Completion:
             completion = TaskCompletion(ancestry, due, day, attrs)
             completions.append(completion)
         return completions
+
+    @property
+    def assignments(self) -> list['Event']:
+        """The `TaskUpdated` of each stream task given a new id.
+
+        A block that goes keeps no line to carry an id, so it records
+        none.
+        """
+        streams = {
+            ancestry.stream.raw_index: ancestry.stream
+            for ancestry in self.ancestries
+        }
+        return [
+            IdAssignment(streams[index], fields['ID']).event
+            for index, fields in self.stamps.items()
+                if not streams[index].task_id
+        ]  # fmt: skip
 
 
 class Scratch:
@@ -1036,7 +1053,21 @@ class Scratch:
             payload['checklist_item'] = True
         if self.attrs:
             payload['attrs'] = self.attrs
-        return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
+        event = Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)
+        return [self.stamp, event] if self.stamped else [event]
+
+    @property
+    def stamp(self) -> 'Event':
+        """The `TaskUpdated` that records the stream task's new id."""
+        return IdAssignment(self.stream, self.stream_id).event
+
+    @property
+    def stamped(self) -> bool:
+        """Whether the stream task of a checklist item is given an id.
+
+        A task that is its own stream loses its line, so no id stays.
+        """
+        return self.stream is not self.node and not self.stream.task_id
 
 
 class Annotation:

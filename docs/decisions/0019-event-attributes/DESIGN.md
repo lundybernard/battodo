@@ -122,10 +122,15 @@ the event of the task the user named. Each ancestor event that the
 cascade writes carries `completed_on` and no `attrs`.
 
 **Checklist items.** A checklist item carries no `[ID:]`, so its events
-go on the stream of its nearest ancestor that has one, with the item
-named in the event's `ancestry`. A checklist item takes no attributes.
-Its events carry a checklist marker, so a reader tells them apart from
-the ancestor's own events.
+go on the stream of its nearest ancestor that can carry one, with the
+item named in the event's `ancestry`. An ancestor without an `[ID:]`
+gets its id stamped first, on an event of its own, as a subtask add
+stamps its parent. A completion records every id that it stamps the same
+way: on the owner of a checklist item, on a subtask that it checks off,
+and on a recurrence that it reschedules. A block that a completion
+removes keeps no id, so the completion writes no stamp for it. A
+checklist item takes no attributes. Its events carry a checklist marker,
+so a reader tells them apart from the ancestor's own events.
 
 **Completed log.** Completion attributes appear in the completed log.
 The log is a render of the journal: its records derive from journal
