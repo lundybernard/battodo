@@ -3,6 +3,9 @@
 `TaskHistory` resolves a selector against the journal, not the lists,
 so a finished task stays in reach. `HistoryEntry` holds one entry of
 the history.
+
+Each form is a view that reads the history through its attributes:
+`HistoryView` lays it out as text, and `HistoryJsonView` as JSON.
 """
 
 from datetime import date, datetime, tzinfo
@@ -173,3 +176,89 @@ class HistoryEntry:
     def attrs(self) -> dict[str, str]:
         """The attributes, in recorded order. Absent reads as none."""
         return self.event['payload'].get('attrs', {})
+
+
+class HistoryView:
+    """A history rendered for a terminal: a header, then the entries."""
+
+    def __init__(self, history: TaskHistory) -> None:
+        self.history = history
+
+    @property
+    def text(self) -> str:
+        """The header, then each entry. Without a trailing newline."""
+        raise NotImplementedError
+
+    @property
+    def header(self) -> str:
+        """The title of the task and its `[ID:]`, or the `[ID:]` alone."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list['HistoryEntryView']:
+        """The entries of the history, each laid out as text."""
+        raise NotImplementedError
+
+
+class HistoryEntryView:
+    """One entry of a history: its day and kind, then its attributes."""
+
+    def __init__(self, entry: HistoryEntry) -> None:
+        self.entry = entry
+
+    @property
+    def lines(self) -> list[str]:
+        """The day and the label, then one `key=value` line each."""
+        raise NotImplementedError
+
+    @property
+    def label(self) -> str:
+        """The kind. The checklist marker labels a checklist item's."""
+        raise NotImplementedError
+
+
+class HistoryJsonView:
+    """A history laid out as JSON, for an agent to read."""
+
+    def __init__(self, history: TaskHistory) -> None:
+        self.history = history
+
+    @property
+    def json(self) -> str:
+        """`data` as a JSON document, indented for a person to read too.
+
+        The schema is a contract for agents; see `data` for its shape.
+        """
+        raise NotImplementedError
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The machine-readable form of the history.
+
+        Shaped as::
+
+            {"id": "ab12cd", "title": "Renew the parking permit",
+             "entries": [{"kind": "TaskCompleted",
+                          "checklist_item": false, "day": "2026-09-30",
+                          "attrs": {"cost": "45.00"}}]}
+
+        `title` is null when no event of the task's own records one.
+        """
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list['HistoryEntryJsonView']:
+        """The entries of the history, each laid out as JSON."""
+        raise NotImplementedError
+
+
+class HistoryEntryJsonView:
+    """One entry of a history laid out as JSON."""
+
+    def __init__(self, entry: HistoryEntry) -> None:
+        self.entry = entry
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The entry as `HistoryJsonView.data` records it."""
+        raise NotImplementedError

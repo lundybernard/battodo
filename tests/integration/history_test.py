@@ -5,6 +5,7 @@ layer asserts state; interaction checks stay in the isolation tests
 beside the code.
 """
 
+import json
 from datetime import date, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,7 +14,12 @@ from unittest import TestCase
 from unittest.mock import Mock
 
 from battodo.conf import TZ
-from battodo.history import HistoryEntry, TaskHistory
+from battodo.history import (
+    HistoryEntry,
+    HistoryJsonView,
+    HistoryView,
+    TaskHistory,
+)
 from battodo.journal import Journal
 
 NOW = datetime(2026, 10, 5, 10, 30, tzinfo=TZ)
@@ -107,6 +113,47 @@ HISTORY = (
         '2026-08-04T16:00:00+00:00',
     ),
 )
+
+# The history of task/ab12cd, as each form lays it out.
+PERMIT_TEXT = """Renew the parking permit [ID:ab12cd]
+  2026-10-01  TaskAnnotated
+    note=Sticker on the car
+  2026-10-01  TaskCompleted (checklist item)
+  2026-09-30  TaskCompleted
+    cost=45.00
+    note=Renewed online
+  2026-09-02  TaskUpdated
+    note=Renamed"""
+PERMIT_DATA = {
+    'id': 'ab12cd',
+    'title': 'Renew the parking permit',
+    'entries': [
+        {
+            'kind': 'TaskAnnotated',
+            'checklist_item': False,
+            'day': '2026-10-01',
+            'attrs': {'note': 'Sticker on the car'},
+        },
+        {
+            'kind': 'TaskCompleted',
+            'checklist_item': True,
+            'day': '2026-10-01',
+            'attrs': {},
+        },
+        {
+            'kind': 'TaskCompleted',
+            'checklist_item': False,
+            'day': '2026-09-30',
+            'attrs': {'cost': '45.00', 'note': 'Renewed online'},
+        },
+        {
+            'kind': 'TaskUpdated',
+            'checklist_item': False,
+            'day': '2026-09-02',
+            'attrs': {'note': 'Renamed'},
+        },
+    ],
+}
 
 
 class TaskHistoryTests(TestCase):
@@ -221,6 +268,54 @@ class TaskHistoryTests(TestCase):
             with t.subTest(name):
                 ret = history_of(t.dir, selector).entries
                 t.assertEqual([described(entry) for entry in ret], expected)
+
+
+class HistoryViewTests(TestCase):
+    """Contract tests for battodo.history.HistoryView.text."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.dir = history_source(t)
+
+    def test_text(t) -> None:
+        cases = {
+            'the header, then each entry and its attributes': (
+                'ab12cd',
+                PERMIT_TEXT,
+            ),
+            'a stream with no entries is its header': (
+                'qq11rr',
+                'Sweep the deck [ID:qq11rr]',
+            ),
+            'no title recorded: the id alone': ('dd44ee', '[ID:dd44ee]'),
+        }
+        for name, (selector, expected) in cases.items():
+            with t.subTest(name):
+                ret = HistoryView(history_of(t.dir, selector)).text
+                t.assertEqual(ret, expected)
+
+
+class HistoryJsonViewTests(TestCase):
+    """Contract tests for battodo.history.HistoryJsonView.json."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.dir = history_source(t)
+
+    def test_json(t) -> None:
+        cases = {
+            'the document the text form lays out': ('ab12cd', PERMIT_DATA),
+            'no title recorded: null': (
+                'dd44ee',
+                {'id': 'dd44ee', 'title': None, 'entries': []},
+            ),
+        }
+        for name, (selector, expected) in cases.items():
+            with t.subTest(name):
+                ret = HistoryJsonView(history_of(t.dir, selector)).json
+                t.assertEqual(json.loads(ret), expected)
 
 
 def history_source(t: TestCase) -> Path:

@@ -4,7 +4,14 @@ from typing import Any
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
-from ..history import HistoryEntry, TaskHistory
+from ..history import (
+    HistoryEntry,
+    HistoryEntryJsonView,
+    HistoryEntryView,
+    HistoryJsonView,
+    HistoryView,
+    TaskHistory,
+)
 
 SRC = 'battodo.history'
 # A zone ten hours behind UTC, which reads from no disk.
@@ -250,3 +257,171 @@ class HistoryEntryTests(TestCase):
             t.payload['attrs'] = {'k': 'v', 'a': 'b'}
             ret = t.he.attrs
             t.assertEqual(list(ret.items()), [('k', 'v'), ('a', 'b')])
+
+
+class HistoryViewTests(TestCase):
+    """Unit tests for battodo.history.HistoryView."""
+
+    def setUp(t) -> None:
+        t.history = Mock(spec=['task_id', 'title', 'entries'])
+        t.history.task_id = 'ab12cd'
+        t.history.title = 'A task title'
+        t.hv = HistoryView(t.history)
+
+    @patch.object(HistoryView, 'entries', new_callable=PropertyMock)
+    @patch.object(HistoryView, 'header', new_callable=PropertyMock)
+    def test_text(t, header: PropertyMock, entries: PropertyMock) -> None:
+        header.return_value = 'A header'
+
+        with t.subTest('the header, then the lines of each entry'):
+            entries.return_value = [
+                Mock(spec=['lines'], lines=['  a day', '    k=v']),
+                Mock(spec=['lines'], lines=['  another day']),
+            ]
+
+            ret = t.hv.text
+
+            t.assertEqual(ret, 'A header\n  a day\n    k=v\n  another day')
+
+        with t.subTest('a history with no entries is its header'):
+            entries.return_value = []
+            ret = t.hv.text
+            t.assertEqual(ret, 'A header')
+
+    def test_header(t) -> None:
+        with t.subTest('the title, then the id'):
+            ret = t.hv.header
+            t.assertEqual(ret, 'A task title [ID:ab12cd]')
+
+        with t.subTest('the id alone where no title is recorded'):
+            t.history.title = None
+            ret = t.hv.header
+            t.assertEqual(ret, '[ID:ab12cd]')
+
+    @patch(f'{SRC}.HistoryEntryView', autospec=True)
+    def test_entries(t, history_entry_view: MagicMock) -> None:
+        t.history.entries = [sentinel.first, sentinel.second]
+        history_entry_view.side_effect = [sentinel.shown, sentinel.next]
+
+        ret = t.hv.entries
+
+        t.assertEqual(ret, [sentinel.shown, sentinel.next])
+        history_entry_view.assert_has_calls(
+            [call(sentinel.first), call(sentinel.second)]
+        )
+
+
+class HistoryEntryViewTests(TestCase):
+    """Unit tests for battodo.history.HistoryEntryView."""
+
+    def setUp(t) -> None:
+        t.entry = Mock(spec=['kind', 'checklist_item', 'day', 'attrs'])
+        t.entry.kind = 'TaskCompleted'
+        t.entry.checklist_item = False
+        t.entry.day = date(2026, 9, 30)
+        t.entry.attrs = {}
+        t.hev = HistoryEntryView(t.entry)
+
+    @patch.object(HistoryEntryView, 'label', new_callable=PropertyMock)
+    def test_lines(t, label: PropertyMock) -> None:
+        label.return_value = 'A label'
+
+        with t.subTest('the day and the label'):
+            ret = t.hev.lines
+            t.assertEqual(ret, ['  2026-09-30  A label'])
+
+        with t.subTest('then each attribute, in recorded order'):
+            t.entry.attrs = {'place': 'Main St, Suite 4', 'cost': '45.00'}
+
+            ret = t.hev.lines
+
+            t.assertEqual(
+                ret,
+                [
+                    '  2026-09-30  A label',
+                    '    place=Main St, Suite 4',
+                    '    cost=45.00',
+                ],
+            )
+
+    def test_label(t) -> None:
+        with t.subTest('the kind'):
+            ret = t.hev.label
+            t.assertEqual(ret, 'TaskCompleted')
+
+        with t.subTest('marked on the event of a checklist item'):
+            t.entry.checklist_item = True
+            ret = t.hev.label
+            t.assertEqual(ret, 'TaskCompleted (checklist item)')
+
+
+class HistoryJsonViewTests(TestCase):
+    """Unit tests for battodo.history.HistoryJsonView."""
+
+    def setUp(t) -> None:
+        t.history = Mock(spec=['task_id', 'title', 'entries'])
+        t.history.task_id = 'ab12cd'
+        t.history.title = 'A task title'
+        t.hjv = HistoryJsonView(t.history)
+
+    @patch.object(HistoryJsonView, 'data', new_callable=PropertyMock)
+    def test_json(t, data: PropertyMock) -> None:
+        data.return_value = {'id': 'ab12cd', 'entries': []}
+        ret = t.hjv.json
+        t.assertEqual(ret, '{\n  "id": "ab12cd",\n  "entries": []\n}')
+
+    @patch.object(HistoryJsonView, 'entries', new_callable=PropertyMock)
+    def test_data(t, entries: PropertyMock) -> None:
+        entries.return_value = [Mock(spec=['data'], data={'k': 'v'})]
+
+        with t.subTest('the id, the title and the entries'):
+            ret = t.hjv.data
+            t.assertEqual(
+                ret,
+                {
+                    'id': 'ab12cd',
+                    'title': 'A task title',
+                    'entries': [{'k': 'v'}],
+                },
+            )
+
+        with t.subTest('a title that is not recorded is null'):
+            t.history.title = None
+            ret = t.hjv.data
+            t.assertIsNone(ret['title'])
+
+    @patch(f'{SRC}.HistoryEntryJsonView', autospec=True)
+    def test_entries(t, history_entry_json_view: MagicMock) -> None:
+        t.history.entries = [sentinel.first, sentinel.second]
+        history_entry_json_view.side_effect = [sentinel.shown, sentinel.next]
+
+        ret = t.hjv.entries
+
+        t.assertEqual(ret, [sentinel.shown, sentinel.next])
+        history_entry_json_view.assert_has_calls(
+            [call(sentinel.first), call(sentinel.second)]
+        )
+
+
+class HistoryEntryJsonViewTests(TestCase):
+    """Unit tests for battodo.history.HistoryEntryJsonView."""
+
+    def setUp(t) -> None:
+        t.entry = Mock(spec=['kind', 'checklist_item', 'day', 'attrs'])
+        t.entry.kind = 'TaskCompleted'
+        t.entry.checklist_item = True
+        t.entry.day = date(2026, 9, 30)
+        t.entry.attrs = {'cost': '45.00'}
+        t.hejv = HistoryEntryJsonView(t.entry)
+
+    def test_data(t) -> None:
+        ret = t.hejv.data
+        t.assertEqual(
+            ret,
+            {
+                'kind': 'TaskCompleted',
+                'checklist_item': True,
+                'day': '2026-09-30',
+                'attrs': {'cost': '45.00'},
+            },
+        )

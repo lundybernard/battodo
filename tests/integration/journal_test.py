@@ -11,7 +11,10 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.journal import SCHEMA_VERSION, Journal
+from battodo.journal import (
+    SCHEMA_VERSION,
+    Journal,
+)
 
 SRC = 'battodo.journal'
 
