@@ -93,6 +93,7 @@ OWNER_LIST = (
 )
 # The owner as the file states it before a write.
 OWNER_SNAPSHOT = {
+    'list': 'an-owner-list',
     'title': 'A checklist owner with no id',
     'done': False,
     'fields': {'P': '3'},
@@ -250,6 +251,7 @@ class AdditionTests(TestCase):
                             'ID': [None, task_id],
                         },
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A new task',
                             'done': False,
                             'fields': {
@@ -463,6 +465,7 @@ class SubtaskAdditionTests(TestCase):
                     {
                         'delta': {'LOE': [None, '2'], 'ID': [None, child_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A new subtask',
                             'done': False,
                             'fields': {'LOE': '2', 'ID': child_id},
@@ -496,6 +499,7 @@ class SubtaskAdditionTests(TestCase):
                     {
                         'delta': {'ID': [None, parent_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A task with no id',
                             'done': False,
                             'fields': {'P': '2'},
@@ -663,6 +667,7 @@ class UpdateTests(TestCase):
                                 'title': ['A task', 'A renamed task'],
                             },
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -882,6 +887,7 @@ class CompletionTests(TestCase):
                             'DUE': ['2026-08-05', '2026-08-15'],
                         },
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A recurring task',
                             'done': False,
                             'fields': {
@@ -1037,6 +1043,7 @@ class ScratchTests(TestCase):
                         {
                             'delta': {'removed': [False, True]},
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -1177,6 +1184,7 @@ class AnnotationTests(TestCase):
                         'task/9o71lx',
                         {
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -1207,6 +1215,7 @@ class AnnotationTests(TestCase):
                     {
                         'delta': {'ID': [None, task_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A task with no id',
                             'done': False,
                             'fields': {'P': '2'},
@@ -1286,6 +1295,7 @@ class BackfillTests(TestCase):
                 {
                     'delta': {'ADDED': [None, '2026-08-08']},
                     'snapshot': {
+                        'list': 'a-list',
                         'title': 'A task with no id',
                         'done': False,
                         'fields': {'P': '2'},

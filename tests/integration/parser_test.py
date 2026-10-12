@@ -121,6 +121,11 @@ class TaskNodeTests(TestCase):
             ret = child.snapshot
             t.assertEqual(ret['description'], 'A line of the child.')
 
+    def test_listed_snapshot(t) -> None:
+        ret = t.tk.listed_snapshot('work')
+        # The snapshot, and the list that holds the task.
+        t.assertEqual(ret, {**t.tk.snapshot, 'list': 'work'})
+
 
 class TodoDocumentTests(TestCase):
     """Contract tests for battodo.parser.TodoDocument, against a real list."""

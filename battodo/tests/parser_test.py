@@ -229,6 +229,12 @@ class TaskNodeTests(TestCase):
             ret = t.tk.snapshot
             t.assertEqual(ret['description'], 'A description.')
 
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_listed_snapshot(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = {'title': 'A task'}
+        ret = t.tk.listed_snapshot('a-list')
+        t.assertEqual(ret, {'title': 'A task', 'list': 'a-list'})
+
     def test_schema_fields(t) -> None:
         t.tk.fields = {
             'TAGS': 'a-tag',

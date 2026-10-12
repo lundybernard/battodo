@@ -286,14 +286,16 @@ class AdditionTests(TestCase):
         written.return_value = sentinel.written
         t.ad.task_id = 'zz01ab'
         t.ad.attrs = sentinel.attrs
+        t.ad.path = LIST_PATH
 
         ret = t.ad.events
 
         # One TaskAdded, on the stream of the new task, which carries
-        # the attributes.
+        # the attributes and names the list.
         added_line.assert_called_once_with(
             'the block as written',
             sentinel.written,
+            'a-list',
             sentinel.attrs,
         )
         t.assertEqual(
@@ -647,14 +649,16 @@ class SubtaskAdditionTests(TestCase):
         t.sa.task_id = 'cc03ef'
         t.sa.parent_id = '9o71lx'
         t.sa.attrs = sentinel.attrs
+        t.sa.path = LIST_PATH
 
         with t.subTest('one TaskAdded, which names the parent'):
             ret = t.sa.events
 
-            # The TaskAdded carries the attributes.
+            # The TaskAdded carries the attributes and names the list.
             added_line.assert_called_once_with(
                 'the block as written',
                 sentinel.written,
+                'a-list',
                 sentinel.attrs,
             )
             t.assertEqual(
@@ -681,10 +685,13 @@ class SubtaskAdditionTests(TestCase):
     def test_stamp(t, node: PropertyMock, id_assignment: MagicMock) -> None:
         node.return_value = bare_node()
         t.sa.parent_id = 'pp02cd'
+        t.sa.path = LIST_PATH
 
         ret = t.sa.stamp
 
-        id_assignment.assert_called_once_with(node.return_value, 'pp02cd')
+        id_assignment.assert_called_once_with(
+            node.return_value, 'pp02cd', 'a-list'
+        )
         t.assertIs(ret, id_assignment.return_value.event)
 
 
@@ -986,7 +993,7 @@ class UpdateTests(TestCase):
             [Event('TaskUpdated', 'task/9o71lx', sentinel.payload)],
         )
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(Update, 'ancestry', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'delta', new_callable=PropertyMock)
@@ -995,7 +1002,7 @@ class UpdateTests(TestCase):
         delta: PropertyMock,
         node: PropertyMock,
         ancestry: PropertyMock,
-        snapshot: PropertyMock,
+        snapshot: MagicMock,
     ) -> None:
         delta.return_value = sentinel.delta
         node.return_value = t.parent
@@ -1005,6 +1012,8 @@ class UpdateTests(TestCase):
 
         with t.subTest('the delta, and the state it changed from'):
             ret = t.up.payload
+
+            snapshot.assert_called_once_with(t.parent, 'a-list')
             t.assertEqual(
                 ret,
                 {'delta': sentinel.delta, 'snapshot': sentinel.snapshot},
@@ -1449,8 +1458,8 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, GIVEN_DAY, sentinel.attrs),
-                    call(top, None, GIVEN_DAY, None),
+                    call(below, None, GIVEN_DAY, 'a-list', sentinel.attrs),
+                    call(top, None, GIVEN_DAY, 'a-list', None),
                 ],
             )
             t.assertEqual(ret, [task_completion.return_value] * 2)
@@ -1464,8 +1473,8 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, GIVEN_DAY, sentinel.attrs),
-                    call(top, date(2026, 8, 15), GIVEN_DAY, None),
+                    call(below, None, GIVEN_DAY, 'a-list', sentinel.attrs),
+                    call(top, date(2026, 8, 15), GIVEN_DAY, 'a-list', None),
                 ],
             )
 
@@ -1478,8 +1487,14 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, date(2026, 8, 15), GIVEN_DAY, sentinel.attrs),
-                    call(top, None, GIVEN_DAY, None),
+                    call(
+                        below,
+                        date(2026, 8, 15),
+                        GIVEN_DAY,
+                        'a-list',
+                        sentinel.attrs,
+                    ),
+                    call(top, None, GIVEN_DAY, 'a-list', None),
                 ],
             )
 
@@ -1552,7 +1567,7 @@ class CompletionTests(TestCase):
 
             ret = t.co.assignments
 
-            id_assignment.assert_called_once_with(bare, 'zz01ab')
+            id_assignment.assert_called_once_with(bare, 'zz01ab', 'a-list')
             t.assertEqual(ret, [event])
 
         with t.subTest('a stream whose id is empty counts as none'):
@@ -1566,7 +1581,7 @@ class CompletionTests(TestCase):
 
             ret = t.co.assignments
 
-            id_assignment.assert_called_once_with(empty, 'ee04gh')
+            id_assignment.assert_called_once_with(empty, 'ee04gh', 'a-list')
             t.assertEqual(ret, [event])
 
         with t.subTest('a stream that keeps its id: none'):
@@ -1588,7 +1603,7 @@ class CompletionTests(TestCase):
 
             ret = t.co.assignments
 
-            id_assignment.assert_called_once_with(bare, 'rr01ab')
+            id_assignment.assert_called_once_with(bare, 'rr01ab', 'a-list')
             t.assertEqual(ret, [event])
 
         with t.subTest('a finished block that goes: none'):
@@ -1615,7 +1630,10 @@ class CompletionTests(TestCase):
 
             t.assertEqual(
                 id_assignment.call_args_list,
-                [call(t.child, 'cc03ef'), call(bare, 'pp02cd')],
+                [
+                    call(t.child, 'cc03ef', 'a-list'),
+                    call(bare, 'pp02cd', 'a-list'),
+                ],
             )
             t.assertEqual(ret, [event, event])
 
@@ -1777,7 +1795,7 @@ class ScratchTests(TestCase):
         ret = t.sc.status
         t.assertEqual(ret, 'SCRATCHED')
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Scratch, 'stamped', new_callable=PropertyMock)
     @patch.object(Scratch, 'stamp', new_callable=PropertyMock)
@@ -1790,7 +1808,7 @@ class ScratchTests(TestCase):
         stamp: PropertyMock,
         stamped: PropertyMock,
         refuse_attributes: MagicMock,
-        snapshot: PropertyMock,
+        snapshot: MagicMock,
     ) -> None:
         stream_id.return_value = '9o71lx'
         stamp.return_value = sentinel.stamp
@@ -1801,6 +1819,8 @@ class ScratchTests(TestCase):
 
         with t.subTest('one TaskScratched, on the stream of its task'):
             ret = t.sc.events
+
+            snapshot.assert_called_once_with(t.task.node, 'a-list')
             t.assertEqual(
                 ret,
                 [
@@ -1878,7 +1898,7 @@ class ScratchTests(TestCase):
 
         ret = t.sc.stamp
 
-        id_assignment.assert_called_once_with(bare, 'zz01ab')
+        id_assignment.assert_called_once_with(bare, 'zz01ab', 'a-list')
         t.assertIs(ret, id_assignment.return_value.event)
 
     @patch.object(Scratch, 'stream', new_callable=PropertyMock)
@@ -2132,17 +2152,17 @@ class AnnotationTests(TestCase):
 
         ret = t.an.stamp
 
-        id_assignment.assert_called_once_with(t.parent, 'pp02cd')
+        id_assignment.assert_called_once_with(t.parent, 'pp02cd', 'a-list')
         t.assertIs(ret, id_assignment.return_value.event)
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(Annotation, 'ancestry', new_callable=PropertyMock)
     @patch.object(Annotation, 'nested', new_callable=PropertyMock)
     def test_payload(
         t,
         nested: PropertyMock,
         ancestry: PropertyMock,
-        snapshot: PropertyMock,
+        snapshot: MagicMock,
     ) -> None:
         nested.return_value = False
         ancestry.return_value = MagicMock(spec=['path'])
@@ -2151,6 +2171,8 @@ class AnnotationTests(TestCase):
 
         with t.subTest('the state of the task and the attributes, no delta'):
             ret = t.an.payload
+
+            snapshot.assert_called_once_with(t.parent, 'a-list')
             t.assertEqual(
                 ret,
                 {'snapshot': sentinel.snapshot, 'attrs': {'note': 'a note'}},
@@ -2763,15 +2785,22 @@ class AddedLineTests(TestCase):
     """Unit tests for battodo.mutate.AddedLine."""
 
     def setUp(t) -> None:
-        t.al = AddedLine('the line as written', {'P': '3', 'ID': 'zz01ab'})
+        t.al = AddedLine(
+            'the line as written',
+            {'P': '3', 'ID': 'zz01ab'},
+            'a-list',
+        )
 
     @patch.object(AddedLine, 'node', new_callable=PropertyMock)
     def test_payload(t, node: PropertyMock) -> None:
-        node.return_value = MagicMock(spec=['snapshot'])
-        node.return_value.snapshot = sentinel.snapshot
+        node.return_value = MagicMock(spec=['listed_snapshot'])
+        listed_snapshot = node.return_value.listed_snapshot
+        listed_snapshot.return_value = sentinel.snapshot
 
-        with t.subTest('each field against nothing, and the line'):
+        with t.subTest('each field against nothing, the line and its list'):
             ret = t.al.payload
+
+            listed_snapshot.assert_called_once_with('a-list')
             t.assertEqual(
                 ret,
                 {
@@ -2802,14 +2831,15 @@ class IdAssignmentTests(TestCase):
     """Unit tests for battodo.mutate.IdAssignment."""
 
     def setUp(t) -> None:
-        t.ia = IdAssignment(bare_node(), 'pp02cd')
+        t.ia = IdAssignment(bare_node(), 'pp02cd', 'a-list')
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
-    def test_event(t, snapshot: PropertyMock) -> None:
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
+    def test_event(t, snapshot: MagicMock) -> None:
         snapshot.return_value = sentinel.snapshot
 
         ret = t.ia.event
 
+        snapshot.assert_called_once_with(t.ia.node, 'a-list')
         t.assertEqual(
             ret,
             Event(
@@ -2832,14 +2862,17 @@ class TaskCompletionTests(TestCase):
             ancestry_of(t.node, path='a path'),
             None,
             GIVEN_DAY,
+            'a-list',
         )
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
-    def test_payload(t, snapshot: PropertyMock) -> None:
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
+    def test_payload(t, snapshot: MagicMock) -> None:
         snapshot.return_value = sentinel.snapshot
 
         with t.subTest('the done, the task as it was, its path, its day'):
             ret = t.tc.payload
+
+            snapshot.assert_called_once_with(t.node, 'a-list')
             t.assertEqual(
                 ret,
                 {
@@ -3147,17 +3180,19 @@ class ListBackfillTests(TestCase):
         # A backfill logs no completed-log record.
         t.assertEqual(ret, [])
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
-    def test_events(t, tasks: PropertyMock, snapshot: PropertyMock) -> None:
+    def test_events(t, tasks: PropertyMock, snapshot: MagicMock) -> None:
         tasks.return_value = [bare_node()]
         snapshot.return_value = sentinel.snapshot
         t.lb.ids = {1: 'zz01ab'}
+        t.path.stem = 'a-list'
 
         ret = t.lb.events
 
         # The date is the migration's: a replay must not read it as an
         # observed fact.
+        snapshot.assert_called_once_with(tasks.return_value[0], 'a-list')
         t.assertEqual(
             ret,
             [

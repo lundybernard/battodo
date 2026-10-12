@@ -243,7 +243,8 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.block, self.written, self.attrs).payload
+        added = AddedLine(self.block, self.written, self.path.stem, self.attrs)
+        payload = added.payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -455,15 +456,15 @@ class SubtaskAddition:
         The `TaskAdded` lands on the stream of the subtask, names the
         parent by id and carries the attributes.
         """
-        added = AddedLine(self.block, self.written, self.attrs).payload
-        payload = {**added, 'parent': self.parent_id}
+        added = AddedLine(self.block, self.written, self.path.stem, self.attrs)
+        payload = {**added.payload, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
 
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the parent's new id."""
-        return IdAssignment(self.node, self.parent_id).event
+        return IdAssignment(self.node, self.parent_id, self.path.stem).event
 
 
 class Update:
@@ -902,11 +903,12 @@ class Completion:
         """
         recurrence, rescheduled = self.recurrence, self.rescheduled
         day, ancestries = self.completed_on, self.ancestries
+        list_name = self.path.stem
         completions = []
         for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
             attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(ancestry, due, day, attrs)
+            completion = TaskCompletion(ancestry, due, day, list_name, attrs)
             completions.append(completion)
         return completions
 
@@ -922,7 +924,7 @@ class Completion:
             for ancestry in self.ancestries
         }
         return [
-            IdAssignment(streams[index], fields['ID']).event
+            IdAssignment(streams[index], fields['ID'], self.path.stem).event
             for index, fields in self.stamps.items()
                 if not streams[index].task_id
         ]  # fmt: skip
@@ -1064,7 +1066,7 @@ class Scratch:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the stream task's new id."""
-        return IdAssignment(self.stream, self.stream_id).event
+        return IdAssignment(self.stream, self.stream_id, self.path.stem).event
 
     @property
     def stamped(self) -> bool:
@@ -1199,7 +1201,7 @@ class Annotation:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the task's new id."""
-        return IdAssignment(self.node, self.task_id).event
+        return IdAssignment(self.node, self.task_id, self.path.stem).event
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -1596,18 +1598,21 @@ class Event(NamedTuple):
 class AddedLine:
     """A task an add writes, as its `TaskAdded` records it.
 
-    `block` is the task line and its description lines. `attrs` holds
-    the attributes of the add, or None.
+    `block` is the task line and its description lines, and `list_name`
+    the stem of the list that receives it. `attrs` holds the attributes
+    of the add, or None.
     """
 
     def __init__(
         self,
         block: str,
         written: dict[str, str],
+        list_name: str,
         attrs: dict[str, str] | None = None,
     ) -> None:
         self.block = block
         self.written = written
+        self.list_name = list_name
         self.attrs = attrs
 
     @property
@@ -1634,9 +1639,10 @@ class AddedLine:
 class IdAssignment:
     """The `TaskUpdated` that records an id given to a task with none."""
 
-    def __init__(self, node: TaskNode, task_id: str) -> None:
+    def __init__(self, node: TaskNode, task_id: str, list_name: str) -> None:
         self.node = node
         self.task_id = task_id
+        self.list_name = list_name
 
     @property
     def event(self) -> Event:
@@ -1653,10 +1659,10 @@ class TaskCompletion:
 
     `rescheduled` is the next due date of a task the completion
     reschedules, and None for every other task. `day` is the day the
-    completion is for. `attrs` holds the attributes of the named task,
-    and None for every other task. The event of a checklist item lands
-    on the stream of an ancestor, so its payload marks it as a
-    checklist item.
+    completion is for, and `list_name` the stem of the list that holds
+    the task. `attrs` holds the attributes of the named task, and None
+    for every other task. The event of a checklist item lands on the
+    stream of an ancestor, so its payload marks it as a checklist item.
     """
 
     def __init__(
@@ -1664,11 +1670,13 @@ class TaskCompletion:
         ancestry: Ancestry,
         rescheduled: date | None,
         day: date,
+        list_name: str,
         attrs: dict[str, str] | None = None,
     ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
         self.day = day
+        self.list_name = list_name
         self.attrs = attrs
 
     @property

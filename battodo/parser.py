@@ -143,6 +143,13 @@ class TaskNode:
             snapshot['description'] = description
         return snapshot
 
+    def listed_snapshot(self, list_name: str) -> dict[str, Any]:
+        """The snapshot of the task and the list that holds it.
+
+        A journal event names the list of its task by the filename stem.
+        """
+        raise NotImplementedError
+
     @property
     def schema_fields(self) -> dict[str, str]:
         """The fields SCHEMA.md names, in its order."""
