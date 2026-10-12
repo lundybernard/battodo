@@ -331,6 +331,7 @@ def update_item(
     attrs: str | None = None,
     note: str | None = None,
     list_name: str | None = None,
+    with_subtasks: bool = False,
 ) -> str:
     """Rewrite the task `selector` names, or reopen it once closed.
 
@@ -364,6 +365,9 @@ def update_item(
         A note, which enters the attributes under the key `note`.
     list_name : str or None
         The list the task moves to. Only a top-level task moves.
+    with_subtasks : bool
+        Whether a reopen opens each closed subtask below the task too.
+        An open task refuses it.
 
     Returns
     -------
@@ -398,6 +402,7 @@ def update_item(
             description=description,
             attrs=checked,
             list_name=list_name,
+            with_subtasks=with_subtasks,
         )
     else:
         update = Reopen(
@@ -408,6 +413,7 @@ def update_item(
             description=description,
             attrs=checked,
             list_name=list_name,
+            with_subtasks=with_subtasks,
         )
     update.write()
     return f'{update.entry}\n{update.path}'

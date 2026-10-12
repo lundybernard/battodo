@@ -7,7 +7,8 @@ the `view` and `show` goldens.
 Each narrative closes a task with `done` or `scratch`, then names it by
 its `[ID:]` to `update`, and reads it back. A top-level task comes back
 to its list with its subtasks closed (rule 2). A closed subtask opens,
-and so does each closed task above it (rule 1).
+and so does each closed task above it (rule 1). `--with-subtasks` opens
+the task and each subtask below it (rule 3).
 """
 
 from datetime import datetime
@@ -201,6 +202,28 @@ class ReopenCommandTests(TestCase):
             [f'task/{parent_id}', f'task/{paint_id}'],
         )
 
+    def test_reopen_with_subtasks(t) -> None:
+        """Rule 3: the parent opens, and each subtask below it."""
+        parent_id = t.added('chores', 'Paint the fence')
+        paint_id = t.added('chores', 'Buy paint', '--parent', parent_id)
+        brush_id = t.added('chores', 'Buy brushes', '--parent', parent_id)
+        t.run_ok('done', paint_id)
+        t.run_ok('done', parent_id)
+
+        t.run_ok('update', parent_id, '--with-subtasks')
+
+        events = Journal(t.source).events[-3:]
+        t.assertIn(
+            f'- [ ] Paint the fence [ADDED:2026-08-05] [ID:{parent_id}]\n'
+            f'  - [ ] Buy paint [ID:{paint_id}]\n'
+            f'  - [ ] Buy brushes [ID:{brush_id}]\n',
+            t.chores(),
+        )
+        t.assertEqual(
+            [event['stream_id'] for event in events],
+            [f'task/{parent_id}', f'task/{paint_id}', f'task/{brush_id}'],
+        )
+
     def test_reopen_rejected(t) -> None:
         """A rejected reopen reports on stderr and writes nothing."""
         t.run_ok('done', 'Open checklist item')
@@ -250,6 +273,18 @@ class ReopenCommandTests(TestCase):
                 t.assertEqual(out, '')
                 t.assertEqual(err, message)
                 t.assertEqual(t.chores(), before)
+
+        with t.subTest('an open task takes no --with-subtasks'):
+            out, err, code = run_cli(
+                ['update', 'Overdue task', '--with-subtasks'], t.env
+            )
+
+            t.assertEqual(code, 1)
+            t.assertEqual(
+                err,
+                "'Overdue task' names an open task: --with-subtasks "
+                'reopens a closed task and its subtasks\n',
+            )
 
         with t.subTest('several closed tasks: each named by id'):
             out, err, code = run_cli(['update', 'rx refill'], t.env)

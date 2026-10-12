@@ -797,6 +797,15 @@ class UpdateTests(TestCase):
                 ValueError,
                 'P belongs to the top-level task',
             ),
+            'an open task with its subtasks': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    with_subtasks=True,
+                ),
+                ValueError,
+                "'9o71lx' names an open task: --with-subtasks reopens",
+            ),
             'a checklist item, which a field would promote': (
                 Update(
                     Task(t.source, 'A checklist item', TODAY),
@@ -1062,6 +1071,25 @@ class ReopenTests(TestCase):
                 'a-held-list.md',
                 HELD_LIST.replace('[x]', '[ ]'),
             ),
+            'a top-level task with its subtasks, a checklist item closed': (
+                reopen_of(t.source, 'ft01ab', with_subtasks=True),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [
+                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[1],
+                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[3],
+                    ],
+                ),
+            ),
+            'a subtask with the closed subtask below it': (
+                reopen_of(t.source, 'ds02cd', with_subtasks=True),
+                'a-held-list.md',
+                HELD_LIST.replace('[x]', '[ ]'),
+            ),
             'a subtask in the record of its top-level task': (
                 reopen_of(t.source, 'fs02cd'),
                 'a-list.md',
@@ -1218,6 +1246,21 @@ class ReopenTests(TestCase):
             t.assertEqual(named.stream, 'task/db03ef')
             t.assertEqual(named.payload['attrs'], {'cost': '45.00'})
             t.assertEqual(named.payload['snapshot']['list'], 'a-held-list')
+
+        with t.subTest('with its subtasks, each opens on its own stream'):
+            whole = reopen_of(t.source, 'ft01ab', with_subtasks=True)
+
+            top, below = whole.events
+
+            t.assertEqual(
+                [top.stream, below.stream],
+                ['task/ft01ab', 'task/fs02cd'],
+            )
+            t.assertEqual(below.payload['delta'], {'done': [True, False]})
+            t.assertEqual(
+                below.payload['ancestry'],
+                'A finished task > Its subtask',
+            )
 
         with t.subTest('a subtask in a record opens its top-level task'):
             child = reopen_of(t.source, 'fs02cd')

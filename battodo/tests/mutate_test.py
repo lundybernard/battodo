@@ -1076,6 +1076,20 @@ class UpdateTests(TestCase):
             ret = t.up.checked
             t.assertIs(ret, sentinel.checked)
 
+        with t.subTest('an open task takes no --with-subtasks'):
+            supplied.reset_mock()
+            t.up = Update(t.task, {'P': '5'}, with_subtasks=True)
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.up.checked
+
+            t.assertEqual(
+                str(caught.exception),
+                "'a selector' names an open task: --with-subtasks reopens "
+                'a closed task and its subtasks',
+            )
+            supplied.assert_not_called()
+
         with t.subTest('no field, title, description or list: refused'):
             supplied.reset_mock()
             t.up = Update(t.task, {})
@@ -1818,8 +1832,9 @@ class ReopenTests(TestCase):
             },
         )
 
+    @patch.object(Reopen, 'subtasks', new_callable=PropertyMock)
     @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
-    def test_opened(t, ancestry: PropertyMock) -> None:
+    def test_opened(t, ancestry: PropertyMock, subtasks: PropertyMock) -> None:
         parent, child, grandchild = (
             parent_node(),
             done_child_node(),
@@ -1827,11 +1842,47 @@ class ReopenTests(TestCase):
         )
         grandchild.done = True
         ancestry.return_value = [parent, child, grandchild]
+        subtasks.return_value = [sentinel.subtask]
 
-        ret = t.ro.opened
+        with t.subTest('the closed tasks alone; an open one stays as it is'):
+            ret = t.ro.opened
+            t.assertEqual(ret, [child, grandchild])
 
-        # The closed tasks alone; an open one stays as it is.
-        t.assertEqual(ret, [child, grandchild])
+        with t.subTest('with its subtasks, each closed one below it too'):
+            t.ro.with_subtasks = True
+            ret = t.ro.opened
+            t.assertEqual(ret, [child, grandchild, sentinel.subtask])
+
+    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    def test_subtasks(t, node: PropertyMock, chains: PropertyMock) -> None:
+        parent = parent_node()
+        parent.done = True
+        closed, still_open = done_child_node(), child_node()
+        item = checklist_node()
+        item.raw_index, item.done = 6, True
+        below = grandchild_node()
+        below.done = True
+        elsewhere = done_child_node()
+        elsewhere.raw_index = 9
+        other = bare_node()
+        other.raw_index = 8
+        chains.return_value = {
+            1: [parent],
+            8: [other],
+            4: [parent, closed],
+            3: [parent, still_open],
+            6: [parent, item],
+            5: [parent, closed, below],
+            9: [other, elsewhere],
+        }
+        node.return_value = parent
+
+        ret = t.ro.subtasks
+
+        # Closed, below the task, at any depth, in file order; neither
+        # an open subtask nor a checklist item.
+        t.assertEqual(ret, [closed, below])
 
     @patch(f'{SRC}.new_task_id', autospec=True)
     @patch.object(Reopen, 'opened', new_callable=PropertyMock)

@@ -386,6 +386,7 @@ class UpdateItemTests(TestCase):
             'title': 'A task title',
             'description': 'A description',
             'list_name': 'another-list',
+            'with_subtasks': True,
         }
 
     def test_forwarded(t):
@@ -399,6 +400,7 @@ class UpdateItemTests(TestCase):
             description='A description',
             attrs=t.SuppliedAttributes.return_value.checked,
             list_name='another-list',
+            with_subtasks=True,
         )
 
     def test_attributes(t):
@@ -457,6 +459,7 @@ class UpdateItemTests(TestCase):
             description='A description',
             attrs=t.SuppliedAttributes.return_value.checked,
             list_name='another-list',
+            with_subtasks=True,
         )
         reopen.return_value.write.assert_called_once_with()
         t.assertEqual(
@@ -478,6 +481,7 @@ class UpdateItemTests(TestCase):
         t.assertIsNone(kwargs['title'])
         t.assertIsNone(kwargs['description'])
         t.assertIsNone(kwargs['list_name'])
+        t.assertFalse(kwargs['with_subtasks'])
 
 
 class CompleteItemTests(TestCase):

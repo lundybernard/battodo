@@ -491,6 +491,7 @@ class Update:
         description: str | None = None,
         attrs: dict[str, str] | None = None,
         list_name: str | None = None,
+        with_subtasks: bool = False,
     ) -> None:
         self.task = task
         self.fields = fields
@@ -498,6 +499,7 @@ class Update:
         self.description = description
         self.attrs = attrs
         self.list_name = list_name
+        self.with_subtasks = with_subtasks
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -797,6 +799,7 @@ class Reopen:
         description: str | None = None,
         attrs: dict[str, str] | None = None,
         list_name: str | None = None,
+        with_subtasks: bool = False,
     ) -> None:
         self.task = task
         self.zone = zone
@@ -805,6 +808,7 @@ class Reopen:
         self.description = description
         self.attrs = attrs
         self.list_name = list_name
+        self.with_subtasks = with_subtasks
 
     def write(self) -> None:
         """Write the list and its events.
@@ -1093,6 +1097,14 @@ class Reopen:
     def opened(self) -> list[TaskNode]:
         """The closed tasks of the ancestry, outermost first."""
         return [task for task in self.ancestry if task.done]
+
+    @property
+    def subtasks(self) -> list[TaskNode]:
+        """Each closed subtask below the task, in file order.
+
+        A checklist item is not a subtask.
+        """
+        raise NotImplementedError
 
     @cached_property
     def ids(self) -> dict[int, str]:
