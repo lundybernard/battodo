@@ -117,7 +117,8 @@ class ItemView:
 
         An absent field has no row. An absent id reads as NO_VALUE. The
         rank reads as a view row shows it: rounded once, not from the
-        published rank.
+        published rank. Each description line closes them with a row,
+        and only the first of those carries a label.
         """
         node = self.item.node
         rows = [
@@ -139,6 +140,10 @@ class ItemView:
             for label, value in stored
                 if value is not None
         )  # fmt: skip
+        if node.description_lines:
+            first, *rest = node.description_lines
+            rows.append(('description', first))
+            rows.extend(('', line) for line in rest)
         return rows
 
     @property
@@ -236,11 +241,13 @@ class ItemJsonView:
             {"list": "work", "id": "9o71lx", "title": "...", "done": false,
              "rank": 10.0, "priority": 4.0, "loe": 8, "due": "2026-08-12",
              "added": "2026-07-06", "repeat": null, "tags": ["yard"],
+             "description": "...",
              "subtasks": [{"id": null, "title": "...", "done": false,
                            "loe": 2, "due": null, "tags": [],
-                           "subtasks": []}]}
+                           "description": null, "subtasks": []}]}
 
-        Every key is always present; an absent field is null. `subtasks`
+        Every key is always present; an absent field is null, and so is
+        the description of a task with no description lines. `subtasks`
         nests to any depth, and holds completed children as well as open
         ones -- a read reports the item as it stands.
         """
@@ -257,6 +264,7 @@ class ItemJsonView:
             'added': node.added,
             'repeat': node.repeat,
             'tags': node.tags,
+            'description': node.description,
             'subtasks': [subtask.data for subtask in self.subtasks],
         }
 
@@ -287,6 +295,7 @@ class SubtaskJsonView:
             'loe': self.node.loe,
             'due': self.node.due,
             'tags': self.node.tags,
+            'description': self.node.description,
             'subtasks': [subtask.data for subtask in self.subtasks],
         }
 

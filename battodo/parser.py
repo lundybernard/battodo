@@ -33,12 +33,19 @@ OPEN_HEADING = '## Open'
 # canonical where hand-written ones keep whatever order they came with.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 DATE_FIELDS = ('DUE',)
+# How far a description line indents past its task line: under the
+# title, clear of the checkbox.
+DESCRIPTION_INDENT = len('- [ ] ')
 ANCESTRY_SEPARATOR = ' > '
 
 
 @dataclass
 class TaskNode:
-    """One `- [ ]` line, plus its children and note lines."""
+    """One `- [ ]` line, plus its children and note lines.
+
+    A note line is a description line: its text, stripped, is one line
+    of the task's description.
+    """
 
     raw_index: int
     indent: int
@@ -48,6 +55,7 @@ class TaskNode:
     raw: str = ''
     children: list['TaskNode'] = field(default_factory=list)
     note_indices: list[int] = field(default_factory=list)
+    description_lines: list[str] = field(default_factory=list)
 
     @property
     def loe(self) -> int | None:
@@ -114,17 +122,26 @@ class TaskNode:
         return owned
 
     @property
+    def description(self) -> str | None:
+        """The description lines joined by newlines, or None if none."""
+        return '\n'.join(self.description_lines) or None
+
+    @property
     def snapshot(self) -> dict[str, Any]:
         """The task's full state, as a journal event records it.
 
         Snapshots are what make a later authority flip replayable
         despite hand-edits that never reached the journal.
         """
-        return {
+        snapshot: dict[str, Any] = {
             'title': self.title,
             'done': self.done,
             'fields': dict(self.fields),
         }
+        description = self.description
+        if description is not None:
+            snapshot['description'] = description
+        return snapshot
 
     @property
     def schema_fields(self) -> dict[str, str]:
@@ -206,7 +223,8 @@ class TodoDocument:
     state, so `text` gives the source back byte for byte until a write.
     The document performs every edit of a list itself: `set_fields`,
     `set_field`, `set_title` and `mark_done` rewrite one raw line where
-    it stands, `append_open` and `insert` add a line, and `drop` removes
+    it stands, `append_open` and `insert` add a line,
+    `insert_description` adds description lines, and `drop` removes
     lines. An edit leaves `tasks` as it was read.
     """
 
@@ -244,6 +262,7 @@ class TodoDocument:
             if match is None:
                 if stripped and not stripped.startswith('<!--') and stack:
                     stack[-1][1].note_indices.append(index)
+                    stack[-1][1].description_lines.append(stripped)
                 continue
 
             indent = len(match.group(1))
@@ -394,6 +413,18 @@ class TodoDocument:
     def insert(self, index: int, line: str) -> None:
         """Insert `line` at `index`. Every later line moves down one."""
         self.lines.insert(index, line)
+
+    def insert_description(self, index: int, lines: list[str]) -> None:
+        """Insert `lines` as description lines of the task line at `index`.
+
+        They go directly under the task line, in order, each indented
+        DESCRIPTION_INDENT past the task line's own indent.
+        """
+        raw = self.lines[index]
+        indent = raw[: len(raw) - len(raw.lstrip())]
+        lead = indent + ' ' * DESCRIPTION_INDENT
+        for offset, line in enumerate(lines, start=1):
+            self.insert(index + offset, f'{lead}{line}')
 
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.

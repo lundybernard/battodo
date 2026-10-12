@@ -36,6 +36,7 @@ from typing import Any, NamedTuple
 from .journal import Journal, new_task_id
 from .lists import discover_lists
 from .parser import (
+    CHECKBOX_RE,
     OPEN_HEADING,
     SCHEMA_FIELDS,
     Ancestry,
@@ -88,12 +89,14 @@ class Addition:
         title: str,
         fields: dict[str, str],
         today: date,
+        description: str | None = None,
     ) -> None:
         self.source = source
         self.list_name = list_name
         self.title = title
         self.fields = fields
         self.today = today
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -132,20 +135,25 @@ class Addition:
         ListError
             `list_name` names no discovered list.
         ValueError
-            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read, or
-            the title holds a line break. `RepeatError`, a ValueError,
-            covers `REPEAT`.
+            A supplied `P`, `LOE`, `DUE` or `REPEAT` does not read, the
+            title holds a line break, or a description line is refused.
+            `RepeatError`, a ValueError, covers `REPEAT`.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
-        """The list as read, with the task last in its open section."""
+        """The list as read, the task last in its open section.
+
+        Its description lines go under it.
+        """
         doc = TodoDocument(self.parsed.text)
         written = self.written
         title = SuppliedTitle(self.title).checked
+        description_lines = self.description_lines
         doc.insert(self.index, f'- [ ] {title}')
         doc.set_fields(self.index, written)
+        doc.insert_description(self.index, description_lines)
         return doc
 
     @cached_property
@@ -175,6 +183,19 @@ class Addition:
         return SuppliedFields(self.fields, self.today)
 
     @property
+    def description_lines(self) -> list[str]:
+        """The lines of the given description, read; none if none is given.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return []
+        return SuppliedDescription(self.description).lines
+
+    @property
     def index(self) -> int:
         """Where the task lands: last in the open section."""
         return self.parsed.open_end
@@ -190,6 +211,12 @@ class Addition:
         return self.document.lines[self.index]
 
     @property
+    def block(self) -> str:
+        """The task line and its description lines, as written."""
+        end = self.index + 1 + len(self.description_lines)
+        return '\n'.join(self.document.lines[self.index : end])
+
+    @property
     def entries(self) -> list[str]:
         """None: an add logs no completed-log record."""
         return []
@@ -197,7 +224,7 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.entry, self.written).payload
+        payload = AddedLine(self.block, self.written).payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -215,11 +242,13 @@ class SubtaskAddition:
         list_name: str,
         title: str,
         fields: dict[str, str],
+        description: str | None = None,
     ) -> None:
         self.parent = parent
         self.list_name = list_name
         self.title = title
         self.fields = fields
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -269,13 +298,16 @@ class SubtaskAddition:
             The parent's selector does not name exactly one open task.
         ValueError
             The parent is a task in another list or a checklist item,
-            or the title holds a line break.
+            the title holds a line break, or a description line is
+            refused.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
         """The parent's list: the parent stamped, the subtask added.
+
+        The subtask's description lines go under it.
 
         The checks run in the order `text` lists them: the list, then
         the fields, then the parent.
@@ -290,8 +322,10 @@ class SubtaskAddition:
         if self.stamped:
             doc.set_field(self.node.raw_index, 'ID', self.parent_id)
         title = SuppliedTitle(self.title).checked
+        description_lines = self.description_lines
         doc.insert(self.index, f'{self.indent}- [ ] {title}')
         doc.set_fields(self.index, written)
+        doc.insert_description(self.index, description_lines)
         return doc
 
     @property
@@ -349,6 +383,19 @@ class SubtaskAddition:
         return self.node.task_id or new_task_id()
 
     @property
+    def description_lines(self) -> list[str]:
+        """The lines of the given description, read; none if none is given.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return []
+        return SuppliedDescription(self.description).lines
+
+    @property
     def index(self) -> int:
         """Where the subtask lands: after every line the parent owns."""
         return max(self.node.block) + 1
@@ -369,6 +416,12 @@ class SubtaskAddition:
         return self.document.lines[self.index]
 
     @property
+    def block(self) -> str:
+        """The subtask line and its description lines, as written."""
+        end = self.index + 1 + len(self.description_lines)
+        return '\n'.join(self.document.lines[self.index : end])
+
+    @property
     def entries(self) -> list[str]:
         """None: an add logs no completed-log record."""
         return []
@@ -380,7 +433,7 @@ class SubtaskAddition:
         The `TaskAdded` lands on the stream of the subtask and names the
         parent by id.
         """
-        added = AddedLine(self.entry, self.written).payload
+        added = AddedLine(self.block, self.written).payload
         payload = {**added, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
@@ -396,10 +449,10 @@ class SubtaskAddition:
 
 
 class Update:
-    """The update of a task: the named fields and title over its own.
+    """The update of a task: the named fields, title and description.
 
-    Only the fields named are written; the rest of the line, and every
-    other line of the file, stays as it was. A task with no `[ID:]` is
+    Only what the update names is written; the rest of the task, and
+    every other line of the file, stays as it was. A task with no `[ID:]` is
     given one, so the caller can name it by id from here on.
     """
 
@@ -408,10 +461,12 @@ class Update:
         task: Task,
         fields: dict[str, str],
         title: str | None = None,
+        description: str | None = None,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
+        self.description = description
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -451,20 +506,27 @@ class Update:
             The selector does not name exactly one open task.
         ValueError
             The task is a checklist item, a subtask is given a field
-            only the top-level task carries, or the title holds a line
-            break.
+            only the top-level task carries, the title holds a line
+            break, or a description line is refused.
         """
         return self.document.text
 
     @property
     def document(self) -> TodoDocument:
-        """The task's list, its line rewritten."""
+        """The task's list, its line rewritten.
+
+        A description given replaces the task's description lines.
+        """
         written = self.written
         index = self.node.raw_index
         doc = TodoDocument(self.task.doc.text)
         doc.set_fields(index, written)
         if self.new_title is not None:
             doc.set_title(index, self.new_title)
+        new_description = self.new_description
+        if new_description is not None:
+            doc.drop(set(self.node.note_indices))
+            doc.insert_description(index, new_description.lines)
         return doc
 
     @property
@@ -505,17 +567,29 @@ class Update:
         return SuppliedTitle(self.title).checked
 
     @property
+    def new_description(self) -> 'SuppliedDescription | None':
+        """The description the update writes, or None where it names none.
+
+        An empty description clears the description lines.
+        """
+        if self.description is None:
+            return None
+        return SuppliedDescription(self.description)
+
+    @property
     def checked(self) -> dict[str, str]:
         """The named fields, read.
 
         Raises
         ------
         ValueError
-            Neither a field nor a title is named, or a supplied value
+            No field, title or description is named, or a supplied value
             does not read.
         """
-        if not self.fields and self.title is None:
-            raise ValueError('nothing to update: name a field or a title')
+        if not self.fields and self.title is None and self.description is None:
+            raise ValueError(
+                'nothing to update: name a field, a title or a description'
+            )
         return self.supplied.checked
 
     @property
@@ -576,6 +650,12 @@ class Update:
         }
         if self.new_title is not None:
             delta['title'] = [self.node.title, self.new_title]
+        new_description = self.new_description
+        if new_description is not None:
+            delta['description'] = [
+                self.node.description,
+                new_description.checked,
+            ]
         return delta
 
     @property
@@ -1064,6 +1144,53 @@ class SuppliedTitle:
         return self.text
 
 
+class SuppliedDescription:
+    """A description a caller supplies to a write, read before any write.
+
+    Each line of the text is one description line. An empty text holds
+    no line, so an update that supplies one clears the description.
+    """
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def checked(self) -> str | None:
+        """The description as a snapshot stores it, or None if empty."""
+        return '\n'.join(self.lines) or None
+
+    @property
+    def lines(self) -> list[str]:
+        """The description lines, each stripped of its indent.
+
+        Raises
+        ------
+        ValueError
+            A line is blank, reads as a task line, a heading or a
+            comment, or holds a carriage return. The parser reads such
+            a line back as something other than a description line.
+        """
+        if not self.text:
+            return []
+        lines = self.text.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                refusal = 'is blank'
+            elif CHECKBOX_RE.match(stripped):
+                refusal = 'reads as a task line'
+            elif stripped.startswith('## '):
+                refusal = 'reads as a heading'
+            elif stripped.startswith('<!--'):
+                refusal = 'reads as a comment'
+            elif '\r' in line:
+                refusal = 'holds a carriage return'
+            else:
+                continue
+            raise ValueError(f'description line {line!r} {refusal}')
+        return [line.strip() for line in lines]
+
+
 class SuppliedFields:
     """The fields a caller supplies to a write, read before any write.
 
@@ -1149,28 +1276,31 @@ class Event(NamedTuple):
 
 
 class AddedLine:
-    """A task line an add writes, as its `TaskAdded` records it."""
+    """A task an add writes, as its `TaskAdded` records it.
 
-    def __init__(self, entry: str, written: dict[str, str]) -> None:
-        self.entry = entry
+    `block` is the task line and its description lines.
+    """
+
+    def __init__(self, block: str, written: dict[str, str]) -> None:
+        self.block = block
         self.written = written
 
     @property
     def payload(self) -> dict[str, Any]:
-        """Each field written against nothing, and the line as written."""
+        """Each field written against nothing, and the task as written."""
         delta = {name: [None, value] for name, value in self.written.items()}
         return {
             'delta': delta,
             # Post-state, unlike every other event here: an add has no
-            # prior state for a snapshot to describe. Taken from the line
+            # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
             'snapshot': self.node.snapshot,
         }
 
     @property
     def node(self) -> TaskNode:
-        """The line alone in an open section, as the parser reads it."""
-        return TodoDocument(f'{OPEN_HEADING}\n{self.entry}').tasks[0]
+        """The block alone in an open section, as the parser reads it."""
+        return TodoDocument(f'{OPEN_HEADING}\n{self.block}').tasks[0]
 
 
 class TaskCompletion:

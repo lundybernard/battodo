@@ -25,7 +25,8 @@ WORK = """# Work
 
 - [ ] Deck rebuild [P:4] [LOE:8] [DUE:2026-08-12] [TAGS:yard,summer] \
 [ADDED:2026-07-06] [ID:9o71lx]
-      A note, which the read does not publish.
+      A description of the deck.
+      Its second line.
   - [ ] Chip the brush [LOE:2]
   - [ ] Sweep
   - [x] Buy the lumber [LOE:1]
@@ -36,14 +37,16 @@ WORK = """# Work
 """
 
 DECK_TEXT = """Deck rebuild
-  list   work
-  id     9o71lx
-  rank   10.0
-  P      4.0
-  LOE    8
-  DUE    2026-08-12
-  TAGS   yard, summer
-  ADDED  2026-07-06
+  list         work
+  id           9o71lx
+  rank         10.0
+  P            4.0
+  LOE          8
+  DUE          2026-08-12
+  TAGS         yard, summer
+  ADDED        2026-07-06
+  description  A description of the deck.
+               Its second line.
   subtasks
     [ ] Chip the brush [LOE:2]
     [ ] Sweep
@@ -91,6 +94,7 @@ class ItemJsonViewTests(TestCase):
                     'added': '2026-07-06',
                     'repeat': None,
                     'tags': ['yard', 'summer'],
+                    'description': 'A description of the deck.\nIts second line.',
                     'subtasks': [
                         {
                             'id': None,
@@ -99,6 +103,7 @@ class ItemJsonViewTests(TestCase):
                             'loe': 2,
                             'due': None,
                             'tags': [],
+                            'description': None,
                             'subtasks': [],
                         },
                         {
@@ -108,6 +113,7 @@ class ItemJsonViewTests(TestCase):
                             'loe': None,
                             'due': None,
                             'tags': [],
+                            'description': None,
                             'subtasks': [],
                         },
                         {
@@ -117,6 +123,7 @@ class ItemJsonViewTests(TestCase):
                             'loe': 1,
                             'due': None,
                             'tags': [],
+                            'description': None,
                             'subtasks': [],
                         },
                     ],
@@ -139,6 +146,7 @@ class ItemJsonViewTests(TestCase):
                     'added': None,
                     'repeat': None,
                     'tags': [],
+                    'description': None,
                     'subtasks': [],
                 },
             )
@@ -153,7 +161,7 @@ class ItemViewTests(TestCase):
         t.source = source_dir(t)
 
     def test_text(t) -> None:
-        with t.subTest('every stored field, then the children'):
+        with t.subTest('every stored field, the description, the children'):
             ret = ItemView(read(t.source, '9o71lx')).text
             t.assertEqual(ret, DECK_TEXT)
 

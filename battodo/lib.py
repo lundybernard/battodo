@@ -200,6 +200,7 @@ def add_item(
     due: str | None = None,
     repeat: str | None = None,
     tags: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Write the task the inputs describe.
 
@@ -221,6 +222,8 @@ def add_item(
     priority, loe, due, repeat, tags : str or None
         The values of the `P`, `LOE`, `DUE`, `REPEAT` and `TAGS`
         fields.
+    description : str or None
+        The description of the task, one description line per line.
 
     Returns
     -------
@@ -234,9 +237,9 @@ def add_item(
     SelectionError
         The parent does not name exactly one open task.
     ValueError
-        A supplied field is unreadable, the title holds a line break,
-        or the parent cannot hold a subtask. Raised before anything is
-        written.
+        A supplied field is unreadable, the title holds a line break, a
+        description line is refused, or the parent cannot hold a
+        subtask. Raised before anything is written.
     """
     source = _source(conf)
     fields = _supplied(
@@ -250,13 +253,21 @@ def add_item(
     )
     addition: Addition | SubtaskAddition
     if parent is None:
-        addition = Addition(source, list_name, title, fields, now.date())
+        addition = Addition(
+            source,
+            list_name,
+            title,
+            fields,
+            now.date(),
+            description=description,
+        )
     else:
         addition = SubtaskAddition(
             Task(source, parent, now.date()),
             list_name,
             title,
             fields,
+            description=description,
         )
     addition.write()
     return f'{addition.entry}\n{addition.path}'
@@ -271,6 +282,7 @@ def update_item(
     priority: str | None = None,
     due: str | None = None,
     tags: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Rewrite the task `selector` names.
 
@@ -291,6 +303,9 @@ def update_item(
         The new title.
     priority, due, tags : str or None
         The new values of the `P`, `DUE` and `TAGS` fields.
+    description : str or None
+        The new description, one description line per line. An empty
+        one clears the description.
 
     Returns
     -------
@@ -303,13 +318,15 @@ def update_item(
         The selector does not name exactly one open task.
     ValueError
         Nothing was named to change, the task cannot carry a field, a
-        supplied value is unreadable, or the title holds a line break.
-        Raised before anything is written.
+        supplied value is unreadable, the title holds a line break, or
+        a description line is refused. Raised before anything is
+        written.
     """
     update = Update(
         Task(_source(conf), selector, now.date()),
         _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
         title=title,
+        description=description,
     )
     update.write()
     return f'{update.entry}\n{update.path}'

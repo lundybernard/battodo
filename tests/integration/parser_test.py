@@ -25,6 +25,15 @@ APPENDED_INDEX = 15
 PARENT_INDEX = 6
 PARENT_BLOCK = {6, 7, 8, 9}
 
+# A task with description lines, and a child with one of its own.
+DESCRIBED = (
+    '## Open\n\n- [ ] Parent task [P:1]\n'
+    '      A first line.\n'
+    '        A second line.\n'
+    '  - [ ] Child task [LOE:2]\n'
+    '        A line of the child.\n'
+)
+
 # Every construct the parser branches on, one case each. The titles
 # name the role the line plays, not any real task.
 SHAPES = {
@@ -95,6 +104,22 @@ class TaskNodeTests(TestCase):
         ret = t.tk.block
         # The task line, then its three children, one level down.
         t.assertEqual(ret, PARENT_BLOCK)
+
+    def test_snapshot(t) -> None:
+        with t.subTest('a task with no description lines has no description'):
+            ret = t.tk.snapshot
+            t.assertNotIn('description', ret)
+
+        (parent,) = TodoDocument(DESCRIBED).tasks
+        (child,) = parent.children
+
+        with t.subTest('the description lines, stripped and joined'):
+            ret = parent.snapshot
+            t.assertEqual(ret['description'], 'A first line.\nA second line.')
+
+        with t.subTest('a child holds its own'):
+            ret = child.snapshot
+            t.assertEqual(ret['description'], 'A line of the child.')
 
 
 class TodoDocumentTests(TestCase):
@@ -238,6 +263,37 @@ class TodoDocumentTests(TestCase):
 
         with t.subTest('the line takes the index, every later line moves'):
             t.assertEqual(t.td.text, '\n'.join(expected))
+
+    def test_insert_description(t) -> None:
+        lines = ['A first line.', 'A second line.']
+
+        with t.subTest('under a task line, past its checkbox'):
+            t.td.insert_description(OVERDUE_INDEX, lines)
+
+            ret = t.td.lines[OVERDUE_INDEX : OVERDUE_INDEX + 4]
+
+            t.assertEqual(
+                ret,
+                [
+                    OVERDUE,
+                    '      A first line.',
+                    '      A second line.',
+                    '- [ ] Due today task [P:3] [LOE:1] [DUE:2026-08-05]',
+                ],
+            )
+
+        with t.subTest('and the parser reads them back as its description'):
+            (overdue, *_) = TodoDocument(t.td.text).tasks
+            t.assertEqual(overdue.description, 'A first line.\nA second line.')
+
+        with t.subTest('a subtask line takes them one level deeper'):
+            fresh = TodoDocument(t.source)
+            subtask_index = PARENT_INDEX + 2
+
+            fresh.insert_description(subtask_index, ['A line.'])
+
+            written = fresh.lines[subtask_index + 1]
+            t.assertEqual(written, '        A line.')
 
     def test_drop(t) -> None:
         with t.subTest('the lines go, and every other line stays'):

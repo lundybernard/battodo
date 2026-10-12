@@ -26,6 +26,7 @@ from ..mutate import (
     NamedList,
     Scratch,
     SubtaskAddition,
+    SuppliedDescription,
     SuppliedFields,
     SuppliedTitle,
     TaskCompletion,
@@ -42,6 +43,14 @@ GIVEN_DAY = date(2026, 8, 1)
 SOURCE = Path('/a-source')
 LIST_PATH = SOURCE / 'a-list.md'
 ANOTHER_PATH = SOURCE / 'another-list.md'
+# A document as an add writes it: the new line at index 1, one
+# description line under it, then the line that follows the block.
+BLOCK_LINES = [
+    OPEN_HEADING,
+    'the line as written',
+    '      A line.',
+    'the next line',
+]
 
 
 class AdditionTests(TestCase):
@@ -114,24 +123,28 @@ class AdditionTests(TestCase):
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Addition, 'description_lines', new_callable=PropertyMock)
     @patch.object(Addition, 'index', new_callable=PropertyMock)
     @patch.object(Addition, 'written', new_callable=PropertyMock)
     def test_document(
         t,
         written: PropertyMock,
         index: PropertyMock,
+        description_lines: PropertyMock,
         todo_document: MagicMock,
         supplied_title: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         index.return_value = 4
+        description_lines.return_value = sentinel.description_lines
         supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.ad.parsed = MagicMock(spec=['text'])
 
         ret = t.ad.document
 
-        # The bare line goes in last in Open, then its fields go on.
+        # The bare line goes in last in Open, then its fields go on,
+        # then its description lines go under it.
         supplied_title.assert_called_once_with('A new task')
         todo_document.assert_called_once_with(t.ad.parsed.text)
         t.assertEqual(
@@ -139,6 +152,7 @@ class AdditionTests(TestCase):
             [
                 call.insert(4, '- [ ] A checked title'),
                 call.set_fields(4, sentinel.written),
+                call.insert_description(4, sentinel.description_lines),
             ],
         )
         t.assertIs(ret, doc)
@@ -174,6 +188,39 @@ class AdditionTests(TestCase):
         ret = t.ad.entry
 
         t.assertEqual(ret, 'the line as written')
+
+    @patch.object(Addition, 'description_lines', new_callable=PropertyMock)
+    @patch.object(Addition, 'index', new_callable=PropertyMock)
+    @patch.object(Addition, 'document', new_callable=PropertyMock)
+    def test_block(
+        t,
+        document: PropertyMock,
+        index: PropertyMock,
+        description_lines: PropertyMock,
+    ) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = BLOCK_LINES
+        index.return_value = 1
+        description_lines.return_value = ['A line.']
+
+        ret = t.ad.block
+
+        t.assertEqual(ret, 'the line as written\n      A line.')
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_description_lines(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.ad.description_lines
+            supplied_description.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description given, read'):
+            t.ad.description = 'A description'
+
+            ret = t.ad.description_lines
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value.lines)
 
     def test_entries(t) -> None:
         ret = t.ad.entries
@@ -222,14 +269,17 @@ class AdditionTests(TestCase):
 
     @patch(f'{SRC}.AddedLine', autospec=True)
     @patch.object(Addition, 'written', new_callable=PropertyMock)
+    @patch.object(Addition, 'block', new_callable=PropertyMock)
     @patch.object(Addition, 'entry', new_callable=PropertyMock)
     def test_events(
         t,
         entry: PropertyMock,
+        block: PropertyMock,
         written: PropertyMock,
         added_line: MagicMock,
     ) -> None:
         entry.return_value = 'the line as written'
+        block.return_value = 'the block as written'
         written.return_value = sentinel.written
         t.ad.task_id = 'zz01ab'
 
@@ -237,7 +287,7 @@ class AdditionTests(TestCase):
 
         # One TaskAdded, on the stream of the new task.
         added_line.assert_called_once_with(
-            'the line as written',
+            'the block as written',
             sentinel.written,
         )
         t.assertEqual(
@@ -322,6 +372,11 @@ class SubtaskAdditionTests(TestCase):
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(
+        SubtaskAddition,
+        'description_lines',
+        new_callable=PropertyMock,
+    )
     @patch.object(SubtaskAddition, 'indent', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'index', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'node', new_callable=PropertyMock)
@@ -334,6 +389,7 @@ class SubtaskAdditionTests(TestCase):
         node: PropertyMock,
         index: PropertyMock,
         indent: PropertyMock,
+        description_lines: PropertyMock,
         todo_document: MagicMock,
         supplied_title: MagicMock,
     ) -> None:
@@ -342,6 +398,7 @@ class SubtaskAdditionTests(TestCase):
         node.return_value = t.parent
         index.return_value = 4
         indent.return_value = '  '
+        description_lines.return_value = sentinel.description_lines
         supplied_title.return_value.checked = 'A checked title'
         doc = todo_document.return_value
         t.sa.path = LIST_PATH
@@ -357,6 +414,7 @@ class SubtaskAdditionTests(TestCase):
                 [
                     call.insert(4, '  - [ ] A checked title'),
                     call.set_fields(4, sentinel.written),
+                    call.insert_description(4, sentinel.description_lines),
                 ],
             )
             t.assertIs(ret, doc)
@@ -517,6 +575,43 @@ class SubtaskAdditionTests(TestCase):
 
         t.assertEqual(ret, 'the line as written')
 
+    @patch.object(
+        SubtaskAddition,
+        'description_lines',
+        new_callable=PropertyMock,
+    )
+    @patch.object(SubtaskAddition, 'index', new_callable=PropertyMock)
+    @patch.object(SubtaskAddition, 'document', new_callable=PropertyMock)
+    def test_block(
+        t,
+        document: PropertyMock,
+        index: PropertyMock,
+        description_lines: PropertyMock,
+    ) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = BLOCK_LINES
+        index.return_value = 1
+        description_lines.return_value = ['A line.']
+
+        ret = t.sa.block
+
+        t.assertEqual(ret, 'the line as written\n      A line.')
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_description_lines(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where no description is given'):
+            ret = t.sa.description_lines
+            supplied_description.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('the lines of the description given, read'):
+            t.sa.description = 'A description'
+
+            ret = t.sa.description_lines
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value.lines)
+
     def test_entries(t) -> None:
         ret = t.sa.entries
         # An add logs no completed-log record.
@@ -526,16 +621,19 @@ class SubtaskAdditionTests(TestCase):
     @patch.object(SubtaskAddition, 'stamp', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'stamped', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'written', new_callable=PropertyMock)
+    @patch.object(SubtaskAddition, 'block', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'entry', new_callable=PropertyMock)
     def test_events(
         t,
         entry: PropertyMock,
+        block: PropertyMock,
         written: PropertyMock,
         stamped: PropertyMock,
         stamp: PropertyMock,
         added_line: MagicMock,
     ) -> None:
         entry.return_value = 'the line as written'
+        block.return_value = 'the block as written'
         written.return_value = sentinel.written
         stamped.return_value = False
         stamp.return_value = sentinel.stamp
@@ -547,7 +645,7 @@ class SubtaskAdditionTests(TestCase):
             ret = t.sa.events
 
             added_line.assert_called_once_with(
-                'the line as written',
+                'the block as written',
                 sentinel.written,
             )
             t.assertEqual(
@@ -652,6 +750,7 @@ class UpdateTests(TestCase):
         t.assertIs(ret, document.return_value.text)
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
@@ -660,11 +759,13 @@ class UpdateTests(TestCase):
         written: PropertyMock,
         node: PropertyMock,
         new_title: PropertyMock,
+        new_description: PropertyMock,
         todo_document: MagicMock,
     ) -> None:
         written.return_value = sentinel.written
         node.return_value = t.parent
         new_title.return_value = 'A checked title'
+        new_description.return_value = None
         doc = todo_document.return_value
 
         with t.subTest('the fields, then the new title, on the task line'):
@@ -689,6 +790,22 @@ class UpdateTests(TestCase):
             t.assertEqual(
                 doc.method_calls,
                 [call.set_fields(1, sentinel.written)],
+            )
+
+        with t.subTest('a description replaces the description lines'):
+            doc.reset_mock()
+            new_description.return_value = MagicMock(spec=['lines'])
+            new_description.return_value.lines = sentinel.lines
+
+            _ = t.up.document
+
+            t.assertEqual(
+                doc.method_calls,
+                [
+                    call.set_fields(1, sentinel.written),
+                    call.drop({2}),
+                    call.insert_description(1, sentinel.lines),
+                ],
             )
 
     @patch.object(Update, 'node', new_callable=PropertyMock)
@@ -758,6 +875,21 @@ class UpdateTests(TestCase):
             supplied_title.assert_not_called()
             t.assertIsNone(ret)
 
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_new_description(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where the update names no description'):
+            ret = t.up.new_description
+            supplied_description.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('the description the update names'):
+            t.up.description = 'A description'
+
+            ret = t.up.new_description
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value)
+
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
     def test_checked(t, supplied: PropertyMock) -> None:
         supplied.return_value = MagicMock(spec=['checked'])
@@ -772,7 +904,12 @@ class UpdateTests(TestCase):
             ret = t.up.checked
             t.assertIs(ret, sentinel.checked)
 
-        with t.subTest('neither a field nor a title, before any value'):
+        with t.subTest('nor does a description alone, an empty one too'):
+            t.up = Update(t.task, {}, description='')
+            ret = t.up.checked
+            t.assertIs(ret, sentinel.checked)
+
+        with t.subTest('no field, title or description, before any value'):
             supplied.reset_mock()
             t.up = Update(t.task, {})
 
@@ -781,7 +918,7 @@ class UpdateTests(TestCase):
 
             t.assertEqual(
                 str(caught.exception),
-                'nothing to update: name a field or a title',
+                'nothing to update: name a field, a title or a description',
             )
             supplied.assert_not_called()
 
@@ -879,6 +1016,7 @@ class UpdateTests(TestCase):
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
+    @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
@@ -887,10 +1025,12 @@ class UpdateTests(TestCase):
         written: PropertyMock,
         node: PropertyMock,
         new_title: PropertyMock,
+        new_description: PropertyMock,
     ) -> None:
         written.return_value = {'P': '5', 'DUE': '2026-09-01'}
         node.return_value = t.parent
         new_title.return_value = 'A checked title'
+        new_description.return_value = None
 
         with t.subTest('each field written against the one it replaced'):
             ret = t.up.delta
@@ -907,6 +1047,15 @@ class UpdateTests(TestCase):
             new_title.return_value = None
             ret = t.up.delta
             t.assertNotIn('title', ret)
+
+        with t.subTest('a description, against the one it replaced'):
+            t.parent.description_lines = ['A line.']
+            new_description.return_value = MagicMock(spec=['checked'])
+            new_description.return_value.checked = 'A new line.'
+
+            ret = t.up.delta
+
+            t.assertEqual(ret['description'], ['A line.', 'A new line.'])
 
     @patch(f'{SRC}.Ancestry', autospec=True)
     def test_ancestry(t, ancestry: MagicMock) -> None:
@@ -1760,6 +1909,66 @@ class SuppliedTitleTests(TestCase):
                     _ = t.st.checked
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class SuppliedDescriptionTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedDescription."""
+
+    def setUp(t) -> None:
+        t.sd = SuppliedDescription('A line.\n  An indented line.  ')
+
+    def test_lines(t) -> None:
+        with t.subTest('each line, stripped of its indent'):
+            ret = t.sd.lines
+            t.assertEqual(ret, ['A line.', 'An indented line.'])
+
+        with t.subTest('an empty text is no description'):
+            t.sd.text = ''
+            ret = t.sd.lines
+            t.assertEqual(ret, [])
+
+        refused = {
+            'a blank line': (
+                'A line.\n  \nAnother line.',
+                "description line '  ' is blank",
+            ),
+            'a line that reads as a task': (
+                'A line.\n  - [x] A done task',
+                "description line '  - [x] A done task' reads as a task line",
+            ),
+            'a line that reads as a heading': (
+                '## A heading',
+                "description line '## A heading' reads as a heading",
+            ),
+            'a line that reads as a comment': (
+                '  <!-- A comment -->',
+                "description line '  <!-- A comment -->' reads as a comment",
+            ),
+            'a carriage return': (
+                'A line.\r',
+                "description line 'A line.\\r' holds a carriage return",
+            ),
+        }
+        for name, (text, message) in refused.items():
+            with t.subTest(name):
+                t.sd.text = text
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sd.lines
+
+                t.assertEqual(str(caught.exception), message)
+
+    @patch.object(SuppliedDescription, 'lines', new_callable=PropertyMock)
+    def test_checked(t, lines: PropertyMock) -> None:
+        with t.subTest('the lines, joined by newlines'):
+            lines.return_value = ['A line.', 'Another line.']
+            ret = t.sd.checked
+            t.assertEqual(ret, 'A line.\nAnother line.')
+
+        with t.subTest('none, where the text holds no line'):
+            lines.return_value = []
+            ret = t.sd.checked
+            t.assertIsNone(ret)
 
 
 class SuppliedFieldsTests(TestCase):
