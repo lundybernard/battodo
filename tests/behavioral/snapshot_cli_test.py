@@ -6,6 +6,8 @@ the `view` and `show` goldens.
 
 The narrative adds a task to one list, then updates it, notes it and
 completes it. The snapshot of every event it journals names that list.
+A second task closes with a subtask under it, and the snapshot of its
+completion records the subtask.
 """
 
 from datetime import datetime
@@ -67,5 +69,33 @@ class SnapshotListTests(TestCase):
                 ('TaskUpdated', 'chores'),
                 ('TaskAnnotated', 'chores'),
                 ('TaskCompleted', 'chores'),
+            ],
+        )
+
+    def test_children(t) -> None:
+        t.run_ok('add', 'chores', 'Paint the fence')
+        t.run_ok(
+            'add',
+            'chores',
+            'Buy paint',
+            '--parent',
+            'Paint the fence',
+            '--loe',
+            '1',
+        )
+        t.run_ok('done', 'Paint the fence')
+        *_, added, completed = Journal(t.source).events
+        child_id = added['stream_id'].removeprefix('task/')
+
+        ret = completed['payload']['snapshot'].get('children')
+
+        t.assertEqual(
+            ret,
+            [
+                {
+                    'title': 'Buy paint',
+                    'done': False,
+                    'fields': {'LOE': '1', 'ID': child_id},
+                },
             ],
         )

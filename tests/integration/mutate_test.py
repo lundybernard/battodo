@@ -76,6 +76,11 @@ RESCHEDULED_RECURRENCE = (
     '[ID:dr01ab]\n'
     '      A description line.\n'
 )
+# The children of A task, as its snapshot records them.
+A_TASK_CHILDREN = [
+    {'title': 'A subtask of it', 'done': False, 'fields': {'LOE': '2'}},
+    {'title': 'A checklist item', 'done': False, 'fields': {}},
+]
 # The attributes of a note.
 A_NOTE = {'note': 'Waiting on the vendor'}
 # A second list, its open section empty.
@@ -97,6 +102,14 @@ OWNER_SNAPSHOT = {
     'title': 'A checklist owner with no id',
     'done': False,
     'fields': {'P': '3'},
+    'children': [
+        {'title': 'A checklist item to write', 'done': False, 'fields': {}},
+        {
+            'title': 'A checklist item that stays open',
+            'done': False,
+            'fields': {},
+        },
+    ],
 }
 
 
@@ -677,6 +690,7 @@ class UpdateTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                         },
                     )
@@ -896,6 +910,13 @@ class CompletionTests(TestCase):
                                 'REPEAT': '7d',
                                 'ID': 'rr01ab',
                             },
+                            'children': [
+                                {
+                                    'title': 'A subtask that does not recur',
+                                    'done': False,
+                                    'fields': {'LOE': '1'},
+                                },
+                            ],
                         },
                         'ancestry': 'A recurring task',
                         'completed_on': '2026-08-08',
@@ -1053,6 +1074,7 @@ class ScratchTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                             'ancestry': 'A task',
                         },
@@ -1194,6 +1216,7 @@ class AnnotationTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                             'attrs': {'note': 'Waiting on the vendor'},
                         },

@@ -110,6 +110,29 @@ class TaskNodeTests(TestCase):
             ret = t.tk.snapshot
             t.assertNotIn('description', ret)
 
+        with t.subTest('each child as its own snapshot, done ones too'):
+            ret = t.tk.snapshot
+            t.assertEqual(
+                ret['children'],
+                [
+                    {
+                        'title': 'Open checklist item',
+                        'done': False,
+                        'fields': {},
+                    },
+                    {
+                        'title': 'Open subtask',
+                        'done': False,
+                        'fields': {'LOE': '1'},
+                    },
+                    {
+                        'title': 'Completed checklist item',
+                        'done': True,
+                        'fields': {},
+                    },
+                ],
+            )
+
         (parent,) = TodoDocument(DESCRIBED).tasks
         (child,) = parent.children
 

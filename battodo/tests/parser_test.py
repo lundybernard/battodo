@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Any
 from unittest import TestCase
-from unittest.mock import PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch, sentinel
 
 from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
 
@@ -228,6 +229,15 @@ class TaskNodeTests(TestCase):
             description.return_value = 'A description.'
             ret = t.tk.snapshot
             t.assertEqual(ret['description'], 'A description.')
+
+        with t.subTest('and its children, each as its own snapshot'):
+            description.return_value = None
+            child: Any = Mock(spec=['snapshot'], snapshot=sentinel.child)
+            t.tk.children = [child]
+
+            ret = t.tk.snapshot
+
+            t.assertEqual(ret['children'], [sentinel.child])
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     def test_listed_snapshot(t, snapshot: PropertyMock) -> None:
