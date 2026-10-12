@@ -636,6 +636,33 @@ class UpdateTests(TestCase):
                 SelectionError,
                 "no open task matches 'nothing'",
             ),
+            'a list that is not there': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='wrk',
+                ),
+                ListError,
+                "no list named 'wrk'",
+            ),
+            'the list the task is in, and no other change': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='a-list',
+                ),
+                ValueError,
+                'nothing to update',
+            ),
+            'a subtask, which moves with its top-level task': (
+                Update(
+                    Task(t.source, 'A subtask of it', TODAY),
+                    {},
+                    list_name='another-list',
+                ),
+                ValueError,
+                "'A subtask of it' is a subtask",
+            ),
             'a title with a line break': (
                 Update(
                     Task(t.source, '9o71lx', TODAY),
@@ -663,6 +690,36 @@ class UpdateTests(TestCase):
     def test_entry(t) -> None:
         ret = t.up.entry
         t.assertEqual(ret, RENAMED_TASK)
+
+    def test_lists(t) -> None:
+        with t.subTest('an update in place writes the list of the task'):
+            ret = t.up.lists
+            t.assertEqual(ret, {t.source / 'a-list.md': t.up.text})
+
+        with t.subTest('a move takes the whole block to the other list'):
+            moved = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {'P': '5'},
+                list_name='another-list',
+            )
+
+            ret = moved.lists
+
+            block = [
+                A_TASK.replace('[P:4]', '[P:5]'),
+                '      A note that stays put.',
+                A_CHILD,
+                '  - [ ] A checklist item',
+            ]
+            t.assertEqual(
+                ret,
+                {
+                    t.source / 'a-list.md': without(A_LIST, 4, 5, 6, 7),
+                    t.source / 'another-list.md': '\n'.join(
+                        ['# Another list', '', '## Open', *block, '']
+                    ),
+                },
+            )
 
     def test_events(t) -> None:
         with t.subTest('one TaskUpdated: what changed, and from what'):
@@ -747,6 +804,21 @@ class UpdateTests(TestCase):
             (event,) = updated.events
 
             t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
+        with t.subTest('a move records the list it leaves and joins'):
+            moved = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {},
+                list_name='another-list',
+            )
+
+            (event,) = moved.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {'list': ['a-list', 'another-list']},
+            )
+            t.assertEqual(event.payload['snapshot']['list'], 'a-list')
 
 
 class CompletionTests(TestCase):

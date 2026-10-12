@@ -468,11 +468,13 @@ class SubtaskAddition:
 
 
 class Update:
-    """The update of a task: the named fields, title and description.
+    """The update of a task: the named fields, title, description, list.
 
     Only what the update names is written; the rest of the task, and
     every other line of the file, stays as it was. A task with no `[ID:]` is
-    given one, so the caller can name it by id from here on.
+    given one, so the caller can name it by id from here on. A top-level
+    task that `list_name` moves takes its whole block, last in the open
+    section of that list.
     """
 
     def __init__(
@@ -482,12 +484,14 @@ class Update:
         title: str | None = None,
         description: str | None = None,
         attrs: dict[str, str] | None = None,
+        list_name: str | None = None,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
         self.description = description
         self.attrs = attrs
+        self.list_name = list_name
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -506,14 +510,27 @@ class Update:
         changes.write()
 
     @property
+    def lists(self) -> dict[Path, str]:
+        """The text of each list the update writes, by its path.
+
+        A move writes the list the task leaves and the list it joins.
+        """
+        raise NotImplementedError
+
+    @property
     def source(self) -> Path:
         """The source directory of the task."""
         return self.task.source
 
-    @property
+    @cached_property
     def path(self) -> Path:
         """The list file that holds the task."""
         return self.task.path
+
+    @property
+    def moved(self) -> bool:
+        """Whether the task moves to another list."""
+        raise NotImplementedError
 
     @property
     def text(self) -> str:
@@ -550,6 +567,27 @@ class Update:
             doc.drop(set(self.node.note_indices))
             doc.insert_description(index, new_description.lines)
         return doc
+
+    @property
+    def rewritten(self) -> TaskNode:
+        """The task as the rewritten list reads it."""
+        raise NotImplementedError
+
+    @property
+    def block(self) -> list[str]:
+        """Every line the rewritten task owns, in file order."""
+        raise NotImplementedError
+
+    @property
+    def joined(self) -> TodoDocument:
+        """The list the task moves to, its block last in the open section.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        """
+        raise NotImplementedError
 
     @property
     def written(self) -> dict[str, str]:

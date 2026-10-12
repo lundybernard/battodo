@@ -382,6 +382,7 @@ class UpdateItemTests(TestCase):
             'due': '2026-09-01',
             'title': 'A task title',
             'description': 'A description',
+            'list_name': 'another-list',
         }
 
     def test_forwarded(t):
@@ -394,6 +395,7 @@ class UpdateItemTests(TestCase):
             title='A task title',
             description='A description',
             attrs=t.SuppliedAttributes.return_value.checked,
+            list_name='another-list',
         )
 
     def test_attributes(t):
@@ -446,6 +448,7 @@ class UpdateItemTests(TestCase):
         t.assertEqual(args[1], {'TAGS': 'a-tag,another-tag'})
         t.assertIsNone(kwargs['title'])
         t.assertIsNone(kwargs['description'])
+        t.assertIsNone(kwargs['list_name'])
 
 
 class CompleteItemTests(TestCase):

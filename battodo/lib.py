@@ -329,6 +329,7 @@ def update_item(
     description: str | None = None,
     attrs: str | None = None,
     note: str | None = None,
+    list_name: str | None = None,
 ) -> str:
     """Rewrite the task `selector` names.
 
@@ -356,6 +357,8 @@ def update_item(
         The attributes of the update, as `key=value` segments.
     note : str or None
         A note, which enters the attributes under the key `note`.
+    list_name : str or None
+        The list the task moves to. Only a top-level task moves.
 
     Returns
     -------
@@ -364,6 +367,8 @@ def update_item(
 
     Raises
     ------
+    ListError
+        `list_name` names no list.
     SelectionError
         The selector does not name exactly one open task.
     ValueError
@@ -379,6 +384,7 @@ def update_item(
         title=title,
         description=description,
         attrs=checked,
+        list_name=list_name,
     )
     update.write()
     return f'{update.entry}\n{update.path}'
