@@ -207,9 +207,10 @@ class TaskHistoryTests(TestCase):
             'a part of several titles, each named': (
                 'the',
                 (
-                    "'the' matches 3 tasks in the journal: "
-                    "'Renew the parking permit', 'Water the plants', "
-                    "'Sweep the deck'"
+                    "'the' matches 3 tasks in the journal:\n"
+                    'ab12cd  2026-10-01  Renew the parking permit\n'
+                    'qq11rr  2026-08-03  Sweep the deck\n'
+                    'zz99yy  2026-08-02  Water the plants'
                 ),
             ),
         }
@@ -300,9 +301,10 @@ class StreamSelectionTests(TestCase):
             'a part of several titles, each named': (
                 'the',
                 (
-                    "'the' matches 3 tasks in the journal: "
-                    "'Renew the parking permit', 'Water the plants', "
-                    "'Sweep the deck'"
+                    "'the' matches 3 tasks in the journal:\n"
+                    'ab12cd  2026-10-01  Renew the parking permit\n'
+                    'qq11rr  2026-08-03  Sweep the deck\n'
+                    'zz99yy  2026-08-02  Water the plants'
                 ),
             ),
         }
@@ -334,6 +336,15 @@ class TaskStreamTests(TestCase):
         with t.subTest('none without an event of its own'):
             ret = t.nails.title
             t.assertIsNone(ret)
+
+    def test_day(t) -> None:
+        ret = t.permit.day
+        # The note of 2026-10-02 05:30 UTC, on its local day.
+        t.assertEqual(ret, date(2026, 10, 1))
+
+    def test_seq(t) -> None:
+        ret = t.permit.seq
+        t.assertEqual(ret, 6)
 
     def test_own(t) -> None:
         ret = t.permit.own

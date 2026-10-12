@@ -130,11 +130,13 @@ class StreamSelectionTests(TestCase):
     """Unit tests for battodo.history.StreamSelection."""
 
     def setUp(t) -> None:
-        t.permit = a_stream('ab12cd', 'Renew the permit')
-        t.follow_up = a_stream('zz99yy', 'Follow up on ab12cd')
-        t.water = a_stream('qq11rr', 'Water the plants')
-        t.sweep = a_stream('dd44ee', 'Sweep the plants')
-        t.untitled = a_stream('ee55ff', None)
+        t.permit = a_stream('ab12cd', 'Renew the permit', 1)
+        t.follow_up = a_stream('zz99yy', 'Follow up on ab12cd', 2)
+        # The later event of a tie on 2026-09-30 is the sweep's.
+        t.water = a_stream('qq11rr', 'Water the plants', 30)
+        t.sweep = a_stream('dd44ee', 'Sweep the plants', 30)
+        t.water.seq, t.sweep.seq = 5, 6
+        t.untitled = a_stream('ee55ff', None, 3)
         t.streams = [t.permit, t.follow_up, t.water, t.sweep, t.untitled]
         t.ss = StreamSelection(t.streams, 'a selector')
 
@@ -150,11 +152,13 @@ class StreamSelectionTests(TestCase):
                 [],
                 "no task in the journal matches 'a selector'",
             ),
-            'two streams, each named': (
-                [t.water, t.sweep],
+            'several streams, each on a line, newest first': (
+                [t.permit, t.water, t.sweep],
                 (
-                    "'a selector' matches 2 tasks in the journal: "
-                    "'Water the plants', 'Sweep the plants'"
+                    "'a selector' matches 3 tasks in the journal:\n"
+                    'dd44ee  2026-09-30  Sweep the plants\n'
+                    'qq11rr  2026-09-30  Water the plants\n'
+                    'ab12cd  2026-09-01  Renew the permit'
                 ),
             ),
         }
@@ -188,9 +192,15 @@ class StreamSelectionTests(TestCase):
                 t.assertEqual(ret, expected)
 
 
-def a_stream(task_id: str, title: str | None) -> Any:
-    """A stand-in for one stream of the journal."""
-    return Mock(spec=['task_id', 'title'], task_id=task_id, title=title)
+def a_stream(task_id: str, title: str | None, day: int) -> Any:
+    """A stand-in for one stream whose last event falls on a September day.
+
+    Its last event is the `day`-th of the journal.
+    """
+    stream = Mock(spec=['task_id', 'title', 'day', 'seq'])
+    stream.task_id, stream.title = task_id, title
+    stream.day, stream.seq = date(2026, 9, day), day
+    return stream
 
 
 class TaskStreamTests(TestCase):
@@ -236,6 +246,17 @@ class TaskStreamTests(TestCase):
                 own.return_value = events
                 ret = t.ts.title
                 t.assertEqual(ret, expected)
+
+    @patch(f'{SRC}.HistoryEntry', autospec=True)
+    def test_day(t, history_entry: MagicMock) -> None:
+        ret = t.ts.day
+        history_entry.assert_called_once_with(t.events[-1], ZONE)
+        t.assertIs(ret, history_entry.return_value.day)
+
+    def test_seq(t) -> None:
+        t.events[-1]['seq'] = 7
+        ret = t.ts.seq
+        t.assertEqual(ret, 7)
 
     def test_own(t) -> None:
         ret = t.ts.own

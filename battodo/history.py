@@ -193,6 +193,16 @@ class TaskStream:
         return renamed[1] if renamed else payload['snapshot']['title']
 
     @property
+    def day(self) -> date:
+        """The day of the last event, as a history entry reads it."""
+        raise NotImplementedError
+
+    @property
+    def seq(self) -> int:
+        """The place of the last event in the journal."""
+        raise NotImplementedError
+
+    @property
     def own(self) -> list[dict[str, Any]]:
         """The events of the task's own, in journal order."""
         return [

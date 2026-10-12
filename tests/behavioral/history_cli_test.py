@@ -130,6 +130,30 @@ class HistoryCommandTests(TestCase):
             '    note=Waiting on the vendor\n',
         )
 
+    def test_several_tasks(t) -> None:
+        """Each task a title part matches is named by id, newest first."""
+        t.run_ok('add', 'chores', 'Rx refill')
+        t.run_ok('done', 'Rx refill', '--date', '2026-08-01')
+        t.run_ok('add', 'chores', 'Rx refill')
+        t.run_ok('done', 'Rx refill', '--date', '2026-08-03')
+        events = Journal(t.source).events
+        first, second = (
+            event['stream_id'].removeprefix('task/')
+            for event in events
+                if event['type'] == 'TaskCompleted'
+        )  # fmt: skip
+
+        out, err, code = run_cli(['history', 'rx refill'], t.env)
+
+        t.assertEqual(code, 1)
+        t.assertEqual(out, '')
+        t.assertEqual(
+            err,
+            "'rx refill' matches 2 tasks in the journal:\n"
+            f'{second}  2026-08-03  Rx refill\n'
+            f'{first}  2026-08-01  Rx refill\n',
+        )
+
     def test_history_rejected(t) -> None:
         """A selector that names no stream reports on stderr."""
         out, err, code = run_cli(['history', 'Legacy priority'], t.env)
