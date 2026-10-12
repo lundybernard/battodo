@@ -6,11 +6,13 @@ the history.
 """
 
 from datetime import date, datetime, tzinfo
+from operator import attrgetter
+from pathlib import Path
 from typing import Any
 
 from batconf import Configuration
 
-from .journal import Journal
+from .journal import COMPLETED_EVENT, Journal
 
 
 class TaskHistory:
@@ -43,12 +45,13 @@ class TaskHistory:
 
         The zone of the clock decides the local day of each event.
         """
-        raise NotImplementedError
+        journal = Journal(Path(conf.view.source_dir))
+        return cls(journal, selector, now.tzinfo)
 
     @property
     def task_id(self) -> str:
-        """The id of the task: its stream, without the stream prefix."""
-        raise NotImplementedError
+        """The id of the task: its stream id after `task/`."""
+        return self.stream_id.removeprefix('task/')
 
     @property
     def stream_id(self) -> str:
@@ -61,7 +64,27 @@ class TaskHistory:
         ValueError
             The selector names no stream, or several.
         """
-        raise NotImplementedError
+        named = f'task/{self.selector}'
+        if any(event['stream_id'] == named for event in self.journal.events):
+            return named
+        part = self.selector.lower()
+        found = {
+            stream_id: title
+            for stream_id, title in self.titles.items()
+                if part in title.lower()
+        }  # fmt: skip
+        if not found:
+            raise ValueError(
+                f'no task in the journal matches {self.selector!r}'
+            )
+        if len(found) > 1:
+            named = ', '.join(repr(title) for title in found.values())
+            raise ValueError(
+                f'{self.selector!r} matches {len(found)} tasks in the '
+                f'journal: {named}'
+            )
+        (stream_id,) = found
+        return stream_id
 
     @property
     def titles(self) -> dict[str, str]:
@@ -71,7 +94,15 @@ class TaskHistory:
         event of the task's own. A checklist item's event carries the
         snapshot of the item, so it gives no title.
         """
-        raise NotImplementedError
+        titles: dict[str, str] = {}
+        for event in self.journal.events:
+            payload = event['payload']
+            if payload.get('checklist_item'):
+                continue
+            renamed = payload.get('delta', {}).get('title')
+            title = renamed[1] if renamed else payload['snapshot']['title']
+            titles[event['stream_id']] = title
+        return titles
 
     @property
     def title(self) -> str | None:
@@ -79,7 +110,7 @@ class TaskHistory:
 
         None when the stream holds no event of the task's own.
         """
-        raise NotImplementedError
+        return self.titles.get(self.stream_id)
 
     @property
     def entries(self) -> list['HistoryEntry']:
@@ -87,12 +118,24 @@ class TaskHistory:
 
         Newest first: by day, then the later event in the journal first.
         """
-        raise NotImplementedError
+        read = [HistoryEntry(event, self.zone) for event in self.events]
+        listed = [
+            entry
+            for entry in read
+                if entry.kind == COMPLETED_EVENT or entry.attrs
+        ]  # fmt: skip
+        newest = reversed(listed)
+        return sorted(newest, key=attrgetter('day'), reverse=True)
 
     @property
     def events(self) -> list[dict[str, Any]]:
         """The events of the task's stream, in journal order."""
-        raise NotImplementedError
+        stream_id = self.stream_id
+        return [
+            event
+            for event in self.journal.events
+                if event['stream_id'] == stream_id
+        ]  # fmt: skip
 
 
 class HistoryEntry:
@@ -105,12 +148,12 @@ class HistoryEntry:
     @property
     def kind(self) -> str:
         """The event type."""
-        raise NotImplementedError
+        return self.event['type']
 
     @property
     def checklist_item(self) -> bool:
-        """Whether the event is the completion of a checklist item."""
-        raise NotImplementedError
+        """Whether the event belongs to a checklist item."""
+        return bool(self.event['payload'].get('checklist_item'))
 
     @property
     def day(self) -> date:
@@ -120,9 +163,13 @@ class HistoryEntry:
         for any other event, and for a completion that predates
         `completed_on`.
         """
-        raise NotImplementedError
+        completed_on = self.event['payload'].get('completed_on')
+        if completed_on is not None:
+            return date.fromisoformat(completed_on)
+        occurred = datetime.fromisoformat(self.event['occurred_at'])
+        return occurred.astimezone(self.zone).date()
 
     @property
     def attrs(self) -> dict[str, str]:
         """The attributes, in recorded order. Absent reads as none."""
-        raise NotImplementedError
+        return self.event['payload'].get('attrs', {})
