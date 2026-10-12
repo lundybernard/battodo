@@ -1,6 +1,6 @@
 ---
 name: battodo
-description: Operate the btodo todo-list CLI — read ranked views, add, update, complete and scratch tasks and subtasks, and digest completed work. Load whenever a todo list is read or changed.
+description: Operate the btodo todo-list CLI — read ranked views, add, update, complete and scratch tasks and subtasks, record attributes and notes, read a task's history, and digest completed work. Load whenever a todo list is read or changed.
 ---
 
 # BatTodo
@@ -16,8 +16,11 @@ directory to load it.
   does not survive the next render of the list.
 - Parse `--format json`. Never scrape the text table: it is laid out
   for a human terminal and its columns move with the content.
-- Errors print to stderr and the exit code is 1. stdout carries the
-  command output and nothing else. Branch on the exit code.
+- A refusal or a config error prints one line to stderr and exits 1.
+  An argparse usage error (an unknown option, a missing argument, a
+  choice outside the list) prints the usage text and the error to
+  stderr and exits 2. stdout carries the command output and nothing
+  else. Branch on the exit code.
 - Rank is computed at read time from priority, age and due date.
   Nothing is written to keep a rank current, and there is no `bump`
   command.
@@ -34,13 +37,29 @@ btodo view --all                      # every open item, every category
 btodo view --format json              # the same selection as JSON
 btodo show <selector>                 # one item: its fields and subtasks
 btodo show <selector> --format json
+btodo history <selector> [--format text|json]
 btodo completed [today|week|month] [--format text|json]
 ```
+
+`show --format json` carries `description` on the item and on each
+entry of `subtasks`: the description lines joined by `\n`, or `null`
+when the task has none.
+
+`history` lists each completion of one task, and every other event of
+that task that carries attributes, newest first. Its JSON holds `id`,
+`title` and `entries`. Each entry holds `kind` (the event type, such as
+`TaskCompleted` or `TaskAnnotated`), `checklist_item` (true for the
+completion of a checklist item under the task), `day` and `attrs`.
+[README.md](README.md#history-of-a-task) states how each entry takes
+its day and its place in the order.
 
 `completed` reads the completed log for one period, DONE records only.
 `today` is the local day, `week` is seven days ending today, and
 `month` reaches back to the first of the month. The period defaults to
-`week`.
+`week`. The text form prints the attributes of a record after its title
+as `key=value` pairs joined by a comma and a space. A value may hold
+that separator, so read attributes from the JSON: each entry carries
+`attrs`, an object of text values, `{}` when the record carries none.
 
 The `view` JSON schema is documented in
 [README.md](README.md#machine-readable-output). It grows by addition:
@@ -53,11 +72,14 @@ to learn how many open items the selection left out.
 ```text
 btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
                          [--repeat R] [--tags a,b] [--description TEXT]
+                         [--attrs ATTRS] [--note TEXT]
 btodo add <list> <title> --parent <selector>
 btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
                         [--title TITLE] [--description TEXT]
-btodo done <selector> [--date YYYY-MM-DD]
-btodo scratch <selector>
+                        [--attrs ATTRS] [--note TEXT]
+btodo done <selector> [--date YYYY-MM-DD] [--attrs ATTRS] [--note TEXT]
+btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
+btodo note <selector> [TEXT] [--attrs ATTRS]
 ```
 
 - `<list>` is a filename stem: `chores` for `chores.md`.
@@ -66,23 +88,54 @@ btodo scratch <selector>
   `monthly:N`. `--tags` is a comma-separated list.
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
-- `--description` sets the static description of a task: each line of
-  `TEXT` becomes one description line under the task.
-  `update --description ''` clears it. A line that is blank, reads as
-  a task, a heading or a comment, or holds a carriage return is
-  refused. `show` prints the description, and its JSON carries it as
-  `description`.
+- `--description` sets the description of a task: each line of `TEXT`
+  becomes one description line under the task. `update --description ''`
+  clears it. A subtask takes a description too. btodo refuses a line
+  that is blank, reads as a task, a heading or a comment, or holds a
+  carriage return. `show` prints the description.
 - `add` echoes the line it wrote and the file it wrote to. Read that
   echo to confirm the write. A task with no `-p` gets a neutral
   priority and still ranks by its dates; an explicit `-p 0` parks the
   task out of every view.
 - `done` completes the task and logs it. `scratch` drops the task and
   logs it as abandoned. `completed` counts only the first, so pick the
-  one that states what happened.
+  one that states what happened. Both echo the record they log. A
+  record with attributes ends with one `[attrs:{...}]` block: the
+  attributes as a JSON object in ASCII.
 - `done --date` logs the completion under the day the work finished,
   rather than the day it is marked off. A repeating task is rescheduled
   from that day too.
 - Checking off the last open child completes its parent.
+
+## Attributes and notes
+
+`--attrs` and `--note` record attributes on the journal event of the
+task the command names. `note` records them with no other change.
+
+- `--attrs` takes one string of `key=value` segments:
+  `--attrs 'cost=45.00, place=Main St, Suite 4'`. The string splits
+  only at a comma followed by the next `key=`, so a value may hold
+  commas and `=`. That example gives `place` the value
+  `Main St, Suite 4`.
+- A key is a lowercase letter, then lowercase letters, digits or
+  underscores.
+- `--note TEXT` records `TEXT` as the attribute `note`. The text never
+  runs through the split.
+- To record no attributes, leave both options off. btodo refuses each
+  of these before it writes anything: a key given twice (`note=` in
+  `--attrs` beside `--note`, or beside the `TEXT` of `note`, counts),
+  an empty value (`--attrs ''` and `--note ''` count), a line break, a
+  segment with no `=`, a key outside the grammar, and any attribute on
+  a checklist item.
+- Attributes ride on a change. `update` with `--attrs` or `--note` and
+  no other change refuses with "nothing to update". Record a note alone
+  with `note`.
+- `note <selector> [TEXT] [--attrs ATTRS]` takes `TEXT` as the
+  attribute `note`. It takes no `--note` option. Give it `TEXT`,
+  `--attrs`, or both; `note` refuses a call with neither.
+- `note` leaves the task unchanged. It reaches an open task at any
+  depth. A task with no `[ID:]` gets one first, and the echoed line
+  shows it.
 
 ## Selectors
 
@@ -93,6 +146,11 @@ every open task at every depth, in every list, parked lists included.
 A selector that matches nothing, or more than one open task, is an
 error. The message names the candidates. Narrow the selector, or take
 the id from `--format json` output.
+
+`history` resolves its selector against the journal instead of the
+lists. A title selector matches the current title of each task, and a
+finished task stays in reach. Read a finished task's attributes and
+notes through `history`.
 
 ## Subtasks
 
