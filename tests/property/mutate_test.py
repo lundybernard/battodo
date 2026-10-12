@@ -833,7 +833,9 @@ def completed(
     Completing the last open child completes its parent. A finished
     top-level task loses its block, unless it repeats: then it stays
     with a new due date, and only its children go. The attributes go
-    on the event of the named task, which is not a checklist item.
+    on the event of the named task, which is not a checklist item. Each
+    stream task that keeps its line and gains an id is stamped first,
+    on an event of its own.
     """
     attrs = attributes(given)
     text, ancestry = reached(found)
@@ -845,16 +847,22 @@ def completed(
     if attrs:
         refuse_checklist_attributes(ancestry[-1])
     ids = stream_ids(ancestries)
+    streams = {
+        stream_task(each).raw_index: stream_task(each) for each in ancestries
+    }
+    stamped: list[int] = []
     doc = TodoDocument(text)
     if rescheduled is not None:
         doc.set_field(root.raw_index, 'DUE', rescheduled.isoformat())
         doc.set_field(root.raw_index, 'ID', ids[root.raw_index])
+        stamped.append(root.raw_index)
     if root_done:
         kept = {root.raw_index, *root.note_indices} if repeats else set()
         doc.drop(root.block - kept)
     else:
         for index, task_id in ids.items():
             doc.set_field(index, 'ID', task_id)
+            stamped.append(index)
         for each in ancestries:
             doc.mark_done(each[-1].raw_index)
     entries = [
@@ -862,7 +870,11 @@ def completed(
         for each in ancestries
             if not is_checklist_item(each[-1])
     ]  # fmt: skip
-    events = []
+    events = [
+        id_stamp(streams[index], ids[index])
+        for index in stamped
+            if not streams[index].task_id
+    ]  # fmt: skip
     for each in ancestries:
         node = each[-1]
         delta: dict[str, Any] = {'done': [False, True]}
@@ -897,7 +909,9 @@ def scratched(
 
     Nothing cascades. A checklist item is not logged, and its event
     lands on the stream of the nearest ancestor that can carry an id.
-    The event carries the attributes; a checklist item takes none.
+    That ancestor, if it has no id, is stamped first, on an event of
+    its own. The event carries the attributes; a checklist item takes
+    none.
     """
     attrs = attributes(given)
     text, ancestry = reached(found)
@@ -924,10 +938,15 @@ def scratched(
         payload['checklist_item'] = True
     if attrs:
         payload['attrs'] = attrs
-    event = Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
+    events = []
+    if stream is not node and not stream.task_id:
+        events.append(id_stamp(stream, stream_id))
+    events.append(
+        Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
+    )
     lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
-    after = Source(lists, log, journal([event]))
+    after = Source(lists, log, journal(events))
     return Outcome('\n'.join(entries) or 'dropped', after)
 
 
@@ -1248,6 +1267,12 @@ def ordered(fields: dict[str, str]) -> dict[str, str]:
         for field in SCHEMA_FIELDS
             if field in fields
     }  # fmt: skip
+
+
+def id_stamp(task: TaskNode, task_id: str) -> 'Appended':
+    """The `TaskUpdated` that records `task_id` given to `task`."""
+    stamp = {'delta': {'ID': [None, task_id]}, 'snapshot': snapshot(task)}
+    return Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
 
 
 def new_ids() -> Iterator[str]:
