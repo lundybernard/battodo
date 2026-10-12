@@ -1299,8 +1299,13 @@ class Changeset:
         self.source = source
 
     def write(self) -> None:
-        """Write the list, then the log records, then the events."""
-        self.path.write_text(self.text)
+        """Write the list, then the log records, then the events.
+
+        A list that holds the text already is not written, so file sync
+        sees no change.
+        """
+        if self.path.read_text() != self.text:
+            self.path.write_text(self.text)
         CompletedLog(self.source).append(self.entries)
         journal = Journal(self.source)
         for event in self.events:
