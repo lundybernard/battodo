@@ -656,7 +656,7 @@ class Update:
         """
         payload: dict[str, Any] = {
             'delta': self.delta,
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.task.path.stem),
         }
         if self.nested:
             payload['ancestry'] = self.ancestry.path
@@ -1053,7 +1053,7 @@ class Scratch:
         self.node.refuse_attributes(self.attrs)
         payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.path.stem),
             'ancestry': self.ancestry.path,
         }
         if self.node.is_checklist_item:
@@ -1209,7 +1209,8 @@ class Annotation:
 
         No delta: a note changes nothing in the task.
         """
-        payload: dict[str, Any] = {'snapshot': self.node.snapshot}
+        snapshot = self.node.listed_snapshot(self.path.stem)
+        payload: dict[str, Any] = {'snapshot': snapshot}
         if self.nested:
             payload['ancestry'] = self.ancestry.path
         payload['attrs'] = self.attrs
@@ -1624,7 +1625,7 @@ class AddedLine:
             # Post-state, unlike every other event here: an add has no
             # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.list_name),
         }
         if self.attrs:
             payload['attrs'] = self.attrs
@@ -1649,7 +1650,7 @@ class IdAssignment:
         """The new id against nothing, on the stream it names."""
         payload = {
             'delta': {'ID': [None, self.task_id]},
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.list_name),
         }
         return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
@@ -1692,7 +1693,7 @@ class TaskCompletion:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
-            'snapshot': node.snapshot,
+            'snapshot': node.listed_snapshot(self.list_name),
             'ancestry': self.ancestry.path,
         }
         if node.is_checklist_item:
@@ -1890,7 +1891,7 @@ class ListBackfill:
         for task in self.tasks:
             payload = {
                 'delta': delta,
-                'snapshot': task.snapshot,
+                'snapshot': task.listed_snapshot(self.path.stem),
                 'backfilled': True,
             }
             stream = f'task/{self.ids[task.raw_index]}'

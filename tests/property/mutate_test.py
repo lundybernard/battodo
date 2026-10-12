@@ -629,7 +629,7 @@ def added(
     doc.set_fields(index, fields)
     describe(doc, index, '', lines)
     entry = doc.lines[index]
-    payload = addition(block(doc, index, lines), fields, attrs)
+    payload = addition(block(doc, index, lines), fields, attrs, name)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
     lists = {**before.lists, name: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -737,13 +737,14 @@ def added_below(
     if stamped:
         stamp = {
             'delta': {'ID': [None, parent_id]},
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
         }
         events.append(
             Appended('TaskUpdated', f'task/{parent_id}', stamp, LIST_FILE)
         )
     added_block = block(doc, index, lines)
-    child = {**addition(added_block, child_fields, attrs), 'parent': parent_id}
+    added_payload = addition(added_block, child_fields, attrs, LIST_FILE)
+    child = {**added_payload, 'parent': parent_id}
     child_stream = f'task/{child_fields["ID"]}'
     events.append(Appended('TaskAdded', child_stream, child, LIST_FILE))
     lists = {**before.lists, LIST_FILE: doc.text}
@@ -803,7 +804,10 @@ def updated(
     if lines is not None:
         before_text = '\n'.join(node.description_lines) or None
         delta['description'] = [before_text, '\n'.join(lines) or None]
-    payload: dict[str, Any] = {'delta': delta, 'snapshot': snapshot(node)}
+    payload: dict[str, Any] = {
+        'delta': delta,
+        'snapshot': snapshot(node, LIST_FILE),
+    }
     if nested:
         payload['ancestry'] = path_of(ancestry)
     if attrs:
@@ -882,7 +886,7 @@ def completed(
             delta['DUE'] = [root.due, rescheduled.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
             'ancestry': path_of(each),
             'completed_on': TODAY.isoformat(),
         }
@@ -931,7 +935,7 @@ def scratched(
     )
     payload: dict[str, Any] = {
         'delta': {'removed': [False, True]},
-        'snapshot': snapshot(node),
+        'snapshot': snapshot(node, LIST_FILE),
         'ancestry': path_of(ancestry),
     }
     if is_checklist_item(node):
@@ -974,12 +978,12 @@ def annotated(
         doc.set_field(node.raw_index, 'ID', task_id)
         stamp = {
             'delta': {'ID': [None, task_id]},
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
         }
         events.append(
             Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
         )
-    payload: dict[str, Any] = {'snapshot': snapshot(node)}
+    payload: dict[str, Any] = {'snapshot': snapshot(node, LIST_FILE)}
     if len(ancestry) > 1:
         payload['ancestry'] = path_of(ancestry)
     payload['attrs'] = attrs
@@ -1015,7 +1019,7 @@ def backfilled(before: Source) -> 'Outcome':
             titles.append(task.title)
             payload = {
                 'delta': {'ADDED': [None, TODAY.isoformat()]},
-                'snapshot': snapshot(task),
+                'snapshot': snapshot(task, name),
                 'backfilled': True,
             }
             events.append(
@@ -1271,7 +1275,10 @@ def ordered(fields: dict[str, str]) -> dict[str, str]:
 
 def id_stamp(task: TaskNode, task_id: str) -> 'Appended':
     """The `TaskUpdated` that records `task_id` given to `task`."""
-    stamp = {'delta': {'ID': [None, task_id]}, 'snapshot': snapshot(task)}
+    stamp = {
+        'delta': {'ID': [None, task_id]},
+        'snapshot': snapshot(task, LIST_FILE),
+    }
     return Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
 
 
@@ -1284,8 +1291,9 @@ def addition(
     written: str,
     fields: dict[str, str],
     attrs: dict[str, str],
+    file: str,
 ) -> dict[str, Any]:
-    """The payload of a new task: each field against nothing.
+    """The payload of a new task in `file`: each field against nothing.
 
     The snapshot is the task line and its description lines as the
     parser reads them back. The attributes go in where any are given.
@@ -1293,7 +1301,7 @@ def addition(
     task = TodoDocument(f'{OPEN_HEADING}\n{written}').tasks[0]
     payload = {
         'delta': {field: [None, value] for field, value in fields.items()},
-        'snapshot': snapshot(task),
+        'snapshot': snapshot(task, file),
     }
     if attrs:
         payload['attrs'] = attrs
@@ -1392,13 +1400,18 @@ def refuse_checklist_item(task: TaskNode) -> None:
         )
 
 
-def snapshot(task: TaskNode) -> dict[str, Any]:
-    """The task as the file states it before the write.
+def snapshot(task: TaskNode, file: str) -> dict[str, Any]:
+    """The task as `file` states it before the write, and its list.
 
     Its description lines join into its description, absent when it
-    has none.
+    has none. The list is the stem of `file`.
     """
-    found = {'title': task.title, 'done': task.done, 'fields': task.fields}
+    found: dict[str, Any] = {
+        'title': task.title,
+        'done': task.done,
+        'fields': task.fields,
+        'list': Path(file).stem,
+    }
     if task.description_lines:
         found['description'] = '\n'.join(task.description_lines)
     return found

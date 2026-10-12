@@ -148,7 +148,7 @@ class TaskNode:
 
         A journal event names the list of its task by the filename stem.
         """
-        raise NotImplementedError
+        return {**self.snapshot, 'list': list_name}
 
     @property
     def schema_fields(self) -> dict[str, str]:
