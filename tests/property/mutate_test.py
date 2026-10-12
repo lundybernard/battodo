@@ -218,6 +218,7 @@ class UpdateItemTests(TestCase):
         title = data.draw(st.one_of(st.none(), supplied_titles()))
         description = data.draw(supplied_descriptions())
         list_name = data.draw(st.one_of(st.none(), list_names()))
+        with_subtasks = data.draw(either(st.just(False), st.booleans()))
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
         given = data.draw(supplied_attributes())
@@ -232,6 +233,8 @@ class UpdateItemTests(TestCase):
             description,
             given,
             list_name,
+            selector,
+            with_subtasks,
         )
 
         with written(before) as directory:
@@ -245,6 +248,7 @@ class UpdateItemTests(TestCase):
                 attrs=given.text,
                 note=given.note,
                 list_name=list_name,
+                with_subtasks=with_subtasks,
             )
 
         t.assertEqual(ret, expected)
@@ -271,6 +275,8 @@ class UpdateItemTests(TestCase):
             None,
             unnamed,
             list_name,
+            selector,
+            False,
         )
 
         with written(before) as directory:
@@ -300,6 +306,7 @@ class UpdateItemTests(TestCase):
         title = data.draw(st.one_of(st.none(), supplied_titles()))
         description = data.draw(supplied_descriptions())
         list_name = data.draw(st.one_of(st.none(), list_names()))
+        with_subtasks = data.draw(st.booleans())
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
         given = data.draw(supplied_attributes())
@@ -314,6 +321,7 @@ class UpdateItemTests(TestCase):
             description,
             given,
             list_name,
+            with_subtasks,
         )
 
         with written(before) as directory:
@@ -327,6 +335,7 @@ class UpdateItemTests(TestCase):
                 attrs=given.text,
                 note=given.note,
                 list_name=list_name,
+                with_subtasks=with_subtasks,
             )
 
         t.assertEqual(ret, expected)
@@ -758,7 +767,7 @@ def observed(
     write: Callable[..., str],
     conf: Mock,
     directory: Path,
-    **inputs: str | None,
+    **inputs: str | bool | None,
 ) -> Any:
     """What `write` answers and leaves in `directory`, canonical.
 
@@ -858,13 +867,16 @@ def updated(
     description: str | None,
     given: 'Attributes',
     list_name: str | None,
+    selector: str,
+    with_subtasks: bool,
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
     one clears them. A task with no id is given one. The event carries
     the attributes. A top-level task bound for another list takes its
-    whole block there, last in the open section.
+    whole block there, last in the open section. An open task refuses
+    the subtasks of a reopen.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
@@ -873,6 +885,11 @@ def updated(
         # the journal of the case holds none.
         checked(fields)
         raise SelectionError(found)
+    if with_subtasks:
+        raise ValueError(
+            f'{selector!r} names an open task: --with-subtasks reopens a '
+            'closed task and its subtasks'
+        )
     if not fields and title is None and description is None:
         # The list counts only where it moves the task.
         file = None if list_name is None else list_file(before, list_name)
@@ -1007,6 +1024,7 @@ def reopened(
     description: str | None,
     given: 'Attributes',
     list_name: str | None,
+    with_subtasks: bool,
 ) -> 'Outcome':
     """The closed task open again, last in the open section of its list.
 
@@ -1014,7 +1032,9 @@ def reopened(
     off, to the list named or else to its recorded list. The task then
     opens and takes the named fields, title and description; its
     children stay closed. One TaskUpdated records the opening and the
-    changes, and carries the attributes.
+    changes, and carries the attributes. With its subtasks, each
+    subtask below it opens too, in file order, each on a TaskUpdated of
+    its own; a subtask with no id takes a new one.
     """
     attrs = attributes(given)
     values = checked(supplied(options, UPDATE_OPTIONS))
@@ -1039,7 +1059,17 @@ def reopened(
         for each in TodoDocument(doc.text).tasks
             if each.raw_index == index
     ]  # fmt: skip
+    below = subtasks_below([root]) if with_subtasks else []
+    new = new_ids()
+    stamped = {
+        chain[-1].raw_index: chain[-1].task_id or next(new) for chain in below
+    }
     doc.lines[index] = doc.lines[index].replace('- [x]', '- [ ]', 1)
+    for chain in below:
+        at = chain[-1].raw_index
+        doc.lines[at] = doc.lines[at].replace('- [x]', '- [ ]', 1)
+        if not chain[-1].task_id:
+            doc.set_field(at, 'ID', stamped[at])
     doc.set_fields(index, values)
     if title is not None:
         doc.set_title(index, title)
@@ -1066,10 +1096,37 @@ def reopened(
     if attrs:
         payload['attrs'] = attrs
     stream = f'task/{CLOSED_ID}'
-    opened = Appended('TaskUpdated', stream, payload, file)
-    events = journal([closing(task, recorded), opened])
+    opened = [Appended('TaskUpdated', stream, payload, file)]
+    for chain in below:
+        subtask = chain[-1]
+        sub_delta: dict[str, Any] = {}
+        if not subtask.task_id:
+            sub_delta['ID'] = [None, stamped[subtask.raw_index]]
+        sub_delta['done'] = [True, False]
+        sub_payload = {
+            'delta': sub_delta,
+            'snapshot': {**state(subtask), 'list': left},
+            'ancestry': path_of(chain),
+        }
+        sub_stream = f'task/{stamped[subtask.raw_index]}'
+        opened.append(Appended('TaskUpdated', sub_stream, sub_payload, file))
+    events = journal([closing(task, recorded), *opened])
     lists = {**before.lists, file: doc.text}
     return Outcome(f'{entry}\n{SOURCE}/{file}', Source(lists, None, events))
+
+
+def subtasks_below(chain: list[TaskNode]) -> list[list[TaskNode]]:
+    """Each subtask below the last of `chain`, with every task above it.
+
+    In file order, at any depth. A checklist item is not a subtask.
+    """
+    found = []
+    for child in chain[-1].children:
+        below = [*chain, child]
+        if not is_checklist_item(child):
+            found.append(below)
+        found.extend(subtasks_below(below))
+    return found
 
 
 def recorded_lines(snapshot: dict[str, Any], depth: int) -> list[str]:

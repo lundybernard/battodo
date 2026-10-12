@@ -686,10 +686,16 @@ class Update:
         Raises
         ------
         ValueError
-            No field, title or description is named and no list moves
-            the task, or a supplied value does not read. The list is
-            read only when nothing else is named.
+            The update asks for the subtasks of a reopen, no field,
+            title or description is named and no list moves the task,
+            or a supplied value does not read. The list is read only
+            when nothing else is named.
         """
+        if self.with_subtasks:
+            raise ValueError(
+                f'{self.task.selector!r} names an open task: '
+                '--with-subtasks reopens a closed task and its subtasks'
+            )
         named = (self.title, self.description)
         if (
             not self.fields
@@ -1095,8 +1101,14 @@ class Reopen:
 
     @property
     def opened(self) -> list[TaskNode]:
-        """The closed tasks of the ancestry, outermost first."""
-        return [task for task in self.ancestry if task.done]
+        """The closed tasks of the ancestry, outermost first.
+
+        With `with_subtasks`, each closed subtask below the task follows.
+        """
+        opened = [task for task in self.ancestry if task.done]
+        if self.with_subtasks:
+            opened.extend(self.subtasks)
+        return opened
 
     @property
     def subtasks(self) -> list[TaskNode]:
@@ -1104,7 +1116,15 @@ class Reopen:
 
         A checklist item is not a subtask.
         """
-        raise NotImplementedError
+        named = self.node.raw_index
+        chains = sorted(self.chains.items())
+        return [
+            chain[-1]
+            for _, chain in chains
+                if any(task.raw_index == named for task in chain[:-1])
+                and chain[-1].done
+                and not chain[-1].is_checklist_item
+        ]  # fmt: skip
 
     @cached_property
     def ids(self) -> dict[int, str]:

@@ -91,6 +91,8 @@ MESSAGES = {
     'update.note.help': 'a note on the update; the attribute note',
     'update.list.help': 'move the task and its subtasks to this list: the'
     " list's filename stem, e.g. chores for chores.md",
+    'update.with_subtasks.help': 'reopen a closed task and each closed'
+    ' subtask below it; without it, its subtasks stay closed',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',
