@@ -215,7 +215,8 @@ def stream_of(events: list[Recorded], selector: str) -> str:
     Raises
     ------
     ValueError
-        The selector names no task in the journal, or several.
+        The selector names no task in the journal, or several. Several
+        are named one per line, newest last event first.
     """
     if any(event.task_id == selector for event in events):
         return selector
@@ -236,12 +237,30 @@ def stream_of(events: list[Recorded], selector: str) -> str:
     if not matched:
         raise ValueError(f'no task in the journal matches {selector!r}')
     if len(matched) > 1:
-        named = ', '.join(repr(title) for _, title in matched)
+        newest = sorted(
+            matched,
+            key=lambda pair: last_of(events, pair[0]),
+            reverse=True,
+        )
+        lines = '\n'.join(
+            f'{task_id}{INDENT}{last_of(events, task_id)[0]}{INDENT}{title}'
+            for task_id, title in newest
+        )
         raise ValueError(
-            f'{selector!r} matches {len(matched)} tasks in the journal: '
-            f'{named}'
+            f'{selector!r} matches {len(matched)} tasks in the journal:\n'
+            f'{lines}'
         )
     return matched[0][0]
+
+
+def last_of(events: list[Recorded], task_id: str) -> tuple[date, int]:
+    """The day of the last event of a task, and its place in the journal."""
+    position, last = max(
+        (position, event)
+        for position, event in enumerate(events)
+            if event.task_id == task_id
+    )  # fmt: skip
+    return day_of(last), position
 
 
 def current_title(events: list[Recorded], task_id: str) -> str | None:

@@ -125,7 +125,9 @@ class StreamSelection:
         Raises
         ------
         ValueError
-            The selector names no stream, or several.
+            The selector names no stream, or several. Several are named
+            one per line: the id, the day of the last event and the
+            title, newest first.
         """
         found = self.candidates
         if not found:
@@ -133,10 +135,14 @@ class StreamSelection:
                 f'no task in the journal matches {self.selector!r}'
             )
         if len(found) > 1:
-            named = ', '.join(repr(stream.title) for stream in found)
+            newest = sorted(found, key=attrgetter('day', 'seq'), reverse=True)
+            lines = '\n'.join(
+                f'{stream.task_id}{INDENT}{stream.day}{INDENT}{stream.title}'
+                for stream in newest
+            )
             raise ValueError(
                 f'{self.selector!r} matches {len(found)} tasks in the '
-                f'journal: {named}'
+                f'journal:\n{lines}'
             )
         return found[0]
 
@@ -195,12 +201,12 @@ class TaskStream:
     @property
     def day(self) -> date:
         """The day of the last event, as a history entry reads it."""
-        raise NotImplementedError
+        return HistoryEntry(self.events[-1], self.zone).day
 
     @property
     def seq(self) -> int:
         """The place of the last event in the journal."""
-        raise NotImplementedError
+        return self.events[-1]['seq']
 
     @property
     def own(self) -> list[dict[str, Any]]:
