@@ -317,6 +317,11 @@ class HistoryEntry:
         """The attributes, in recorded order. Absent reads as none."""
         return self.event['payload'].get('attrs', {})
 
+    @property
+    def reopen(self) -> bool:
+        """Whether the event reopens the task: done turns false."""
+        raise NotImplementedError
+
 
 class HistoryView:
     """A history rendered for a terminal: a header, then the entries."""

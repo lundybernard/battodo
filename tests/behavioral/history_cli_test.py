@@ -130,6 +130,22 @@ class HistoryCommandTests(TestCase):
             '    note=Waiting on the vendor\n',
         )
 
+    def test_reopened_task(t) -> None:
+        t.run_ok('done', 'Overdue task', '--date', '2026-08-03')
+        (completed,) = Journal(t.source).events
+        task_id = completed['stream_id'].removeprefix('task/')
+        t.run_ok('update', task_id)
+
+        out = t.run_ok('history', task_id)
+
+        # The reopen is listed, though it carries no attribute.
+        t.assertEqual(
+            out,
+            f'Overdue task [ID:{task_id}]\n'
+            '  2026-08-04  TaskUpdated\n'
+            '  2026-08-03  TaskCompleted\n',
+        )
+
     def test_several_tasks(t) -> None:
         """Each task a title part matches is named by id, newest first."""
         t.run_ok('add', 'chores', 'Rx refill')

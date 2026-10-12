@@ -151,6 +151,34 @@ HISTORY = (
         },
         '2026-08-07T16:00:00+00:00',
     ),
+    (
+        'TaskCompleted',
+        'task/rx33rx',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+            'completed_on': '2026-08-08',
+        },
+        '2026-08-08T16:00:00+00:00',
+    ),
+    (
+        'TaskUpdated',
+        'task/rx33rx',
+        {
+            'delta': {'DUE': [None, '2026-09-08'], 'done': [True, False]},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+        },
+        '2026-08-09T16:00:00+00:00',
+    ),
+    (
+        'TaskUpdated',
+        'task/rx33rx',
+        {
+            'delta': {'DUE': ['2026-09-08', '2026-09-09']},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+        },
+        '2026-08-10T16:00:00+00:00',
+    ),
 )
 
 # The history of task/ab12cd, as each form lays it out.
@@ -303,6 +331,13 @@ class TaskHistoryTests(TestCase):
                 [('TaskCompleted', False, date(2026, 7, 31), {})],
             ),
             'a stream with no entries': ('qq11rr', []),
+            'a reopen, beside its completion; a plain update is no entry': (
+                'rx33rx',
+                [
+                    ('TaskUpdated', False, date(2026, 8, 9), {}),
+                    ('TaskCompleted', False, date(2026, 8, 8), {}),
+                ],
+            ),
         }
         for name, (selector, expected) in cases.items():
             with t.subTest(name):

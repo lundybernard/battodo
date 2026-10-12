@@ -102,12 +102,21 @@ class TaskHistoryTests(TestCase):
             sentinel.updated,
             sentinel.completed,
             sentinel.annotated,
+            sentinel.reopened,
         ]
         added = an_entry('TaskAdded', date(2026, 9, 1), {})
         updated = an_entry('TaskUpdated', date(2026, 9, 2), {'k': 'v'})
         completed = an_entry('TaskCompleted', date(2026, 9, 30), {})
         annotated = an_entry('TaskAnnotated', date(2026, 9, 30), {'k': 'v'})
-        history_entry.side_effect = [added, updated, completed, annotated]
+        reopened = an_entry('TaskUpdated', date(2026, 10, 1), {})
+        reopened.reopen = True
+        history_entry.side_effect = [
+            added,
+            updated,
+            completed,
+            annotated,
+            reopened,
+        ]
 
         ret = t.th.entries
 
@@ -118,12 +127,13 @@ class TaskHistoryTests(TestCase):
                     call(sentinel.updated, sentinel.zone),
                     call(sentinel.completed, sentinel.zone),
                     call(sentinel.annotated, sentinel.zone),
+                    call(sentinel.reopened, sentinel.zone),
                 ]
             )
 
-        with t.subTest('a completion, and another event with attributes'):
+        with t.subTest('a completion, a reopen, an event with attributes'):
             # Newest first by day. In a tie, the later event comes first.
-            t.assertEqual(ret, [annotated, completed, updated])
+            t.assertEqual(ret, [reopened, annotated, completed, updated])
 
 
 class StreamSelectionTests(TestCase):
@@ -372,9 +382,10 @@ class TaskStreamTests(TestCase):
 
 
 def an_entry(kind: str, day: date, attrs: dict[str, str]) -> Mock:
-    """A stand-in for one entry of a history."""
-    entry = Mock(spec=['kind', 'day', 'attrs'])
+    """A stand-in for one entry of a history that reopens nothing."""
+    entry = Mock(spec=['kind', 'day', 'attrs', 'reopen'])
     entry.kind, entry.day, entry.attrs = kind, day, attrs
+    entry.reopen = False
     return entry
 
 
@@ -418,6 +429,22 @@ class HistoryEntryTests(TestCase):
             t.payload['completed_on'] = '2026-09-30'
             ret = t.he.day
             t.assertEqual(ret, date(2026, 9, 30))
+
+    def test_reopen(t) -> None:
+        cases: dict[str, tuple[dict[str, Any], bool]] = {
+            'no delta': ({}, False),
+            'a delta without done': ({'delta': {'P': ['1', '2']}}, False),
+            'a completion': ({'delta': {'done': [False, True]}}, False),
+            'done turns false': ({'delta': {'done': [True, False]}}, True),
+        }
+        for name, (payload, expected) in cases.items():
+            with t.subTest(name):
+                t.payload.clear()
+                t.payload.update(payload)
+
+                ret = t.he.reopen
+
+                t.assertIs(ret, expected)
 
     def test_attrs(t) -> None:
         with t.subTest('absent reads as none'):
