@@ -93,6 +93,15 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   clears it. A subtask takes a description too. btodo refuses a line
   that is blank, reads as a task, a heading or a comment, or holds a
   carriage return. `show` prints the description.
+- Before `add`, look for a finished task with the same meaning:
+  `btodo history <a key word of the title>`. One match prints that
+  task's history. Several matches exit 1 and name the candidate titles
+  on stderr, which is the search result. No match exits 1 and says so.
+  When a finished task matches, ask the user whether to reopen or
+  reschedule it under its own `[ID:]` instead of adding a new task. One
+  id keeps the history of a task in one place, where a new title
+  scatters it across names. btodo has no reopen command yet, so a
+  reopen is a request to the user.
 - `add` echoes the line it wrote and the file it wrote to. Read that
   echo to confirm the write. A task with no `-p` gets a neutral
   priority and still ranks by its dates; an explicit `-p 0` parks the
