@@ -230,7 +230,6 @@ class AddItemTests(TestCase):
                 attrs='cost=45.00',
                 note='a note',
             )
-
             t.SuppliedAttributes.assert_called_once_with(
                 'cost=45.00', 'a note'
             )
@@ -352,7 +351,6 @@ class UpdateItemTests(TestCase):
                 attrs='cost=45.00',
                 note='a note',
             )
-
             t.SuppliedAttributes.assert_called_once_with(
                 'cost=45.00', 'a note'
             )
@@ -472,7 +470,6 @@ class CompleteItemTests(TestCase):
                 attrs='cost=45.00',
                 note='a note',
             )
-
             t.SuppliedAttributes.assert_called_once_with(
                 'cost=45.00', 'a note'
             )
@@ -550,7 +547,6 @@ class ScratchItemTests(TestCase):
                 attrs='cost=45.00',
                 note='a note',
             )
-
             t.SuppliedAttributes.assert_called_once_with(
                 'cost=45.00', 'a note'
             )
