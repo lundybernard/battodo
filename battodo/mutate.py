@@ -20,7 +20,8 @@ it. `Scratch` abandons a task: the block goes, the log records it as
 SCRATCHED, and nothing cascades or reschedules. `Update` sets the
 fields and the title it is given and leaves the rest of the list, or
 moves a top-level task and its block to another list.
-`Annotation` records a note on a task and changes nothing in it.
+`Reopen` brings a closed task back open, named by its stream in the
+journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
 leaves a list with nothing to stamp unwritten, so file sync sees no
 change.
@@ -31,12 +32,13 @@ so the write edits the document that selection read.
 
 import re
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
+from .history import TaskStream
 from .journal import (
     ADDED_EVENT,
     ANNOTATED_EVENT,
@@ -769,6 +771,276 @@ class Update:
     def ancestry(self) -> Ancestry:
         """The task and every task above it."""
         return Ancestry(self.task.ancestry)
+
+
+class Reopen:
+    """The reopen of a closed task, named by its stream in the journal.
+
+    A completion or a scratch closes a task (ADR 0025). The task comes
+    back open, with the fields, the title and the description the reopen
+    names. A top-level task comes back last in the open section of its
+    list, as the last snapshot of its stream records it, each child
+    checked off. A closed subtask opens where its line stands, or comes
+    back with the record of its top-level task, and each closed task
+    above it opens too.
+    """
+
+    def __init__(
+        self,
+        task: Task,
+        zone: tzinfo | None,
+        fields: dict[str, str],
+        title: str | None = None,
+        description: str | None = None,
+        attrs: dict[str, str] | None = None,
+        list_name: str | None = None,
+    ) -> None:
+        self.task = task
+        self.zone = zone
+        self.fields = fields
+        self.title = title
+        self.description = description
+        self.attrs = attrs
+        self.list_name = list_name
+
+    def write(self) -> None:
+        """Write the list and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        raise NotImplementedError
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        raise NotImplementedError
+
+    @property
+    def text(self) -> str:
+        """The list with the task open in it.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read, the selector names several
+            closed tasks or a checklist item, a subtask is given a list
+            or a field only the top-level task carries, no list or record
+            holds the line of a subtask, no list is named for a record
+            that names none, the title holds a line break, or a
+            description line is refused.
+        SelectionError
+            The selector names no open task and no closed task.
+        ListError
+            The list named is not a discovered list.
+        """
+        raise NotImplementedError
+
+    @property
+    def document(self) -> TodoDocument:
+        """The restored list: each closed task of the chain open.
+
+        The task the reopen names takes its fields, title and
+        description.
+        """
+        raise NotImplementedError
+
+    @property
+    def checked(self) -> dict[str, str]:
+        """The named fields, read.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read.
+        """
+        raise NotImplementedError
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The named fields, read against the day of the task."""
+        raise NotImplementedError
+
+    @property
+    def stream(self) -> TaskStream:
+        """The closed stream the selector names.
+
+        Raises
+        ------
+        ValueError
+            The selector names several closed tasks, or a checklist
+            item.
+        SelectionError
+            The selector names no closed task either.
+        """
+        raise NotImplementedError
+
+    @property
+    def streams(self) -> list[TaskStream]:
+        """Every stream of the journal of the source."""
+        raise NotImplementedError
+
+    def refuse_checklist_item(self) -> None:
+        """Refuse a selector that names a checklist item in the journal.
+
+        Raises
+        ------
+        ValueError
+            A checklist item's title holds the selector. The refusal
+            names the id of each task that owns one.
+        """
+        raise NotImplementedError
+
+    def refuse_nested_changes(self) -> None:
+        """Refuse a list, or a field the top-level task owns, on a subtask.
+
+        Raises
+        ------
+        ValueError
+            The stream is a subtask's, and the reopen names a list or
+            such a field.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def path(self) -> Path:
+        """The list the task opens in.
+
+        The list that holds the line of a subtask. Otherwise the list
+        `list_name` names, or else the list the record names. Cached:
+        discovery reads every list in the source.
+
+        Raises
+        ------
+        ValueError
+            Neither names a list.
+        ListError
+            The name is not a discovered list.
+        """
+        raise NotImplementedError
+
+    @cached_property
+    def held(self) -> Path | None:
+        """The list that holds the closed line of a subtask, or None.
+
+        Cached: discovery reads every list in the source.
+        """
+        raise NotImplementedError
+
+    @property
+    def record(self) -> TaskStream:
+        """The closed top-level stream whose snapshot holds the task.
+
+        The stream itself for a top-level task. Read only where no list
+        holds the line of the task.
+
+        Raises
+        ------
+        ValueError
+            No list and no record holds the line of a subtask. The
+            refusal names the parent.
+        """
+        raise NotImplementedError
+
+    @property
+    def parent(self) -> str:
+        """The parent of a subtask: its `[ID:]`, or else its path."""
+        raise NotImplementedError
+
+    @property
+    def restored(self) -> TodoDocument:
+        """The list as read, the recorded block last in its open section."""
+        raise NotImplementedError
+
+    @property
+    def recorded(self) -> 'RecordedTask':
+        """The block of the record, with the id of its stream on it."""
+        raise NotImplementedError
+
+    @property
+    def ancestry(self) -> list[TaskNode]:
+        """The task and every task above it in the restored list."""
+        raise NotImplementedError
+
+    @cached_property
+    def chains(self) -> dict[int, list[TaskNode]]:
+        """Each task of the restored list and every task above it.
+
+        By the line of the task, outermost first. Cached: the write
+        changes the list this reads.
+        """
+        raise NotImplementedError
+
+    @property
+    def opened(self) -> list[TaskNode]:
+        """The closed tasks of the ancestry, outermost first."""
+        raise NotImplementedError
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each task the reopen opens, by its line.
+
+        A task with no id takes a new one. Cached: a new id is drawn at
+        random, so every read names one.
+        """
+        raise NotImplementedError
+
+    @property
+    def node(self) -> TaskNode:
+        """The task the reopen names, in the restored list."""
+        raise NotImplementedError
+
+    @property
+    def new_title(self) -> str | None:
+        """The title the reopen writes, or None where it names none.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line break.
+        """
+        raise NotImplementedError
+
+    @property
+    def new_description(self) -> 'SuppliedDescription | None':
+        """The description the reopen writes, or None where it names none."""
+        raise NotImplementedError
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        raise NotImplementedError
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a reopen logs no completed-log record."""
+        raise NotImplementedError
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskUpdated` per task the reopen opens, outermost first.
+
+        The event of the task the reopen names carries its changes and
+        its attributes.
+        """
+        raise NotImplementedError
+
+    @property
+    def delta(self) -> dict[str, list[Any]]:
+        """Each value the reopen writes against the one it replaced.
+
+        A top-level task that comes back to another list records the
+        list it left.
+        """
+        raise NotImplementedError
+
+    @property
+    def list_left(self) -> str | None:
+        """The list the task was in before the reopen, by its name.
+
+        None where its record names none.
+        """
+        raise NotImplementedError
 
 
 class Completion:
@@ -1790,6 +2062,77 @@ class TaskCompletion:
     def status(self) -> str:
         """The status the log records a completion under."""
         return DONE_STATUS
+
+
+class RecordedTask:
+    """A task as a snapshot records it, closed, as the lines of a list.
+
+    `depth` counts the levels above the task. Each child snapshot comes
+    back one level deeper, closed too.
+    """
+
+    def __init__(self, snapshot: dict[str, Any], depth: int) -> None:
+        self.snapshot = snapshot
+        self.depth = depth
+
+    @property
+    def lines(self) -> list[str]:
+        """The task line, its description lines, then each child's."""
+        raise NotImplementedError
+
+    @property
+    def line(self) -> str:
+        """The task line, checked off, its fields in recorded order."""
+        raise NotImplementedError
+
+    @property
+    def indent(self) -> str:
+        """The indent of the task line."""
+        raise NotImplementedError
+
+    @property
+    def description_lines(self) -> list[str]:
+        """The description lines, under the title."""
+        raise NotImplementedError
+
+    @property
+    def children(self) -> list['RecordedTask']:
+        """Each child the snapshot records, one level deeper."""
+        raise NotImplementedError
+
+    @property
+    def ids(self) -> set[str]:
+        """The id of the task and of each task below it that has one."""
+        raise NotImplementedError
+
+
+class OpenedTask:
+    """One task a reopen opens, as its `TaskUpdated` records it.
+
+    `task_id` names its stream. A task with no `[ID:]` takes it on the
+    same event. `list_name` is the list the task was in before the
+    reopen, and None where no record names one.
+    """
+
+    def __init__(
+        self,
+        ancestry: Ancestry,
+        task_id: str,
+        list_name: str | None,
+    ) -> None:
+        self.ancestry = ancestry
+        self.task_id = task_id
+        self.list_name = list_name
+
+    @property
+    def event(self) -> Event:
+        """The `TaskUpdated` on the stream of the task."""
+        raise NotImplementedError
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """The opening, the task as it was, and where a subtask sits."""
+        raise NotImplementedError
 
 
 class LogEntry:

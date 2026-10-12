@@ -697,3 +697,27 @@ class TodoDocumentTests(TestCase):
             t.td.mark_done(1)
             ret = t.td.lines[1]
             t.assertEqual(ret, '- [x] Quote - [ ] in a title')
+
+    def test_mark_open(t) -> None:
+        cases = {
+            'the box is cleared, the rest of the line kept': (
+                '- [x] A task [P:2]',
+                '- [ ] A task [P:2]',
+            ),
+            'a capital X too': ('- [X] A task', '- [ ] A task'),
+            'an indented task keeps its indent': (
+                '    - [x] A subtask [LOE:1]',
+                '    - [ ] A subtask [LOE:1]',
+            ),
+            'a box quoted in the title is left alone': (
+                '- [x] Quote - [x] in a title',
+                '- [ ] Quote - [x] in a title',
+            ),
+        }
+        for name, (line, expected) in cases.items():
+            with t.subTest(name):
+                t.td.lines = ['## Open', line]
+
+                t.td.mark_open(1)
+
+                t.assertEqual(t.td.lines[1], expected)

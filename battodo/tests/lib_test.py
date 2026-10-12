@@ -370,6 +370,9 @@ class UpdateItemTests(TestCase):
         t.update = t.Update.return_value
         t.update.path = Path('~/a-source-dir/a-list.md')
         t.update.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
+        # An open task answers the selector.
+        t.Task.return_value.selection = Mock(spec=['records'])
+        t.Task.return_value.selection.records = [sentinel.record]
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
@@ -434,6 +437,32 @@ class UpdateItemTests(TestCase):
     def test_result(t):
         written = update_item(t.conf, t.now, **t.inputs)
         t.assertEqual(written, f'{t.update.entry}\n{t.update.path}')
+
+    @patch(f'{SRC}.Reopen', autospec=True)
+    def test_closed(t, reopen):
+        t.Task.return_value.selection.records = []
+        reopen.return_value.path = Path('~/a-source-dir/a-list.md')
+        reopen.return_value.entry = '- [ ] A task title [P:4] [ID:ab12cd]'
+
+        ret = update_item(t.conf, t.now, **t.inputs)
+
+        # No open task answers: the reopen of a closed one, in the zone
+        # of the clock.
+        t.Update.assert_not_called()
+        reopen.assert_called_once_with(
+            t.Task.return_value,
+            t.now.tzinfo,
+            {'P': '4', 'DUE': '2026-09-01'},
+            title='A task title',
+            description='A description',
+            attrs=t.SuppliedAttributes.return_value.checked,
+            list_name='another-list',
+        )
+        reopen.return_value.write.assert_called_once_with()
+        t.assertEqual(
+            ret,
+            f'{reopen.return_value.entry}\n{reopen.return_value.path}',
+        )
 
     def test_option_left_off(t):
         update_item(

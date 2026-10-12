@@ -350,3 +350,9 @@ class TodoDocumentTests(TestCase):
         t.td.mark_done(OVERDUE_INDEX)
         ret = t.td.lines[OVERDUE_INDEX]
         t.assertEqual(ret, OVERDUE.replace('- [ ]', '- [x]'))
+
+    def test_mark_open(t) -> None:
+        t.td.mark_done(OVERDUE_INDEX)
+        t.td.mark_open(OVERDUE_INDEX)
+        # A box checked and cleared again gives the line back.
+        t.assertEqual(t.td.text, WORK.read_text(encoding='utf-8'))

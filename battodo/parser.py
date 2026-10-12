@@ -475,6 +475,10 @@ class TodoDocument:
         """Check the box of the task line at `index`."""
         self.lines[index] = self.lines[index].replace('- [ ]', '- [x]', 1)
 
+    def mark_open(self, index: int) -> None:
+        """Clear the box of the task line at `index`, either case of x."""
+        raise NotImplementedError
+
 
 def parse_date(value: str | None) -> date | None:
     """Parse an ISO date field, tolerating placeholders.

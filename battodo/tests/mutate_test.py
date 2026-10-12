@@ -1,6 +1,7 @@
 from datetime import date
 from io import TextIOWrapper
 from pathlib import Path
+from typing import Any
 from unittest import TestCase
 from unittest.mock import (
     MagicMock,
@@ -26,6 +27,9 @@ from ..mutate import (
     ListError,
     LogEntry,
     NamedList,
+    OpenedTask,
+    RecordedTask,
+    Reopen,
     Scratch,
     SubtaskAddition,
     SuppliedAttributes,
@@ -1269,6 +1273,776 @@ class UpdateTests(TestCase):
         ret = t.up.ancestry
         ancestry.assert_called_once_with(t.task.ancestry)
         t.assertIs(ret, ancestry.return_value)
+
+
+class ReopenTests(TestCase):
+    """Unit tests for battodo.mutate.Reopen."""
+
+    def setUp(t) -> None:
+        t.task = Mock(spec=['source', 'selector', 'today'])
+        t.task.source = SOURCE
+        t.task.selector = 'a selector'
+        t.task.today = TODAY
+        t.ro = Reopen(t.task, sentinel.zone, {'P': '5'}, title='A new title')
+
+    @patch(f'{SRC}.Changeset', autospec=True)
+    @patch.object(Reopen, 'events', new_callable=PropertyMock)
+    @patch.object(Reopen, 'entries', new_callable=PropertyMock)
+    @patch.object(Reopen, 'text', new_callable=PropertyMock)
+    def test_write(
+        t,
+        text: PropertyMock,
+        entries: PropertyMock,
+        events: PropertyMock,
+        changeset: MagicMock,
+    ) -> None:
+        text.return_value = sentinel.text
+        entries.return_value = sentinel.entries
+        events.return_value = sentinel.events
+        t.ro.path = LIST_PATH
+
+        with t.subTest('the list, its log records and its events'):
+            t.ro.write()
+
+            changeset.assert_called_once_with(
+                {LIST_PATH: sentinel.text},
+                sentinel.entries,
+                sentinel.events,
+                LIST_PATH,
+                SOURCE,
+            )
+            changeset.return_value.write.assert_called_once_with()
+
+        with t.subTest('a refused text: nothing else is read or written'):
+            changeset.reset_mock()
+            entries.reset_mock()
+            text.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.ro.write()
+
+            entries.assert_not_called()
+            changeset.assert_not_called()
+
+    def test_source(t) -> None:
+        ret = t.ro.source
+        t.assertIs(ret, SOURCE)
+
+    @patch.object(Reopen, 'document', new_callable=PropertyMock)
+    def test_text(t, document: PropertyMock) -> None:
+        document.return_value = MagicMock(spec=['text'])
+        ret = t.ro.text
+        t.assertIs(ret, document.return_value.text)
+
+    @patch.object(Reopen, 'new_description', new_callable=PropertyMock)
+    @patch.object(Reopen, 'new_title', new_callable=PropertyMock)
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    @patch.object(Reopen, 'opened', new_callable=PropertyMock)
+    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
+    @patch.object(Reopen, 'refuse_nested_changes', autospec=True)
+    @patch.object(Reopen, 'checked', new_callable=PropertyMock)
+    def test_document(
+        t,
+        checked: PropertyMock,
+        refuse_nested_changes: MagicMock,
+        restored: PropertyMock,
+        opened: PropertyMock,
+        node: PropertyMock,
+        new_title: PropertyMock,
+        new_description: PropertyMock,
+    ) -> None:
+        checked.return_value = sentinel.checked
+        child = child_node()
+        child.note_indices = [4]
+        opened.return_value = [parent_node(), child]
+        node.return_value = child
+        new_title.return_value = 'A checked title'
+        new_description.return_value = None
+        t.ro.ids = {1: '9o71lx', 3: 'zz01ab'}
+        doc = restored.return_value
+
+        with t.subTest('each closed task opens, then the named one changes'):
+            ret = t.ro.document
+
+            # The refusals of the fields and of a subtask come first.
+            refuse_nested_changes.assert_called_once_with(t.ro)
+            t.assertEqual(
+                doc.method_calls,
+                [
+                    call.mark_open(1),
+                    call.mark_open(3),
+                    call.set_field(3, 'ID', 'zz01ab'),
+                    call.set_fields(3, sentinel.checked),
+                    call.set_title(3, 'A checked title'),
+                ],
+            )
+            t.assertIs(ret, doc)
+
+        with t.subTest('a description replaces the description lines'):
+            doc.reset_mock()
+            t.ro.__dict__.pop('document', None)
+            new_title.return_value = None
+            new_description.return_value = MagicMock(spec=['lines'])
+            new_description.return_value.lines = sentinel.lines
+
+            _ = t.ro.document
+
+            t.assertEqual(
+                doc.method_calls[-3:],
+                [
+                    call.set_fields(3, sentinel.checked),
+                    call.drop({4}),
+                    call.insert_description(3, sentinel.lines),
+                ],
+            )
+
+    @patch.object(Reopen, 'supplied', new_callable=PropertyMock)
+    def test_checked(t, supplied: PropertyMock) -> None:
+        supplied.return_value = MagicMock(spec=['checked'])
+        supplied.return_value.checked = sentinel.checked
+
+        with t.subTest('the named fields, read'):
+            ret = t.ro.checked
+            t.assertIs(ret, sentinel.checked)
+
+        with t.subTest('a reopen that names nothing is no refusal'):
+            t.ro = Reopen(t.task, sentinel.zone, {})
+            ret = t.ro.checked
+            t.assertIs(ret, sentinel.checked)
+
+    @patch(f'{SRC}.SuppliedFields', autospec=True)
+    def test_supplied(t, supplied_fields: MagicMock) -> None:
+        ret = t.ro.supplied
+        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
+        t.assertIs(ret, supplied_fields.return_value)
+
+    @patch(f'{SRC}.StreamSelection', autospec=True)
+    @patch.object(Reopen, 'refuse_checklist_item', autospec=True)
+    @patch.object(Reopen, 'streams', new_callable=PropertyMock)
+    def test_stream(
+        t,
+        streams: PropertyMock,
+        refuse_checklist_item: MagicMock,
+        stream_selection: MagicMock,
+    ) -> None:
+        closed = Mock(spec=['closed'], closed=True)
+        still_open = Mock(spec=['closed'], closed=False)
+        streams.return_value = [still_open, closed]
+        selection = stream_selection.return_value
+
+        with t.subTest('the closed stream the selector names'):
+            selection.candidates = [sentinel.candidate]
+
+            ret = t.ro.stream
+
+            stream_selection.assert_called_once_with([closed], 'a selector')
+            refuse_checklist_item.assert_not_called()
+            t.assertIs(ret, selection.stream)
+
+        with t.subTest('none: a checklist item, then no task at all'):
+            t.ro.__dict__.pop('stream', None)
+            selection.candidates = []
+
+            with t.assertRaises(Exception) as caught:
+                _ = t.ro.stream
+
+            refuse_checklist_item.assert_called_once_with(t.ro)
+            t.assertEqual(
+                str(caught.exception),
+                "no open task matches 'a selector'",
+            )
+
+    @patch(f'{SRC}.TaskStream', autospec=True)
+    @patch(f'{SRC}.Journal', autospec=True)
+    def test_streams(t, journal: MagicMock, task_stream: MagicMock) -> None:
+        journal.return_value.streams = {
+            'task/aa': sentinel.aa_events,
+            'task/bb': sentinel.bb_events,
+        }
+        task_stream.side_effect = [sentinel.aa, sentinel.bb]
+
+        ret = t.ro.streams
+
+        journal.assert_called_once_with(SOURCE)
+        t.assertEqual(ret, [sentinel.aa, sentinel.bb])
+        t.assertEqual(
+            task_stream.call_args_list,
+            [
+                call('task/aa', sentinel.aa_events, sentinel.zone),
+                call('task/bb', sentinel.bb_events, sentinel.zone),
+            ],
+        )
+
+    @patch.object(Reopen, 'streams', new_callable=PropertyMock)
+    def test_refuse_checklist_item(t, streams: PropertyMock) -> None:
+        streams.return_value = [
+            Mock(
+                spec=['task_id', 'checklist_titles'],
+                task_id='ab12cd',
+                checklist_titles=['Print A Selector'],
+            ),
+            Mock(
+                spec=['task_id', 'checklist_titles'],
+                task_id='zz99yy',
+                checklist_titles=['Water'],
+            ),
+            Mock(
+                spec=['task_id', 'checklist_titles'],
+                task_id='cc03ef',
+                checklist_titles=['Find a selector'],
+            ),
+        ]
+
+        with t.subTest('the owner of each item whose title holds it'):
+            with t.assertRaises(ValueError) as caught:
+                t.ro.refuse_checklist_item()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'a selector' names a checklist item of [ID:ab12cd], "
+                '[ID:cc03ef]: a checklist item opens with its task, not on '
+                'its own',
+            )
+
+        with t.subTest('no item holds it: no refusal'):
+            t.task.selector = 'nothing'
+            t.ro.refuse_checklist_item()
+
+    @patch.object(Reopen, 'supplied', new_callable=PropertyMock)
+    @patch.object(Reopen, 'stream', new_callable=PropertyMock)
+    def test_refuse_nested_changes(
+        t,
+        stream: PropertyMock,
+        supplied: PropertyMock,
+    ) -> None:
+        stream.return_value = Mock(spec=['nested', 'title'])
+        stream.return_value.title = 'A subtask'
+        refuse_root_fields = supplied.return_value.refuse_root_fields
+
+        with t.subTest('a top-level task takes any change'):
+            stream.return_value.nested = False
+            t.ro.list_name = 'another-list'
+
+            t.ro.refuse_nested_changes()
+
+            refuse_root_fields.assert_not_called()
+
+        with t.subTest('a subtask takes no list'):
+            stream.return_value.nested = True
+
+            with t.assertRaises(ValueError) as caught:
+                t.ro.refuse_nested_changes()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A subtask' is a subtask: --list moves a top-level task, "
+                'and its subtasks with it',
+            )
+
+        with t.subTest('and no field the top-level task owns'):
+            t.ro.list_name = None
+            t.ro.refuse_nested_changes()
+            refuse_root_fields.assert_called_once_with()
+
+    @patch(f'{SRC}.NamedList', autospec=True)
+    @patch.object(Reopen, 'record', new_callable=PropertyMock)
+    @patch.object(Reopen, 'held', new_callable=PropertyMock)
+    def test_path(
+        t,
+        held: PropertyMock,
+        record: PropertyMock,
+        named_list: MagicMock,
+    ) -> None:
+        record.return_value = Mock(spec=['list_name', 'title'])
+        record.return_value.list_name = 'a-list'
+        record.return_value.title = 'A task'
+
+        with t.subTest('the list that holds the line of a subtask'):
+            held.return_value = LIST_PATH
+            ret = t.ro.path
+            t.assertIs(ret, LIST_PATH)
+
+        held.return_value = None
+        cases = {
+            'the list the reopen names': ('another-list', 'another-list'),
+            'or else the list the record names': (None, 'a-list'),
+        }
+        for name, (list_name, expected) in cases.items():
+            with t.subTest(name):
+                named_list.reset_mock()
+                t.ro.__dict__.pop('path', None)
+                t.ro.list_name = list_name
+
+                ret = t.ro.path
+
+                named_list.assert_called_once_with(SOURCE, expected)
+                t.assertIs(ret, named_list.return_value.path)
+
+        with t.subTest('a record from before the list: refused'):
+            t.ro.__dict__.pop('path', None)
+            record.return_value.list_name = None
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.ro.path
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' was closed before btodo recorded its list: "
+                'name the list with --list',
+            )
+
+    @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch(f'{SRC}.discover_lists', autospec=True)
+    @patch.object(Reopen, 'stream', new_callable=PropertyMock)
+    def test_held(
+        t,
+        stream: PropertyMock,
+        discover_lists: MagicMock,
+        todo_document: MagicMock,
+    ) -> None:
+        stream.return_value = Mock(spec=['nested', 'task_id'])
+        stream.return_value.task_id = 'cc03ef'
+        first, second = MagicMock(spec=Path), MagicMock(spec=Path)
+        discover_lists.return_value = [first, second]
+        done = child_node()
+        done.done, done.fields = True, {'LOE': '2', 'ID': 'cc03ef'}
+        parent = parent_node()
+        parent.children = [done]
+        todo_document.side_effect = lambda text: Mock(
+            spec=['tasks'],
+            tasks=[parent] if text is second.read_text.return_value else [],
+        )
+
+        with t.subTest('the list that holds the closed line, at any depth'):
+            stream.return_value.nested = True
+            ret = t.ro.held
+            discover_lists.assert_called_once_with(SOURCE)
+            t.assertIs(ret, second)
+
+        with t.subTest('an open line with the id is not a closed one'):
+            t.ro.__dict__.pop('held', None)
+            done.done = False
+            ret = t.ro.held
+            t.assertIsNone(ret)
+
+        with t.subTest('a top-level task is never looked for'):
+            t.ro.__dict__.pop('held', None)
+            discover_lists.reset_mock()
+            stream.return_value.nested = False
+
+            ret = t.ro.held
+
+            discover_lists.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch(f'{SRC}.RecordedTask', autospec=True)
+    @patch.object(Reopen, 'parent', new_callable=PropertyMock)
+    @patch.object(Reopen, 'streams', new_callable=PropertyMock)
+    @patch.object(Reopen, 'stream', new_callable=PropertyMock)
+    def test_record(
+        t,
+        stream: PropertyMock,
+        streams: PropertyMock,
+        parent: PropertyMock,
+        recorded_task: MagicMock,
+    ) -> None:
+        stream.return_value = Mock(spec=['nested', 'task_id', 'title'])
+        stream.return_value.task_id = 'cc03ef'
+        stream.return_value.title = 'A subtask'
+        holder = a_record(sentinel.holder_snapshot)
+        other = a_record(sentinel.other_snapshot)
+        nested = a_record(sentinel.nested_snapshot, nested=True)
+        still_open = a_record(sentinel.open_snapshot, closed=False)
+        streams.return_value = [other, nested, still_open, holder]
+        recorded_task.side_effect = lambda snapshot, depth: Mock(
+            spec=['ids'],
+            ids={'cc03ef'} if snapshot is sentinel.holder_snapshot else set(),
+        )
+        parent.return_value = '[ID:pf11pf]'
+
+        with t.subTest('a top-level task is its own record'):
+            stream.return_value.nested = False
+            ret = t.ro.record
+            t.assertIs(ret, stream.return_value)
+
+        with t.subTest('a subtask: the closed top-level record that holds it'):
+            stream.return_value.nested = True
+            ret = t.ro.record
+            t.assertIs(ret, holder)
+
+        with t.subTest('no record holds it: refused, the parent named'):
+            streams.return_value = [other]
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.ro.record
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A subtask' is a subtask of [ID:pf11pf], and no list and "
+                'no record of a closed task holds its line',
+            )
+
+    @patch.object(Reopen, 'stream', new_callable=PropertyMock)
+    def test_parent(t, stream: PropertyMock) -> None:
+        stream.return_value = Mock(spec=['parent_id', 'own'])
+        stream.return_value.own = [
+            {
+                'payload': {
+                    'snapshot': {'title': 'A subtask'},
+                    'ancestry': 'A task > A step > A subtask',
+                },
+            },
+        ]
+
+        with t.subTest('the id its add names'):
+            stream.return_value.parent_id = 'pf11pf'
+            ret = t.ro.parent
+            t.assertEqual(ret, '[ID:pf11pf]')
+
+        with t.subTest('or else the path above it'):
+            stream.return_value.parent_id = None
+            ret = t.ro.parent
+            t.assertEqual(ret, "'A task > A step'")
+
+    @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Reopen, 'recorded', new_callable=PropertyMock)
+    @patch.object(Reopen, 'held', new_callable=PropertyMock)
+    def test_restored(
+        t,
+        held: PropertyMock,
+        recorded: PropertyMock,
+        todo_document: MagicMock,
+    ) -> None:
+        path = MagicMock(spec=Path)
+        path.read_text.return_value = 'the list as read'
+        t.ro.path = path
+        recorded.return_value = MagicMock(spec=['lines'])
+        recorded.return_value.lines = ['the task line', 'its child line']
+        doc = todo_document.return_value
+        doc.open_end = 3
+
+        with t.subTest('the recorded block, after the last open entry'):
+            held.return_value = None
+
+            ret = t.ro.restored
+
+            todo_document.assert_called_once_with('the list as read')
+            t.assertEqual(
+                doc.method_calls,
+                [
+                    call.insert(3, 'the task line'),
+                    call.insert(4, 'its child line'),
+                ],
+            )
+            t.assertIs(ret, doc)
+
+        with t.subTest('a list that holds the line: the list as read'):
+            doc.reset_mock()
+            held.return_value = path
+
+            ret = t.ro.restored
+
+            t.assertEqual(doc.method_calls, [])
+            t.assertIs(ret, doc)
+
+    @patch(f'{SRC}.RecordedTask', autospec=True)
+    @patch.object(Reopen, 'record', new_callable=PropertyMock)
+    def test_recorded(
+        t, record: PropertyMock, recorded_task: MagicMock
+    ) -> None:
+        record.return_value = Mock(spec=['snapshot', 'task_id'])
+        record.return_value.task_id = 'ab12cd'
+        snapshot = {'title': 'A task', 'done': False, 'fields': {'P': '2'}}
+
+        with t.subTest('a record with no id takes the id of its stream'):
+            record.return_value.snapshot = snapshot
+
+            ret = t.ro.recorded
+
+            recorded_task.assert_called_once_with(
+                {**snapshot, 'fields': {'P': '2', 'ID': 'ab12cd'}},
+                0,
+            )
+            t.assertIs(ret, recorded_task.return_value)
+
+        with t.subTest('a record with an id keeps it'):
+            recorded_task.reset_mock()
+            kept = {**snapshot, 'fields': {'ID': 'ab12cd', 'P': '2'}}
+            record.return_value.snapshot = kept
+
+            _ = t.ro.recorded
+
+            recorded_task.assert_called_once_with(kept, 0)
+
+    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
+    @patch.object(Reopen, 'stream', new_callable=PropertyMock)
+    def test_ancestry(t, stream: PropertyMock, chains: PropertyMock) -> None:
+        parent = parent_node()
+        child = child_node()
+        child.fields = {'LOE': '2', 'ID': 'cc03ef'}
+        chains.return_value = {1: [parent], 3: [parent, child]}
+        stream.return_value = Mock(spec=['task_id'])
+
+        cases = {
+            'a top-level task alone': ('9o71lx', [parent]),
+            'a subtask, below each task above it': ('cc03ef', [parent, child]),
+        }
+        for name, (task_id, expected) in cases.items():
+            with t.subTest(name):
+                stream.return_value.task_id = task_id
+                ret = t.ro.ancestry
+                t.assertEqual(ret, expected)
+
+    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
+    def test_chains(t, restored: PropertyMock) -> None:
+        parent = parent_node()
+        child = child_node()
+        grandchild = grandchild_node()
+        child.children = [grandchild]
+        parent.children = [child]
+        bare = bare_node()
+        bare.raw_index = 6
+        restored.return_value = Mock(spec=['tasks'])
+        restored.return_value.tasks = [parent, bare]
+
+        ret = t.ro.chains
+
+        # Each task of the list, below every task above it.
+        t.assertEqual(
+            ret,
+            {
+                1: [parent],
+                6: [bare],
+                3: [parent, child],
+                5: [parent, child, grandchild],
+            },
+        )
+
+    @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
+    def test_opened(t, ancestry: PropertyMock) -> None:
+        parent, child, grandchild = (
+            parent_node(),
+            done_child_node(),
+            grandchild_node(),
+        )
+        grandchild.done = True
+        ancestry.return_value = [parent, child, grandchild]
+
+        ret = t.ro.opened
+
+        # The closed tasks alone; an open one stays as it is.
+        t.assertEqual(ret, [child, grandchild])
+
+    @patch(f'{SRC}.new_task_id', autospec=True)
+    @patch.object(Reopen, 'opened', new_callable=PropertyMock)
+    def test_ids(t, opened: PropertyMock, new_task_id: MagicMock) -> None:
+        # Two reads: an id drawn at random must name one task.
+        opened.return_value = [parent_node(), done_child_node()]
+        new_task_id.return_value = 'zz01ab'
+
+        ret = t.ro.ids
+        t.assertEqual(ret, {1: '9o71lx', 4: 'zz01ab'})
+
+        again = t.ro.ids
+        t.assertIs(again, ret)
+        new_task_id.assert_called_once_with()
+
+    @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
+    def test_node(t, ancestry: PropertyMock) -> None:
+        ancestry.return_value = [sentinel.parent, sentinel.named]
+        ret = t.ro.node
+        t.assertIs(ret, sentinel.named)
+
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
+    def test_new_title(t, supplied_title: MagicMock) -> None:
+        with t.subTest('the title the reopen names, read'):
+            ret = t.ro.new_title
+            supplied_title.assert_called_once_with('A new title')
+            t.assertIs(ret, supplied_title.return_value.checked)
+
+        with t.subTest('none, where the reopen names no title'):
+            supplied_title.reset_mock()
+            t.ro.title = None
+
+            ret = t.ro.new_title
+
+            supplied_title.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_new_description(t, supplied_description: MagicMock) -> None:
+        with t.subTest('none, where the reopen names no description'):
+            ret = t.ro.new_description
+            supplied_description.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('the description the reopen names'):
+            t.ro.description = 'A description'
+
+            ret = t.ro.new_description
+
+            supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value)
+
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    @patch.object(Reopen, 'document', new_callable=PropertyMock)
+    def test_entry(t, document: PropertyMock, node: PropertyMock) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = [OPEN_HEADING, 'the line as written']
+        node.return_value = parent_node()
+
+        ret = t.ro.entry
+
+        t.assertEqual(ret, 'the line as written')
+
+    def test_entries(t) -> None:
+        ret = t.ro.entries
+        # A reopen logs no completed-log record.
+        t.assertEqual(ret, [])
+
+    @patch(f'{SRC}.OpenedTask', autospec=True)
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    @patch.object(Reopen, 'delta', new_callable=PropertyMock)
+    @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
+    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
+    @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
+    def test_events(
+        t,
+        ancestry: PropertyMock,
+        chains: PropertyMock,
+        list_left: PropertyMock,
+        delta: PropertyMock,
+        ancestry_class: MagicMock,
+        opened_task: MagicMock,
+    ) -> None:
+        parent, child = parent_node(), done_child_node()
+        parent.done = True
+        ancestry.return_value = [parent, child]
+        chains.return_value = {1: [parent], 4: [parent, child]}
+        list_left.return_value = 'a-list'
+        delta.return_value = {'P': ['4', '5']}
+        t.ro.ids = {1: '9o71lx', 4: 'cc03ef'}
+        ancestry_class.side_effect = [sentinel.top, sentinel.below]
+        opened_task.side_effect = [
+            Mock(spec=['event'], event=an_opening('task/9o71lx')),
+            Mock(spec=['event'], event=an_opening('task/cc03ef')),
+        ]
+        t.ro.attrs = {'cost': '45.00'}
+
+        ret = t.ro.events
+
+        with t.subTest('one opening a closed task, outermost first'):
+            t.assertEqual(
+                ancestry_class.call_args_list,
+                [call([parent]), call([parent, child])],
+            )
+            t.assertEqual(
+                opened_task.call_args_list,
+                [
+                    call(sentinel.top, '9o71lx', 'a-list'),
+                    call(sentinel.below, 'cc03ef', 'a-list'),
+                ],
+            )
+            t.assertEqual(ret[0], an_opening('task/9o71lx'))
+
+        with t.subTest('the named task carries the changes and attributes'):
+            t.assertEqual(
+                ret[1],
+                Event(
+                    'TaskUpdated',
+                    'task/cc03ef',
+                    {
+                        'delta': {'P': ['4', '5'], 'done': [True, False]},
+                        'snapshot': sentinel.snapshot,
+                        'attrs': {'cost': '45.00'},
+                    },
+                ),
+            )
+
+    @patch.object(Reopen, 'path', new_callable=PropertyMock)
+    @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
+    @patch.object(Reopen, 'new_description', new_callable=PropertyMock)
+    @patch.object(Reopen, 'new_title', new_callable=PropertyMock)
+    @patch.object(Reopen, 'checked', new_callable=PropertyMock)
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    def test_delta(
+        t,
+        node: PropertyMock,
+        checked: PropertyMock,
+        new_title: PropertyMock,
+        new_description: PropertyMock,
+        list_left: PropertyMock,
+        path: PropertyMock,
+    ) -> None:
+        node.return_value = parent_node()
+        checked.return_value = {'P': '5', 'DUE': '2026-09-01'}
+        new_title.return_value = 'A checked title'
+        new_description.return_value = None
+        list_left.return_value = 'a-list'
+        path.return_value = LIST_PATH
+
+        with t.subTest('each value written against the recorded one'):
+            ret = t.ro.delta
+            t.assertEqual(
+                ret,
+                {
+                    'P': ['4', '5'],
+                    'DUE': [None, '2026-09-01'],
+                    'title': ['A task', 'A checked title'],
+                },
+            )
+
+        with t.subTest('a description, against the recorded one'):
+            node.return_value.description_lines = ['A line.']
+            new_description.return_value = MagicMock(spec=['checked'])
+            new_description.return_value.checked = 'A new line.'
+
+            ret = t.ro.delta
+
+            t.assertEqual(ret['description'], ['A line.', 'A new line.'])
+
+        with t.subTest('another list, against the list it left'):
+            path.return_value = ANOTHER_PATH
+            ret = t.ro.delta
+            t.assertEqual(ret['list'], ['a-list', 'another-list'])
+
+        with t.subTest('a record from before the list: against null'):
+            list_left.return_value = None
+            ret = t.ro.delta
+            t.assertEqual(ret['list'], [None, 'another-list'])
+
+    @patch.object(Reopen, 'record', new_callable=PropertyMock)
+    @patch.object(Reopen, 'held', new_callable=PropertyMock)
+    def test_list_left(t, held: PropertyMock, record: PropertyMock) -> None:
+        record.return_value = Mock(spec=['list_name'], list_name='a-list')
+
+        with t.subTest('the list that holds the line of a subtask'):
+            held.return_value = ANOTHER_PATH
+            ret = t.ro.list_left
+            t.assertEqual(ret, 'another-list')
+
+        with t.subTest('or else the list the record names'):
+            held.return_value = None
+            ret = t.ro.list_left
+            t.assertEqual(ret, 'a-list')
+
+
+def a_record(
+    snapshot: object, closed: bool = True, nested: bool = False
+) -> Mock:
+    """A stand-in for a stream whose last snapshot is `snapshot`."""
+    record = Mock(spec=['closed', 'nested', 'snapshot'])
+    record.closed, record.nested, record.snapshot = closed, nested, snapshot
+    return record
+
+
+def an_opening(stream: str) -> Event:
+    """The event an `OpenedTask` stand-in records on `stream`."""
+    return Event(
+        'TaskUpdated',
+        stream,
+        {'delta': {'done': [True, False]}, 'snapshot': sentinel.snapshot},
+    )
 
 
 class CompletionTests(TestCase):
@@ -3120,6 +3894,152 @@ class TaskCompletionTests(TestCase):
     def test_status(t) -> None:
         ret = t.tc.status
         t.assertEqual(ret, 'DONE')
+
+
+class RecordedTaskTests(TestCase):
+    """Unit tests for battodo.mutate.RecordedTask."""
+
+    def setUp(t) -> None:
+        t.snapshot: dict[str, Any] = {
+            'title': 'A task',
+            'done': False,
+            'fields': {'P': '4', 'ID': '9o71lx'},
+        }
+        t.rt = RecordedTask(t.snapshot, 1)
+
+    @patch.object(RecordedTask, 'children', new_callable=PropertyMock)
+    @patch.object(RecordedTask, 'description_lines', new_callable=PropertyMock)
+    @patch.object(RecordedTask, 'line', new_callable=PropertyMock)
+    def test_lines(
+        t,
+        line: PropertyMock,
+        description_lines: PropertyMock,
+        children: PropertyMock,
+    ) -> None:
+        line.return_value = 'the task line'
+        description_lines.return_value = ['a description line']
+        children.return_value = [
+            Mock(spec=['lines'], lines=['a child line', 'its child line']),
+        ]
+
+        ret = t.rt.lines
+
+        t.assertEqual(
+            ret,
+            [
+                'the task line',
+                'a description line',
+                'a child line',
+                'its child line',
+            ],
+        )
+
+    def test_line(t) -> None:
+        ret = t.rt.line
+        # Checked off, whatever the record says: the task is closed.
+        t.assertEqual(ret, '  - [x] A task [P:4] [ID:9o71lx]')
+
+    def test_indent(t) -> None:
+        ret = t.rt.indent
+        t.assertEqual(ret, '  ')
+
+    def test_description_lines(t) -> None:
+        with t.subTest('none without a description'):
+            ret = t.rt.description_lines
+            t.assertEqual(ret, [])
+
+        with t.subTest('each line under the title'):
+            t.snapshot['description'] = 'A line.\nAnother line.'
+            ret = t.rt.description_lines
+            t.assertEqual(
+                ret,
+                ['        A line.', '        Another line.'],
+            )
+
+    @patch(f'{SRC}.RecordedTask', autospec=True)
+    def test_children(t, recorded_task: MagicMock) -> None:
+        with t.subTest('none recorded'):
+            ret = t.rt.children
+            t.assertEqual(ret, [])
+
+        with t.subTest('each one level deeper'):
+            t.snapshot['children'] = [sentinel.child]
+            ret = t.rt.children
+            recorded_task.assert_called_once_with(sentinel.child, 2)
+            t.assertEqual(ret, [recorded_task.return_value])
+
+    @patch.object(RecordedTask, 'children', new_callable=PropertyMock)
+    def test_ids(t, children: PropertyMock) -> None:
+        children.return_value = [
+            Mock(spec=['ids'], ids={'cc03ef', 'gc04gh'}),
+            Mock(spec=['ids'], ids=set()),
+        ]
+
+        with t.subTest('its own id and each below it'):
+            ret = t.rt.ids
+            t.assertEqual(ret, {'9o71lx', 'cc03ef', 'gc04gh'})
+
+        with t.subTest('a task with no id adds none'):
+            t.snapshot['fields'] = {'P': '4'}
+            ret = t.rt.ids
+            t.assertEqual(ret, {'cc03ef', 'gc04gh'})
+
+
+class OpenedTaskTests(TestCase):
+    """Unit tests for battodo.mutate.OpenedTask."""
+
+    def setUp(t) -> None:
+        t.node = parent_node()
+        t.node.done = True
+        t.ot = OpenedTask(
+            ancestry_of(t.node, path='a path'), 'pp02cd', 'a-list'
+        )
+
+    @patch.object(OpenedTask, 'payload', new_callable=PropertyMock)
+    def test_event(t, payload: PropertyMock) -> None:
+        payload.return_value = sentinel.payload
+
+        ret = t.ot.event
+
+        t.assertEqual(
+            ret,
+            Event('TaskUpdated', 'task/pp02cd', sentinel.payload),
+        )
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_payload(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = {'title': 'A task'}
+
+        with t.subTest('the opening and the task as it was, in its list'):
+            ret = t.ot.payload
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'done': [True, False]},
+                    'snapshot': {'title': 'A task', 'list': 'a-list'},
+                },
+            )
+
+        with t.subTest('a record from before the list names none'):
+            t.ot.list_name = None
+            ret = t.ot.payload
+            t.assertEqual(
+                ret['snapshot'],
+                {'title': 'A task', 'list': None},
+            )
+
+        with t.subTest('a task with no id takes one on the same event'):
+            t.node.fields = {'LOE': '2'}
+            ret = t.ot.payload
+            t.assertEqual(
+                ret['delta'],
+                {'ID': [None, 'pp02cd'], 'done': [True, False]},
+            )
+
+        with t.subTest('a subtask records where it sits'):
+            t.ot.ancestry = ancestry_of(parent_node(), t.node, path='a path')
+            ret = t.ot.payload
+            t.assertEqual(ret['ancestry'], 'a path')
 
 
 class LogEntryTests(TestCase):
