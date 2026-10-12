@@ -9,6 +9,7 @@ Each form is a view that reads the history through its attributes:
 """
 
 from datetime import date, datetime, tzinfo
+from json import dumps
 from operator import attrgetter
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,11 @@ from typing import Any
 from batconf import Configuration
 
 from .journal import COMPLETED_EVENT, Journal
+
+# The text form of a history indents each level by two spaces.
+INDENT = '  '
+# The label the text form gives the event of a checklist item.
+CHECKLIST_LABEL = '(checklist item)'
 
 
 class TaskHistory:
@@ -187,17 +193,22 @@ class HistoryView:
     @property
     def text(self) -> str:
         """The header, then each entry. Without a trailing newline."""
-        raise NotImplementedError
+        lines = [self.header]
+        for entry in self.entries:
+            lines.extend(entry.lines)
+        return '\n'.join(lines)
 
     @property
     def header(self) -> str:
         """The title of the task and its `[ID:]`, or the `[ID:]` alone."""
-        raise NotImplementedError
+        marker = f'[ID:{self.history.task_id}]'
+        title = self.history.title
+        return f'{title} {marker}' if title else marker
 
     @property
     def entries(self) -> list['HistoryEntryView']:
         """The entries of the history, each laid out as text."""
-        raise NotImplementedError
+        return [HistoryEntryView(entry) for entry in self.history.entries]
 
 
 class HistoryEntryView:
@@ -209,12 +220,22 @@ class HistoryEntryView:
     @property
     def lines(self) -> list[str]:
         """The day and the label, then one `key=value` line each."""
-        raise NotImplementedError
+        day = self.entry.day.isoformat()
+        return [
+            f'{INDENT}{day}{INDENT}{self.label}',
+            *(
+                f'{INDENT * 2}{key}={value}'
+                for key, value in self.entry.attrs.items()
+            ),
+        ]
 
     @property
     def label(self) -> str:
         """The kind. The checklist marker labels a checklist item's."""
-        raise NotImplementedError
+        kind = self.entry.kind
+        return (
+            f'{kind} {CHECKLIST_LABEL}' if self.entry.checklist_item else kind
+        )
 
 
 class HistoryJsonView:
@@ -229,7 +250,7 @@ class HistoryJsonView:
 
         The schema is a contract for agents; see `data` for its shape.
         """
-        raise NotImplementedError
+        return dumps(self.data, indent=2)
 
     @property
     def data(self) -> dict[str, Any]:
@@ -244,12 +265,16 @@ class HistoryJsonView:
 
         `title` is null when no event of the task's own records one.
         """
-        raise NotImplementedError
+        return {
+            'id': self.history.task_id,
+            'title': self.history.title,
+            'entries': [entry.data for entry in self.entries],
+        }
 
     @property
     def entries(self) -> list['HistoryEntryJsonView']:
         """The entries of the history, each laid out as JSON."""
-        raise NotImplementedError
+        return [HistoryEntryJsonView(entry) for entry in self.history.entries]
 
 
 class HistoryEntryJsonView:
@@ -261,4 +286,9 @@ class HistoryEntryJsonView:
     @property
     def data(self) -> dict[str, Any]:
         """The entry as `HistoryJsonView.data` records it."""
-        raise NotImplementedError
+        return {
+            'kind': self.entry.kind,
+            'checklist_item': self.entry.checklist_item,
+            'day': self.entry.day.isoformat(),
+            'attrs': self.entry.attrs,
+        }
