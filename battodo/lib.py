@@ -32,6 +32,7 @@ from .mutate import (
     Completion,
     Scratch,
     SubtaskAddition,
+    SuppliedAttributes,
     Update,
 )
 from .task import Task
@@ -201,6 +202,8 @@ def add_item(
     repeat: str | None = None,
     tags: str | None = None,
     description: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Write the task the inputs describe.
 
@@ -224,6 +227,10 @@ def add_item(
         fields.
     description : str or None
         The description of the task, one description line per line.
+    attrs : str or None
+        The attributes of the add, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -237,10 +244,11 @@ def add_item(
     SelectionError
         The parent does not name exactly one open task.
     ValueError
-        A supplied field is unreadable, the title holds a line break, a
-        description line is refused, or the parent cannot hold a
-        subtask. Raised before anything is written.
+        The attributes do not read, a supplied field is unreadable, the
+        title holds a line break, a description line is refused, or the
+        parent cannot hold a subtask. Raised before anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     source = _source(conf)
     fields = _supplied(
         {
@@ -260,6 +268,7 @@ def add_item(
             fields,
             now.date(),
             description=description,
+            attrs=checked,
         )
     else:
         addition = SubtaskAddition(
@@ -268,6 +277,7 @@ def add_item(
             title,
             fields,
             description=description,
+            attrs=checked,
         )
     addition.write()
     return f'{addition.entry}\n{addition.path}'
@@ -283,6 +293,8 @@ def update_item(
     due: str | None = None,
     tags: str | None = None,
     description: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Rewrite the task `selector` names.
 
@@ -306,6 +318,10 @@ def update_item(
     description : str or None
         The new description, one description line per line. An empty
         one clears the description.
+    attrs : str or None
+        The attributes of the update, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -317,16 +333,18 @@ def update_item(
     SelectionError
         The selector does not name exactly one open task.
     ValueError
-        Nothing was named to change, the task cannot carry a field, a
-        supplied value is unreadable, the title holds a line break, or
-        a description line is refused. Raised before anything is
-        written.
+        The attributes do not read, nothing was named to change, the
+        task cannot carry a field, a supplied value is unreadable, the
+        title holds a line break, or a description line is refused.
+        Raised before anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     update = Update(
         Task(_source(conf), selector, now.date()),
         _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
         title=title,
         description=description,
+        attrs=checked,
     )
     update.write()
     return f'{update.entry}\n{update.path}'
@@ -338,6 +356,8 @@ def complete_item(
     *,
     selector: str,
     date: str | None = None,
+    attrs: str | None = None,
+    note: str | None = None,
 ) -> str:
     """Complete the task `selector` names.
 
@@ -351,6 +371,10 @@ def complete_item(
         Names the task.
     date : str or None
         The ISO day the task was completed.
+    attrs : str or None
+        The attributes of the completion, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -366,16 +390,26 @@ def complete_item(
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
     ValueError
-        `date` is not an ISO date. Raised before anything is written.
+        The attributes do not read, a checklist item is given
+        attributes, or `date` is not an ISO date. Raised before
+        anything is written.
     """
+    checked = SuppliedAttributes(attrs, note).checked
     task = Task.from_config(conf, now, selector=selector, date=date)
-    completion = Completion(task)
+    completion = Completion(task, attrs=checked)
     completion.write()
     entries = completion.entries
     return '\n'.join(entries) if entries else 'checked off'
 
 
-def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+def scratch_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    attrs: str | None = None,
+    note: str | None = None,
+) -> str:
     """Drop the task `selector` names.
 
     Parameters
@@ -386,6 +420,10 @@ def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
         The clock, whose local day stamps the log.
     selector : str
         Names the task.
+    attrs : str or None
+        The attributes of the scratch, as `key=value` segments.
+    note : str or None
+        A note, which enters the attributes under the key `note`.
 
     Returns
     -------
@@ -397,8 +435,13 @@ def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
     ------
     SelectionError
         The selector does not name exactly one open task.
+    ValueError
+        The attributes do not read, or a checklist item is given
+        attributes. Raised before anything is written.
     """
-    scratch = Scratch(Task(_source(conf), selector, now.date()))
+    checked = SuppliedAttributes(attrs, note).checked
+    task = Task(_source(conf), selector, now.date())
+    scratch = Scratch(task, attrs=checked)
     scratch.write()
     entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'

@@ -21,6 +21,7 @@ from batconf import TomlSource
 from batconf.types import SourceInterfaceP
 
 from battodo.cli import TZ, argparser, get_config
+from battodo.journal import Journal
 from battodo.view import TOP_N
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
@@ -173,6 +174,32 @@ class CommandInputTests(TestCase):
                 f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
             )
 
+        with t.subTest('--attrs and --note reach the event'):
+            t.run_command(
+                ['add', 'yard', 'Trim hedge', '--attrs', 'cost=12.50'],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['attrs'], {'cost': '12.50'})
+
+        with t.subTest('and the event of a subtask'):
+            t.run_command(
+                [
+                    'add',
+                    'yard',
+                    'Bag them',
+                    '--parent',
+                    'rk01lv',
+                    '--note',
+                    'Wet',
+                ],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['attrs'], {'note': 'Wet'})
+
     def test_view(t):
         with t.subTest('BATTODO_SHOW_ALL does not reach view'):
             ret = t.run_command(
@@ -208,6 +235,26 @@ class CommandInputTests(TestCase):
             )
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+    def test_scratch(t):
+        with t.subTest('--attrs and --note reach the event'):
+            t.run_command(
+                [
+                    'scratch',
+                    'rk01lv',
+                    '--attrs',
+                    'cost=0',
+                    '--note',
+                    'Too wet',
+                ],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(
+                event['payload']['attrs'],
+                {'cost': '0', 'note': 'Too wet'},
+            )
 
     def test_update(t):
         listed = t.source / 'yard.md'

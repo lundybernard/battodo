@@ -178,7 +178,7 @@ class AddItemTests(TestCase):
     """Unit tests for battodo.lib.add_item."""
 
     def setUp(t):
-        patches = ['Addition', 'SubtaskAddition', 'Task']
+        patches = ['Addition', 'SubtaskAddition', 'Task', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -218,7 +218,37 @@ class AddItemTests(TestCase):
             },
             t.today,
             description='A description',
+            attrs=t.SuppliedAttributes.return_value.checked,
         )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            add_item(
+                t.conf,
+                t.now,
+                **t.inputs,
+                attrs='cost=45.00',
+                note='a note',
+            )
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            add_item(t.conf, t.now, **t.inputs)
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the add is built'):
+            t.Addition.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                add_item(t.conf, t.now, **t.inputs)
+
+            t.Addition.assert_not_called()
 
     def test_written(t):
         add_item(t.conf, t.now, **t.inputs)
@@ -261,6 +291,7 @@ class AddItemTests(TestCase):
                 'A subtask title',
                 {'LOE': '2'},
                 description='A description',
+                attrs=t.SuppliedAttributes.return_value.checked,
             )
 
         with t.subTest('the parent is the task its selector names'):
@@ -277,7 +308,7 @@ class UpdateItemTests(TestCase):
     """Unit tests for battodo.lib.update_item."""
 
     def setUp(t):
-        patches = ['Update', 'Task']
+        patches = ['Update', 'Task', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -308,7 +339,37 @@ class UpdateItemTests(TestCase):
             {'P': '4', 'DUE': '2026-09-01'},
             title='A task title',
             description='A description',
+            attrs=t.SuppliedAttributes.return_value.checked,
         )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            update_item(
+                t.conf,
+                t.now,
+                **t.inputs,
+                attrs='cost=45.00',
+                note='a note',
+            )
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            update_item(t.conf, t.now, **t.inputs)
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                update_item(t.conf, t.now, **t.inputs)
+
+            t.Task.assert_not_called()
 
     def test_written(t):
         update_item(t.conf, t.now, **t.inputs)
@@ -337,7 +398,7 @@ class CompleteItemTests(TestCase):
     """Unit tests for battodo.lib.complete_item."""
 
     def setUp(t):
-        patches = ['Task', 'Completion']
+        patches = ['Task', 'Completion', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -383,7 +444,10 @@ class CompleteItemTests(TestCase):
             )
 
         with t.subTest('which the completion is built on'):
-            t.Completion.assert_called_once_with(t.task)
+            t.Completion.assert_called_once_with(
+                t.task,
+                attrs=t.SuppliedAttributes.return_value.checked,
+            )
 
         with t.subTest('a date left off is None'):
             t.Task.from_config.reset_mock()
@@ -396,6 +460,35 @@ class CompleteItemTests(TestCase):
                 selector='a selector',
                 date=None,
             )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            complete_item(
+                t.conf,
+                t.now,
+                selector='a selector',
+                attrs='cost=45.00',
+                note='a note',
+            )
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            complete_item(t.conf, t.now, selector='a selector')
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.from_config.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                complete_item(t.conf, t.now, selector='a selector')
+
+            t.Task.from_config.assert_not_called()
 
     def test_written(t):
         complete_item(t.conf, t.now, selector='a selector')
@@ -410,7 +503,7 @@ class ScratchItemTests(TestCase):
     """Unit tests for battodo.lib.scratch_item."""
 
     def setUp(t):
-        patches = ['Scratch', 'Task']
+        patches = ['Scratch', 'Task', 'SuppliedAttributes']
         for target in patches:
             patcher = patch(f'{SRC}.{target}', autospec=True)
             setattr(t, target, patcher.start())
@@ -440,7 +533,39 @@ class ScratchItemTests(TestCase):
         scratch_item(t.conf, t.now, selector='a selector')
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
-        t.Scratch.assert_called_once_with(t.Task.return_value)
+        t.Scratch.assert_called_once_with(
+            t.Task.return_value,
+            attrs=t.SuppliedAttributes.return_value.checked,
+        )
+
+    def test_attributes(t):
+        with t.subTest('the attribute inputs are read'):
+            scratch_item(
+                t.conf,
+                t.now,
+                selector='a selector',
+                attrs='cost=45.00',
+                note='a note',
+            )
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+
+            scratch_item(t.conf, t.now, selector='a selector')
+
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                scratch_item(t.conf, t.now, selector='a selector')
+
+            t.Task.assert_not_called()
 
     def test_written(t):
         scratch_item(t.conf, t.now, selector='a selector')

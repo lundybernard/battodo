@@ -26,6 +26,7 @@ from ..mutate import (
     NamedList,
     Scratch,
     SubtaskAddition,
+    SuppliedAttributes,
     SuppliedDescription,
     SuppliedFields,
     SuppliedTitle,
@@ -282,13 +283,16 @@ class AdditionTests(TestCase):
         block.return_value = 'the block as written'
         written.return_value = sentinel.written
         t.ad.task_id = 'zz01ab'
+        t.ad.attrs = sentinel.attrs
 
         ret = t.ad.events
 
-        # One TaskAdded, on the stream of the new task.
+        # One TaskAdded, on the stream of the new task, which carries
+        # the attributes.
         added_line.assert_called_once_with(
             'the block as written',
             sentinel.written,
+            sentinel.attrs,
         )
         t.assertEqual(
             ret,
@@ -640,13 +644,16 @@ class SubtaskAdditionTests(TestCase):
         added_line.return_value.payload = {'delta': sentinel.delta}
         t.sa.task_id = 'cc03ef'
         t.sa.parent_id = '9o71lx'
+        t.sa.attrs = sentinel.attrs
 
         with t.subTest('one TaskAdded, which names the parent'):
             ret = t.sa.events
 
+            # The TaskAdded carries the attributes.
             added_line.assert_called_once_with(
                 'the block as written',
                 sentinel.written,
+                sentinel.attrs,
             )
             t.assertEqual(
                 ret,
@@ -1015,6 +1022,21 @@ class UpdateTests(TestCase):
             t.task.ancestry = [t.parent, child_node()]
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
+
+        with t.subTest('the attributes, where any are given'):
+            t.task.ancestry = [t.parent]
+            t.up.attrs = {'cost': '45.00'}
+
+            ret = t.up.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': sentinel.delta,
+                    'snapshot': sentinel.snapshot,
+                    'attrs': {'cost': '45.00'},
+                },
+            )
 
     @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
@@ -1411,6 +1433,7 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
@@ -1421,6 +1444,7 @@ class CompletionTests(TestCase):
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
         completed_on: PropertyMock,
+        refuse_attributes: MagicMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
@@ -1429,17 +1453,21 @@ class CompletionTests(TestCase):
         completed_on.return_value = GIVEN_DAY
         task_completion.return_value.payload = {'delta': sentinel.delta}
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        t.co.attrs = sentinel.attrs
 
         with t.subTest('one TaskCompleted a completion, deepest first'):
             recurrence.return_value = None
 
             ret = t.co.events
 
-            # Each payload carries the day the completion is for.
+            # Each payload carries the day the completion is for. Only
+            # the task the caller named carries the attributes, once the
+            # task has checked that it takes them.
             payload = {'delta': sentinel.delta, 'completed_on': '2026-08-01'}
+            refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None), call(top, None)],
+                [call(below, None, sentinel.attrs), call(top, None, None)],
             )
             t.assertEqual(
                 ret,
@@ -1457,7 +1485,10 @@ class CompletionTests(TestCase):
 
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None), call(top, date(2026, 8, 15))],
+                [
+                    call(below, None, sentinel.attrs),
+                    call(top, date(2026, 8, 15), None),
+                ],
             )
 
         with t.subTest('the recurrence, whichever task it is'):
@@ -1468,7 +1499,10 @@ class CompletionTests(TestCase):
 
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, date(2026, 8, 15)), call(top, None)],
+                [
+                    call(below, date(2026, 8, 15), sentinel.attrs),
+                    call(top, None, None),
+                ],
             )
 
 
@@ -1631,12 +1665,14 @@ class ScratchTests(TestCase):
             t.assertEqual(ret, [])
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Scratch, 'ancestry', new_callable=PropertyMock)
     @patch.object(Scratch, 'stream_id', new_callable=PropertyMock)
     def test_events(
         t,
         stream_id: PropertyMock,
         ancestry: PropertyMock,
+        refuse_attributes: MagicMock,
         snapshot: PropertyMock,
     ) -> None:
         stream_id.return_value = '9o71lx'
@@ -1673,6 +1709,27 @@ class ScratchTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                },
+            )
+
+        with t.subTest('the attributes, once the task takes them'):
+            refuse_attributes.reset_mock()
+            t.task.node = t.parent
+            t.sc.attrs = {'cost': '45.00'}
+
+            ret = t.sc.events
+
+            refuse_attributes.assert_called_once_with(
+                t.parent,
+                {'cost': '45.00'},
+            )
+            t.assertEqual(
+                ret[0].payload,
+                {
+                    'delta': {'removed': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
                 },
             )
 
@@ -2088,6 +2145,149 @@ class SuppliedFieldsTests(TestCase):
                 t.assertEqual(str(caught.exception), message)
 
 
+class SuppliedAttributesTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedAttributes."""
+
+    def setUp(t) -> None:
+        t.sa = SuppliedAttributes('a_key=a value', 'a note')
+
+    @patch.object(SuppliedAttributes, 'pairs', new_callable=PropertyMock)
+    def test_checked(t, pairs: PropertyMock) -> None:
+        with t.subTest('each key against its value, in the order given'):
+            pairs.return_value = [('cost', '45.00'), ('note', 'a note')]
+            ret = t.sa.checked
+            t.assertEqual(list(ret.items()), pairs.return_value)
+
+        with t.subTest('no pair: no attribute'):
+            pairs.return_value = []
+            ret = t.sa.checked
+            t.assertEqual(ret, {})
+
+        refused = {
+            'a key with a capital': (
+                [('Place', 'Main St')],
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'a key that starts with a digit': (
+                [('1st', 'Main St')],
+                "attribute key must be a lowercase identifier, not '1st'",
+            ),
+            'a key with a line break': (
+                [('cost\n', '45.00')],
+                "attribute key must be a lowercase identifier, not 'cost\\n'",
+            ),
+            'an empty value': (
+                [('cost', '')],
+                "attribute 'cost' must hold a value",
+            ),
+            'a value with a line feed': (
+                [('note', 'a\nnote')],
+                "attribute 'note' must hold no line break, not 'a\\nnote'",
+            ),
+            'a value with a carriage return': (
+                [('note', 'a\rnote')],
+                "attribute 'note' must hold no line break, not 'a\\rnote'",
+            ),
+            'a key given twice': (
+                [('note', 'a note'), ('cost', '45.00'), ('note', 'another')],
+                "attribute 'note' is given twice",
+            ),
+        }
+        for name, (given, message) in refused.items():
+            with t.subTest(name):
+                pairs.return_value = given
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sa.checked
+
+                t.assertEqual(str(caught.exception), message)
+
+    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
+    def test_pairs(t, segments: PropertyMock) -> None:
+        with t.subTest('each segment split at its first =, then the note'):
+            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+            ret = t.sa.pairs
+            t.assertEqual(
+                ret,
+                [('a_key', 'a value'), ('sum', '1+1=2'), ('note', 'a note')],
+            )
+
+        with t.subTest('the note enters whole, never split'):
+            segments.return_value = []
+            t.sa.note = 'a note, cost=45.00'
+
+            ret = t.sa.pairs
+
+            t.assertEqual(ret, [('note', 'a note, cost=45.00')])
+
+        with t.subTest('no note: the segments alone'):
+            segments.return_value = ['a_key=a value']
+            t.sa.note = None
+
+            ret = t.sa.pairs
+
+            t.assertEqual(ret, [('a_key', 'a value')])
+
+        with t.subTest('a segment with no = is refused'):
+            segments.return_value = ['a value']
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sa.pairs
+
+            t.assertEqual(
+                str(caught.exception),
+                "attribute must read key=value, not 'a value'",
+            )
+
+    def test_segments(t) -> None:
+        with t.subTest('the text the write was given'):
+            ret = t.sa.segments
+            t.assertEqual(ret, ['a_key=a value'])
+
+        with t.subTest('no text: no segment'):
+            t.sa.text = None
+            ret = t.sa.segments
+            t.assertEqual(ret, [])
+
+        split = {
+            'one segment': ('place=Main St', ['place=Main St']),
+            'a value holds commas and =': (
+                'place=Main St, Suite 4, sum=1+1=2',
+                ['place=Main St, Suite 4', 'sum=1+1=2'],
+            ),
+            'the split takes every space after the comma': (
+                'a_key=a value,  cost=45.00',
+                ['a_key=a value', 'cost=45.00'],
+            ),
+            'and needs none': (
+                'a_key=a value,cost=45.00',
+                ['a_key=a value', 'cost=45.00'],
+            ),
+            'a line feed after the comma stays': (
+                'a_key=a value,\ncost=45.00',
+                ['a_key=a value,\ncost=45.00'],
+            ),
+            'a carriage return after the comma stays': (
+                'a_key=a value,\r\ncost=45.00',
+                ['a_key=a value,\r\ncost=45.00'],
+            ),
+            'a comma before a key outside the grammar stays': (
+                'a_key=a value, Cost=45.00, 2nd=b',
+                ['a_key=a value, Cost=45.00, 2nd=b'],
+            ),
+            'a comma before a word with no = stays': (
+                'a_key=a value, cost',
+                ['a_key=a value, cost'],
+            ),
+            'an empty text is one empty segment': ('', ['']),
+        }
+        for name, (text, expected) in split.items():
+            with t.subTest(name):
+                t.sa.text = text
+                ret = t.sa.segments
+                t.assertEqual(ret, expected)
+
+
 class AddedLineTests(TestCase):
     """Unit tests for battodo.mutate.AddedLine."""
 
@@ -2099,16 +2299,20 @@ class AddedLineTests(TestCase):
         node.return_value = MagicMock(spec=['snapshot'])
         node.return_value.snapshot = sentinel.snapshot
 
-        ret = t.al.payload
+        with t.subTest('each field against nothing, and the line'):
+            ret = t.al.payload
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'P': [None, '3'], 'ID': [None, 'zz01ab']},
+                    'snapshot': sentinel.snapshot,
+                },
+            )
 
-        # Each field written against nothing, and the line as written.
-        t.assertEqual(
-            ret,
-            {
-                'delta': {'P': [None, '3'], 'ID': [None, 'zz01ab']},
-                'snapshot': sentinel.snapshot,
-            },
-        )
+        with t.subTest('the attributes, where any are given'):
+            t.al.attrs = {'cost': '45.00'}
+            ret = t.al.payload
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
     def test_node(t, todo_document: MagicMock) -> None:
@@ -2174,6 +2378,22 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                },
+            )
+
+        with t.subTest('the attributes of the named task'):
+            t.tc.ancestry = ancestry_of(t.node, path='a path')
+            t.tc.attrs = {'cost': '45.00'}
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'done': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
                 },
             )
 

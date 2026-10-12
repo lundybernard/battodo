@@ -261,6 +261,24 @@ class ArgparserTests(TestCase):
             )
             t.assertEqual(args.date, '2026-08-15')
 
+    def test_attributes(t):
+        for argv in [
+            ['done', 'brush pile'],
+            ['scratch', 'brush pile'],
+            ['update', 'brush pile'],
+            ['add', 'chores', 'Water it'],
+        ]:
+            with t.subTest(f'{argv[0]}: None when not given'):
+                args = t.parser.parse_args(argv)
+                t.assertEqual((args.attrs, args.note), (None, None))
+
+            with t.subTest(f'{argv[0]} takes both'):
+                given = [*argv, '--attrs', 'cost=45.00', '--note', 'a note']
+                args = t.parser.parse_args(given)
+                t.assertEqual(
+                    (args.attrs, args.note), ('cost=45.00', 'a note')
+                )
+
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
             args = t.parser.parse_args(['completed'])
@@ -498,6 +516,8 @@ class CommandsAddTests(TestCase):
             repeat='a repeat',
             tags='some tags',
             description='a description',
+            attrs='some attrs',
+            note='a note',
         )
 
     def test_add(t):
@@ -516,6 +536,8 @@ class CommandsAddTests(TestCase):
                 repeat='a repeat',
                 tags='some tags',
                 description='a description',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -609,6 +631,8 @@ class CommandsUpdateTests(TestCase):
             due='a due date',
             tags='some tags',
             description='a description',
+            attrs='some attrs',
+            note='a note',
         )
 
     def test_update(t):
@@ -624,6 +648,8 @@ class CommandsUpdateTests(TestCase):
                 due='a due date',
                 tags='some tags',
                 description='a description',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -646,7 +672,12 @@ class CommandsDoneTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view'])
-        t.args = Namespace(selector='a selector', date='a date')
+        t.args = Namespace(
+            selector='a selector',
+            date='a date',
+            attrs='some attrs',
+            note='a note',
+        )
 
     def test_done(t):
         Commands.done(t.conf, t.args)
@@ -657,6 +688,8 @@ class CommandsDoneTests(TestCase):
                 t.datetime.now.return_value,
                 selector='a selector',
                 date='a date',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -679,16 +712,22 @@ class CommandsScratchTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view'])
-        t.args = Namespace(selector='a selector')
+        t.args = Namespace(
+            selector='a selector',
+            attrs='some attrs',
+            note='a note',
+        )
 
     def test_scratch(t):
         Commands.scratch(t.conf, t.args)
 
-        with t.subTest('the input reaches the library beside the config'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.scratch_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
                 selector='a selector',
+                attrs='some attrs',
+                note='a note',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

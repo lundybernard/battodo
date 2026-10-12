@@ -168,6 +168,14 @@ def argparser():
         '--description',
         help=MESSAGES['add.description.help'],
     )
+    add.add_argument(
+        '--attrs',
+        help=MESSAGES['add.attrs.help'],
+    )
+    add.add_argument(
+        '--note',
+        help=MESSAGES['add.note.help'],
+    )
 
     show = commands.add_parser(
         'show',
@@ -219,6 +227,14 @@ def argparser():
         '--description',
         help=MESSAGES['update.description.help'],
     )
+    update.add_argument(
+        '--attrs',
+        help=MESSAGES['update.attrs.help'],
+    )
+    update.add_argument(
+        '--note',
+        help=MESSAGES['update.note.help'],
+    )
 
     done = commands.add_parser(
         'done',
@@ -235,6 +251,14 @@ def argparser():
         '--date',
         help=MESSAGES['done.date.help'],
     )
+    done.add_argument(
+        '--attrs',
+        help=MESSAGES['done.attrs.help'],
+    )
+    done.add_argument(
+        '--note',
+        help=MESSAGES['done.note.help'],
+    )
 
     drop = commands.add_parser(
         'scratch',
@@ -246,6 +270,14 @@ def argparser():
         'selector',
         metavar=MESSAGES['scratch.selector.metavar'],
         help=MESSAGES['scratch.selector.help'],
+    )
+    drop.add_argument(
+        '--attrs',
+        help=MESSAGES['scratch.attrs.help'],
+    )
+    drop.add_argument(
+        '--note',
+        help=MESSAGES['scratch.note.help'],
     )
 
     backfill = commands.add_parser(
@@ -319,6 +351,8 @@ class Commands:
                 repeat=args.repeat,
                 tags=args.tags,
                 description=args.description,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 
@@ -338,6 +372,8 @@ class Commands:
                 due=args.due,
                 tags=args.tags,
                 description=args.description,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 
@@ -349,12 +385,22 @@ class Commands:
                 datetime.now(TZ),
                 selector=args.selector,
                 date=args.date,
+                attrs=args.attrs,
+                note=args.note,
             )
         )
 
     @staticmethod
     def scratch(conf, args):
-        print(scratch_item(conf, datetime.now(TZ), selector=args.selector))
+        print(
+            scratch_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                attrs=args.attrs,
+                note=args.note,
+            )
+        )
 
     @staticmethod
     def backfill(conf, args):

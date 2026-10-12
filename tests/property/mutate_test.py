@@ -15,6 +15,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
+from functools import cache
 from itertools import count
 from json import dumps, loads
 from pathlib import Path
@@ -35,7 +36,7 @@ from battodo.lib import (
     scratch_item,
     update_item,
 )
-from battodo.mutate import ListError
+from battodo.mutate import ListError, SuppliedAttributes
 from battodo.parser import (
     CHECKBOX_RE,
     OPEN_HEADING,
@@ -99,6 +100,9 @@ REFUSED_LINES = (
     '<!-- A comment -->',
     'A line\rbroken',
 )
+# An attribute key, and the comma-then-key that ends a segment.
+ATTRIBUTE_KEY = r'[a-z][a-z0-9_]*'
+SEPARATOR_RE = re.compile(rf',[ \t]*{ATTRIBUTE_KEY}=')
 
 
 class AddItemTests(TestCase):
@@ -118,6 +122,7 @@ class AddItemTests(TestCase):
         options = data.draw(supplied_options(ADD_OPTIONS))
         description = data.draw(supplied_descriptions())
         named = described(options, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         expected = foreseen(
             added,
@@ -126,6 +131,7 @@ class AddItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -137,6 +143,8 @@ class AddItemTests(TestCase):
                 list_name=list_name,
                 title=title,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -155,6 +163,7 @@ class AddItemTests(TestCase):
         options = data.draw(subtask_options())
         description = data.draw(supplied_descriptions())
         named = described(options, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, parent)
         expected = foreseen(
@@ -166,6 +175,7 @@ class AddItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -178,6 +188,8 @@ class AddItemTests(TestCase):
                 title=title,
                 parent=parent,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -202,6 +214,7 @@ class UpdateItemTests(TestCase):
         description = data.draw(supplied_descriptions())
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, selector)
         expected = foreseen(
@@ -211,6 +224,7 @@ class UpdateItemTests(TestCase):
             title,
             options,
             description,
+            given,
         )
 
         with written(before) as directory:
@@ -221,6 +235,8 @@ class UpdateItemTests(TestCase):
                 directory,
                 selector=selector,
                 **named,
+                attrs=given.text,
+                note=given.note,
             )
 
         t.assertEqual(ret, expected)
@@ -241,13 +257,21 @@ class CompleteItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
         log = data.draw(logs())
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), log, [])
         found = outcome(text, ancestries, selector)
-        expected = foreseen(completed, before, found)
+        expected = foreseen(completed, before, found, given)
 
         with written(before) as directory:
             conf = configuration(directory)
-            ret = observed(complete_item, conf, directory, selector=selector)
+            ret = observed(
+                complete_item,
+                conf,
+                directory,
+                selector=selector,
+                attrs=given.text,
+                note=given.note,
+            )
 
         t.assertEqual(ret, expected)
 
@@ -267,13 +291,21 @@ class ScratchItemTests(TestCase):
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
         log = data.draw(logs())
+        given = data.draw(supplied_attributes())
         before = Source(source_lists(text), log, [])
         found = outcome(text, ancestries, selector)
-        expected = foreseen(scratched, before, found)
+        expected = foreseen(scratched, before, found, given)
 
         with written(before) as directory:
             conf = configuration(directory)
-            ret = observed(scratch_item, conf, directory, selector=selector)
+            ret = observed(
+                scratch_item,
+                conf,
+                directory,
+                selector=selector,
+                attrs=given.text,
+                note=given.note,
+            )
 
         t.assertEqual(ret, expected)
 
@@ -296,6 +328,24 @@ class BackfillItemsTests(TestCase):
         t.assertEqual(ret, expected)
 
 
+class SuppliedAttributesTests(TestCase):
+    """Property tests for battodo.mutate.SuppliedAttributes."""
+
+    maxDiff = None
+
+    @given(st.data())
+    def test_checked(t, data: st.DataObject) -> None:
+        attrs = data.draw(attribute_maps())
+        note = data.draw(st.one_of(st.none(), attribute_values()))
+        text = ', '.join(f'{key}={value}' for key, value in attrs.items())
+        expected = attrs if note is None else {**attrs, 'note': note}
+
+        ret = SuppliedAttributes(text or None, note).checked
+
+        # Every value comes back whole, in the order given.
+        t.assertEqual(list(ret.items()), list(expected.items()))
+
+
 def list_names() -> st.SearchStrategy[str]:
     """A list the source holds, or a name no list need carry."""
     return st.one_of(st.sampled_from(['a-list', 'b-list']), grammar.titles)
@@ -313,6 +363,104 @@ def supplied_titles() -> st.SearchStrategy[str]:
         grammar.titles,
     ).map(''.join)
     return either(grammar.titles, either(grammar.titles, broken))
+
+
+def attribute_maps() -> st.SearchStrategy[dict[str, str]]:
+    """Up to four attributes, none of them keyed `note`."""
+    keys = st.from_regex(ATTRIBUTE_KEY, fullmatch=True).filter(
+        lambda key: key != 'note'
+    )
+    return st.dictionaries(keys, attribute_values(), max_size=4)
+
+
+def attribute_values() -> st.SearchStrategy[str]:
+    """A value on one line, rich in commas, `=` and spaces.
+
+    A comma followed by a key and `=` ends a segment by design, so no
+    value holds one.
+    """
+    text = st.text(
+        st.characters(codec='utf-8', exclude_characters='\n\r'),
+        max_size=4,
+    )
+    pieces = st.one_of(st.sampled_from([',', '=', ', ', ' Suite 4']), text)
+    values = st.lists(pieces, min_size=1, max_size=4).map(''.join)
+    return values.filter(lambda value: value and separated(value))
+
+
+def separated(text: str) -> bool:
+    """Whether `text` holds no comma-then-key, so it stays one segment."""
+    return SEPARATOR_RE.search(text) is None
+
+
+# Cached: the strategy is a deep tree, and a draw is cheap only once it
+# is built.
+@cache
+def supplied_attributes() -> st.SearchStrategy['Attributes']:
+    """The attribute inputs of a write, each left off or given.
+
+    One first segment in four, and one note in four, does not read.
+    """
+    first = either(
+        attribute_segments(),
+        either(attribute_segments(), odd_first_segments()),
+    )
+    segments = st.tuples(
+        first,
+        st.lists(attribute_segments(), max_size=2),
+    ).map(lambda drawn: [drawn[0], *drawn[1]])
+    notes = either(
+        attribute_values(), either(attribute_values(), odd_values())
+    )
+    return st.builds(
+        Attributes,
+        st.one_of(st.none(), segments),
+        st.one_of(st.none(), notes),
+    )
+
+
+def attribute_segments() -> st.SearchStrategy[str]:
+    """A `key=value` segment with a key of the grammar.
+
+    The keys repeat often, `note` among them, and one value in eight
+    does not read.
+    """
+    keys = either(
+        st.from_regex(ATTRIBUTE_KEY, fullmatch=True),
+        st.sampled_from(['cost', 'note']),
+    )
+    odd = either(attribute_values(), odd_values())
+    values = either(attribute_values(), either(attribute_values(), odd))
+    return st.builds('{}={}'.format, keys, values).filter(separated)
+
+
+def odd_first_segments() -> st.SearchStrategy[str]:
+    """A first segment that does not read: no `=`, or an odd key.
+
+    Only the first segment can hold one: the split takes a later
+    segment from its own key.
+    """
+    text = st.text(
+        st.characters(codec='utf-8', exclude_characters='='),
+        max_size=6,
+    )
+    odd_keys = text.filter(lambda key: not re.fullmatch(ATTRIBUTE_KEY, key))
+    keyed = st.builds('{}={}'.format, odd_keys, attribute_values())
+    return st.one_of(text, keyed).filter(separated)
+
+
+def odd_values() -> st.SearchStrategy[str]:
+    """A value that does not read: empty, or broken across lines.
+
+    Some breaks follow a comma and lead a key, which does not split.
+    """
+    breaks = ['\n', '\r', '\r\n', ',\ncost=', ',\r\nnote=']
+    broken = st.tuples(
+        attribute_values(),
+        st.sampled_from(breaks),
+        attribute_values(),
+    ).map(''.join)
+    return st.one_of(st.just(''), broken.filter(separated))
 
 
 def supplied_options(
@@ -411,12 +559,15 @@ def added(
     title: str,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """A new top-level task, last in the open section of its list.
 
     It carries the supplied fields in SCHEMA.md order, then its add
-    date and a new id. Its description lines follow it.
+    date and a new id. Its description lines follow it. Its event
+    carries the attributes.
     """
+    attrs = attributes(given)
     name = list_file(before, list_name)
     values = checked(supplied(options, ADD_OPTIONS))
     if 'REPEAT' in values:
@@ -433,7 +584,7 @@ def added(
     doc.set_fields(index, fields)
     describe(doc, index, '', lines)
     entry = doc.lines[index]
-    payload = addition(block(doc, index, lines), fields)
+    payload = addition(block(doc, index, lines), fields, attrs)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
     lists = {**before.lists, name: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -464,7 +615,7 @@ def observed(
     write: Callable[..., str],
     conf: Mock,
     directory: Path,
-    **inputs: str,
+    **inputs: str | None,
 ) -> Any:
     """What `write` answers and leaves in `directory`, canonical.
 
@@ -503,13 +654,16 @@ def added_below(
     title: str,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """A new subtask, last in its parent's block, one level deeper.
 
     It carries the supplied fields in SCHEMA.md order, then a new id,
     and its description lines follow it. A parent with no id is stamped
-    first, on an event of its own.
+    first, on an event of its own. The event of the subtask carries the
+    attributes.
     """
+    attrs = attributes(given)
     name = list_file(before, list_name)
     fields = supplied(options, ADD_OPTIONS)
     refuse_root_fields(fields)
@@ -544,7 +698,7 @@ def added_below(
             Appended('TaskUpdated', f'task/{parent_id}', stamp, LIST_FILE)
         )
     added_block = block(doc, index, lines)
-    child = {**addition(added_block, child_fields), 'parent': parent_id}
+    child = {**addition(added_block, child_fields, attrs), 'parent': parent_id}
     child_stream = f'task/{child_fields["ID"]}'
     events.append(Appended('TaskAdded', child_stream, child, LIST_FILE))
     lists = {**before.lists, LIST_FILE: doc.text}
@@ -558,12 +712,15 @@ def updated(
     title: str | None,
     options: dict[str, str],
     description: str | None,
+    given: 'Attributes',
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A task with no id is given one.
+    one clears them. A task with no id is given one. The event carries
+    the attributes.
     """
+    attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
     if not fields and title is None and description is None:
         raise ValueError(
@@ -604,6 +761,8 @@ def updated(
     payload: dict[str, Any] = {'delta': delta, 'snapshot': snapshot(node)}
     if nested:
         payload['ancestry'] = path_of(ancestry)
+    if attrs:
+        payload['attrs'] = attrs
     event = Appended('TaskUpdated', f'task/{task_id}', payload, LIST_FILE)
     lists = {**before.lists, LIST_FILE: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -619,19 +778,27 @@ def logs() -> st.SearchStrategy[str | None]:
     return st.sampled_from([None, '', f'{heading}\n', heading])
 
 
-def completed(before: Source, found: Answer) -> 'Outcome':
+def completed(
+    before: Source,
+    found: Answer,
+    given: 'Attributes',
+) -> 'Outcome':
     """The task checked off, logged and journaled, per SCHEMA.md.
 
     Completing the last open child completes its parent. A finished
     top-level task loses its block, unless it repeats: then it stays
-    with a new due date, and only its children go.
+    with a new due date, and only its children go. The attributes go
+    on the event of the named task, which is not a checklist item.
     """
+    attrs = attributes(given)
     text, ancestry = reached(found)
     ancestries = cascade(ancestry)
     root = ancestry[0]
     root_done = len(ancestries[-1]) == 1
     repeats = root_done and bool(root.repeat)
     rescheduled = next_due(root.repeat or '', TODAY) if repeats else None
+    if attrs:
+        refuse_checklist_attributes(ancestry[-1])
     ids = stream_ids(ancestries)
     doc = TodoDocument(text)
     if rescheduled is not None:
@@ -664,6 +831,8 @@ def completed(before: Source, found: Answer) -> 'Outcome':
         }
         if is_checklist_item(node):
             payload['checklist_item'] = True
+        if attrs and each is ancestry:
+            payload['attrs'] = attrs
         stream = ids[stream_task(each).raw_index]
         events.append(
             Appended('TaskCompleted', f'task/{stream}', payload, LIST_FILE)
@@ -674,14 +843,22 @@ def completed(before: Source, found: Answer) -> 'Outcome':
     return Outcome('\n'.join(entries) or 'checked off', after)
 
 
-def scratched(before: Source, found: Answer) -> 'Outcome':
+def scratched(
+    before: Source,
+    found: Answer,
+    given: 'Attributes',
+) -> 'Outcome':
     """The task's whole block dropped, logged and journaled.
 
     Nothing cascades. A checklist item is not logged, and its event
     lands on the stream of the nearest ancestor that can carry an id.
+    The event carries the attributes; a checklist item takes none.
     """
+    attrs = attributes(given)
     text, ancestry = reached(found)
     node = ancestry[-1]
+    if attrs:
+        refuse_checklist_attributes(node)
     stream = stream_task(ancestry)
     stream_id = stream.task_id or next(new_ids())
     doc = TodoDocument(text)
@@ -698,6 +875,8 @@ def scratched(before: Source, found: Answer) -> 'Outcome':
     }
     if is_checklist_item(node):
         payload['checklist_item'] = True
+    if attrs:
+        payload['attrs'] = attrs
     event = Appended('TaskScratched', f'task/{stream_id}', payload, LIST_FILE)
     lists = {**before.lists, LIST_FILE: doc.text}
     log = appended(before.log, entries)
@@ -779,6 +958,68 @@ def given_options(options: dict[str, str | None]) -> dict[str, str]:
         for option, value in options.items()
             if value is not None
     }  # fmt: skip
+
+
+class Attributes(NamedTuple):
+    """The attribute inputs of a write, the segments not yet joined."""
+
+    segments: list[str] | None
+    note: str | None
+
+    @property
+    def text(self) -> str | None:
+        """The `attrs` input: the segments joined, or None."""
+        if self.segments is None:
+            return None
+        return ', '.join(self.segments)
+
+
+def attributes(given: Attributes) -> dict[str, str]:
+    """The attributes a write carries: each key against its value.
+
+    Raises
+    ------
+    ValueError
+        A segment holds no `=`, a key is outside the grammar, a value
+        is empty or broken across lines, or a key repeats, checked in
+        that order.
+    """
+    pairs = []
+    for segment in given.segments or []:
+        key, sign, value = segment.partition('=')
+        if not sign:
+            raise ValueError(f'attribute must read key=value, not {segment!r}')
+        pairs.append((key, value))
+    if given.note is not None:
+        pairs.append(('note', given.note))
+    found: dict[str, str] = {}
+    for key, value in pairs:
+        if not re.fullmatch(ATTRIBUTE_KEY, key):
+            raise ValueError(
+                f'attribute key must be a lowercase identifier, not {key!r}'
+            )
+        if not value:
+            raise ValueError(f'attribute {key!r} must hold a value')
+        if '\n' in value or '\r' in value:
+            raise ValueError(
+                f'attribute {key!r} must hold no line break, not {value!r}'
+            )
+        if key in found:
+            raise ValueError(f'attribute {key!r} is given twice')
+        found[key] = value
+    return found
+
+
+def refuse_checklist_attributes(task: TaskNode) -> None:
+    """Refuse attributes on a checklist item.
+
+    Raises
+    ------
+    ValueError
+        `task` is a checklist item.
+    """
+    if is_checklist_item(task):
+        raise ValueError('a checklist item takes no attributes')
 
 
 class Outcome(NamedTuple):
@@ -925,17 +1166,24 @@ def new_ids() -> Iterator[str]:
     return (NEW_ID.format(number) for number in count(1))
 
 
-def addition(written: str, fields: dict[str, str]) -> dict[str, Any]:
+def addition(
+    written: str,
+    fields: dict[str, str],
+    attrs: dict[str, str],
+) -> dict[str, Any]:
     """The payload of a new task: each field against nothing.
 
     The snapshot is the task line and its description lines as the
-    parser reads them back.
+    parser reads them back. The attributes go in where any are given.
     """
     task = TodoDocument(f'{OPEN_HEADING}\n{written}').tasks[0]
-    return {
+    payload = {
         'delta': {field: [None, value] for field, value in fields.items()},
         'snapshot': snapshot(task),
     }
+    if attrs:
+        payload['attrs'] = attrs
+    return payload
 
 
 class Appended(NamedTuple):

@@ -308,6 +308,28 @@ class TaskNodeTests(TestCase):
                 'would promote it to a subtask',
             )
 
+    def test_refuse_attributes(t) -> None:
+        with t.subTest('a task that carries a field takes attributes'):
+            # Nothing to refuse: the call returns.
+            t.tk.refuse_attributes({'cost': '45.00'})
+
+        with t.subTest('a checklist item with none'):
+            t.tk.indent = 2
+            t.tk.fields = {}
+
+            # Nothing to refuse, for no attributes and for an empty map.
+            t.tk.refuse_attributes(None)
+            t.tk.refuse_attributes({})
+
+        with t.subTest('a checklist item with attributes is refused'):
+            with t.assertRaises(ValueError) as caught:
+                t.tk.refuse_attributes({'note': 'a note'})
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
+
     def test_raw_index(t) -> None:
         ret = t.tk.raw_index
         t.assertEqual(ret, 2)

@@ -99,3 +99,55 @@ class DoneCommandTests(TestCase):
 
         with t.subTest('and the run wrote nothing'):
             t.assertEqual((t.read('work.md'), t.read('completed.md')), before)
+
+    def test_done_with_attributes(t) -> None:
+        t.run_ok(
+            'done',
+            'Overdue task',
+            '--attrs',
+            'confirmation=A1B2C3, place=Main St, Suite 4',
+            '--note',
+            'Renewed online',
+        )
+
+        event = Journal(t.source).events[-1]
+        t.assertEqual(
+            event['payload']['attrs'],
+            {
+                'confirmation': 'A1B2C3',
+                'place': 'Main St, Suite 4',
+                'note': 'Renewed online',
+            },
+        )
+
+    def test_done_with_refused_attributes(t) -> None:
+        """A refused attribute reports on stderr and writes nothing."""
+        cases = {
+            'a key outside the grammar': (
+                ['Overdue task', '--attrs', 'Place=Main St'],
+                "attribute key must be a lowercase identifier, not 'Place'\n",
+            ),
+            'a checklist item takes no attributes': (
+                ['Open checklist item', '--note', 'Renewed online'],
+                'a checklist item takes no attributes\n',
+            ),
+            'a line break after a comma': (
+                ['Overdue task', '--attrs', 'place=Main St,\ncost=45.00'],
+                (
+                    "attribute 'place' must hold no line break, "
+                    "not 'Main St,\\ncost=45.00'\n"
+                ),
+            ),
+        }
+        before = (t.read('work.md'), t.read('completed.md'))
+
+        for name, (args, message) in cases.items():
+            with t.subTest(name):
+                ret = run_cli(['done', *args], t.env)
+
+                t.assertEqual(ret, ('', message, 1))
+                t.assertEqual(
+                    (t.read('work.md'), t.read('completed.md')),
+                    before,
+                )
+                t.assertEqual(Journal(t.source).events, [])

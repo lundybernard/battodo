@@ -256,6 +256,20 @@ class AdditionTests(TestCase):
             )
             t.assertNotIn('description', ret.payload['delta'])
 
+        with t.subTest('the attributes go on its event'):
+            added = Addition(
+                t.source,
+                'a-list',
+                'A new task',
+                {},
+                TODAY,
+                attrs={'cost': '45.00'},
+            )
+
+            (event,) = added.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
     def test_block(t) -> None:
         with t.subTest('the task line alone, where it has no description'):
             ret = t.ad.block
@@ -473,6 +487,20 @@ class SubtaskAdditionTests(TestCase):
             )
             t.assertEqual(added.payload['parent'], parent_id)
 
+        with t.subTest('the attributes go on the TaskAdded alone'):
+            unidentified = SubtaskAddition(
+                Task(t.source, 'A task with no id', TODAY),
+                'a-list',
+                'A new subtask',
+                {},
+                attrs={'cost': '45.00'},
+            )
+
+            stamp, added = unidentified.events
+
+            t.assertNotIn('attrs', stamp.payload)
+            t.assertEqual(added.payload['attrs'], {'cost': '45.00'})
+
         with t.subTest('a parent whose id is empty is stamped first too'):
             unrecorded = under_an_empty_id(t.source)
 
@@ -672,6 +700,17 @@ class UpdateTests(TestCase):
                 'A task > A subtask of it',
             )
 
+        with t.subTest('the attributes go on its event'):
+            updated = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {'P': '5'},
+                attrs={'cost': '45.00'},
+            )
+
+            (event,) = updated.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
 
 class CompletionTests(TestCase):
     """Contract tests for battodo.mutate.Completion."""
@@ -836,6 +875,33 @@ class CompletionTests(TestCase):
             t.assertEqual(ret.payload['ancestry'], 'A task > A checklist item')
             t.assertIs(ret.payload['checklist_item'], True)
 
+        with t.subTest('the attributes go on the named task alone'):
+            completed = completion_of(
+                t.source,
+                'A subtask that does not',
+                attrs={'cost': '45.00'},
+            )
+
+            child, parent = completed.events
+
+            t.assertEqual(child.payload['attrs'], {'cost': '45.00'})
+            t.assertNotIn('attrs', parent.payload)
+
+        with t.subTest('a checklist item takes no attributes'):
+            completed = completion_of(
+                t.source,
+                'A checklist item',
+                attrs={'note': 'a note'},
+            )
+
+            with t.assertRaises(ValueError) as caught:
+                _ = completed.events
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
+
 
 class ScratchTests(TestCase):
     """Contract tests for battodo.mutate.Scratch."""
@@ -894,31 +960,52 @@ class ScratchTests(TestCase):
             t.assertEqual(ret, [])
 
     def test_events(t) -> None:
-        ret = t.sc.events
-        t.assertEqual(
-            ret,
-            [
-                (
-                    'TaskScratched',
-                    'task/9o71lx',
-                    {
-                        'delta': {'removed': [False, True]},
-                        'snapshot': {
-                            'title': 'A task',
-                            'done': False,
-                            'fields': {
-                                'P': '4',
-                                'LOE': '8',
-                                'ADDED': '2026-07-06',
-                                'ID': '9o71lx',
+        with t.subTest('one TaskScratched, on the stream of the task'):
+            ret = t.sc.events
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        'TaskScratched',
+                        'task/9o71lx',
+                        {
+                            'delta': {'removed': [False, True]},
+                            'snapshot': {
+                                'title': 'A task',
+                                'done': False,
+                                'fields': {
+                                    'P': '4',
+                                    'LOE': '8',
+                                    'ADDED': '2026-07-06',
+                                    'ID': '9o71lx',
+                                },
+                                'description': 'A note that stays put.',
                             },
-                            'description': 'A note that stays put.',
+                            'ancestry': 'A task',
                         },
-                        'ancestry': 'A task',
-                    },
-                )
-            ],
-        )
+                    )
+                ],
+            )
+
+        with t.subTest('the attributes go on its event'):
+            task = Task(t.source, '9o71lx', TODAY)
+            scratched = Scratch(task, attrs={'cost': '45.00'})
+
+            (event,) = scratched.events
+
+            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
+        with t.subTest('a checklist item takes no attributes'):
+            task = Task(t.source, 'A checklist', TODAY)
+            scratched = Scratch(task, attrs={'note': 'a note'})
+
+            with t.assertRaises(ValueError) as caught:
+                _ = scratched.events
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
 
 
 class BackfillTests(TestCase):
@@ -1123,9 +1210,13 @@ def without(text: str, *indices: int) -> str:
     )  # fmt: skip
 
 
-def completion_of(source: Path, selector: str) -> Completion:
+def completion_of(
+    source: Path,
+    selector: str,
+    attrs: dict[str, str] | None = None,
+) -> Completion:
     """The completion of the task `selector` names."""
-    return Completion(Task(source, selector, TODAY))
+    return Completion(Task(source, selector, TODAY), attrs=attrs)
 
 
 def under_an_empty_id(source: Path) -> SubtaskAddition:

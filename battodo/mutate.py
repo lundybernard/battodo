@@ -27,6 +27,7 @@ A write to an existing task is built on the `Task` its caller built,
 so the write edits the document that selection read.
 """
 
+import re
 from collections.abc import Sequence
 from datetime import date
 from functools import cached_property
@@ -63,6 +64,13 @@ SUBTASK_INDENT = 2
 # its own, and only the root task is rescheduled, so a `[REPEAT:]` on a
 # child never fires.
 ROOT_ONLY_FIELDS = ('P', 'REPEAT')
+# An attribute key: a letter, then letters, digits or underscores.
+ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
+# The one place `--attrs` splits: a comma, spaces or tabs, then the next
+# `key=`. A line break does not split, so the value refuses it.
+ATTRIBUTE_SEPARATOR = re.compile(rf',[ \t]*(?={ATTRIBUTE_KEY.pattern}=)')
+# The key the text of `--note` enters the attributes under.
+NOTE_KEY = 'note'
 
 
 class ListError(Exception):
@@ -90,6 +98,7 @@ class Addition:
         fields: dict[str, str],
         today: date,
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.source = source
         self.list_name = list_name
@@ -97,6 +106,7 @@ class Addition:
         self.fields = fields
         self.today = today
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -224,7 +234,7 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.block, self.written).payload
+        payload = AddedLine(self.block, self.written, self.attrs).payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -243,12 +253,14 @@ class SubtaskAddition:
         title: str,
         fields: dict[str, str],
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.parent = parent
         self.list_name = list_name
         self.title = title
         self.fields = fields
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -430,10 +442,10 @@ class SubtaskAddition:
     def events(self) -> list['Event']:
         """The parent's stamp if it has one, then one `TaskAdded`.
 
-        The `TaskAdded` lands on the stream of the subtask and names the
-        parent by id.
+        The `TaskAdded` lands on the stream of the subtask, names the
+        parent by id and carries the attributes.
         """
-        added = AddedLine(self.block, self.written).payload
+        added = AddedLine(self.block, self.written, self.attrs).payload
         payload = {**added, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
@@ -462,11 +474,13 @@ class Update:
         fields: dict[str, str],
         title: str | None = None,
         description: str | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
         self.description = description
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -627,7 +641,7 @@ class Update:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """What changed, from what, and where a subtask sits.
+        """What changed, from what, where a subtask sits, and attributes.
 
         A top-level task's ancestry is its own title, which the snapshot
         already carries.
@@ -638,6 +652,8 @@ class Update:
         }
         if self.nested:
             payload['ancestry'] = self.ancestry.path
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return payload
 
     @property
@@ -674,8 +690,13 @@ class Completion:
     only its children go.
     """
 
-    def __init__(self, task: Task) -> None:
+    def __init__(
+        self,
+        task: Task,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.task = task
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -853,14 +874,23 @@ class Completion:
 
         The payload carries the state the task changed from and the day
         the completion is for. A rescheduled task records its due date
-        beside the done.
+        beside the done. The attributes go on the event of the named
+        task alone.
+
+        Raises
+        ------
+        ValueError
+            The named task is a checklist item and attributes are given.
         """
+        self.task.node.refuse_attributes(self.attrs)
         completed_on = self.completed_on.isoformat()
         recurrence, rescheduled = self.recurrence, self.rescheduled
+        ancestries = self.ancestries
         events = []
-        for ancestry in self.ancestries:
+        for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
-            completed = TaskCompletion(ancestry, due).payload
+            attrs = self.attrs if ancestry is ancestries[0] else None
+            completed = TaskCompletion(ancestry, due, attrs).payload
             payload = {**completed, 'completed_on': completed_on}
             stream = self.ids[ancestry.stream.raw_index]
             events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
@@ -876,8 +906,13 @@ class Scratch:
     proposed in this one, so every scratch is logged (SCHEMA.md).
     """
 
-    def __init__(self, task: Task) -> None:
+    def __init__(
+        self,
+        task: Task,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.task = task
+        self.attrs = attrs
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -969,8 +1004,15 @@ class Scratch:
         """One `TaskScratched`, on the stream task's stream.
 
         The stream of a checklist item is an ancestor's, so its payload
-        marks it as a checklist item.
+        marks it as a checklist item. The payload carries the
+        attributes.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item and attributes are given.
         """
+        self.node.refuse_attributes(self.attrs)
         payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
             'snapshot': self.node.snapshot,
@@ -978,6 +1020,8 @@ class Scratch:
         }
         if self.node.is_checklist_item:
             payload['checklist_item'] = True
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
 
 
@@ -1267,6 +1311,74 @@ class SuppliedFields:
                 )
 
 
+class SuppliedAttributes:
+    """The attributes a caller supplies to a write, read before any write.
+
+    `text` holds `key=value` segments. The text of `note` enters as the
+    key `note` and never runs through the split.
+    """
+
+    def __init__(self, text: str | None, note: str | None) -> None:
+        self.text = text
+        self.note = note
+
+    @property
+    def checked(self) -> dict[str, str]:
+        """Each key against its value, in the order given.
+
+        Raises
+        ------
+        ValueError
+            A key is outside the grammar, a value is empty or holds a
+            line break, or a key is given twice.
+        """
+        checked: dict[str, str] = {}
+        for key, value in self.pairs:
+            if not ATTRIBUTE_KEY.fullmatch(key):
+                raise ValueError(
+                    f'attribute key must be a lowercase identifier, '
+                    f'not {key!r}'
+                )
+            if not value:
+                raise ValueError(f'attribute {key!r} must hold a value')
+            if '\n' in value or '\r' in value:
+                raise ValueError(
+                    f'attribute {key!r} must hold no line break, not {value!r}'
+                )
+            if key in checked:
+                raise ValueError(f'attribute {key!r} is given twice')
+            checked[key] = value
+        return checked
+
+    @property
+    def pairs(self) -> list[tuple[str, str]]:
+        """Each segment split at its first `=`, then the note.
+
+        Raises
+        ------
+        ValueError
+            A segment holds no `=`.
+        """
+        pairs = []
+        for segment in self.segments:
+            key, sign, value = segment.partition('=')
+            if not sign:
+                raise ValueError(
+                    f'attribute must read key=value, not {segment!r}'
+                )
+            pairs.append((key, value))
+        if self.note is not None:
+            pairs.append((NOTE_KEY, self.note))
+        return pairs
+
+    @property
+    def segments(self) -> list[str]:
+        """The `key=value` segments of `text`, or none without it."""
+        if self.text is None:
+            return []
+        return ATTRIBUTE_SEPARATOR.split(self.text)
+
+
 class Event(NamedTuple):
     """One journal event a write records."""
 
@@ -1278,24 +1390,34 @@ class Event(NamedTuple):
 class AddedLine:
     """A task an add writes, as its `TaskAdded` records it.
 
-    `block` is the task line and its description lines.
+    `block` is the task line and its description lines. `attrs` holds
+    the attributes of the add, or None.
     """
 
-    def __init__(self, block: str, written: dict[str, str]) -> None:
+    def __init__(
+        self,
+        block: str,
+        written: dict[str, str],
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.block = block
         self.written = written
+        self.attrs = attrs
 
     @property
     def payload(self) -> dict[str, Any]:
-        """Each field written against nothing, and the task as written."""
+        """Each field written against nothing, the task, the attributes."""
         delta = {name: [None, value] for name, value in self.written.items()}
-        return {
+        payload = {
             'delta': delta,
             # Post-state, unlike every other event here: an add has no
             # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
             'snapshot': self.node.snapshot,
         }
+        if self.attrs:
+            payload['attrs'] = self.attrs
+        return payload
 
     @property
     def node(self) -> TaskNode:
@@ -1307,20 +1429,28 @@ class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
     `rescheduled` is the next due date of a task the completion
-    reschedules, and None for every other task. The event of a
-    checklist item lands on the stream of an ancestor, so its payload
-    marks it as a checklist item.
+    reschedules, and None for every other task. `attrs` holds the
+    attributes of the named task, and None for every other task. The
+    event of a checklist item lands on the stream of an ancestor, so
+    its payload marks it as a checklist item.
     """
 
-    def __init__(self, ancestry: Ancestry, rescheduled: date | None) -> None:
+    def __init__(
+        self,
+        ancestry: Ancestry,
+        rescheduled: date | None,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
+        self.attrs = attrs
 
     @property
     def payload(self) -> dict[str, Any]:
         """The done, a new due date beside it, the task and its path.
 
-        A checklist item also carries its mark.
+        A checklist item also carries its mark, and the named task its
+        attributes.
         """
         node = self.ancestry.node
         delta: dict[str, list[Any]] = {'done': [False, True]}
@@ -1333,6 +1463,8 @@ class TaskCompletion:
         }
         if node.is_checklist_item:
             payload['checklist_item'] = True
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return payload
 
 

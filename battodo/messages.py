@@ -57,6 +57,9 @@ MESSAGES = {
     ' value, or part of its title',
     'add.description.help': 'the task description; each line of it is one'
     ' description line under the task',
+    'add.attrs.help': 'attributes of the add: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'add.note.help': 'a note on the add; the attribute note',
     # show
     'show.description': 'show one item: its fields and its subtasks',
     'show.help': 'for details use show --help',
@@ -74,6 +77,9 @@ MESSAGES = {
     'update.title.help': 'new title, without any [FIELD:] markup',
     'update.description.help': 'new description, one description line per'
     ' line; an empty one clears it',
+    'update.attrs.help': 'attributes of the update: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'update.note.help': 'a note on the update; the attribute note',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',
@@ -81,11 +87,17 @@ MESSAGES = {
     'done.selector.help': "the task's [ID:] value, or part of its title",
     'done.date.help': 'the day the task was completed, YYYY-MM-DD;'
     ' default today',
+    'done.attrs.help': 'attributes of the completion: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'done.note.help': 'a note on the completion; the attribute note',
     # scratch
     'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
     'scratch.help': 'for details use scratch --help',
     'scratch.selector.metavar': 'selector',
     'scratch.selector.help': "the task's [ID:] value, or part of its title",
+    'scratch.attrs.help': 'attributes of the scratch: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
+    'scratch.note.help': 'a note on the scratch; the attribute note',
     # backfill
     'backfill.description': 'one-time migration: stamp [ADDED:today] on '
     'tasks that predate the field',

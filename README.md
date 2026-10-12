@@ -40,6 +40,26 @@ A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it, and
 it stays out of `--all` too — opting out is not a time window.
 
+### Attributes on a write
+
+`add`, `update`, `done` and `scratch` take `--attrs` and `--note`. The
+journal event of the task the command names records them in
+`payload.attrs`
+([ADR 0020](docs/decisions/0019-event-attributes/0020-event-attribute-map.md)).
+
+```bash
+btodo done permit --attrs 'confirmation=A1B2C3, place=Main St, Suite 4'
+btodo done permit --note 'Renewed online'
+```
+
+`--attrs` takes `key=value` segments. It splits only at a comma
+followed by the next `key=`, so a value may hold commas and `=`. A key
+is a lowercase letter, then lowercase letters, digits or underscores.
+`--note TEXT` enters as the key `note` and is not split. A key given
+twice, an empty value, a line break, a segment with no `=` or a key
+outside the grammar is refused before anything is written. A checklist
+item takes no attributes.
+
 ### Machine-readable output
 
 `btodo view --format json` writes the same selection to stdout as a

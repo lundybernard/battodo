@@ -184,6 +184,18 @@ class TaskNode:
                 'would promote it to a subtask'
             )
 
+    def refuse_attributes(self, attrs: dict[str, str] | None) -> None:
+        """Refuse attributes given to the task if it is a checklist item.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item and `attrs` holds any. A
+            checklist item takes no attributes (ADR 0020).
+        """
+        if attrs and self.is_checklist_item:
+            raise ValueError('a checklist item takes no attributes')
+
 
 class Ancestry:
     """A task and every task above it, outermost first."""

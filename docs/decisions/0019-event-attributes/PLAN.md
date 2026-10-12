@@ -21,7 +21,7 @@ the CLI split and subtask schedules.
 | ----- | ----- | ------ |
 | S1a — completion event payload | — | In progress (#90) |
 | CLI split (ADR 0024) | — | In progress, parallel PR |
-| S1b — attributes on every write event | S1a, CLI split | Planned |
+| S1b — attributes on every write event | S1a, CLI split | In progress |
 | S2 — note event and command | S1b | Planned |
 | S3 — history command | S2 | Planned |
 | S4 — notes in `show` | S3, subtask schedules | Planned |
