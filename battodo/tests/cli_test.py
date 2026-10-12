@@ -126,7 +126,12 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        for argv in (['view'], ['show', 'brush pile'], ['completed']):
+        for argv in (
+            ['view'],
+            ['show', 'brush pile'],
+            ['completed'],
+            ['history', 'brush pile'],
+        ):
             with t.subTest(f'an unknown {argv[0]} format is a usage error'):
                 stderr = StringIO()
 
@@ -158,6 +163,16 @@ class ArgparserTests(TestCase):
             t.assertIsNone(getattr(args, 'battodo.format'))
 
             args = t.parser.parse_args(['completed', '--format', 'json'])
+            t.assertEqual(getattr(args, 'battodo.format'), 'json')
+
+        with t.subTest('and so does history'):
+            # Two cycles: each one checks one of the two accepted values.
+            args = t.parser.parse_args(['history', 'brush pile'])
+            t.assertIsNone(getattr(args, 'battodo.format'))
+
+            args = t.parser.parse_args(
+                ['history', 'brush pile', '--format', 'json']
+            )
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
 
     def test_top(t):
@@ -204,6 +219,7 @@ class ArgparserTests(TestCase):
             (['done', 'brush pile'], Commands.done),
             (['scratch', 'brush pile'], Commands.scratch),
             (['note', 'brush pile', 'Too wet'], Commands.note),
+            (['history', 'brush pile'], Commands.history),
             (['backfill'], Commands.backfill),
             (['completed'], Commands.completed),
         ]
@@ -232,7 +248,8 @@ class ArgparserTests(TestCase):
                 t.assertEqual(args.priority, '4')
 
     def test_selector(t):
-        for command in ('show', 'update', 'done', 'scratch', 'note'):
+        commands = ('show', 'update', 'done', 'scratch', 'note', 'history')
+        for command in commands:
             with t.subTest(command):
                 args = t.parser.parse_args([command, 'brush pile'])
                 t.assertEqual(args.selector, 'brush pile')
@@ -600,6 +617,38 @@ class CommandsShowTests(TestCase):
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.get_item.return_value)
+
+
+class CommandsHistoryTests(TestCase):
+    """Unit tests for battodo.cli.Commands.history."""
+
+    def setUp(t):
+        t.datetime = clock(t)
+        patcher = patch(f'{SRC}.get_history', autospec=True)
+        t.get_history = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(selector='a selector')
+
+    def test_history(t):
+        Commands.history(t.conf, t.args)
+
+        with t.subTest('the input reaches the library beside the config'):
+            t.get_history.assert_called_once_with(
+                t.conf,
+                t.datetime.now.return_value,
+                selector='a selector',
+            )
+
+        with t.subTest('the clock is read in the local zone, not the host'):
+            t.datetime.now.assert_called_with(TZ)
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.get_history.return_value)
 
 
 class CommandsCompletedTests(TestCase):

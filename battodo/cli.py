@@ -384,6 +384,10 @@ class Commands:
         print(get_item(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
+    def history(conf, args):
+        raise NotImplementedError
+
+    @staticmethod
     def update(conf, args):
         print(
             update_item(

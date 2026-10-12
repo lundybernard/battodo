@@ -278,6 +278,20 @@ class CommandInputTests(TestCase):
             event = Journal(t.source).events[-1]
             t.assertEqual(event['payload']['attrs'], {'note': 'Still wet'})
 
+    def test_history(t):
+        t.run_command(['note', 'rk01lv', 'Too wet'], {})
+
+        with t.subTest('the selector and BATTODO_FORMAT reach history'):
+            ret = t.run_command(
+                ['history', 'rk01lv'],
+                {'BATTODO_FORMAT': 'json'},
+            )
+
+            history = loads(ret)
+            t.assertEqual(history['id'], 'rk01lv')
+            t.assertEqual(history['title'], 'Rake leaves')
+            t.assertEqual(history['entries'][0]['kind'], 'TaskAnnotated')
+
     def test_update(t):
         listed = t.source / 'yard.md'
 
