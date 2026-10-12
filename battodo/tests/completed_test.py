@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
@@ -20,7 +20,7 @@ from ..completed import (
 
 SRC = 'battodo.completed'
 TODAY = date(2026, 8, 5)
-NOW = datetime(2026, 8, 5, 10, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 5, 10, 30, tzinfo=UTC)
 # Two records of one category, one of another, one outside every
 # period, and one abandoned. The dates are out of order on purpose.
 LOG = """\

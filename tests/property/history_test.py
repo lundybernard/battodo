@@ -9,7 +9,7 @@ code under test.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from json import loads
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -112,7 +112,7 @@ def recorded_events(draw: st.DrawFn) -> Recorded:
     instants = st.datetimes(
         datetime.combine(EARLIEST, time()),
         datetime.combine(LATEST, time()),
-        timezones=st.just(timezone.utc),
+        timezones=st.just(UTC),
     )
     occurred_at = draw(instants)
     task_id = draw(st.sampled_from(STREAM_IDS))

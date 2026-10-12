@@ -3,7 +3,7 @@ name = "battodo"
 description = "Personal todo-list CLI (BAT ecosystem test-bed)"
 authors = [{ name = "Lundy Bernard" }]
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["version"]
 # [toml] extra: on <=3.10 batconf's TomlSource needs the third-party
 # toml package (stdlib tomllib is 3.11+); marker makes it a no-op above.
@@ -61,7 +61,7 @@ batconf = { path = "../batconf" }
 # spec mirrors requires-python; the concrete interpreter comes from a
 # pyNNN feature, so one manifest can build an env per supported version.
 [tool.pixi.dependencies]
-python = ">=3.10"
+python = ">=3.11"
 
 [tool.pixi.pypi-dependencies]
 battodo = { path = ".", editable = true }
@@ -96,7 +96,6 @@ behavioral = { depends-on = [
 ] }
 # Same suite, one entry point per supported interpreter. CI fans these
 # out; locally they are the way to check a requires-python claim.
-unit-py310 = { depends-on = [{ task = "_unit", environment = "test-py310" }] }
 unit-py311 = { depends-on = [{ task = "_unit", environment = "test-py311" }] }
 unit-py312 = { depends-on = [{ task = "_unit", environment = "test-py312" }] }
 unit-py313 = { depends-on = [{ task = "_unit", environment = "test-py313" }] }
@@ -174,9 +173,6 @@ _mutate = "rm -rf mutants/pyproject.toml mutants/tests mutants/battodo/_version.
 
 # Interpreter-only features: one per CPython in requires-python. They
 # carry no tools — pair one with `test` to get that version's suite.
-[tool.pixi.feature.py310.dependencies]
-python = "3.10.*"
-
 [tool.pixi.feature.py311.dependencies]
 python = "3.11.*"
 
@@ -213,7 +209,6 @@ dev = { features = [
 # The version matrix: what turns requires-python from a claim into a
 # tested range. Each older interpreter needs its own solve group, since
 # one group means one shared package set.
-test-py310 = { features = ["py310", "test"] }
 test-py311 = { features = ["py311", "test"] }
 test-py312 = { features = ["py312", "test"] }
 test-py313 = { features = ["py313", "test"] }
