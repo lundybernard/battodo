@@ -27,6 +27,7 @@ the CLI split and subtask schedules.
 | S4 — notes in `show` | S3, subtask schedules | Planned |
 | S5 — attributes in the completed log | S1b | In progress (#97) |
 | S6 — task description | — (runs before #88) | In review |
+| S7 — reopen through update (ADR 0025) | S3 | In progress (#107) |
 
 Subtask schedules (owner design, 2026-10-11) run after S1a and before
 S4. #88 runs after subtask schedules and after S6.
@@ -81,6 +82,14 @@ the refusals, the render and the `show` row
 another slice. It changes `Update`, as #88 does, so S6 runs first and
 issue #88 follows it.
 
+## S7 — Reopen through update
+
+`update` reaches a closed task by its id and reopens it, `update --list`
+moves a task between lists, and every snapshot records its list and
+children ([ADR 0025](../0025-reopen-by-update.md),
+[DESIGN.md](DESIGN.md#reopen)). `history` lists each reopen, and names
+several candidates by id (#109).
+
 ## After the flip
 
 Two items wait for the journal-authority flip. The group README lists
@@ -94,3 +103,4 @@ them under [After the flip](README.md#after-the-flip).
   shares `Update` with S6.
 - #52 records that command inputs reach the configuration object
   undeclared.
+- #107 is the S7 issue; #109 asks `history` to name candidates by id.
