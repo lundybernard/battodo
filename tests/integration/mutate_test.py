@@ -7,6 +7,7 @@ the isolation tests beside the code.
 """
 
 from datetime import date
+from os import utime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -1103,13 +1104,29 @@ class AnnotationTests(TestCase):
         t.an = annotation_of(t.source, '9o71lx')
 
     def test_write(t) -> None:
-        t.an.write()
+        with t.subTest('the list and the journal hold its values'):
+            unidentified = annotation_of(t.source, 'A task with no id')
 
-        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+            unidentified.write()
 
-        # The list holds the text the note derives, the journal its event.
-        t.assertEqual(written, t.an.text)
-        t.assertEqual(journaled(t.source), as_journaled(t.an.events))
+            written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+            t.assertEqual(written, unidentified.text)
+            t.assertEqual(
+                journaled(t.source),
+                as_journaled(unidentified.events),
+            )
+
+        with t.subTest('a task with an id: the list is not written again'):
+            source = a_source(t)
+            path = source / 'a-list.md'
+            # A known mtime, so a rewrite shows without a wait.
+            utime(path, ns=(0, 0))
+            noted = annotation_of(source, '9o71lx')
+
+            noted.write()
+
+            t.assertEqual(path.stat().st_mtime_ns, 0)
+            t.assertEqual(journaled(source), as_journaled(noted.events))
 
     def test_text(t) -> None:
         with t.subTest('a task with an id: the list as read'):
@@ -1321,21 +1338,42 @@ class ChangesetTests(TestCase):
         )
 
     def test_write(t) -> None:
-        t.cs.write()
+        with t.subTest('the list, the log and the journal take its values'):
+            t.cs.write()
 
-        written = t.path.read_text(encoding='utf-8')
-        logged = (t.source / 'completed.md').read_text(encoding='utf-8')
-        (event,) = Journal(t.source).events
-        t.assertEqual(written, 'the list as written\n')
-        t.assertEqual(logged, 'a record\n')
-        t.assertEqual(
-            (event['type'], event['stream_id'], event['payload']),
-            ('TaskAdded', 'task/zz01ab', {'delta': {}}),
-        )
-        t.assertEqual(
-            event['metadata'],
-            {'actor': 'agent', 'source_file': 'a-list.md'},
-        )
+            written = t.path.read_text(encoding='utf-8')
+            logged = (t.source / 'completed.md').read_text(encoding='utf-8')
+            (event,) = Journal(t.source).events
+            t.assertEqual(written, 'the list as written\n')
+            t.assertEqual(logged, 'a record\n')
+            t.assertEqual(
+                (event['type'], event['stream_id'], event['payload']),
+                ('TaskAdded', 'task/zz01ab', {'delta': {}}),
+            )
+            t.assertEqual(
+                event['metadata'],
+                {'actor': 'agent', 'source_file': 'a-list.md'},
+            )
+
+        with t.subTest('a list that holds the text already is not written'):
+            source = a_source(t)
+            path = source / 'a-list.md'
+            # A known mtime, so a rewrite shows without a wait.
+            utime(path, ns=(0, 0))
+            unchanged = Changeset(
+                A_LIST,
+                ['a record'],
+                [Event('TaskAdded', 'task/zz01ab', {'delta': {}})],
+                path,
+                source,
+            )
+
+            unchanged.write()
+
+            logged = (source / 'completed.md').read_text(encoding='utf-8')
+            t.assertEqual(path.stat().st_mtime_ns, 0)
+            t.assertEqual(logged, 'a record\n')
+            t.assertEqual(journaled(source), [('TaskAdded', 'task/zz01ab')])
 
 
 def a_source(t: TestCase) -> Path:
