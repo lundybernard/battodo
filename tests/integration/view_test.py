@@ -223,6 +223,10 @@ class SelectionJsonViewTests(TestCase):
         with t.subTest('and says none are when it is holding nothing back'):
             t.assertEqual(t.categories(show_all=True)[0]['hidden'], 0)
 
+        with t.subTest('each task names its list'):
+            tasks = abridged['categories'][0]['tasks']
+            t.assertEqual({task['list'] for task in tasks}, {'career'})
+
         # Seven days over a 30-day scale is a repeating fraction, so
         # the raw rank has more decimals than the document publishes.
         with empty_source() as source:

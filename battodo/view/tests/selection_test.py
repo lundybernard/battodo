@@ -713,7 +713,7 @@ class CategoryJsonViewTests(TestCase):
         t.assertEqual(ret, [row_json_view.return_value] * 2)
         t.assertEqual(
             row_json_view.call_args_list,
-            [call(first), call(second)],
+            [call(first, 'work'), call(second, 'work')],
         )
 
 
@@ -745,7 +745,7 @@ class RowJsonViewTests(TestCase):
         t.row.rank = 4.25
         t.row.priority = 3.0
         t.row.subtasks = 0
-        t.rjv = RowJsonView(t.row)
+        t.rjv = RowJsonView(t.row, 'work')
 
     def test_data(t) -> None:
         with t.subTest('every stored field is carried through verbatim'):
@@ -753,6 +753,7 @@ class RowJsonViewTests(TestCase):
             t.assertEqual(
                 ret,
                 {
+                    'list': 'work',
                     'id': 'ab12cd',
                     'title': 'A task',
                     'rank': 4.25,

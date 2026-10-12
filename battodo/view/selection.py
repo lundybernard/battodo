@@ -410,14 +410,19 @@ class CategoryJsonView:
     @property
     def rows(self) -> list['RowJsonView']:
         """The rows the category shows, each laid out as JSON."""
-        return [RowJsonView(row) for row in self.category.shown]
+        name = self.category.name
+        return [RowJsonView(row, name) for row in self.category.shown]
 
 
 class RowJsonView:
-    """One task of a selection laid out as JSON."""
+    """One task of a selection laid out as JSON.
 
-    def __init__(self, row: Row) -> None:
+    `list_name` is the name of the category that shows the row.
+    """
+
+    def __init__(self, row: Row, list_name: str) -> None:
         self.row = row
+        self.list_name = list_name
 
     @property
     def data(self) -> dict[str, object]:
