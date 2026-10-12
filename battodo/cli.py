@@ -15,6 +15,7 @@ from battodo.lib import (
     backfill_items,
     complete_item,
     get_completed,
+    get_history,
     get_item,
     get_view,
     item_count,
@@ -194,6 +195,24 @@ def argparser():
         dest=f'{CONFIG_ROOT}.format',
         choices=FORMATS,
         help=MESSAGES['show.format.help'],
+    )
+
+    history = commands.add_parser(
+        'history',
+        description=MESSAGES['history.description'],
+        help=MESSAGES['history.help'],
+    )
+    history.set_defaults(func=Commands.history)
+    history.add_argument(
+        'selector',
+        metavar=MESSAGES['history.selector.metavar'],
+        help=MESSAGES['history.selector.help'],
+    )
+    history.add_argument(
+        '--format',
+        dest=f'{CONFIG_ROOT}.format',
+        choices=FORMATS,
+        help=MESSAGES['history.format.help'],
     )
 
     update = commands.add_parser(
@@ -382,6 +401,10 @@ class Commands:
     @staticmethod
     def show(conf, args):
         print(get_item(conf, datetime.now(TZ), selector=args.selector))
+
+    @staticmethod
+    def history(conf, args):
+        print(get_history(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
     def update(conf, args):

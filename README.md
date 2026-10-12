@@ -89,6 +89,42 @@ stream of the task, and the task does not change. A task with no
 neither `TEXT` nor `--attrs` is refused before anything is written, as
 is a checklist item. A done task is out of reach.
 
+### History of a task
+
+`history` lists the completions of one task, and every other event
+that carries attributes, from the journal
+([ADR 0022](docs/decisions/0019-event-attributes/0022-history-command.md)).
+
+```bash
+btodo done permit --date 2026-09-01
+btodo note permit 'Waiting on the office'
+btodo done permit --date 2026-10-01 \
+  --attrs 'confirmation=A1B2C3, place=Main St, Suite 4'
+btodo history permit
+```
+
+```text
+Renew the parking permit [ID:3usdig]
+  2026-10-11  TaskAnnotated
+    note=Waiting on the office
+  2026-10-01  TaskCompleted
+    confirmation=A1B2C3
+    place=Main St, Suite 4
+  2026-09-01  TaskCompleted
+```
+
+The selector is the `[ID:]` of the task, or a case-insensitive part of
+its current title. It reads the journal, not the lists, so a finished
+one-shot task stays in reach. A selector that names no task is
+refused. A selector that names several is refused, and the message
+names each candidate. Entries run newest first: by day, and on one day
+the later event in the journal comes first. A completion falls on the
+day it is for, and any other event on the local day it was recorded.
+Each attribute follows on a line of its own, in recorded order. The
+completion of a checklist item reads `TaskCompleted (checklist item)`.
+`--format json` gives the same document. A completion made by hand
+edit writes no event, so `history` does not list it.
+
 ### Machine-readable output
 
 `btodo view --format json` writes the same selection to stdout as a

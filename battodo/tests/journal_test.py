@@ -58,7 +58,7 @@ class JournalTests(TestCase):
         t.datetime.now.return_value.isoformat.return_value = STAMP
 
         t.file = MagicMock(spec=Path)
-        t.source = t.Path.return_value
+        t.source = t.Path.return_value.expanduser.return_value
         t.journal_dir = MagicMock(spec=Path)
         t.source.__truediv__.return_value = t.journal_dir
         t.journal_dir.__truediv__.return_value = t.file
@@ -77,6 +77,9 @@ class JournalTests(TestCase):
             t.assertEqual(ret, t.file)
             t.source.__truediv__.assert_called_once_with(JOURNAL_DIRNAME)
             t.journal_dir.__truediv__.assert_called_once_with(JOURNAL_FILENAME)
+
+        with t.subTest('a ~ in the source expands to the home directory'):
+            t.Path.return_value.expanduser.assert_called_once_with()
 
     def test_text(t) -> None:
         with t.subTest('a journal that is not there is empty text'):

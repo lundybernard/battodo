@@ -24,6 +24,7 @@ from .completed import (
     DigestView,
 )
 from .conf import TZ
+from .history import HistoryJsonView, HistoryView, TaskHistory
 from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
 from .mutate import (
@@ -49,6 +50,7 @@ __all__ = [
     'backfill_items',
     'complete_item',
     'get_completed',
+    'get_history',
     'get_item',
     'get_view',
     'item_count',
@@ -189,6 +191,36 @@ def get_item(conf: Configuration, now: datetime, *, selector: str) -> str:
     if _is_json(conf):
         return ItemJsonView(item).json
     return ItemView(item).text
+
+
+def get_history(conf: Configuration, now: datetime, *, selector: str) -> str:
+    """The history of the task `selector` names, from the journal.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. `format` chooses the form.
+    now : datetime
+        The clock, whose zone decides the local day of each event.
+    selector : str
+        Names the task: its id, or a part of its current title.
+
+    Returns
+    -------
+    str
+        The rendered history, or the history as JSON, without a
+        trailing newline.
+
+    Raises
+    ------
+    ValueError
+        The selector does not name exactly one task in the journal, or
+        the configured format is not one of FORMATS.
+    """
+    history = TaskHistory.from_config(conf, now, selector=selector)
+    if _is_json(conf):
+        return HistoryJsonView(history).json
+    return HistoryView(history).text
 
 
 def add_item(

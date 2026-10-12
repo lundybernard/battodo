@@ -9,6 +9,7 @@ from ..lib import (
     backfill_items,
     complete_item,
     get_completed,
+    get_history,
     get_item,
     get_view,
     scratch_item,
@@ -168,6 +169,58 @@ class GetItemTests(TestCase):
 
         with t.assertRaises(ValueError) as caught:
             get_item(t.conf, t.now, selector='a selector')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
+
+
+class GetHistoryTests(TestCase):
+    """Unit tests for battodo.lib.get_history."""
+
+    def setUp(t):
+        patches = ['TaskHistory', 'HistoryView']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.history = t.TaskHistory.from_config.return_value
+
+        t.now = sentinel.now
+        t.conf = Mock(spec=['format'])
+        t.conf.format = 'text'
+
+    def test_history(t):
+        get_history(t.conf, t.now, selector='a selector')
+        # The configuration is decoded once, by the history.
+        t.TaskHistory.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            selector='a selector',
+        )
+
+    def test_text(t):
+        rendered = get_history(t.conf, t.now, selector='a selector')
+        t.HistoryView.assert_called_once_with(t.history)
+        t.assertEqual(rendered, t.HistoryView.return_value.text)
+
+    @patch(f'{SRC}.HistoryJsonView', autospec=True)
+    def test_json(t, history_json_view):
+        t.conf.format = 'json'
+
+        rendered = get_history(t.conf, t.now, selector='a selector')
+
+        history_json_view.assert_called_once_with(t.history)
+        t.assertEqual(rendered, history_json_view.return_value.json)
+        # The JSON view serializes the history; the text view is not built.
+        t.HistoryView.assert_not_called()
+
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_history(t.conf, t.now, selector='a selector')
 
         t.assertEqual(
             str(caught.exception),

@@ -11,7 +11,10 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.journal import SCHEMA_VERSION, Journal
+from battodo.journal import (
+    SCHEMA_VERSION,
+    Journal,
+)
 
 SRC = 'battodo.journal'
 
@@ -37,8 +40,16 @@ class JournalTests(TestCase):
         return t.journal.append(**params)
 
     def test_path(t) -> None:
-        ret = t.journal.path
-        t.assertEqual(ret, t.dir / '.journal' / 'log.jsonl')
+        with t.subTest('the log sits in the journal directory'):
+            ret = t.journal.path
+            t.assertEqual(ret, t.dir / '.journal' / 'log.jsonl')
+
+        with t.subTest('a ~ in the source expands to the home directory'):
+            ret = Journal(Path('~/a-source-dir')).path
+            t.assertEqual(
+                ret,
+                Path.home() / 'a-source-dir' / '.journal' / 'log.jsonl',
+            )
 
     def test_append(t) -> None:
         with t.subTest('creates the journal directory and file'):

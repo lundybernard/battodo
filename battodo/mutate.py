@@ -36,7 +36,15 @@ from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
-from .journal import Journal, new_task_id
+from .journal import (
+    ADDED_EVENT,
+    ANNOTATED_EVENT,
+    COMPLETED_EVENT,
+    SCRATCHED_EVENT,
+    UPDATED_EVENT,
+    Journal,
+    new_task_id,
+)
 from .lists import discover_lists
 from .parser import (
     CHECKBOX_RE,
@@ -50,11 +58,6 @@ from .parser import (
 from .repeat import next_due
 from .task import Task
 
-ADDED_EVENT = 'TaskAdded'
-ANNOTATED_EVENT = 'TaskAnnotated'
-COMPLETED_EVENT = 'TaskCompleted'
-SCRATCHED_EVENT = 'TaskScratched'
-UPDATED_EVENT = 'TaskUpdated'
 COMPLETED_LOG = 'completed.md'
 # Opens the attribute block that ends a completed-log record.
 ATTRIBUTES_MARK = '[attrs:'

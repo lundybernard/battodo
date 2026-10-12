@@ -26,6 +26,12 @@ JOURNAL_DIRNAME = '.journal'
 JOURNAL_FILENAME = 'log.jsonl'
 ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
 ID_LENGTH = 6
+# The event types btodo writes.
+ADDED_EVENT = 'TaskAdded'
+ANNOTATED_EVENT = 'TaskAnnotated'
+COMPLETED_EVENT = 'TaskCompleted'
+SCRATCHED_EVENT = 'TaskScratched'
+UPDATED_EVENT = 'TaskUpdated'
 
 
 def new_task_id() -> str:
@@ -48,8 +54,12 @@ class Journal:
 
     @cached_property
     def path(self) -> Path:
-        """The log file inside the journal directory of the source."""
-        return Path(self.source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+        """The log file inside the journal directory of the source.
+
+        A `~` in the source directory expands to the home directory.
+        """
+        source = Path(self.source_dir).expanduser()
+        return source / JOURNAL_DIRNAME / JOURNAL_FILENAME
 
     @cached_property
     def text(self) -> str:
