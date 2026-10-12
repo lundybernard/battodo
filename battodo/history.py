@@ -92,7 +92,7 @@ class TaskHistory:
 
     @property
     def entries(self) -> list['HistoryEntry']:
-        """Each completion, and each other event that carries attributes.
+        """Each completion and reopen, and each other event with attributes.
 
         Newest first: by day, then the later event in the journal first.
         """
@@ -100,7 +100,7 @@ class TaskHistory:
         listed = [
             entry
             for entry in read
-                if entry.kind == COMPLETED_EVENT or entry.attrs
+                if entry.kind == COMPLETED_EVENT or entry.reopen or entry.attrs
         ]  # fmt: skip
         newest = reversed(listed)
         return sorted(newest, key=attrgetter('day'), reverse=True)
@@ -320,7 +320,8 @@ class HistoryEntry:
     @property
     def reopen(self) -> bool:
         """Whether the event reopens the task: done turns false."""
-        raise NotImplementedError
+        delta = self.event['payload'].get('delta', {})
+        return delta.get('done') == [True, False]
 
 
 class HistoryView:
