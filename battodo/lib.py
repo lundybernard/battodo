@@ -28,6 +28,7 @@ from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
 from .mutate import (
     Addition,
+    Annotation,
     Backfill,
     Completion,
     Scratch,
@@ -44,6 +45,7 @@ __all__ = [
     'PERIODS',
     'TZ',
     'add_item',
+    'annotate_item',
     'backfill_items',
     'complete_item',
     'get_completed',
@@ -445,6 +447,50 @@ def scratch_item(
     scratch.write()
     entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'
+
+
+def annotate_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    text: str | None = None,
+    attrs: str | None = None,
+) -> str:
+    """Note the task `selector` names.
+
+    Parameters
+    ----------
+    conf : Configuration
+        The resolved configuration. Only the source directory is read.
+    now : datetime
+        The clock, whose local day the task is read under.
+    selector : str
+        Names the task.
+    text : str or None
+        The note, which enters the attributes under the key `note`.
+    attrs : str or None
+        The attributes of the note, as `key=value` segments.
+
+    Returns
+    -------
+    str
+        The task line as written and the file that holds it, one per
+        line.
+
+    Raises
+    ------
+    SelectionError
+        The selector does not name exactly one open task.
+    ValueError
+        The attributes do not read, the note carries nothing, or the
+        task is a checklist item. Raised before anything is written.
+    """
+    checked = SuppliedAttributes(attrs, text).checked
+    task = Task(_source(conf), selector, now.date())
+    annotation = Annotation(task, checked)
+    annotation.write()
+    return f'{annotation.entry}\n{annotation.path}'
 
 
 def backfill_items(conf: Configuration, now: datetime) -> str:

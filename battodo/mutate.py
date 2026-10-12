@@ -19,6 +19,7 @@ of it is done, and reschedules a recurring task instead of removing
 it. `Scratch` abandons a task: the block goes, the log records it as
 SCRATCHED, and nothing cascades or reschedules. `Update` sets the
 fields and the title it is given and leaves the rest of the list.
+`Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
 leaves a list with nothing to stamp unwritten, so file sync sees no
 change.
@@ -49,6 +50,7 @@ from .repeat import next_due
 from .task import Task
 
 ADDED_EVENT = 'TaskAdded'
+ANNOTATED_EVENT = 'TaskAnnotated'
 COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
 UPDATED_EVENT = 'TaskUpdated'
@@ -453,11 +455,7 @@ class SubtaskAddition:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the parent's new id."""
-        payload = {
-            'delta': {'ID': [None, self.parent_id]},
-            'snapshot': self.node.snapshot,
-        }
-        return Event(UPDATED_EVENT, f'task/{self.parent_id}', payload)
+        return IdAssignment(self.node, self.parent_id).event
 
 
 class Update:
@@ -1025,6 +1023,154 @@ class Scratch:
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
 
 
+class Annotation:
+    """The note on an open task: its attributes on an event of its own.
+
+    The note changes no task state. A task with no `[ID:]` is given one
+    first, on an event of its own, so the note has a stream to land on.
+    """
+
+    def __init__(self, task: Task, attrs: dict[str, str]) -> None:
+        self.task = task
+        self.attrs = attrs
+
+    def write(self) -> None:
+        """Write the list, its log records and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        changes = Changeset(
+            self.text,
+            self.entries,
+            self.events,
+            self.path,
+            self.source,
+        )
+        changes.write()
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        return self.task.source
+
+    @property
+    def path(self) -> Path:
+        """The list file that holds the task."""
+        return self.task.path
+
+    @property
+    def text(self) -> str:
+        """The list with the task given an id where it carries none.
+
+        Raises
+        ------
+        ValueError
+            The note carries no attribute, or the task is a checklist
+            item, which takes no attributes.
+        SelectionError
+            The selector does not name exactly one open task.
+        """
+        return self.document.text
+
+    @property
+    def document(self) -> TodoDocument:
+        """The task's list, its line stamped with an id where it has none.
+
+        The note is checked before the selector is read.
+        """
+        self.refuse_empty()
+        doc = TodoDocument(self.task.doc.text)
+        if self.stamped:
+            doc.set_field(self.node.raw_index, 'ID', self.task_id)
+        return doc
+
+    def refuse_empty(self) -> None:
+        """Refuse a note that carries nothing.
+
+        Raises
+        ------
+        ValueError
+            The note holds no attribute, the key `note` included.
+        """
+        if not self.attrs:
+            raise ValueError('nothing to note: give a note or an attribute')
+
+    @property
+    def stamped(self) -> bool:
+        """Whether the task is given an id: it carries none.
+
+        An `[ID:]` with nothing in it names no stream, so it counts as
+        none.
+        """
+        return not self.node.task_id
+
+    @property
+    def node(self) -> TaskNode:
+        """The task as the parser reads it.
+
+        Raises
+        ------
+        ValueError
+            The task is a checklist item, which takes no attributes. An
+            `[ID:]` stamped on one would promote it to a subtask.
+        """
+        node = self.task.node
+        node.refuse_attributes(self.attrs)
+        return node
+
+    @cached_property
+    def task_id(self) -> str:
+        """The task's id, or a new one.
+
+        Cached: a new id is drawn at random, so every read names one.
+        """
+        return self.node.task_id or new_task_id()
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        return self.document.lines[self.node.raw_index]
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a note logs no completed-log record."""
+        return []
+
+    @property
+    def events(self) -> list['Event']:
+        """The task's stamp if it has no id, then one `TaskAnnotated`."""
+        event = Event(ANNOTATED_EVENT, f'task/{self.task_id}', self.payload)
+        return [self.stamp, event] if self.stamped else [event]
+
+    @property
+    def stamp(self) -> 'Event':
+        """The `TaskUpdated` that records the task's new id."""
+        return IdAssignment(self.node, self.task_id).event
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """The task, where a subtask sits, and the attributes.
+
+        No delta: a note changes nothing in the task.
+        """
+        payload: dict[str, Any] = {'snapshot': self.node.snapshot}
+        if self.nested:
+            payload['ancestry'] = self.ancestry.path
+        payload['attrs'] = self.attrs
+        return payload
+
+    @property
+    def nested(self) -> bool:
+        """Whether the task is a subtask, at any depth."""
+        return len(self.task.ancestry) > 1
+
+    @property
+    def ancestry(self) -> Ancestry:
+        """The task and every task above it."""
+        return Ancestry(self.task.ancestry)
+
+
 class Backfill:
     """The backfill of a source: each open top-level task given a date.
 
@@ -1423,6 +1569,23 @@ class AddedLine:
     def node(self) -> TaskNode:
         """The block alone in an open section, as the parser reads it."""
         return TodoDocument(f'{OPEN_HEADING}\n{self.block}').tasks[0]
+
+
+class IdAssignment:
+    """The `TaskUpdated` that records an id given to a task with none."""
+
+    def __init__(self, node: TaskNode, task_id: str) -> None:
+        self.node = node
+        self.task_id = task_id
+
+    @property
+    def event(self) -> Event:
+        """The new id against nothing, on the stream it names."""
+        payload = {
+            'delta': {'ID': [None, self.task_id]},
+            'snapshot': self.node.snapshot,
+        }
+        return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
 
 class TaskCompletion:

@@ -14,6 +14,7 @@ from unittest import TestCase
 from battodo.journal import Journal
 from battodo.mutate import (
     Addition,
+    Annotation,
     Backfill,
     Changeset,
     CompletedLog,
@@ -74,6 +75,8 @@ RESCHEDULED_RECURRENCE = (
     '[ID:dr01ab]\n'
     '      A description line.\n'
 )
+# The attributes of a note.
+A_NOTE = {'note': 'Waiting on the vendor'}
 # A second list, its open section empty.
 ANOTHER_LIST = '# Another list\n\n## Open\n'
 # A list whose one task carries an `[ID:]` with nothing in it.
@@ -1008,6 +1011,123 @@ class ScratchTests(TestCase):
             )
 
 
+class AnnotationTests(TestCase):
+    """Contract tests for battodo.mutate.Annotation."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.source = a_source(t)
+        t.an = annotation_of(t.source, '9o71lx')
+
+    def test_write(t) -> None:
+        t.an.write()
+
+        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+
+        # The list holds the text the note derives, the journal its event.
+        t.assertEqual(written, t.an.text)
+        t.assertEqual(journaled(t.source), as_journaled(t.an.events))
+
+    def test_text(t) -> None:
+        with t.subTest('a task with an id: the list as read'):
+            ret = t.an.text
+            t.assertEqual(ret, A_LIST)
+
+        with t.subTest('a task with no id is given one'):
+            unidentified = annotation_of(t.source, 'A task with no id')
+
+            ret = unidentified.text
+
+            line = f'{NO_ID_TASK} [ID:{unidentified.task_id}]'
+            t.assertEqual(ret, A_LIST.replace(NO_ID_TASK, line))
+
+        refused = {
+            'a note that carries nothing, before the selector': (
+                Annotation(Task(t.source, 'nothing', TODAY), {}),
+                ValueError,
+                'nothing to note: give a note or an attribute',
+            ),
+            'a checklist item, which takes no attributes': (
+                annotation_of(t.source, 'A checklist item'),
+                ValueError,
+                'a checklist item takes no attributes',
+            ),
+            'a selector that names no open task': (
+                annotation_of(t.source, 'nothing'),
+                SelectionError,
+                "no open task matches 'nothing'",
+            ),
+        }
+        for name, (refusal, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                _ = refusal.text
+
+    def test_entry(t) -> None:
+        ret = t.an.entry
+        t.assertEqual(ret, A_TASK)
+
+    def test_events(t) -> None:
+        with t.subTest('one TaskAnnotated, on the stream of the task'):
+            ret = t.an.events
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        'TaskAnnotated',
+                        'task/9o71lx',
+                        {
+                            'snapshot': {
+                                'title': 'A task',
+                                'done': False,
+                                'fields': {
+                                    'P': '4',
+                                    'LOE': '8',
+                                    'ADDED': '2026-07-06',
+                                    'ID': '9o71lx',
+                                },
+                                'description': 'A note that stays put.',
+                            },
+                            'attrs': {'note': 'Waiting on the vendor'},
+                        },
+                    )
+                ],
+            )
+
+        with t.subTest('a task with no id is stamped first, on its own'):
+            unidentified = annotation_of(t.source, 'A task with no id')
+
+            stamp, annotated = unidentified.events
+
+            task_id = unidentified.task_id
+            t.assertEqual(
+                stamp,
+                (
+                    'TaskUpdated',
+                    f'task/{task_id}',
+                    {
+                        'delta': {'ID': [None, task_id]},
+                        'snapshot': {
+                            'title': 'A task with no id',
+                            'done': False,
+                            'fields': {'P': '2'},
+                        },
+                    },
+                ),
+            )
+            t.assertEqual(annotated.stream, f'task/{task_id}')
+
+        with t.subTest('a subtask records where it sits'):
+            child = annotation_of(t.source, 'A subtask of it')
+
+            _, annotated = child.events
+
+            t.assertEqual(
+                annotated.payload['ancestry'],
+                'A task > A subtask of it',
+            )
+
+
 class BackfillTests(TestCase):
     """Contract tests for battodo.mutate.Backfill."""
 
@@ -1217,6 +1337,11 @@ def completion_of(
 ) -> Completion:
     """The completion of the task `selector` names."""
     return Completion(Task(source, selector, TODAY), attrs=attrs)
+
+
+def annotation_of(source: Path, selector: str) -> Annotation:
+    """A note on the task `selector` names."""
+    return Annotation(Task(source, selector, TODAY), A_NOTE)
 
 
 def under_an_empty_id(source: Path) -> SubtaskAddition:

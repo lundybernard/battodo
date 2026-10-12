@@ -15,11 +15,13 @@ from ..mutate import (
     OPEN_HEADING,
     AddedLine,
     Addition,
+    Annotation,
     Backfill,
     Changeset,
     CompletedLog,
     Completion,
     Event,
+    IdAssignment,
     ListBackfill,
     ListError,
     LogEntry,
@@ -674,26 +676,16 @@ class SubtaskAdditionTests(TestCase):
             t.assertEqual(len(ret), 2)
             t.assertIs(ret[0], sentinel.stamp)
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch(f'{SRC}.IdAssignment', autospec=True)
     @patch.object(SubtaskAddition, 'node', new_callable=PropertyMock)
-    def test_stamp(t, node: PropertyMock, snapshot: PropertyMock) -> None:
+    def test_stamp(t, node: PropertyMock, id_assignment: MagicMock) -> None:
         node.return_value = bare_node()
-        snapshot.return_value = sentinel.snapshot
         t.sa.parent_id = 'pp02cd'
 
         ret = t.sa.stamp
 
-        t.assertEqual(
-            ret,
-            Event(
-                'TaskUpdated',
-                'task/pp02cd',
-                {
-                    'delta': {'ID': [None, 'pp02cd']},
-                    'snapshot': sentinel.snapshot,
-                },
-            ),
-        )
+        id_assignment.assert_called_once_with(node.return_value, 'pp02cd')
+        t.assertIs(ret, id_assignment.return_value.event)
 
 
 class UpdateTests(TestCase):
@@ -1734,6 +1726,273 @@ class ScratchTests(TestCase):
             )
 
 
+class AnnotationTests(TestCase):
+    """Unit tests for battodo.mutate.Annotation."""
+
+    def setUp(t) -> None:
+        t.parent = parent_node()
+        t.task = named_task(t.parent)
+        t.an = Annotation(t.task, {'note': 'a note'})
+
+    @patch(f'{SRC}.Changeset', autospec=True)
+    @patch.object(Annotation, 'events', new_callable=PropertyMock)
+    @patch.object(Annotation, 'entries', new_callable=PropertyMock)
+    @patch.object(Annotation, 'text', new_callable=PropertyMock)
+    def test_write(
+        t,
+        text: PropertyMock,
+        entries: PropertyMock,
+        events: PropertyMock,
+        changeset: MagicMock,
+    ) -> None:
+        text.return_value = sentinel.text
+        entries.return_value = sentinel.entries
+        events.return_value = sentinel.events
+
+        with t.subTest('the list, its log records and its events'):
+            t.an.write()
+
+            changeset.assert_called_once_with(
+                sentinel.text,
+                sentinel.entries,
+                sentinel.events,
+                LIST_PATH,
+                SOURCE,
+            )
+            changeset.return_value.write.assert_called_once_with()
+
+        with t.subTest('a refused text: nothing else is read or written'):
+            changeset.reset_mock()
+            entries.reset_mock()
+            text.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.an.write()
+
+            entries.assert_not_called()
+            changeset.assert_not_called()
+
+    def test_source(t) -> None:
+        ret = t.an.source
+        t.assertIs(ret, t.task.source)
+
+    def test_path(t) -> None:
+        ret = t.an.path
+        t.assertIs(ret, t.task.path)
+
+    @patch.object(Annotation, 'document', new_callable=PropertyMock)
+    def test_text(t, document: PropertyMock) -> None:
+        document.return_value = MagicMock(spec=['text'])
+        ret = t.an.text
+        t.assertIs(ret, document.return_value.text)
+
+    @patch(f'{SRC}.TodoDocument', autospec=True)
+    @patch.object(Annotation, 'stamped', new_callable=PropertyMock)
+    @patch.object(Annotation, 'refuse_empty', autospec=True)
+    def test_document(
+        t,
+        refuse_empty: MagicMock,
+        stamped: PropertyMock,
+        todo_document: MagicMock,
+    ) -> None:
+        stamped.return_value = False
+        doc = todo_document.return_value
+
+        with t.subTest('a task with an id: the list as read'):
+            ret = t.an.document
+
+            refuse_empty.assert_called_once_with(t.an)
+            todo_document.assert_called_once_with(t.task.doc.text)
+            t.assertEqual(doc.method_calls, [])
+            t.assertIs(ret, doc)
+
+        with t.subTest('a task with no id is stamped'):
+            stamped.return_value = True
+            t.an.task_id = 'pp02cd'
+
+            _ = t.an.document
+
+            t.assertEqual(
+                doc.method_calls, [call.set_field(1, 'ID', 'pp02cd')]
+            )
+
+        with t.subTest('an empty note is refused before the task is read'):
+            todo_document.reset_mock()
+            stamped.reset_mock()
+            refuse_empty.side_effect = ValueError('nothing to note')
+
+            with t.assertRaisesRegex(ValueError, 'nothing to note'):
+                _ = t.an.document
+
+            stamped.assert_not_called()
+            todo_document.assert_not_called()
+
+    def test_refuse_empty(t) -> None:
+        with t.subTest('a note that carries an attribute'):
+            # Nothing to refuse: the call returns.
+            t.an.refuse_empty()
+
+        with t.subTest('a note that carries nothing'):
+            t.an.attrs = {}
+
+            with t.assertRaises(ValueError) as caught:
+                t.an.refuse_empty()
+
+            t.assertEqual(
+                str(caught.exception),
+                'nothing to note: give a note or an attribute',
+            )
+
+    @patch.object(Annotation, 'node', new_callable=PropertyMock)
+    def test_stamped(t, node: PropertyMock) -> None:
+        with t.subTest('a task with an id is not stamped'):
+            node.return_value = t.parent
+            ret = t.an.stamped
+            t.assertFalse(ret)
+
+        with t.subTest('a task with no id is'):
+            node.return_value = bare_node()
+            ret = t.an.stamped
+            t.assertTrue(ret)
+
+        with t.subTest('a task whose id is empty is too'):
+            node.return_value.fields = {'P': '2', 'ID': ''}
+            ret = t.an.stamped
+            t.assertTrue(ret)
+
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    def test_node(t, refuse_attributes: MagicMock) -> None:
+        with t.subTest('the task the selector names'):
+            ret = t.an.node
+
+            refuse_attributes.assert_called_once_with(
+                t.parent,
+                {'note': 'a note'},
+            )
+            t.assertIs(ret, t.parent)
+
+        with t.subTest('a checklist item is refused'):
+            refuse_attributes.side_effect = ValueError('a checklist item')
+            with t.assertRaisesRegex(ValueError, 'a checklist item'):
+                _ = t.an.node
+
+    @patch(f'{SRC}.new_task_id', autospec=True)
+    @patch.object(Annotation, 'node', new_callable=PropertyMock)
+    def test_task_id(t, node: PropertyMock, new_task_id: MagicMock) -> None:
+        with t.subTest('the id the task carries'):
+            node.return_value = t.parent
+            ret = t.an.task_id
+            t.assertEqual(ret, '9o71lx')
+
+        with t.subTest('a new one, drawn once, where it carries none'):
+            # Two reads: an id drawn at random must name one task.
+            t.an = Annotation(t.task, {'note': 'a note'})
+            node.return_value = bare_node()
+
+            ret = t.an.task_id
+            t.assertIs(ret, new_task_id.return_value)
+
+            again = t.an.task_id
+            t.assertIs(again, ret)
+            new_task_id.assert_called_once_with()
+
+    @patch.object(Annotation, 'document', new_callable=PropertyMock)
+    def test_entry(t, document: PropertyMock) -> None:
+        document.return_value = MagicMock(spec=['lines'])
+        document.return_value.lines = [OPEN_HEADING, 'the line as written']
+
+        ret = t.an.entry
+
+        t.assertEqual(ret, 'the line as written')
+
+    def test_entries(t) -> None:
+        ret = t.an.entries
+        # A note logs no completed-log record.
+        t.assertEqual(ret, [])
+
+    @patch.object(Annotation, 'payload', new_callable=PropertyMock)
+    @patch.object(Annotation, 'stamp', new_callable=PropertyMock)
+    @patch.object(Annotation, 'stamped', new_callable=PropertyMock)
+    def test_events(
+        t,
+        stamped: PropertyMock,
+        stamp: PropertyMock,
+        payload: PropertyMock,
+    ) -> None:
+        stamped.return_value = False
+        stamp.return_value = sentinel.stamp
+        payload.return_value = sentinel.payload
+        t.an.task_id = '9o71lx'
+        annotated = Event('TaskAnnotated', 'task/9o71lx', sentinel.payload)
+
+        with t.subTest('one TaskAnnotated, on the stream of the task'):
+            ret = t.an.events
+            t.assertEqual(ret, [annotated])
+
+        with t.subTest('the stamp of a task with no id goes first'):
+            stamped.return_value = True
+            ret = t.an.events
+            t.assertEqual(ret, [sentinel.stamp, annotated])
+
+    @patch(f'{SRC}.IdAssignment', autospec=True)
+    def test_stamp(t, id_assignment: MagicMock) -> None:
+        t.an.task_id = 'pp02cd'
+
+        ret = t.an.stamp
+
+        id_assignment.assert_called_once_with(t.parent, 'pp02cd')
+        t.assertIs(ret, id_assignment.return_value.event)
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    @patch.object(Annotation, 'ancestry', new_callable=PropertyMock)
+    @patch.object(Annotation, 'nested', new_callable=PropertyMock)
+    def test_payload(
+        t,
+        nested: PropertyMock,
+        ancestry: PropertyMock,
+        snapshot: PropertyMock,
+    ) -> None:
+        nested.return_value = False
+        ancestry.return_value = MagicMock(spec=['path'])
+        ancestry.return_value.path = 'a path'
+        snapshot.return_value = sentinel.snapshot
+
+        with t.subTest('the state of the task and the attributes, no delta'):
+            ret = t.an.payload
+            t.assertEqual(
+                ret,
+                {'snapshot': sentinel.snapshot, 'attrs': {'note': 'a note'}},
+            )
+
+        with t.subTest('a subtask records where it sits'):
+            nested.return_value = True
+            ret = t.an.payload
+            t.assertEqual(
+                ret,
+                {
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'note': 'a note'},
+                },
+            )
+
+    def test_nested(t) -> None:
+        with t.subTest('a top-level task is not nested'):
+            ret = t.an.nested
+            t.assertFalse(ret)
+
+        with t.subTest('a subtask is, at any depth'):
+            t.task.ancestry = [t.parent, child_node(), grandchild_node()]
+            ret = t.an.nested
+            t.assertTrue(ret)
+
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    def test_ancestry(t, ancestry: MagicMock) -> None:
+        ret = t.an.ancestry
+        ancestry.assert_called_once_with(t.task.ancestry)
+        t.assertIs(ret, ancestry.return_value)
+
+
 class BackfillTests(TestCase):
     """Unit tests for battodo.mutate.Backfill."""
 
@@ -2325,6 +2584,31 @@ class AddedLineTests(TestCase):
             f'{OPEN_HEADING}\nthe line as written'
         )
         t.assertIs(ret, sentinel.node)
+
+
+class IdAssignmentTests(TestCase):
+    """Unit tests for battodo.mutate.IdAssignment."""
+
+    def setUp(t) -> None:
+        t.ia = IdAssignment(bare_node(), 'pp02cd')
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_event(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = sentinel.snapshot
+
+        ret = t.ia.event
+
+        t.assertEqual(
+            ret,
+            Event(
+                'TaskUpdated',
+                'task/pp02cd',
+                {
+                    'delta': {'ID': [None, 'pp02cd']},
+                    'snapshot': sentinel.snapshot,
+                },
+            ),
+        )
 
 
 class TaskCompletionTests(TestCase):

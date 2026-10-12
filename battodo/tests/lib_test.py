@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch, sentinel
 
 from ..lib import (
     add_item,
+    annotate_item,
     backfill_items,
     complete_item,
     get_completed,
@@ -574,6 +575,76 @@ class ScratchItemTests(TestCase):
     def test_nothing_logged(t):
         logged = scratch_item(t.conf, t.now, selector='a selector')
         t.assertEqual(logged, 'dropped')
+
+
+class AnnotateItemTests(TestCase):
+    """Unit tests for battodo.lib.annotate_item."""
+
+    def setUp(t):
+        patches = ['Annotation', 'Task', 'SuppliedAttributes']
+        for target in patches:
+            patcher = patch(f'{SRC}.{target}', autospec=True)
+            setattr(t, target, patcher.start())
+            t.addCleanup(patcher.stop)
+        t.annotation = t.Annotation.return_value
+        t.annotation.path = Path('~/a-source-dir/a-list.md')
+        t.annotation.entry = '- [ ] A task title [ID:ab12cd]'
+
+        t.now = Mock(spec=datetime)
+        t.today = t.now.date.return_value
+        t.conf = Mock(spec=['view'])
+        t.conf.view = Mock(spec=['source_dir'])
+        t.conf.view.source_dir = '~/a-source-dir'
+
+    def test_forwarded(t):
+        annotate_item(t.conf, t.now, selector='a selector', text='a note')
+
+        t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
+        t.Annotation.assert_called_once_with(
+            t.Task.return_value,
+            t.SuppliedAttributes.return_value.checked,
+        )
+
+    def test_attributes(t):
+        with t.subTest('the text enters as the note'):
+            annotate_item(
+                t.conf,
+                t.now,
+                selector='a selector',
+                text='a note',
+                attrs='cost=45.00',
+            )
+            t.SuppliedAttributes.assert_called_once_with(
+                'cost=45.00', 'a note'
+            )
+
+        with t.subTest('left off, both are None'):
+            t.SuppliedAttributes.reset_mock()
+            annotate_item(t.conf, t.now, selector='a selector')
+            t.SuppliedAttributes.assert_called_once_with(None, None)
+
+        with t.subTest('a refusal comes before the task is built'):
+            t.Task.reset_mock()
+            t.SuppliedAttributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                annotate_item(t.conf, t.now, selector='a selector')
+
+            t.Task.assert_not_called()
+
+    def test_written(t):
+        annotate_item(t.conf, t.now, selector='a selector', text='a note')
+        t.annotation.write.assert_called_once_with()
+
+    def test_result(t):
+        written = annotate_item(
+            t.conf,
+            t.now,
+            selector='a selector',
+            text='a note',
+        )
+
+        t.assertEqual(written, f'{t.annotation.entry}\n{t.annotation.path}')
 
 
 class BackfillItemsTests(TestCase):

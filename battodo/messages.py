@@ -98,6 +98,16 @@ MESSAGES = {
     'scratch.attrs.help': 'attributes of the scratch: key=value, ...;'
     ' a key is a lowercase identifier, a value may hold commas and =',
     'scratch.note.help': 'a note on the scratch; the attribute note',
+    # note
+    'note.description': 'record a note on an open task; the task does not'
+    ' change',
+    'note.help': 'for details use note --help',
+    'note.selector.metavar': 'selector',
+    'note.selector.help': "the task's [ID:] value, or part of its title",
+    'note.text.metavar': 'text',
+    'note.text.help': 'the note; the attribute note',
+    'note.attrs.help': 'attributes of the note: key=value, ...;'
+    ' a key is a lowercase identifier, a value may hold commas and =',
     # backfill
     'backfill.description': 'one-time migration: stamp [ADDED:today] on '
     'tasks that predate the field',

@@ -256,6 +256,28 @@ class CommandInputTests(TestCase):
                 {'cost': '0', 'note': 'Too wet'},
             )
 
+    def test_note(t):
+        with t.subTest('TEXT and --attrs reach the event'):
+            t.run_command(
+                ['note', 'rk01lv', 'Too wet', '--attrs', 'cost=0'],
+                {},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(
+                event['payload']['attrs'],
+                {'cost': '0', 'note': 'Too wet'},
+            )
+
+        with t.subTest('BATTODO_ATTRS does not reach note'):
+            t.run_command(
+                ['note', 'rk01lv', 'Still wet'],
+                {'BATTODO_ATTRS': 'cost=9'},
+            )
+
+            event = Journal(t.source).events[-1]
+            t.assertEqual(event['payload']['attrs'], {'note': 'Still wet'})
+
     def test_update(t):
         listed = t.source / 'yard.md'
 
