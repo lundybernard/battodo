@@ -1389,97 +1389,83 @@ class CompletionTests(TestCase):
             )
 
     @patch(f'{SRC}.LogEntry', autospec=True)
-    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
     def test_entries(
         t,
-        ancestries: PropertyMock,
-        completed_on: PropertyMock,
+        completions: PropertyMock,
         log_entry: MagicMock,
     ) -> None:
         log_entry.return_value.text = 'a record'
-        completed_on.return_value = GIVEN_DAY
-        below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
+        below = MagicMock(spec=['ancestry'])
+        below.ancestry = ancestry_of(t.parent, t.child)
+        top = MagicMock(spec=['ancestry'])
+        top.ancestry = ancestry_of(t.parent)
 
-        with t.subTest('one record a completion, deepest first'):
-            ancestries.return_value = [below, top]
+        with t.subTest('one record a task finished, deepest first'):
+            completions.return_value = [below, top]
 
             ret = t.co.entries
 
             t.assertEqual(
                 log_entry.call_args_list,
-                [
-                    call(LIST_PATH, below, 'DONE', GIVEN_DAY),
-                    call(LIST_PATH, top, 'DONE', GIVEN_DAY),
-                ],
+                [call(LIST_PATH, below), call(LIST_PATH, top)],
             )
             t.assertEqual(ret, ['a record', 'a record'])
 
         with t.subTest('a checklist item is not logged'):
             log_entry.reset_mock()
-            ancestries.return_value = [ancestry_of(t.parent, checklist_node())]
+            below.ancestry = ancestry_of(t.parent, checklist_node())
 
             ret = t.co.entries
 
-            log_entry.assert_not_called()
-            t.assertEqual(ret, [])
+            t.assertEqual(log_entry.call_args_list, [call(LIST_PATH, top)])
+            t.assertEqual(ret, ['a record'])
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
-    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_events(
+    def test_completions(
         t,
         ancestries: PropertyMock,
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
         completed_on: PropertyMock,
-        refuse_attributes: MagicMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
         ancestries.return_value = [below, top]
         rescheduled.return_value = date(2026, 8, 15)
         completed_on.return_value = GIVEN_DAY
-        task_completion.return_value.payload = {'delta': sentinel.delta}
-        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
         t.co.attrs = sentinel.attrs
 
-        with t.subTest('one TaskCompleted a completion, deepest first'):
+        with t.subTest('one a task finished, deepest first'):
             recurrence.return_value = None
 
-            ret = t.co.events
+            ret = t.co.completions
 
-            # Each payload carries the day the completion is for. Only
-            # the task the caller named carries the attributes, once the
-            # task has checked that it takes them.
-            payload = {'delta': sentinel.delta, 'completed_on': '2026-08-01'}
-            refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+            # Only the task the caller named carries the attributes.
             t.assertEqual(
                 task_completion.call_args_list,
-                [call(below, None, sentinel.attrs), call(top, None, None)],
-            )
-            t.assertEqual(
-                ret,
                 [
-                    Event('TaskCompleted', 'task/zz01ab', payload),
-                    Event('TaskCompleted', 'task/9o71lx', payload),
+                    call(below, None, GIVEN_DAY, sentinel.attrs),
+                    call(top, None, GIVEN_DAY, None),
                 ],
             )
+            t.assertEqual(ret, [task_completion.return_value] * 2)
 
         with t.subTest('a recurrence takes its next due date'):
             task_completion.reset_mock()
             recurrence.return_value = t.parent
 
-            _ = t.co.events
+            _ = t.co.completions
 
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, sentinel.attrs),
-                    call(top, date(2026, 8, 15), None),
+                    call(below, None, GIVEN_DAY, sentinel.attrs),
+                    call(top, date(2026, 8, 15), GIVEN_DAY, None),
                 ],
             )
 
@@ -1487,15 +1473,44 @@ class CompletionTests(TestCase):
             task_completion.reset_mock()
             recurrence.return_value = t.child
 
-            _ = t.co.events
+            _ = t.co.completions
 
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, date(2026, 8, 15), sentinel.attrs),
-                    call(top, None, None),
+                    call(below, date(2026, 8, 15), GIVEN_DAY, sentinel.attrs),
+                    call(top, None, GIVEN_DAY, None),
                 ],
             )
+
+    @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_events(
+        t,
+        completions: PropertyMock,
+        refuse_attributes: MagicMock,
+    ) -> None:
+        below = MagicMock(spec=['ancestry', 'payload'])
+        below.ancestry = ancestry_of(t.parent, t.child)
+        below.payload = sentinel.below
+        top = MagicMock(spec=['ancestry', 'payload'])
+        top.ancestry = ancestry_of(t.parent)
+        top.payload = sentinel.top
+        completions.return_value = [below, top]
+        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        t.co.attrs = sentinel.attrs
+
+        ret = t.co.events
+
+        # The named task checks that it takes the attributes first.
+        refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+        t.assertEqual(
+            ret,
+            [
+                Event('TaskCompleted', 'task/zz01ab', sentinel.below),
+                Event('TaskCompleted', 'task/9o71lx', sentinel.top),
+            ],
+        )
 
 
 class ScratchTests(TestCase):
@@ -1632,19 +1647,10 @@ class ScratchTests(TestCase):
             new_task_id.assert_called_once_with()
 
     @patch(f'{SRC}.LogEntry', autospec=True)
-    @patch.object(Scratch, 'ancestry', new_callable=PropertyMock)
-    def test_entries(t, ancestry: PropertyMock, log_entry: MagicMock) -> None:
-        ancestry.return_value = sentinel.ancestry
-
-        with t.subTest('one SCRATCHED record'):
+    def test_entries(t, log_entry: MagicMock) -> None:
+        with t.subTest('one record, of the scratch itself'):
             ret = t.sc.entries
-
-            log_entry.assert_called_once_with(
-                LIST_PATH,
-                sentinel.ancestry,
-                'SCRATCHED',
-                TODAY,
-            )
+            log_entry.assert_called_once_with(LIST_PATH, t.sc)
             t.assertEqual(ret, [log_entry.return_value.text])
 
         with t.subTest('a checklist item is not logged'):
@@ -1655,6 +1661,14 @@ class ScratchTests(TestCase):
 
             log_entry.assert_not_called()
             t.assertEqual(ret, [])
+
+    def test_day(t) -> None:
+        ret = t.sc.day
+        t.assertEqual(ret, TODAY)
+
+    def test_status(t) -> None:
+        ret = t.sc.status
+        t.assertEqual(ret, 'SCRATCHED')
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
@@ -2616,13 +2630,17 @@ class TaskCompletionTests(TestCase):
 
     def setUp(t) -> None:
         t.node = parent_node()
-        t.tc = TaskCompletion(ancestry_of(t.node, path='a path'), None)
+        t.tc = TaskCompletion(
+            ancestry_of(t.node, path='a path'),
+            None,
+            GIVEN_DAY,
+        )
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     def test_payload(t, snapshot: PropertyMock) -> None:
         snapshot.return_value = sentinel.snapshot
 
-        with t.subTest('the done, the task as it was, and its path'):
+        with t.subTest('the done, the task as it was, its path, its day'):
             ret = t.tc.payload
             t.assertEqual(
                 ret,
@@ -2630,6 +2648,7 @@ class TaskCompletionTests(TestCase):
                     'delta': {'done': [False, True]},
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
+                    'completed_on': '2026-08-01',
                 },
             )
 
@@ -2662,6 +2681,7 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'checklist_item': True,
+                    'completed_on': '2026-08-01',
                 },
             )
 
@@ -2678,22 +2698,41 @@ class TaskCompletionTests(TestCase):
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'attrs': {'cost': '45.00'},
+                    'completed_on': '2026-08-01',
                 },
             )
+
+    def test_status(t) -> None:
+        ret = t.tc.status
+        t.assertEqual(ret, 'DONE')
 
 
 class LogEntryTests(TestCase):
     """Unit tests for battodo.mutate.LogEntry."""
 
     def setUp(t) -> None:
-        t.ancestry = MagicMock(spec=['path', 'node'])
-        t.ancestry.path = 'A task > A subtask of it'
-        t.ancestry.node = MagicMock(spec=['schema_fields'])
-        t.ancestry.node.schema_fields = {'LOE': '2', 'DUE': '2026-08-20'}
-        t.le = LogEntry(LIST_PATH, t.ancestry, 'DONE', TODAY)
+        t.logged = MagicMock(spec=['ancestry', 'day', 'status', 'attrs'])
+        t.logged.ancestry = MagicMock(spec=['path', 'node'])
+        t.logged.ancestry.path = 'A task > A subtask of it'
+        t.logged.ancestry.node = MagicMock(spec=['schema_fields'])
+        t.logged.ancestry.node.schema_fields = {
+            'LOE': '2',
+            'DUE': '2026-08-20',
+        }
+        t.logged.day = TODAY
+        t.logged.status = 'DONE'
+        t.logged.attrs = None
+        t.le = LogEntry(LIST_PATH, t.logged)
 
+    @patch.object(LogEntry, 'attributes', new_callable=PropertyMock)
     @patch.object(LogEntry, 'fields', new_callable=PropertyMock)
-    def test_text(t, fields: PropertyMock) -> None:
+    def test_text(
+        t,
+        fields: PropertyMock,
+        attributes: PropertyMock,
+    ) -> None:
+        attributes.return_value = ''
+
         with t.subTest('the day, the list, the status, the path, the fields'):
             fields.return_value = '[LOE:2]'
 
@@ -2714,9 +2753,62 @@ class LogEntryTests(TestCase):
                 '2026-08-08 | a-list | DONE | A task > A subtask of it',
             )
 
+        with t.subTest('the attributes come last'):
+            attributes.return_value = '[attrs:{}]'
+
+            ret = t.le.text
+
+            t.assertEqual(
+                ret,
+                '2026-08-08 | a-list | DONE | A task > A subtask of it '
+                '[attrs:{}]',
+            )
+
+    def test_day(t) -> None:
+        ret = t.le.day
+        t.assertEqual(ret, TODAY)
+
+    def test_category(t) -> None:
+        ret = t.le.category
+        t.assertEqual(ret, 'a-list')
+
+    def test_status(t) -> None:
+        ret = t.le.status
+        t.assertEqual(ret, 'DONE')
+
+    def test_title(t) -> None:
+        ret = t.le.title
+        t.assertEqual(ret, 'A task > A subtask of it')
+
     def test_fields(t) -> None:
         ret = t.le.fields
         t.assertEqual(ret, '[LOE:2] [DUE:2026-08-20]')
+
+    def test_attributes(t) -> None:
+        with t.subTest('a JSON object in a block of its own'):
+            t.logged.attrs = {'cost': '45.00', 'note': 'Paid] "cash", cost=5'}
+
+            ret = t.le.attributes
+
+            t.assertEqual(
+                ret,
+                '[attrs:{"cost": "45.00", "note": "Paid] \\"cash\\", cost=5"}]',
+            )
+
+        with t.subTest('in ASCII, so no character can break the line'):
+            t.logged.attrs = {'note': 'caf\u00e9\u2028'}
+            ret = t.le.attributes
+            t.assertEqual(ret, '[attrs:{"note": "caf\\u00e9\\u2028"}]')
+
+        cases: dict[str, dict[str, str] | None] = {
+            'no attributes': None,
+            'an empty map': {},
+        }
+        for name, attrs in cases.items():
+            with t.subTest(f'{name} write no block'):
+                t.logged.attrs = attrs
+                ret = t.le.attributes
+                t.assertEqual(ret, '')
 
 
 class ListBackfillTests(TestCase):

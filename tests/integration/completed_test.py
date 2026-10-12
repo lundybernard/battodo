@@ -5,7 +5,7 @@ real directory holding a real `completed.md`. This layer asserts return
 values; interaction checks stay in the isolation tests beside the code.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from json import loads
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,6 +16,7 @@ from battodo.completed import (
     Digest,
     DigestJsonView,
     DigestView,
+    Record,
 )
 
 # Wednesday. The week reaches back to 2026-07-30, the month to
@@ -32,14 +33,60 @@ LOG = """\
 2026-08-04 | chores | DONE | Deck > Chip the brush pile [LOE:2]
 """
 
+# Lines as btodo wrote them before a record carried attributes, with
+# titles that hold the characters an attribute syntax could claim.
+LEGACY_LOG = """\
+2026-08-01 | work | DONE | Ship it | today [P:4]
+2026-08-02 | work | DONE | Set x=1, y=2 [LOE:2] [TAGS:a,b]
+2026-08-03 | chores | DONE | Deck > Price {"cost": "45.00"}
+2026-08-04 | chores | DONE | Read [attrs:{"a": "b"} later
+2026-08-05 | van | DONE | Keep [attrs:x] as text [DUE:2026-08-05]
+"""
 
-def source_dir(t: TestCase) -> Path:
-    """A source directory holding the log, removed when the test ends."""
+# One record with attributes, its title holding a separator.
+ATTRIBUTED_LOG = """\
+2026-08-04 | chores | DONE | Renew it | online [P:3] \
+[attrs:{"confirmation": "A1B2C3", "place": "Main St, Suite 4"}]
+"""
+
+
+def source_dir(t: TestCase, log: str = LOG) -> Path:
+    """A source directory holding `log`, removed when the test ends."""
     tmp = TemporaryDirectory()
     t.addCleanup(tmp.cleanup)
     source = Path(tmp.name)
-    (source / 'completed.md').write_text(LOG, encoding='utf-8')
+    (source / 'completed.md').write_text(log, encoding='utf-8')
     return source
+
+
+class DigestTests(TestCase):
+    """Contract tests for battodo.completed.Digest.records."""
+
+    def test_records(t) -> None:
+        source = source_dir(t, LEGACY_LOG)
+        digest = Digest(source, NOW, period='week')
+
+        ret = digest.records
+
+        # A line with no attributes reads back as it always has.
+        t.assertEqual(
+            ret,
+            [
+                Record(date(2026, 8, 1), 'work', 'Ship it | today'),
+                Record(date(2026, 8, 2), 'work', 'Set x=1, y=2'),
+                Record(
+                    date(2026, 8, 3),
+                    'chores',
+                    'Deck > Price {"cost": "45.00"}',
+                ),
+                Record(
+                    date(2026, 8, 4),
+                    'chores',
+                    'Read [attrs:{"a": "b"} later',
+                ),
+                Record(date(2026, 8, 5), 'van', 'Keep [attrs:x] as text'),
+            ],
+        )
 
 
 class RenderedDigestTests(TestCase):
@@ -72,6 +119,14 @@ class RenderedDigestTests(TestCase):
 
         with t.subTest('and so is an abandoned one'):
             t.assertNotIn('Rewrite the formula again', digest)
+
+        with t.subTest('a record shows its attributes after its title'):
+            attributed = t.rendered(source_dir(t, ATTRIBUTED_LOG), 'week')
+            t.assertIn(
+                '  2026-08-04  Renew it | online '
+                'confirmation=A1B2C3, place=Main St, Suite 4',
+                attributed,
+            )
 
         with t.subTest('a shorter period reads as one day'):
             today = t.rendered(t.source, 'today')
@@ -131,6 +186,18 @@ class DigestJsonViewTests(TestCase):
                     {
                         'date': '2026-08-04',
                         'title': 'Deck > Chip the brush pile',
+                        'attrs': {},
                     }
                 ],
+            )
+
+        with t.subTest('an entry holds the attributes of its record'):
+            source = source_dir(t, ATTRIBUTED_LOG)
+            attributed = Digest(source, NOW, period='week')
+
+            found = loads(DigestJsonView(attributed).json)
+
+            t.assertEqual(
+                found['categories'][0]['entries'][0]['attrs'],
+                {'confirmation': 'A1B2C3', 'place': 'Main St, Suite 4'},
             )

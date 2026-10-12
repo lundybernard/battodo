@@ -130,13 +130,25 @@ the ancestor's own events.
 **Completed log.** Completion attributes appear in the completed log.
 The log is a render of the journal: its records derive from journal
 events, and btodo never rebuilds journal state from the log. The record
-line carries the attributes of its completion. Today the digest reader
-splits a record into four fields on the first three separators, folds
-the rest into the title, and strips `[FIELD:]` markup from that title,
-so attributes on the line would read as title text or vanish. The
-implementing work sets the attribute syntax on the line and changes the
-reader in the same change. The four-field split is a render detail, not
-a compatibility constraint.
+line carries the attributes of its completion, after the SCHEMA.md
+fields, as one block that holds a JSON object in ASCII:
+
+```text
+2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
+```
+
+The digest reader takes the block off before it reads the title. The
+block starts at the first `[attrs:` from which the rest of the line
+reads as a JSON object of text values and a closing `]`. JSON escapes
+every quote and every line break in a value, so a title or a value may
+hold `|`, `=`, commas and brackets. A record without attributes carries
+no block and reads as before. A cascade ancestor's record carries none.
+A SCRATCHED record carries the attributes of its scratch the same way.
+
+The `completed` text shows the attributes of a record after its title,
+as `key=value` pairs joined by a comma and a space, the form `--attrs`
+reads. Each entry of its JSON gains an `attrs` object, empty where the
+record carries none.
 
 ## Note event
 

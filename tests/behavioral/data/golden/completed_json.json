@@ -2,18 +2,20 @@
   "period": "week",
   "start": "2026-07-30",
   "end": "2026-08-05",
-  "total": 6,
+  "total": 7,
   "categories": [
     {
       "name": "work",
       "entries": [
         {
           "date": "2026-07-30",
-          "title": "Out of file order, the week's first day"
+          "title": "Out of file order, the week's first day",
+          "attrs": {}
         },
         {
           "date": "2026-08-05",
-          "title": "The one record of today"
+          "title": "The one record of today",
+          "attrs": {}
         }
       ]
     },
@@ -21,12 +23,22 @@
       "name": "chores",
       "entries": [
         {
-          "date": "2026-08-04",
-          "title": "A parent > Its child"
+          "date": "2026-08-01",
+          "title": "Renew the permit | online",
+          "attrs": {
+            "confirmation": "A1B2C3",
+            "place": "Main St, Suite 4"
+          }
         },
         {
           "date": "2026-08-04",
-          "title": "A record carrying no fields"
+          "title": "A parent > Its child",
+          "attrs": {}
+        },
+        {
+          "date": "2026-08-04",
+          "title": "A record carrying no fields",
+          "attrs": {}
         }
       ]
     },
@@ -35,7 +47,8 @@
       "entries": [
         {
           "date": "2026-07-31",
-          "title": "Inside the week, outside the month"
+          "title": "Inside the week, outside the month",
+          "attrs": {}
         }
       ]
     },
@@ -44,7 +57,8 @@
       "entries": [
         {
           "date": "2026-08-02",
-          "title": "The record of the ad-hoc category"
+          "title": "The record of the ad-hoc category",
+          "attrs": {}
         }
       ]
     }

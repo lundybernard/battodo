@@ -13,7 +13,9 @@ from ..completed import (
     Record,
     RecordJsonView,
     Table,
+    read_attributes,
     read_record,
+    split_attributes,
 )
 
 SRC = 'battodo.completed'
@@ -120,6 +122,23 @@ class DigestTests(TestCase):
                 ['Completed today'],
             )
 
+        with t.subTest('a line ends at a line feed, and nowhere else'):
+            # The list parser splits at line feeds alone, so a title
+            # may hold any other line break. The title shows it as the
+            # space it collapses to.
+            t.log.read_text.return_value = (
+                '2026-08-05 | work | DONE | Pay\u2028the bill\n'
+                '2026-08-05 | work | DONE | Fix\x85it\n'
+            )
+            digest = Digest(t.directory, NOW, period='today')
+
+            ret = digest.records
+
+            t.assertEqual(
+                [found.title for found in ret],
+                ['Pay the bill', 'Fix it'],
+            )
+
     def test_groups(t) -> None:
         ret = t.d.groups
 
@@ -166,9 +185,39 @@ class RecordTests(TestCase):
     def setUp(t) -> None:
         t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
 
-    def test_cells(t) -> None:
-        ret = t.r.cells
-        t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+    @patch.object(Record, 'attributes', new_callable=PropertyMock)
+    def test_cells(t, attributes: PropertyMock) -> None:
+        with t.subTest('the date and the title'):
+            attributes.return_value = ''
+            ret = t.r.cells
+            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+
+        with t.subTest('the attributes follow the title'):
+            attributes.return_value = 'cost=45.00'
+
+            ret = t.r.cells
+
+            t.assertEqual(
+                ret,
+                ('2026-08-04', 'A parent > A record cost=45.00'),
+            )
+
+    def test_attributes(t) -> None:
+        with t.subTest('none'):
+            ret = t.r.attributes
+            t.assertEqual(ret, '')
+
+        with t.subTest('each as key=value, in the order logged'):
+            t.r = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'place': 'Main St, Suite 4', 'cost': '45.00'},
+            )
+
+            ret = t.r.attributes
+
+            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
 
 
 class ReadRecordTests(TestCase):
@@ -223,6 +272,79 @@ class ReadRecordTests(TestCase):
         for name, line in skipped.items():
             with t.subTest(name):
                 ret = read_record(line)
+                t.assertIsNone(ret)
+
+    def test_attributes(t) -> None:
+        line = (
+            '2026-08-04 | work | DONE | Deck > Chip [LOE:2] '
+            '[attrs:{"cost": "45.00"}]'
+        )
+
+        ret = read_record(line)
+
+        t.assertEqual(
+            ret,
+            Record(date(2026, 8, 4), 'work', 'Deck > Chip', {'cost': '45.00'}),
+        )
+
+
+class SplitAttributesTests(TestCase):
+    """Unit tests for battodo.completed.split_attributes."""
+
+    def test_block(t) -> None:
+        cases = {
+            'the block after the fields leaves the text': (
+                'Ship | it, x=1 [P:4] [attrs:{"cost": "45.00"}]',
+                ('Ship | it, x=1 [P:4] ', {'cost': '45.00'}),
+            ),
+            'a value may hold the mark and a bracket': (
+                'Ship [attrs:{"note": "[attrs:{} ]"}]',
+                ('Ship ', {'note': '[attrs:{} ]'}),
+            ),
+            'a mark in the text before the block stays text': (
+                'Read [attrs:{"a": "b"} later [attrs:{"cost": "4"}]',
+                ('Read [attrs:{"a": "b"} later ', {'cost': '4'}),
+            ),
+        }
+
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                ret = split_attributes(text)
+                t.assertEqual(ret, expected)
+
+    def test_text(t) -> None:
+        cases = {
+            'a text with no mark': 'Ship it [P:4]',
+            'a mark that opens no block': 'Keep [attrs:x] as text',
+            'a block that is not the end of the text': (
+                'Read [attrs:{"a": "b"}] later'
+            ),
+        }
+
+        for name, text in cases.items():
+            with t.subTest(name):
+                ret = split_attributes(text)
+                t.assertEqual(ret, (text, {}))
+
+
+class ReadAttributesTests(TestCase):
+    """Unit tests for battodo.completed.read_attributes."""
+
+    def test_attributes(t) -> None:
+        ret = read_attributes('{"cost": "45.00", "note": "Paid]"}]')
+        t.assertEqual(ret, {'cost': '45.00', 'note': 'Paid]'})
+
+    def test_unread(t) -> None:
+        cases = {
+            'no closing bracket': '{"cost": "45.00"}',
+            'no JSON before it': '{cost=45.00}]',
+            'JSON that is not an object': '["cost"]]',
+            'a value that is not text': '{"cost": 45}]',
+        }
+
+        for name, block in cases.items():
+            with t.subTest(name):
+                ret = read_attributes(block)
                 t.assertIsNone(ret)
 
 
@@ -462,8 +584,25 @@ class RecordJsonViewTests(TestCase):
         t.rjv = RecordJsonView(t.record)
 
     def test_data(t) -> None:
-        ret = t.rjv.data
-        t.assertEqual(
-            ret,
-            {'date': '2026-08-04', 'title': 'A parent > A record'},
-        )
+        with t.subTest('a record without attributes holds an empty map'):
+            ret = t.rjv.data
+            t.assertEqual(
+                ret,
+                {
+                    'date': '2026-08-04',
+                    'title': 'A parent > A record',
+                    'attrs': {},
+                },
+            )
+
+        with t.subTest('and one with them holds each'):
+            t.rjv.record = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'cost': '45.00'},
+            )
+
+            ret = t.rjv.data
+
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})

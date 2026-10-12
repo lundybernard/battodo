@@ -32,8 +32,9 @@ import re
 from collections.abc import Sequence
 from datetime import date
 from functools import cached_property
+from json import dumps
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol
 
 from .journal import Journal, new_task_id
 from .lists import discover_lists
@@ -55,6 +56,8 @@ COMPLETED_EVENT = 'TaskCompleted'
 SCRATCHED_EVENT = 'TaskScratched'
 UPDATED_EVENT = 'TaskUpdated'
 COMPLETED_LOG = 'completed.md'
+# Opens the attribute block that ends a completed-log record.
+ATTRIBUTES_MARK = '[attrs:'
 DONE_STATUS = 'DONE'
 SCRATCHED_STATUS = 'SCRATCHED'
 # Whom every journal event names as its actor.
@@ -861,19 +864,14 @@ class Completion:
         SCHEMA.md logs no checklist item.
         """
         return [
-            LogEntry(self.path, ancestry, DONE_STATUS, self.completed_on).text
-            for ancestry in self.ancestries
-                if not ancestry.node.is_checklist_item
+            LogEntry(self.path, completion).text
+            for completion in self.completions
+                if not completion.ancestry.node.is_checklist_item
         ]  # fmt: skip
 
     @property
     def events(self) -> list['Event']:
         """One `TaskCompleted` per completion, deepest first.
-
-        The payload carries the state the task changed from and the day
-        the completion is for. A rescheduled task records its due date
-        beside the done. The attributes go on the event of the named
-        task alone.
 
         Raises
         ------
@@ -881,18 +879,29 @@ class Completion:
             The named task is a checklist item and attributes are given.
         """
         self.task.node.refuse_attributes(self.attrs)
-        completed_on = self.completed_on.isoformat()
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        ancestries = self.ancestries
         events = []
+        for completion in self.completions:
+            stream = self.ids[completion.ancestry.stream.raw_index]
+            payload = completion.payload
+            events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
+        return events
+
+    @property
+    def completions(self) -> list['TaskCompletion']:
+        """One per task the completion finishes, deepest first.
+
+        A rescheduled task takes its next due date. The attributes go
+        to the named task alone.
+        """
+        recurrence, rescheduled = self.recurrence, self.rescheduled
+        day, ancestries = self.completed_on, self.ancestries
+        completions = []
         for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
             attrs = self.attrs if ancestry is ancestries[0] else None
-            completed = TaskCompletion(ancestry, due, attrs).payload
-            payload = {**completed, 'completed_on': completed_on}
-            stream = self.ids[ancestry.stream.raw_index]
-            events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
-        return events
+            completion = TaskCompletion(ancestry, due, day, attrs)
+            completions.append(completion)
+        return completions
 
 
 class Scratch:
@@ -989,13 +998,17 @@ class Scratch:
         """The one completed-log record, or none for a checklist item."""
         if self.node.is_checklist_item:
             return []
-        entry = LogEntry(
-            self.path,
-            self.ancestry,
-            SCRATCHED_STATUS,
-            self.task.today,
-        )
-        return [entry.text]
+        return [LogEntry(self.path, self).text]
+
+    @property
+    def day(self) -> date:
+        """The day the scratch is logged under."""
+        return self.task.today
+
+    @property
+    def status(self) -> str:
+        """The status the log records a scratch under."""
+        return SCRATCHED_STATUS
 
     @property
     def events(self) -> list['Event']:
@@ -1592,25 +1605,28 @@ class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
     `rescheduled` is the next due date of a task the completion
-    reschedules, and None for every other task. `attrs` holds the
-    attributes of the named task, and None for every other task. The
-    event of a checklist item lands on the stream of an ancestor, so
-    its payload marks it as a checklist item.
+    reschedules, and None for every other task. `day` is the day the
+    completion is for. `attrs` holds the attributes of the named task,
+    and None for every other task. The event of a checklist item lands
+    on the stream of an ancestor, so its payload marks it as a
+    checklist item.
     """
 
     def __init__(
         self,
         ancestry: Ancestry,
         rescheduled: date | None,
+        day: date,
         attrs: dict[str, str] | None = None,
     ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
+        self.day = day
         self.attrs = attrs
 
     @property
     def payload(self) -> dict[str, Any]:
-        """The done, a new due date beside it, the task and its path.
+        """The done, a new due date beside it, the task, its path, its day.
 
         A checklist item also carries its mark, and the named task its
         attributes.
@@ -1628,39 +1644,90 @@ class TaskCompletion:
             payload['checklist_item'] = True
         if self.attrs:
             payload['attrs'] = self.attrs
+        payload['completed_on'] = self.day.isoformat()
         return payload
+
+    @property
+    def status(self) -> str:
+        """The status the log records a completion under."""
+        return DONE_STATUS
 
 
 class LogEntry:
-    """One `completed.md` record: date, category, status, ancestry."""
+    """One `completed.md` record of a write to one task, in `path`.
 
-    def __init__(
-        self,
-        path: Path,
-        ancestry: Ancestry,
-        status: str,
-        today: date,
-    ) -> None:
+    The record reads the object that also builds the event of the
+    write, so the log renders what the journal records.
+    """
+
+    def __init__(self, path: Path, logged: 'LogSource') -> None:
         self.path = path
-        self.ancestry = ancestry
-        self.status = status
-        self.today = today
+        self.logged = logged
 
     @property
     def text(self) -> str:
-        """The record, the SCHEMA.md fields of the task after its path."""
-        entry = (
-            f'{self.today.isoformat()} | {self.path.stem} | {self.status} | '
-            f'{self.ancestry.path}'
-        )
-        fields = self.fields
-        return f'{entry} {fields}' if fields else entry
+        """The record: the path, the SCHEMA.md fields, the attributes."""
+        entry = f'{self.day} | {self.category} | {self.status} | {self.title}'
+        parts = (entry, self.fields, self.attributes)
+        return ' '.join(
+            part
+            for part in parts
+                if part
+        )  # fmt: skip
+
+    @property
+    def day(self) -> date:
+        """The day the record is logged under."""
+        return self.logged.day
+
+    @property
+    def category(self) -> str:
+        """The list that holds the task, by its name."""
+        return self.path.stem
+
+    @property
+    def status(self) -> str:
+        """DONE or SCRATCHED."""
+        return self.logged.status
+
+    @property
+    def title(self) -> str:
+        """The `Parent > Child` path of the task."""
+        return self.logged.ancestry.path
 
     @property
     def fields(self) -> str:
         """The SCHEMA.md fields of the task, in SCHEMA.md order."""
-        ordered = self.ancestry.node.schema_fields
+        ordered = self.logged.ancestry.node.schema_fields
         return ' '.join(f'[{name}:{value}]' for name, value in ordered.items())
+
+    @property
+    def attributes(self) -> str:
+        """The attributes of the write as one block, or none without them.
+
+        The block holds a JSON object in ASCII, so a value can hold no
+        line break and no character a reader could take for the end.
+        """
+        attrs = self.logged.attrs
+        if not attrs:
+            return ''
+        return f'{ATTRIBUTES_MARK}{dumps(attrs)}]'
+
+
+class LogSource(Protocol):
+    """A write to one task, as its completed-log record reads it."""
+
+    @property
+    def ancestry(self) -> Ancestry: ...
+
+    @property
+    def day(self) -> date: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def attrs(self) -> dict[str, str] | None: ...
 
 
 class ListBackfill:

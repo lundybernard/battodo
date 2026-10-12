@@ -858,9 +858,9 @@ def completed(
         for each in ancestries:
             doc.mark_done(each[-1].raw_index)
     entries = [
-        log_entry(ancestry, 'DONE')
-        for ancestry in ancestries
-            if not is_checklist_item(ancestry[-1])
+        log_entry(each, 'DONE', attrs if each is ancestry else None)
+        for each in ancestries
+            if not is_checklist_item(each[-1])
     ]  # fmt: skip
     events = []
     for each in ancestries:
@@ -911,7 +911,9 @@ def scratched(
         doc.set_field(stream.raw_index, 'ID', stream_id)
     doc.drop(node.block)
     entries = (
-        [] if is_checklist_item(node) else [log_entry(ancestry, 'SCRATCHED')]
+        []
+        if is_checklist_item(node)
+        else [log_entry(ancestry, 'SCRATCHED', attrs)]
     )
     payload: dict[str, Any] = {
         'delta': {'removed': [False, True]},
@@ -1415,16 +1417,25 @@ def stream_ids(ancestries: list[list[TaskNode]]) -> dict[int, str]:
     return ids
 
 
-def log_entry(ancestry: list[TaskNode], status: str) -> str:
-    """One completed-log record: the day, list, status, path, fields."""
+def log_entry(
+    ancestry: list[TaskNode],
+    status: str,
+    attrs: dict[str, str] | None,
+) -> str:
+    """One completed-log record: the day, list, status, path, fields.
+
+    The attributes follow as a JSON object in a block of their own.
+    """
     task = ancestry[-1]
     fields = ''.join(
         f' [{field}:{task.fields[field]}]'
         for field in SCHEMA_FIELDS
             if field in task.fields
     )  # fmt: skip
+    block = f' [attrs:{dumps(attrs)}]' if attrs else ''
     category = Path(LIST_FILE).stem
-    return f'{TODAY} | {category} | {status} | {path_of(ancestry)}{fields}'
+    path = path_of(ancestry)
+    return f'{TODAY} | {category} | {status} | {path}{fields}{block}'
 
 
 def is_checklist_item(task: TaskNode) -> bool:

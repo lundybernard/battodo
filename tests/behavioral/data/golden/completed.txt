@@ -1,19 +1,20 @@
-Completed week: 2026-07-30 to 2026-08-05 — 6 done
+Completed week: 2026-07-30 to 2026-08-05 — 7 done
 
-── Work ─────────────────────────────────────────────
+── Work ───────────────────────────────────────────────────────────────────────────
   DATE        TASK
   2026-07-30  Out of file order, the week's first day
   2026-08-05  The one record of today
 
-── Chores ───────────────────────────────────────────
+── Chores ─────────────────────────────────────────────────────────────────────────
   DATE        TASK
+  2026-08-01  Renew the permit | online confirmation=A1B2C3, place=Main St, Suite 4
   2026-08-04  A parent > Its child
   2026-08-04  A record carrying no fields
 
-── Career ───────────────────────────────────────────
+── Career ─────────────────────────────────────────────────────────────────────────
   DATE        TASK
   2026-07-31  Inside the week, outside the month
 
-── Van ──────────────────────────────────────────────
+── Van ────────────────────────────────────────────────────────────────────────────
   DATE        TASK
   2026-08-02  The record of the ad-hoc category

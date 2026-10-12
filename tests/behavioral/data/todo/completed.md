@@ -13,4 +13,5 @@
 2026-08-03 | work | SCRATCHED | Scratched, so never counted [P:2]
 2026-08-04 | chores | DONE | A parent > Its child [LOE:2] [TAGS:yard,summer]
 2026-08-04 | chores | DONE | A record carrying no fields
+2026-08-01 | chores | DONE | Renew the permit | online [P:3] [attrs:{"confirmation": "A1B2C3", "place": "Main St, Suite 4"}]
 this line is not a record
