@@ -38,7 +38,7 @@ from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
-from .history import TaskStream
+from .history import StreamSelection, TaskStream
 from .journal import (
     ADDED_EVENT,
     ANNOTATED_EVENT,
@@ -50,7 +50,9 @@ from .journal import (
 )
 from .lists import discover_lists
 from .parser import (
+    ANCESTRY_SEPARATOR,
     CHECKBOX_RE,
+    DESCRIPTION_INDENT,
     OPEN_HEADING,
     SCHEMA_FIELDS,
     Ancestry,
@@ -59,6 +61,7 @@ from .parser import (
     parse_date,
 )
 from .repeat import next_due
+from .selector import SelectionError
 from .task import Task
 
 COMPLETED_LOG = 'completed.md'
@@ -809,12 +812,20 @@ class Reopen:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
-        raise NotImplementedError
+        text = self.text
+        changes = Changeset(
+            {self.path: text},
+            self.entries,
+            self.events,
+            self.path,
+            self.source,
+        )
+        changes.write()
 
     @property
     def source(self) -> Path:
         """The source directory of the task."""
-        raise NotImplementedError
+        return self.task.source
 
     @property
     def text(self) -> str:
@@ -834,16 +845,33 @@ class Reopen:
         ListError
             The list named is not a discovered list.
         """
-        raise NotImplementedError
+        return self.document.text
 
-    @property
+    @cached_property
     def document(self) -> TodoDocument:
         """The restored list: each closed task of the chain open.
 
         The task the reopen names takes its fields, title and
-        description.
+        description. Cached: the write changes the list this reads, and
+        the echo reads the line after the write.
         """
-        raise NotImplementedError
+        written = self.checked
+        self.refuse_nested_changes()
+        doc = self.restored
+        for task in self.opened:
+            doc.mark_open(task.raw_index)
+            if not task.task_id:
+                doc.set_field(task.raw_index, 'ID', self.ids[task.raw_index])
+        node = self.node
+        doc.set_fields(node.raw_index, written)
+        new_title = self.new_title
+        if new_title is not None:
+            doc.set_title(node.raw_index, new_title)
+        new_description = self.new_description
+        if new_description is not None:
+            doc.drop(set(node.note_indices))
+            doc.insert_description(node.raw_index, new_description.lines)
+        return doc
 
     @property
     def checked(self) -> dict[str, str]:
@@ -854,16 +882,18 @@ class Reopen:
         ValueError
             A supplied value does not read.
         """
-        raise NotImplementedError
+        return self.supplied.checked
 
     @property
     def supplied(self) -> 'SuppliedFields':
         """The named fields, read against the day of the task."""
-        raise NotImplementedError
+        return SuppliedFields(self.fields, self.task.today)
 
-    @property
+    @cached_property
     def stream(self) -> TaskStream:
         """The closed stream the selector names.
+
+        Cached: the write opens the stream.
 
         Raises
         ------
@@ -873,12 +903,23 @@ class Reopen:
         SelectionError
             The selector names no closed task either.
         """
-        raise NotImplementedError
+        closed = [stream for stream in self.streams if stream.closed]
+        selection = StreamSelection(closed, self.task.selector)
+        if not selection.candidates:
+            self.refuse_checklist_item()
+            raise SelectionError(
+                f'no open task matches {self.task.selector!r}'
+            )
+        return selection.stream
 
     @property
     def streams(self) -> list[TaskStream]:
         """Every stream of the journal of the source."""
-        raise NotImplementedError
+        journal = Journal(self.source)
+        return [
+            TaskStream(stream_id, events, self.zone)
+            for stream_id, events in journal.streams.items()
+        ]
 
     def refuse_checklist_item(self) -> None:
         """Refuse a selector that names a checklist item in the journal.
@@ -889,7 +930,18 @@ class Reopen:
             A checklist item's title holds the selector. The refusal
             names the id of each task that owns one.
         """
-        raise NotImplementedError
+        part = self.task.selector.lower()
+        owners = [
+            f'[ID:{stream.task_id}]'
+            for stream in self.streams
+                if any(part in title.lower() for title in stream.checklist_titles)
+        ]  # fmt: skip
+        if owners:
+            raise ValueError(
+                f'{self.task.selector!r} names a checklist item of '
+                f'{", ".join(owners)}: a checklist item opens with its '
+                'task, not on its own'
+            )
 
     def refuse_nested_changes(self) -> None:
         """Refuse a list, or a field the top-level task owns, on a subtask.
@@ -900,7 +952,15 @@ class Reopen:
             The stream is a subtask's, and the reopen names a list or
             such a field.
         """
-        raise NotImplementedError
+        stream = self.stream
+        if not stream.nested:
+            return
+        if self.list_name is not None:
+            raise ValueError(
+                f'{stream.title!r} is a subtask: --list moves a top-level '
+                'task, and its subtasks with it'
+            )
+        self.supplied.refuse_root_fields()
 
     @cached_property
     def path(self) -> Path:
@@ -917,7 +977,17 @@ class Reopen:
         ListError
             The name is not a discovered list.
         """
-        raise NotImplementedError
+        held = self.held
+        if held is not None:
+            return held
+        record = self.record
+        name = self.list_name or record.list_name
+        if name is None:
+            raise ValueError(
+                f'{record.title!r} was closed before btodo recorded its '
+                'list: name the list with --list'
+            )
+        return NamedList(self.source, name).path
 
     @cached_property
     def held(self) -> Path | None:
@@ -925,7 +995,16 @@ class Reopen:
 
         Cached: discovery reads every list in the source.
         """
-        raise NotImplementedError
+        stream = self.stream
+        if not stream.nested:
+            return None
+        for path in discover_lists(self.source):
+            tasks = list(TodoDocument(path.read_text()).tasks)
+            for task in tasks:
+                if task.done and task.task_id == stream.task_id:
+                    return path
+                tasks.extend(task.children)
+        return None
 
     @property
     def record(self) -> TaskStream:
@@ -940,27 +1019,63 @@ class Reopen:
             No list and no record holds the line of a subtask. The
             refusal names the parent.
         """
-        raise NotImplementedError
+        stream = self.stream
+        if not stream.nested:
+            return stream
+        found = [
+            record
+            for record in self.streams
+                if record.closed and not record.nested and record.snapshot
+                and stream.task_id in RecordedTask(record.snapshot, 0).ids
+        ]  # fmt: skip
+        if not found:
+            raise ValueError(
+                f'{stream.title!r} is a subtask of {self.parent}, and no '
+                'list and no record of a closed task holds its line'
+            )
+        return found[-1]
 
     @property
     def parent(self) -> str:
         """The parent of a subtask: its `[ID:]`, or else its path."""
-        raise NotImplementedError
+        stream = self.stream
+        if stream.parent_id:
+            return f'[ID:{stream.parent_id}]'
+        payload = stream.own[-1]['payload']
+        title = payload['snapshot']['title']
+        path = payload['ancestry'].removesuffix(f'{ANCESTRY_SEPARATOR}{title}')
+        return repr(path)
 
     @property
     def restored(self) -> TodoDocument:
         """The list as read, the recorded block last in its open section."""
-        raise NotImplementedError
+        doc = TodoDocument(self.path.read_text())
+        if self.held is not None:
+            return doc
+        index = doc.open_end
+        for offset, line in enumerate(self.recorded.lines):
+            doc.insert(index + offset, line)
+        return doc
 
     @property
     def recorded(self) -> 'RecordedTask':
         """The block of the record, with the id of its stream on it."""
-        raise NotImplementedError
+        record = self.record
+        snapshot = record.snapshot or {}
+        fields = dict(snapshot['fields'])
+        if not fields.get('ID'):
+            fields['ID'] = record.task_id
+        return RecordedTask({**snapshot, 'fields': fields}, 0)
 
     @property
     def ancestry(self) -> list[TaskNode]:
         """The task and every task above it in the restored list."""
-        raise NotImplementedError
+        task_id = self.stream.task_id
+        return next(
+            chain
+            for chain in self.chains.values()
+                if chain[-1].task_id == task_id
+        )  # fmt: skip
 
     @cached_property
     def chains(self) -> dict[int, list[TaskNode]]:
@@ -969,12 +1084,15 @@ class Reopen:
         By the line of the task, outermost first. Cached: the write
         changes the list this reads.
         """
-        raise NotImplementedError
+        found = [[task] for task in self.restored.tasks]
+        for chain in found:
+            found.extend([*chain, child] for child in chain[-1].children)
+        return {chain[-1].raw_index: chain for chain in found}
 
     @property
     def opened(self) -> list[TaskNode]:
         """The closed tasks of the ancestry, outermost first."""
-        raise NotImplementedError
+        return [task for task in self.ancestry if task.done]
 
     @cached_property
     def ids(self) -> dict[int, str]:
@@ -983,12 +1101,15 @@ class Reopen:
         A task with no id takes a new one. Cached: a new id is drawn at
         random, so every read names one.
         """
-        raise NotImplementedError
+        return {
+            task.raw_index: task.task_id or new_task_id()
+            for task in self.opened
+        }
 
     @property
     def node(self) -> TaskNode:
         """The task the reopen names, in the restored list."""
-        raise NotImplementedError
+        return self.ancestry[-1]
 
     @property
     def new_title(self) -> str | None:
@@ -999,22 +1120,26 @@ class Reopen:
         ValueError
             The title holds a line break.
         """
-        raise NotImplementedError
+        if self.title is None:
+            return None
+        return SuppliedTitle(self.title).checked
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
         """The description the reopen writes, or None where it names none."""
-        raise NotImplementedError
+        if self.description is None:
+            return None
+        return SuppliedDescription(self.description)
 
     @property
     def entry(self) -> str:
         """The task line as written."""
-        raise NotImplementedError
+        return self.document.lines[self.node.raw_index]
 
     @property
     def entries(self) -> list[str]:
         """None: a reopen logs no completed-log record."""
-        raise NotImplementedError
+        return []
 
     @property
     def events(self) -> list['Event']:
@@ -1023,7 +1148,21 @@ class Reopen:
         The event of the task the reopen names carries its changes and
         its attributes.
         """
-        raise NotImplementedError
+        named = self.node.raw_index
+        events = []
+        for task in self.opened:
+            path = Ancestry(self.chains[task.raw_index])
+            task_id = self.ids[task.raw_index]
+            event = OpenedTask(path, task_id, self.list_left).event
+            if task.raw_index == named:
+                payload = event.payload
+                delta = {**self.delta, **payload['delta']}
+                payload = {**payload, 'delta': delta}
+                if self.attrs:
+                    payload['attrs'] = self.attrs
+                event = Event(event.type, event.stream, payload)
+            events.append(event)
+        return events
 
     @property
     def delta(self) -> dict[str, list[Any]]:
@@ -1032,7 +1171,24 @@ class Reopen:
         A top-level task that comes back to another list records the
         list it left.
         """
-        raise NotImplementedError
+        node = self.node
+        delta = {
+            name: [node.fields.get(name), value]
+            for name, value in self.checked.items()
+        }
+        new_title = self.new_title
+        if new_title is not None:
+            delta['title'] = [node.title, new_title]
+        new_description = self.new_description
+        if new_description is not None:
+            delta['description'] = [
+                node.description,
+                new_description.checked,
+            ]
+        list_left, list_name = self.list_left, self.path.stem
+        if list_left != list_name:
+            delta['list'] = [list_left, list_name]
+        return delta
 
     @property
     def list_left(self) -> str | None:
@@ -1040,7 +1196,10 @@ class Reopen:
 
         None where its record names none.
         """
-        raise NotImplementedError
+        held = self.held
+        if held is not None:
+            return held.stem
+        return self.record.list_name
 
 
 class Completion:
@@ -2078,32 +2237,51 @@ class RecordedTask:
     @property
     def lines(self) -> list[str]:
         """The task line, its description lines, then each child's."""
-        raise NotImplementedError
+        return [
+            self.line,
+            *self.description_lines,
+            *(line for child in self.children for line in child.lines),
+        ]
 
     @property
     def line(self) -> str:
         """The task line, checked off, its fields in recorded order."""
-        raise NotImplementedError
+        fields = ''.join(
+            f' [{name}:{value}]'
+            for name, value in self.snapshot['fields'].items()
+        )
+        return f'{self.indent}- [x] {self.snapshot["title"]}{fields}'
 
     @property
     def indent(self) -> str:
         """The indent of the task line."""
-        raise NotImplementedError
+        return ' ' * (self.depth * SUBTASK_INDENT)
 
     @property
     def description_lines(self) -> list[str]:
         """The description lines, under the title."""
-        raise NotImplementedError
+        description = self.snapshot.get('description')
+        if not description:
+            return []
+        lead = self.indent + ' ' * DESCRIPTION_INDENT
+        return [f'{lead}{line}' for line in description.split('\n')]
 
     @property
     def children(self) -> list['RecordedTask']:
         """Each child the snapshot records, one level deeper."""
-        raise NotImplementedError
+        return [
+            RecordedTask(child, self.depth + 1)
+            for child in self.snapshot.get('children', [])
+        ]
 
     @property
     def ids(self) -> set[str]:
         """The id of the task and of each task below it that has one."""
-        raise NotImplementedError
+        own = self.snapshot['fields'].get('ID')
+        found = {own} if own else set()
+        for child in self.children:
+            found |= child.ids
+        return found
 
 
 class OpenedTask:
@@ -2127,12 +2305,23 @@ class OpenedTask:
     @property
     def event(self) -> Event:
         """The `TaskUpdated` on the stream of the task."""
-        raise NotImplementedError
+        return Event(UPDATED_EVENT, f'task/{self.task_id}', self.payload)
 
     @property
     def payload(self) -> dict[str, Any]:
         """The opening, the task as it was, and where a subtask sits."""
-        raise NotImplementedError
+        node = self.ancestry.node
+        delta: dict[str, list[Any]] = {}
+        if not node.task_id:
+            delta['ID'] = [None, self.task_id]
+        delta['done'] = [True, False]
+        payload: dict[str, Any] = {
+            'delta': delta,
+            'snapshot': {**node.snapshot, 'list': self.list_name},
+        }
+        if len(self.ancestry.tasks) > 1:
+            payload['ancestry'] = self.ancestry.path
+        return payload
 
 
 class LogEntry:

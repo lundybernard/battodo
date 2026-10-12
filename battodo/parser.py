@@ -477,7 +477,9 @@ class TodoDocument:
 
     def mark_open(self, index: int) -> None:
         """Clear the box of the task line at `index`, either case of x."""
-        raise NotImplementedError
+        self.lines[index] = re.sub(
+            r'^(\s*- \[)[xX]\]', r'\1 ]', self.lines[index]
+        )
 
 
 def parse_date(value: str | None) -> date | None:
