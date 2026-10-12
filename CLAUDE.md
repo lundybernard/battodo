@@ -30,6 +30,20 @@ change this rule forbids. A typed TOML value is input outside the
 contract, so the exit-1 error it produces is a config error to fix in
 the file, not a decoder bug.
 
+## SKILL.md is the operating agent's manual
+
+`SKILL.md` ships with the project. An agent that runs `btodo` loads it
+and reads nothing else, so a command absent from it is invisible to that
+agent. A change that an operating agent must know lands in `SKILL.md` in
+the same PR: a new or changed command, option, selector rule, output key,
+refusal, or exit code. Internal changes stay out of it: refactors, object
+design, test layout. `README.md` is the human guide; the two files share
+no text.
+
+**How to apply:** the PR reviewer notes name the `SKILL.md` hunk, or
+state that the change is internal. `SKILL.md` follows the
+writing-for-agents register; lint both files with `markdownlint-cli2`.
+
 ## Feature-cycle-end evaluation (modified engineering cycle)
 
 When a feature cycle completes, before moving on, evaluate the finished
