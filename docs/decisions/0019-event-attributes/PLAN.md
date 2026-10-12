@@ -19,15 +19,15 @@ the CLI split and subtask schedules.
 
 | Slice | Needs | Status |
 | ----- | ----- | ------ |
-| S1a — completion event payload | — | In progress (#90) |
-| CLI split (ADR 0024) | — | In progress, parallel PR |
-| S1b — attributes on every write event | S1a, CLI split | In progress |
-| S2 — note event and command | S1b | In progress |
-| S3 — history command | S2 | In progress |
+| S1a — completion event payload | — | Merged (#90) |
+| CLI split (ADR 0024) | — | Merged (#91) |
+| S1b — attributes on every write event | S1a, CLI split | Merged (#94) |
+| S2 — note event and command | S1b | Merged (#95) |
+| S3 — history command | S2 | Merged (#99) |
 | S4 — notes in `show` | S3, subtask schedules | Planned |
-| S5 — attributes in the completed log | S1b | In progress (#97) |
-| S6 — task description | — (runs before #88) | In review |
-| S7 — reopen through update (ADR 0025) | S3 | In progress (#107) |
+| S5 — attributes in the completed log | S1b | Merged (#97) |
+| S6 — task description | — (runs before #88) | Merged (#93) |
+| S7 — reopen through update (ADR 0025) | S3 | Merged (#111) |
 
 Subtask schedules (owner design, 2026-10-11) run after S1a and before
 S4. #88 runs after subtask schedules and after S6.
@@ -37,13 +37,13 @@ S4. #88 runs after subtask schedules and after S6.
 Completion events gain `completed_on` and the checklist marker, and
 the completion gains the rescheduling-node property
 ([DESIGN.md](DESIGN.md#event-attributes)). The reschedule reads
-`completed_on` as its anchor. In progress in #90.
+`completed_on` as its anchor. Merged in #90.
 
 ## CLI split (ADR 0024)
 
 Command inputs (the selector, `--date`, `--attrs`, `--note`) stop
 passing as configuration and pass to the command beside `conf`. ADR
-0024 lands in a parallel PR and sets the convention.
+0024 sets the convention. Merged in #91.
 
 ## S1b — Attributes on every write event
 
