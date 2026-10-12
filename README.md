@@ -34,11 +34,13 @@ btodo add chores 'Renew the parking permit' --due 2026-10-01
 btodo add chores 'Find the old sticker' --parent permit  # a subtask
 btodo update permit -p 2 --due 2026-10-15  # new field values
 btodo update permit --description 'Bring the old permit.'
+btodo update permit --list errands  # move it, its subtasks with it
 btodo note permit 'Called the office'  # a note; the task does not change
 btodo done permit       # complete the task and log it to completed.md
 btodo done permit --date 2026-10-01  # log it under the day it finished
 btodo scratch permit    # drop the task and log it as SCRATCHED
-btodo history permit    # completions and events with attributes, newest first
+btodo update 3usdig --due 2026-11-01  # reopen a closed task by its id
+btodo history permit    # completions, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
@@ -112,10 +114,40 @@ an `[ID:]` on a task that has none, and the echoed line shows it.
 [SKILL.md](SKILL.md#attributes-and-notes) lists the calls that `note`
 refuses.
 
+### Reopen a task
+
+`done` and `scratch` close a task; `update` on its `[ID:]` reopens it
+([ADR 0025](docs/decisions/0025-reopen-by-update.md)). The task keeps
+its id, so `history` reads its whole life as one task.
+
+```bash
+btodo done permit --date 2026-10-01
+btodo update 3usdig --due 2026-11-01  # back in its list, open
+btodo update 3usdig --list errands    # or back in another list
+btodo update 3usdig --with-subtasks   # and its subtasks open too
+```
+
+`update` reaches an open task first. When none answers the selector, it
+reaches a closed task in the journal, by the rule of `history`. The
+task comes back last in the open section of its list, with the fields,
+title and description it closed with and the changes the update names.
+With no option, it comes back unchanged. Its subtasks come back checked
+off; `--with-subtasks` opens them. A closed subtask opens with each
+closed task above it, and its siblings stay as they are. A checklist
+item opens only with its task.
+
+A task closed before btodo recorded its list in the journal needs
+`--list`. The completed log keeps the record of each closing, and a
+later `done` adds a new one under the same id.
+
+`update --list <list>` also moves an open top-level task to another
+list, its description and subtasks with it. The journal records the
+move as the list the task left and the list it joined.
+
 ### History of a task
 
-`history` lists the completions of one task, and every other event
-that carries attributes, from the journal
+`history` lists the completions and reopens of one task, and every
+other event that carries attributes, from the journal
 ([ADR 0022](docs/decisions/0019-event-attributes/0022-history-command.md)).
 
 ```bash
@@ -140,9 +172,11 @@ The selector is the `[ID:]` of the task, or a case-insensitive part of
 its current title. It reads the journal, not the lists, so a finished
 one-shot task stays in reach. A selector that names no task is
 refused. A selector that names several is refused, and the message
-names each candidate. Entries run newest first: by day, and on one day
-the later event in the journal comes first. A completion falls on the
-day it is for, and any other event on the local day it was recorded.
+names each candidate on a line of its own: its id, the day of its last
+event and its title, newest first. Entries run newest first: by day,
+and on one day the later event in the journal comes first. A completion
+falls on the day it is for, and any other event on the local day it was
+recorded.
 Each attribute follows on a line of its own, in recorded order. The
 completion of a checklist item reads `TaskCompleted (checklist item)`.
 `--format json` gives the same document. A completion made by hand
@@ -163,6 +197,7 @@ JSON document, so an agent never has to scrape the table:
       "hidden": 2,
       "tasks": [
         {
+          "list": "work",
           "id": "k3x9",
           "title": "File the quarterly report",
           "rank": 6.0,
@@ -188,7 +223,8 @@ for display; each task array is already in rank order, so read the
 order rather than re-sorting by the number. `subtasks` counts open
 children. `hidden` is how many of the category's open items were left
 out — `0` means the array is the whole of it, and anything higher means
-`--all`, or a larger `--top`, will show more.
+`--all`, or a larger `--top`, will show more. `list` names the list
+that holds each task, as `show --format json` does.
 
 The schema grows by addition only: new keys may appear, existing ones
 keep their meaning.
