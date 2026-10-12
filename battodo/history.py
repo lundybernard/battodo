@@ -17,7 +17,7 @@ from typing import Any
 
 from batconf import Configuration
 
-from .journal import COMPLETED_EVENT, Journal
+from .journal import COMPLETED_EVENT, SCRATCHED_EVENT, Journal
 
 # The text form of a history indents each level by two spaces.
 INDENT = '  '
@@ -215,17 +215,26 @@ class TaskStream:
         A scratch closes it, and so does a completion that does not
         reschedule it.
         """
-        raise NotImplementedError
+        own = self.own
+        if not own:
+            return False
+        last = own[-1]
+        if last['type'] == SCRATCHED_EVENT:
+            return True
+        delta = last['payload'].get('delta', {})
+        return last['type'] == COMPLETED_EVENT and 'DUE' not in delta
 
     @property
     def snapshot(self) -> dict[str, Any] | None:
         """The snapshot of the last event of the task's own, or None."""
-        raise NotImplementedError
+        own = self.own
+        return own[-1]['payload']['snapshot'] if own else None
 
     @property
     def list_name(self) -> str | None:
         """The list the snapshot names, or None where it names none."""
-        raise NotImplementedError
+        snapshot = self.snapshot
+        return snapshot.get('list') if snapshot else None
 
     @property
     def nested(self) -> bool:
@@ -233,17 +242,34 @@ class TaskStream:
 
         Its ancestry is a path longer than its own title.
         """
-        raise NotImplementedError
+        own = self.own
+        if not own:
+            return False
+        payload = own[-1]['payload']
+        ancestry = payload.get('ancestry')
+        title = payload['snapshot']['title']
+        return ancestry is not None and ancestry != title
 
     @property
     def parent_id(self) -> str | None:
         """The id of the parent its add names, or None."""
-        raise NotImplementedError
+        return next(
+            (
+                event['payload']['parent']
+                for event in self.own
+                    if 'parent' in event['payload']
+            ),
+            None,
+        )  # fmt: skip
 
     @property
     def checklist_titles(self) -> list[str]:
         """The title of each checklist item event on the stream."""
-        raise NotImplementedError
+        return [
+            event['payload']['snapshot']['title']
+            for event in self.events
+                if event['payload'].get('checklist_item')
+        ]  # fmt: skip
 
     @property
     def own(self) -> list[dict[str, Any]]:
