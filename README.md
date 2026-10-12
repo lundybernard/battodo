@@ -29,8 +29,23 @@ btodo view              # open items for the currently active categories
 btodo view --top 10     # ten items a category, rather than the default five
 btodo view --all        # every open item, and every category, active or not
 btodo view --format json  # the same view as JSON, for agents
+btodo show permit       # one task: its fields, description and subtasks
+btodo add chores 'Renew the parking permit' --due 2026-10-01
+btodo add chores 'Find the old sticker' --parent permit  # a subtask
+btodo update permit -p 2 --due 2026-10-15  # new field values
+btodo update permit --description 'Bring the old permit.'
+btodo note permit 'Called the office'  # a note; the task does not change
+btodo done permit       # complete the task and log it to completed.md
+btodo done permit --date 2026-10-01  # log it under the day it finished
+btodo scratch permit    # drop the task and log it as SCRATCHED
+btodo history permit    # completions and events with attributes, newest first
+btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
+
+`btodo <command> --help` lists the options of each command.
+[SKILL.md](SKILL.md) states the rules and the refusals of each command
+for an agent.
 
 Items are ordered by a rank computed from the file and the clock —
 priority as a multiplier, times how long the item has waited and how
@@ -53,13 +68,20 @@ btodo done permit --attrs 'confirmation=A1B2C3, place=Main St, Suite 4'
 btodo done permit --note 'Renewed online'
 ```
 
-`--attrs` takes `key=value` segments. It splits only at a comma
-followed by the next `key=`, so a value may hold commas and `=`. A key
-is a lowercase letter, then lowercase letters, digits or underscores.
-`--note TEXT` enters as the key `note` and is not split. A key given
-twice, an empty value, a line break, a segment with no `=` or a key
-outside the grammar is refused before anything is written. A checklist
-item takes no attributes.
+`--attrs` takes `key=value` segments, and a value may hold commas and
+`=`: the first example records `place` as `Main St, Suite 4`.
+`--note TEXT` records the attribute `note`.
+[SKILL.md](SKILL.md#attributes-and-notes) states the grammar and the
+inputs that btodo refuses before it writes anything.
+
+`done` and `scratch` also write the attributes on the record they add
+to `completed.md`, as one JSON block after the fields:
+
+```text
+2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
+```
+
+`btodo completed` shows them after the title as `key=value` pairs.
 
 ### Notes on a task
 
@@ -73,11 +95,11 @@ btodo note permit --attrs 'quote=45.00'
 ```
 
 `TEXT` enters as the key `note`, beside the `--attrs` grammar above,
-and is not split. The note goes on a `TaskAnnotated` event on the
-stream of the task, and the task does not change. A task with no
-`[ID:]` is given one first, and the echoed line shows it. A call with
-neither `TEXT` nor `--attrs` is refused before anything is written, as
-is a checklist item. A done task is out of reach.
+and btodo never splits it. The note goes on a `TaskAnnotated` event on the
+stream of the task, and the task does not change. btodo first stamps
+an `[ID:]` on a task that has none, and the echoed line shows it.
+[SKILL.md](SKILL.md#attributes-and-notes) lists the calls that `note`
+refuses.
 
 ### History of a task
 
