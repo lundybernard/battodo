@@ -54,8 +54,12 @@ class Journal:
 
     @cached_property
     def path(self) -> Path:
-        """The log file inside the journal directory of the source."""
-        return Path(self.source_dir) / JOURNAL_DIRNAME / JOURNAL_FILENAME
+        """The log file inside the journal directory of the source.
+
+        A `~` in the source directory expands to the home directory.
+        """
+        source = Path(self.source_dir).expanduser()
+        return source / JOURNAL_DIRNAME / JOURNAL_FILENAME
 
     @cached_property
     def text(self) -> str:
