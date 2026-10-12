@@ -27,7 +27,7 @@ directory to load it.
 
 ## Read
 
-```
+```text
 btodo view                            # open items, active categories
 btodo view --top 10                   # more items a category; default 5
 btodo view --all                      # every open item, every category
@@ -50,7 +50,7 @@ to learn how many open items the selection left out.
 
 ## Write
 
-```
+```text
 btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
                          [--repeat R] [--tags a,b] [--description TEXT]
 btodo add <list> <title> --parent <selector>

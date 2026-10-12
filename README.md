@@ -1,29 +1,30 @@
 # BatTodo
+
 Personal todo-list CLI (BAT ecosystem test-bed)
 
 ## Installation
 
 Development environment (pixi manages the interpreter and tools):
 
-```
+```bash
 pixi install
 ```
 
 Or install the package on its own:
 
-```
+```bash
 pip install -e .
 ```
 
 Either way the CLI is available as `btodo`, or `btd` for short:
 
-```
+```bash
 btodo --help
 ```
 
 ## Usage
 
-```
+```bash
 btodo view              # open items for the currently active categories
 btodo view --top 10     # ten items a category, rather than the default five
 btodo view --all        # every open item, and every category, active or not
@@ -180,7 +181,7 @@ configuration: it comes from the command line only
 
 An environment variable is the config path in caps:
 
-```
+```bash
 export BATTODO_VIEW_TOP=10
 ```
 
@@ -218,7 +219,7 @@ order is [ADR 0015](docs/decisions/0015-config-file-location.md).
 The source directory defaults to `~/todo`. Override it through batconf's
 environment source — the variable is the config path in caps:
 
-```
+```bash
 export BATTODO_VIEW_SOURCE_DIR=/path/to/battodo/sandbox/todo
 btodo view
 ```
@@ -232,10 +233,9 @@ that mutates.
 A config file sets the same value; see
 [Configuration](#configuration).
 
-
 Tasks run through pixi; each one uses its own isolated environment.
 
-```
+```bash
 pixi run tests      # the full gate: unit + typecheck + lint
 pixi run unit       # unit suite under coverage, gated at 100%
 pixi run test       # unit suite only, no coverage, no gate
