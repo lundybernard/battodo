@@ -595,9 +595,12 @@ class Update:
             doc.insert_description(index, new_description.lines)
         return doc
 
-    @property
+    @cached_property
     def rewritten(self) -> TaskNode:
-        """The task as the rewritten list reads it."""
+        """The task as the rewritten list reads it.
+
+        Cached: the list is rewritten the same way on every read.
+        """
         index = self.node.raw_index
         rewritten = TodoDocument(self.document.text)
         return next(
@@ -622,9 +625,8 @@ class Update:
             `list_name` names no discovered list.
         """
         doc = TodoDocument(self.path.read_text())
-        index = doc.open_end
-        for offset, line in enumerate(self.block):
-            doc.insert(index + offset, line)
+        for line in self.block:
+            doc.append_open(line)
         return doc
 
     @property
@@ -857,17 +859,16 @@ class Reopen:
         """
         return self.document.text
 
-    @cached_property
+    @property
     def document(self) -> TodoDocument:
         """The restored list: each closed task of the chain open.
 
         The task the reopen names takes its fields, title and
-        description. Cached: the write changes the list this reads, and
-        the echo reads the line after the write.
+        description.
         """
         written = self.checked
         self.refuse_nested_changes()
-        doc = self.restored
+        doc = TodoDocument(self.restored.text)
         for task in self.opened:
             doc.mark_open(task.raw_index)
             if not task.task_id:
@@ -899,11 +900,9 @@ class Reopen:
         """The named fields, read against the day of the task."""
         return SuppliedFields(self.fields, self.task.today)
 
-    @cached_property
+    @property
     def stream(self) -> TaskStream:
         """The closed stream the selector names.
-
-        Cached: the write opens the stream.
 
         Raises
         ------
@@ -925,11 +924,19 @@ class Reopen:
     @property
     def streams(self) -> list[TaskStream]:
         """Every stream of the journal of the source."""
-        journal = Journal(self.source)
         return [
             TaskStream(stream_id, events, self.zone)
-            for stream_id, events in journal.streams.items()
+            for stream_id, events in self.journal.streams.items()
         ]
+
+    @cached_property
+    def journal(self) -> Journal:
+        """The journal of the source.
+
+        Cached: one journal reads its file once, as it stood before the
+        write.
+        """
+        return Journal(self.source)
 
     def refuse_checklist_item(self) -> None:
         """Refuse a selector that names a checklist item in the journal.
@@ -999,17 +1006,17 @@ class Reopen:
             )
         return NamedList(self.source, name).path
 
-    @cached_property
+    @property
     def held(self) -> Path | None:
         """The list that holds the closed line of a subtask, or None.
 
-        Cached: discovery reads every list in the source.
+        The lists are the ones the selection read.
         """
         stream = self.stream
         if not stream.nested:
             return None
-        for path in discover_lists(self.source):
-            tasks = list(TodoDocument(path.read_text()).tasks)
+        for path, doc in self.task.selection.lists:
+            tasks = list(doc.tasks)
             for task in tasks:
                 if task.done and task.task_id == stream.task_id:
                     return path
@@ -1056,15 +1063,18 @@ class Reopen:
         path = payload['ancestry'].removesuffix(f'{ANCESTRY_SEPARATOR}{title}')
         return repr(path)
 
-    @property
+    @cached_property
     def restored(self) -> TodoDocument:
-        """The list as read, the recorded block last in its open section."""
+        """The list as read, the recorded block last in its open section.
+
+        Cached: the write changes the list this reads. The document
+        edits a copy.
+        """
         doc = TodoDocument(self.path.read_text())
         if self.held is not None:
             return doc
-        index = doc.open_end
-        for offset, line in enumerate(self.recorded.lines):
-            doc.insert(index + offset, line)
+        for line in self.recorded.lines:
+            doc.append_open(line)
         return doc
 
     @property
@@ -1087,12 +1097,11 @@ class Reopen:
                 if chain[-1].task_id == task_id
         )  # fmt: skip
 
-    @cached_property
+    @property
     def chains(self) -> dict[int, list[TaskNode]]:
         """Each task of the restored list and every task above it.
 
-        By the line of the task, outermost first. Cached: the write
-        changes the list this reads.
+        By the line of the task, outermost first.
         """
         found = [[task] for task in self.restored.tasks]
         for chain in found:
@@ -1180,20 +1189,19 @@ class Reopen:
         The event of the task the reopen names carries its changes and
         its attributes.
         """
-        named = self.node.raw_index
+        named, list_left = self.node.raw_index, self.list_left
         events = []
         for task in self.opened:
             path = Ancestry(self.chains[task.raw_index])
-            task_id = self.ids[task.raw_index]
-            event = OpenedTask(path, task_id, self.list_left).event
-            if task.raw_index == named:
-                payload = event.payload
-                delta = {**self.delta, **payload['delta']}
-                payload = {**payload, 'delta': delta}
-                if self.attrs:
-                    payload['attrs'] = self.attrs
-                event = Event(event.type, event.stream, payload)
-            events.append(event)
+            changed = task.raw_index == named
+            opened = OpenedTask(
+                path,
+                self.ids[task.raw_index],
+                list_left,
+                self.delta if changed else None,
+                self.attrs if changed else None,
+            )
+            events.append(opened.event)
         return events
 
     @property
@@ -2321,7 +2329,9 @@ class OpenedTask:
 
     `task_id` names its stream. A task with no `[ID:]` takes it on the
     same event. `list_name` is the list the task was in before the
-    reopen, and None where no record names one.
+    reopen, and None where no record names one. `delta` and `attrs`
+    hold the changes and the attributes of the task the reopen names,
+    and None for every other task.
     """
 
     def __init__(
@@ -2329,10 +2339,14 @@ class OpenedTask:
         ancestry: Ancestry,
         task_id: str,
         list_name: str | None,
+        delta: dict[str, list[Any]] | None = None,
+        attrs: dict[str, str] | None = None,
     ) -> None:
         self.ancestry = ancestry
         self.task_id = task_id
         self.list_name = list_name
+        self.delta = delta
+        self.attrs = attrs
 
     @property
     def event(self) -> Event:
@@ -2341,18 +2355,23 @@ class OpenedTask:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """The opening, the task as it was, and where a subtask sits."""
+        """The opening, the task as it was, and where a subtask sits.
+
+        The changes and the attributes go in where any are given.
+        """
         node = self.ancestry.node
-        delta: dict[str, list[Any]] = {}
+        delta = dict(self.delta or {})
         if not node.task_id:
             delta['ID'] = [None, self.task_id]
         delta['done'] = [True, False]
         payload: dict[str, Any] = {
             'delta': delta,
-            'snapshot': {**node.snapshot, 'list': self.list_name},
+            'snapshot': node.listed_snapshot(self.list_name),
         }
         if len(self.ancestry.tasks) > 1:
             payload['ancestry'] = self.ancestry.path
+        if self.attrs:
+            payload['attrs'] = self.attrs
         return payload
 
 

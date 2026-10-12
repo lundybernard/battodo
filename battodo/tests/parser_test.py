@@ -242,8 +242,14 @@ class TaskNodeTests(TestCase):
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     def test_listed_snapshot(t, snapshot: PropertyMock) -> None:
         snapshot.return_value = {'title': 'A task'}
-        ret = t.tk.listed_snapshot('a-list')
-        t.assertEqual(ret, {'title': 'A task', 'list': 'a-list'})
+
+        with t.subTest('the snapshot beside the list'):
+            ret = t.tk.listed_snapshot('a-list')
+            t.assertEqual(ret, {'title': 'A task', 'list': 'a-list'})
+
+        with t.subTest('a list no record names reads as null'):
+            ret = t.tk.listed_snapshot(None)
+            t.assertEqual(ret, {'title': 'A task', 'list': None})
 
     def test_schema_fields(t) -> None:
         t.tk.fields = {

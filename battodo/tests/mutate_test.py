@@ -940,7 +940,6 @@ class UpdateTests(TestCase):
         path.read_text.return_value = 'the other list as read'
         t.up.path = path
         doc = todo_document.return_value
-        doc.open_end = 3
 
         ret = t.up.joined
 
@@ -949,8 +948,8 @@ class UpdateTests(TestCase):
         t.assertEqual(
             doc.method_calls,
             [
-                call.insert(3, 'the task line'),
-                call.insert(4, 'its child line'),
+                call.append_open('the task line'),
+                call.append_open('its child line'),
             ],
         )
         t.assertIs(ret, doc)
@@ -1293,7 +1292,7 @@ class ReopenTests(TestCase):
     """Unit tests for battodo.mutate.Reopen."""
 
     def setUp(t) -> None:
-        t.task = Mock(spec=['source', 'selector', 'today'])
+        t.task = Mock(spec=['source', 'selector', 'today', 'selection'])
         t.task.source = SOURCE
         t.task.selector = 'a selector'
         t.task.today = TODAY
@@ -1348,6 +1347,7 @@ class ReopenTests(TestCase):
         ret = t.ro.text
         t.assertIs(ret, document.return_value.text)
 
+    @patch(f'{SRC}.TodoDocument', autospec=True)
     @patch.object(Reopen, 'new_description', new_callable=PropertyMock)
     @patch.object(Reopen, 'new_title', new_callable=PropertyMock)
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
@@ -1364,6 +1364,7 @@ class ReopenTests(TestCase):
         node: PropertyMock,
         new_title: PropertyMock,
         new_description: PropertyMock,
+        todo_document: MagicMock,
     ) -> None:
         checked.return_value = sentinel.checked
         child = child_node()
@@ -1373,13 +1374,17 @@ class ReopenTests(TestCase):
         new_title.return_value = 'A checked title'
         new_description.return_value = None
         t.ro.ids = {1: '9o71lx', 3: 'zz01ab'}
-        doc = restored.return_value
+        restored.return_value = MagicMock(spec=['text'])
+        restored.return_value.text = 'the restored list'
+        doc = todo_document.return_value
 
         with t.subTest('each closed task opens, then the named one changes'):
             ret = t.ro.document
 
-            # The refusals of the fields and of a subtask come first.
+            # The refusals of the fields and of a subtask come first, and
+            # the edits go to a copy of the restored list.
             refuse_nested_changes.assert_called_once_with(t.ro)
+            todo_document.assert_called_once_with('the restored list')
             t.assertEqual(
                 doc.method_calls,
                 [
@@ -1394,7 +1399,6 @@ class ReopenTests(TestCase):
 
         with t.subTest('a description replaces the description lines'):
             doc.reset_mock()
-            t.ro.__dict__.pop('document', None)
             new_title.return_value = None
             new_description.return_value = MagicMock(spec=['lines'])
             new_description.return_value.lines = sentinel.lines
@@ -1454,7 +1458,6 @@ class ReopenTests(TestCase):
             t.assertIs(ret, selection.stream)
 
         with t.subTest('none: a checklist item, then no task at all'):
-            t.ro.__dict__.pop('stream', None)
             selection.candidates = []
 
             with t.assertRaises(Exception) as caught:
@@ -1467,8 +1470,9 @@ class ReopenTests(TestCase):
             )
 
     @patch(f'{SRC}.TaskStream', autospec=True)
-    @patch(f'{SRC}.Journal', autospec=True)
-    def test_streams(t, journal: MagicMock, task_stream: MagicMock) -> None:
+    @patch.object(Reopen, 'journal', new_callable=PropertyMock)
+    def test_streams(t, journal: PropertyMock, task_stream: MagicMock) -> None:
+        journal.return_value = Mock(spec=['streams'])
         journal.return_value.streams = {
             'task/aa': sentinel.aa_events,
             'task/bb': sentinel.bb_events,
@@ -1477,7 +1481,6 @@ class ReopenTests(TestCase):
 
         ret = t.ro.streams
 
-        journal.assert_called_once_with(SOURCE)
         t.assertEqual(ret, [sentinel.aa, sentinel.bb])
         t.assertEqual(
             task_stream.call_args_list,
@@ -1486,6 +1489,16 @@ class ReopenTests(TestCase):
                 call('task/bb', sentinel.bb_events, sentinel.zone),
             ],
         )
+
+    @patch(f'{SRC}.Journal', autospec=True)
+    def test_journal(t, journal: MagicMock) -> None:
+        # Two reads: one journal answers every stream the reopen reads.
+        ret = t.ro.journal
+        t.assertIs(ret, journal.return_value)
+
+        again = t.ro.journal
+        t.assertIs(again, ret)
+        journal.assert_called_once_with(SOURCE)
 
     @patch.object(Reopen, 'streams', new_callable=PropertyMock)
     def test_refuse_checklist_item(t, streams: PropertyMock) -> None:
@@ -1605,48 +1618,38 @@ class ReopenTests(TestCase):
                 'name the list with --list',
             )
 
-    @patch(f'{SRC}.TodoDocument', autospec=True)
-    @patch(f'{SRC}.discover_lists', autospec=True)
     @patch.object(Reopen, 'stream', new_callable=PropertyMock)
-    def test_held(
-        t,
-        stream: PropertyMock,
-        discover_lists: MagicMock,
-        todo_document: MagicMock,
-    ) -> None:
+    def test_held(t, stream: PropertyMock) -> None:
         stream.return_value = Mock(spec=['nested', 'task_id'])
         stream.return_value.task_id = 'cc03ef'
-        first, second = MagicMock(spec=Path), MagicMock(spec=Path)
-        discover_lists.return_value = [first, second]
         done = child_node()
         done.done, done.fields = True, {'LOE': '2', 'ID': 'cc03ef'}
         parent = parent_node()
         parent.children = [done]
-        todo_document.side_effect = lambda text: Mock(
-            spec=['tasks'],
-            tasks=[parent] if text is second.read_text.return_value else [],
-        )
+        # The lists as the selection read them, each beside its path.
+        t.task.selection = Mock(spec=['lists'])
+        t.task.selection.lists = [
+            (LIST_PATH, Mock(spec=['tasks'], tasks=[])),
+            (ANOTHER_PATH, Mock(spec=['tasks'], tasks=[parent])),
+        ]
 
         with t.subTest('the list that holds the closed line, at any depth'):
             stream.return_value.nested = True
             ret = t.ro.held
-            discover_lists.assert_called_once_with(SOURCE)
-            t.assertIs(ret, second)
+            t.assertIs(ret, ANOTHER_PATH)
 
         with t.subTest('an open line with the id is not a closed one'):
-            t.ro.__dict__.pop('held', None)
             done.done = False
             ret = t.ro.held
             t.assertIsNone(ret)
 
         with t.subTest('a top-level task is never looked for'):
-            t.ro.__dict__.pop('held', None)
-            discover_lists.reset_mock()
+            # A selection read here would raise: it holds no lists.
+            t.task.selection = Mock(spec=[])
             stream.return_value.nested = False
 
             ret = t.ro.held
 
-            discover_lists.assert_not_called()
             t.assertIsNone(ret)
 
     @patch(f'{SRC}.RecordedTask', autospec=True)
@@ -1733,7 +1736,6 @@ class ReopenTests(TestCase):
         recorded.return_value = MagicMock(spec=['lines'])
         recorded.return_value.lines = ['the task line', 'its child line']
         doc = todo_document.return_value
-        doc.open_end = 3
 
         with t.subTest('the recorded block, after the last open entry'):
             held.return_value = None
@@ -1744,13 +1746,14 @@ class ReopenTests(TestCase):
             t.assertEqual(
                 doc.method_calls,
                 [
-                    call.insert(3, 'the task line'),
-                    call.insert(4, 'its child line'),
+                    call.append_open('the task line'),
+                    call.append_open('its child line'),
                 ],
             )
             t.assertIs(ret, doc)
 
         with t.subTest('a list that holds the line: the list as read'):
+            t.ro.__dict__.pop('restored', None)
             doc.reset_mock()
             held.return_value = path
 
@@ -1867,13 +1870,14 @@ class ReopenTests(TestCase):
         elsewhere.raw_index = 9
         other = bare_node()
         other.raw_index = 8
+        # Breadth first, as `chains` builds them: not in file order.
         chains.return_value = {
             1: [parent],
             8: [other],
-            4: [parent, closed],
+            5: [parent, closed, below],
             3: [parent, still_open],
             6: [parent, item],
-            5: [parent, closed, below],
+            4: [parent, closed],
             9: [other, elsewhere],
         }
         node.return_value = parent
@@ -1975,40 +1979,33 @@ class ReopenTests(TestCase):
         t.ro.ids = {1: '9o71lx', 4: 'cc03ef'}
         ancestry_class.side_effect = [sentinel.top, sentinel.below]
         opened_task.side_effect = [
-            Mock(spec=['event'], event=an_opening('task/9o71lx')),
-            Mock(spec=['event'], event=an_opening('task/cc03ef')),
+            Mock(spec=['event'], event=sentinel.top_event),
+            Mock(spec=['event'], event=sentinel.named_event),
         ]
         t.ro.attrs = {'cost': '45.00'}
 
         ret = t.ro.events
 
-        with t.subTest('one opening a closed task, outermost first'):
-            t.assertEqual(
-                ancestry_class.call_args_list,
-                [call([parent]), call([parent, child])],
-            )
-            t.assertEqual(
-                opened_task.call_args_list,
-                [
-                    call(sentinel.top, '9o71lx', 'a-list'),
-                    call(sentinel.below, 'cc03ef', 'a-list'),
-                ],
-            )
-            t.assertEqual(ret[0], an_opening('task/9o71lx'))
-
-        with t.subTest('the named task carries the changes and attributes'):
-            t.assertEqual(
-                ret[1],
-                Event(
-                    'TaskUpdated',
-                    'task/cc03ef',
-                    {
-                        'delta': {'P': ['4', '5'], 'done': [True, False]},
-                        'snapshot': sentinel.snapshot,
-                        'attrs': {'cost': '45.00'},
-                    },
+        # One opening a closed task, outermost first. The named task
+        # carries the changes and the attributes.
+        t.assertEqual(
+            ancestry_class.call_args_list,
+            [call([parent]), call([parent, child])],
+        )
+        t.assertEqual(
+            opened_task.call_args_list,
+            [
+                call(sentinel.top, '9o71lx', 'a-list', None, None),
+                call(
+                    sentinel.below,
+                    'cc03ef',
+                    'a-list',
+                    {'P': ['4', '5']},
+                    {'cost': '45.00'},
                 ),
-            )
+            ],
+        )
+        t.assertEqual(ret, [sentinel.top_event, sentinel.named_event])
 
     @patch.object(Reopen, 'path', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
@@ -2085,15 +2082,6 @@ def a_record(
     record = Mock(spec=['closed', 'nested', 'snapshot'])
     record.closed, record.nested, record.snapshot = closed, nested, snapshot
     return record
-
-
-def an_opening(stream: str) -> Event:
-    """The event an `OpenedTask` stand-in records on `stream`."""
-    return Event(
-        'TaskUpdated',
-        stream,
-        {'delta': {'done': [True, False]}, 'snapshot': sentinel.snapshot},
-    )
 
 
 class CompletionTests(TestCase):
@@ -4057,26 +4045,20 @@ class OpenedTaskTests(TestCase):
             Event('TaskUpdated', 'task/pp02cd', sentinel.payload),
         )
 
-    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
-    def test_payload(t, snapshot: PropertyMock) -> None:
-        snapshot.return_value = {'title': 'A task'}
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
+    def test_payload(t, listed_snapshot: MagicMock) -> None:
+        listed_snapshot.return_value = sentinel.snapshot
 
         with t.subTest('the opening and the task as it was, in its list'):
             ret = t.ot.payload
+
+            listed_snapshot.assert_called_once_with(t.node, 'a-list')
             t.assertEqual(
                 ret,
                 {
                     'delta': {'done': [True, False]},
-                    'snapshot': {'title': 'A task', 'list': 'a-list'},
+                    'snapshot': sentinel.snapshot,
                 },
-            )
-
-        with t.subTest('a record from before the list names none'):
-            t.ot.list_name = None
-            ret = t.ot.payload
-            t.assertEqual(
-                ret['snapshot'],
-                {'title': 'A task', 'list': None},
             )
 
         with t.subTest('a task with no id takes one on the same event'):
@@ -4091,6 +4073,23 @@ class OpenedTaskTests(TestCase):
             t.ot.ancestry = ancestry_of(parent_node(), t.node, path='a path')
             ret = t.ot.payload
             t.assertEqual(ret['ancestry'], 'a path')
+
+        with t.subTest('the named task: its changes and its attributes'):
+            t.ot.ancestry = ancestry_of(t.node, path='a path')
+            t.node.fields = {'LOE': '2', 'ID': 'pp02cd'}
+            t.ot.delta = {'P': ['4', '5']}
+            t.ot.attrs = {'cost': '45.00'}
+
+            ret = t.ot.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'P': ['4', '5'], 'done': [True, False]},
+                    'snapshot': sentinel.snapshot,
+                    'attrs': {'cost': '45.00'},
+                },
+            )
 
 
 class LogEntryTests(TestCase):

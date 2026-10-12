@@ -146,10 +146,11 @@ class TaskNode:
             snapshot['children'] = [child.snapshot for child in self.children]
         return snapshot
 
-    def listed_snapshot(self, list_name: str) -> dict[str, Any]:
+    def listed_snapshot(self, list_name: str | None) -> dict[str, Any]:
         """The snapshot of the task and the list that holds it.
 
-        A journal event names the list of its task by the filename stem.
+        A journal event names the list of its task by the filename stem,
+        or null where no record names one.
         """
         return {**self.snapshot, 'list': list_name}
 
