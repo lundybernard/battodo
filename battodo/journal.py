@@ -26,6 +26,12 @@ JOURNAL_DIRNAME = '.journal'
 JOURNAL_FILENAME = 'log.jsonl'
 ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
 ID_LENGTH = 6
+# The event types btodo writes.
+ADDED_EVENT = 'TaskAdded'
+ANNOTATED_EVENT = 'TaskAnnotated'
+COMPLETED_EVENT = 'TaskCompleted'
+SCRATCHED_EVENT = 'TaskScratched'
+UPDATED_EVENT = 'TaskUpdated'
 
 
 def new_task_id() -> str:
