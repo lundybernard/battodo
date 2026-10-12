@@ -131,6 +131,13 @@ class DoneCommandTests(TestCase):
                 ['Open checklist item', '--note', 'Renewed online'],
                 'a checklist item takes no attributes\n',
             ),
+            'a line break after a comma': (
+                ['Overdue task', '--attrs', 'place=Main St,\ncost=45.00'],
+                (
+                    "attribute 'place' must hold no line break, "
+                    "not 'Main St,\\ncost=45.00'\n"
+                ),
+            ),
         }
         before = (t.read('work.md'), t.read('completed.md'))
 

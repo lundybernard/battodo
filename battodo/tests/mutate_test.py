@@ -2263,6 +2263,14 @@ class SuppliedAttributesTests(TestCase):
                 'a_key=a value,cost=45.00',
                 ['a_key=a value', 'cost=45.00'],
             ),
+            'a line feed after the comma stays': (
+                'a_key=a value,\ncost=45.00',
+                ['a_key=a value,\ncost=45.00'],
+            ),
+            'a carriage return after the comma stays': (
+                'a_key=a value,\r\ncost=45.00',
+                ['a_key=a value,\r\ncost=45.00'],
+            ),
             'a comma before a key outside the grammar stays': (
                 'a_key=a value, Cost=45.00, 2nd=b',
                 ['a_key=a value, Cost=45.00, 2nd=b'],
