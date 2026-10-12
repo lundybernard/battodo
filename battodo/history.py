@@ -209,6 +209,43 @@ class TaskStream:
         return self.events[-1]['seq']
 
     @property
+    def closed(self) -> bool:
+        """Whether the last event of the task's own closes the task.
+
+        A scratch closes it, and so does a completion that does not
+        reschedule it.
+        """
+        raise NotImplementedError
+
+    @property
+    def snapshot(self) -> dict[str, Any] | None:
+        """The snapshot of the last event of the task's own, or None."""
+        raise NotImplementedError
+
+    @property
+    def list_name(self) -> str | None:
+        """The list the snapshot names, or None where it names none."""
+        raise NotImplementedError
+
+    @property
+    def nested(self) -> bool:
+        """Whether the last event of the task's own places it under another.
+
+        Its ancestry is a path longer than its own title.
+        """
+        raise NotImplementedError
+
+    @property
+    def parent_id(self) -> str | None:
+        """The id of the parent its add names, or None."""
+        raise NotImplementedError
+
+    @property
+    def checklist_titles(self) -> list[str]:
+        """The title of each checklist item event on the stream."""
+        raise NotImplementedError
+
+    @property
     def own(self) -> list[dict[str, Any]]:
         """The events of the task's own, in journal order."""
         return [

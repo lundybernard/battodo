@@ -258,6 +258,113 @@ class TaskStreamTests(TestCase):
         ret = t.ts.seq
         t.assertEqual(ret, 7)
 
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_closed(t, own: PropertyMock) -> None:
+        cases = {
+            'a stream with no event of its own': ([], False),
+            'a completion closes the task': (
+                [{'type': 'TaskCompleted', 'payload': {'delta': {}}}],
+                True,
+            ),
+            'a scratch closes it too': (
+                [{'type': 'TaskScratched', 'payload': {'delta': {}}}],
+                True,
+            ),
+            'a completion that reschedules leaves it open': (
+                [
+                    {
+                        'type': 'TaskCompleted',
+                        'payload': {'delta': {'DUE': ['a', 'b']}},
+                    },
+                ],
+                False,
+            ),
+            'a later event of its own reopens it': (
+                [
+                    {'type': 'TaskCompleted', 'payload': {'delta': {}}},
+                    {'type': 'TaskUpdated', 'payload': {'delta': {}}},
+                ],
+                False,
+            ),
+        }
+        for name, (events, expected) in cases.items():
+            with t.subTest(name):
+                own.return_value = events
+                ret = t.ts.closed
+                t.assertIs(ret, expected)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_snapshot(t, own: PropertyMock) -> None:
+        with t.subTest('the snapshot of the last event of its own'):
+            own.return_value = t.events[:2]
+            ret = t.ts.snapshot
+            t.assertEqual(ret, {'title': 'A second'})
+
+        with t.subTest('none without an event of its own'):
+            own.return_value = []
+            ret = t.ts.snapshot
+            t.assertIsNone(ret)
+
+    @patch.object(TaskStream, 'snapshot', new_callable=PropertyMock)
+    def test_list_name(t, snapshot: PropertyMock) -> None:
+        cases = {
+            'the list the snapshot names': ({'list': 'chores'}, 'chores'),
+            'none where it names none': ({'title': 'A task'}, None),
+            'none without a snapshot': (None, None),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                snapshot.return_value = found
+                ret = t.ts.list_name
+                t.assertEqual(ret, expected)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_nested(t, own: PropertyMock) -> None:
+        cases = {
+            'a path past its own title': (
+                'A subtask',
+                'A task > A subtask',
+                True,
+            ),
+            'its own title alone': ('A subtask', 'A subtask', False),
+            'a title that holds the separator': ('A > B', 'A > B', False),
+            'no ancestry recorded': ('A subtask', None, False),
+        }
+        for name, (title, ancestry, expected) in cases.items():
+            with t.subTest(name):
+                payload: dict[str, Any] = {'snapshot': {'title': title}}
+                if ancestry is not None:
+                    payload['ancestry'] = ancestry
+                own.return_value = [{'payload': payload}]
+
+                ret = t.ts.nested
+
+                t.assertIs(ret, expected)
+
+        with t.subTest('a stream with no event of its own'):
+            own.return_value = []
+            ret = t.ts.nested
+            t.assertFalse(ret)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_parent_id(t, own: PropertyMock) -> None:
+        with t.subTest('the parent its add names'):
+            own.return_value = [
+                {'payload': {'snapshot': {}, 'parent': 'pf11pf'}},
+                {'payload': {'snapshot': {}}},
+            ]
+            ret = t.ts.parent_id
+            t.assertEqual(ret, 'pf11pf')
+
+        with t.subTest('none where no event names one'):
+            own.return_value = [{'payload': {'snapshot': {}}}]
+            ret = t.ts.parent_id
+            t.assertIsNone(ret)
+
+    def test_checklist_titles(t) -> None:
+        ret = t.ts.checklist_titles
+        t.assertEqual(ret, ['A checklist item'])
+
     def test_own(t) -> None:
         ret = t.ts.own
         # A checklist item's event belongs to the item, not the task.

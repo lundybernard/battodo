@@ -114,6 +114,43 @@ HISTORY = (
         },
         '2026-08-04T16:00:00+00:00',
     ),
+    (
+        'TaskAdded',
+        'task/pf11pf',
+        {'delta': {}, 'snapshot': {'title': 'Paint a fence'}},
+        '2026-08-05T16:00:00+00:00',
+    ),
+    (
+        'TaskAdded',
+        'task/bp22bp',
+        {
+            'delta': {},
+            'snapshot': {'title': 'Buy paint'},
+            'parent': 'pf11pf',
+        },
+        '2026-08-05T16:00:00+00:00',
+    ),
+    (
+        'TaskCompleted',
+        'task/bp22bp',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {'title': 'Buy paint', 'list': 'chores'},
+            'ancestry': 'Paint a fence > Buy paint',
+            'completed_on': '2026-08-06',
+        },
+        '2026-08-06T16:00:00+00:00',
+    ),
+    (
+        'TaskScratched',
+        'task/pf11pf',
+        {
+            'delta': {'removed': [False, True]},
+            'snapshot': {'title': 'Paint a fence', 'list': 'chores'},
+            'ancestry': 'Paint a fence',
+        },
+        '2026-08-07T16:00:00+00:00',
+    ),
 )
 
 # The history of task/ab12cd, as each form lays it out.
@@ -323,6 +360,8 @@ class TaskStreamTests(TestCase):
         streams = Journal(history_source(t)).streams
         t.permit = TaskStream('task/ab12cd', streams['task/ab12cd'], TZ)
         t.nails = TaskStream('task/dd44ee', streams['task/dd44ee'], TZ)
+        t.fence = TaskStream('task/pf11pf', streams['task/pf11pf'], TZ)
+        t.paint = TaskStream('task/bp22bp', streams['task/bp22bp'], TZ)
 
     def test_task_id(t) -> None:
         ret = t.permit.task_id
@@ -345,6 +384,53 @@ class TaskStreamTests(TestCase):
     def test_seq(t) -> None:
         ret = t.permit.seq
         t.assertEqual(ret, 6)
+
+    def test_closed(t) -> None:
+        cases = {
+            'a note after the completion: open': (t.permit, False),
+            'a scratch closes the task': (t.fence, True),
+            'and so does a completion': (t.paint, True),
+            'no event of its own: open': (t.nails, False),
+        }
+        for name, (stream, expected) in cases.items():
+            with t.subTest(name):
+                ret = stream.closed
+                t.assertIs(ret, expected)
+
+    def test_snapshot(t) -> None:
+        ret = t.fence.snapshot
+        t.assertEqual(ret, {'title': 'Paint a fence', 'list': 'chores'})
+
+    def test_list_name(t) -> None:
+        with t.subTest('the list the last snapshot names'):
+            ret = t.fence.list_name
+            t.assertEqual(ret, 'chores')
+
+        with t.subTest('none from a snapshot that names none'):
+            ret = t.permit.list_name
+            t.assertIsNone(ret)
+
+    def test_nested(t) -> None:
+        with t.subTest('a subtask'):
+            ret = t.paint.nested
+            t.assertTrue(ret)
+
+        with t.subTest('a top-level task'):
+            ret = t.fence.nested
+            t.assertFalse(ret)
+
+    def test_parent_id(t) -> None:
+        with t.subTest('the parent its add names'):
+            ret = t.paint.parent_id
+            t.assertEqual(ret, 'pf11pf')
+
+        with t.subTest('none for a top-level task'):
+            ret = t.fence.parent_id
+            t.assertIsNone(ret)
+
+    def test_checklist_titles(t) -> None:
+        ret = t.permit.checklist_titles
+        t.assertEqual(ret, ['Print the receipt'])
 
     def test_own(t) -> None:
         ret = t.permit.own
