@@ -2295,6 +2295,7 @@ class ChangesetTests(TestCase):
     def setUp(t) -> None:
         t.path = MagicMock(spec=Path)
         t.path.name = 'a-list.md'
+        t.path.read_text.return_value = 'the list as read'
         t.events = [
             Event('TaskUpdated', 'task/pp02cd', sentinel.stamp),
             Event('TaskAdded', 'task/cc03ef', sentinel.added),
@@ -2323,6 +2324,7 @@ class ChangesetTests(TestCase):
             t.assertEqual(steps, ['list', 'log', 'event', 'event'])
 
         with t.subTest('the text goes to the list file'):
+            t.path.read_text.assert_called_once_with()
             t.path.write_text.assert_called_once_with('the list as written')
 
         with t.subTest('the log of the source takes the records'):
@@ -2350,6 +2352,15 @@ class ChangesetTests(TestCase):
                     ),
                 ],
             )
+
+        with t.subTest('the text as read: the list file is left alone'):
+            # A second write, to a file that holds the text already.
+            steps.clear()
+            t.path.read_text.return_value = 'the list as written'
+
+            t.cs.write()
+
+            t.assertEqual(steps, ['log', 'event', 'event'])
 
 
 class NamedListTests(TestCase):
