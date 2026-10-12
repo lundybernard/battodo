@@ -285,8 +285,8 @@
   slice fixed a rank bug under the old text (#77). 4e373fc amends R7
   to match: a slice fixes a bug at once or files an issue, case by
   case. The last two slices fixed four bugs, each as a red
-  reproduction and then the fix (#77, #83). The test-driven-refactor
-  skill still carries the record-only rule.
+  reproduction and then the fix (#77, #83). Resolved: the
+  test-driven-refactor skill now decides case by case, as R7 does.
 - 2026-10-10: review by key question. For the rest of the refactor and
   the feature that waits on it, the owner reviews by decision, not by
   line. A report and a PR's reviewer notes lead with the decisions that
@@ -295,3 +295,65 @@
   merge: on the mutate slice (#83), one inline comment went to approval
   the same day. Size is not a concern: more lines with less complexity
   is a good trade.
+- 2026-10-11: the ADR group 0019 slices split their docs between the
+  two manuals. #93 changed SKILL.md alone, and #94, #95, #97 and #99
+  changed README.md alone. SKILL.md is the whole manual of an agent
+  that runs `btodo`, so four slices of commands stayed invisible to
+  that agent until the catch-up PR, #104. Resolved: the CLAUDE.md rule
+  from #103 puts the SKILL.md change in the PR that changes the
+  command, and #111 applied it.
+- 2026-10-11: a commit subject starts in lowercase after its type
+  prefix, as Conventional Commits and git's own guide write it. The
+  commit-message skill ruled so on this date. The last capitalized
+  subject on main is `84674d4`, and every later subject is lowercase.
+  The skill wins over the older precedent. Rehomed: the commit-message
+  skill.
+- 2026-10-12: red evidence goes in the report, not in the commit. The
+  22 `test(RED)` commits of #93 to #101 carried the failing test names,
+  the failure text and the line "Every other test passes" in their
+  bodies. A message-only rewrite before the merges replaced each body
+  with a short list of the behaviours that its tests cover, and every
+  branch kept its tree. The cause was the work orders, which asked for
+  the red evidence in the commit body. #90 merged before the rewrite
+  and keeps the old shape (`da455c0`). Rule: the hand-back report and
+  the PR reviewer notes carry the failing tests, the failure text and
+  the zero-collateral line. A red body is empty or a short bullet list
+  of the behaviours covered. Rehomed: the tdd, work-orders and
+  commit-message skills.
+- 2026-10-12: `[REVIEW FIX]` commits never merge to main. Each one
+  folds into the commit that introduced its target, or becomes a plain
+  commit when its change stands alone. #95 folded its three
+  `[REVIEW FIX]` commits with the tree unchanged, and main holds none.
+  A stacked dependent rebases from its old fork point,
+  `git rebase --onto <new base> <old fork point>`, never from the tip
+  of its base, so it replays only its own commits. #111 rebased onto
+  main after #106 and #110 merged, and `git range-diff` marked all 24
+  commits `=`.
+- 2026-10-12: stacked PRs keep the slices moving while the owner is
+  away. A dependent slice bases on the branch of the slice before it.
+  When the base merges and someone deletes its branch, GitHub retargets
+  the dependent to main, and the retarget starts no CI run. #110 added
+  the CPython 3.15 legs to the matrix, and #111, retargeted from the
+  #106 branch, had run only on the old matrix. Rule: when the new base
+  changes the workflow, the dependent rebases and pushes, and the push
+  starts a run on the new matrix (#111).
+- 2026-10-12: a task that comes back reopens under its own id and is
+  never added again. One id keeps one history; a second `add` splits
+  that history across two streams. PR #106 told the operating agent to
+  search the journal before `add`, and #109 found two streams under one
+  title that the `history` refusal could not tell apart. The owner
+  ruled in #107: `update <closed id>` reopens the task. Decision: ADR
+  0025 (#111).
+- 2026-10-12: a write probe runs against a copy. A main-thread probe
+  set the wrong environment variable, and `btodo add` wrote a probe
+  task into a real list, which the owner removed. This repeats the
+  2026-08-08 sandbox lesson in a new form. Rule: a write probe runs in
+  a subagent against a `cp -rL` copy, proves its target with a read
+  first, and checks the file path that the command prints. Rehomed:
+  agent memory.
+- 2026-10-12: the package cooldown holds a new interpreter too.
+  `exclude-newer = "3d"` kept CPython 3.15.0 out of the lock until
+  three days after its conda-forge upload, and #110 made the 3.15 lock
+  after that time with the cooldown unchanged. Wait for the cooldown;
+  never pin around it. The cooldown's first record is the win in
+  [batconf.md](batconf.md).
