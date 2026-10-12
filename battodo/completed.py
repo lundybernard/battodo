@@ -69,16 +69,15 @@ class Digest:
         self.period = period
 
     @classmethod
-    def from_config(cls, conf: Configuration, now: datetime) -> 'Digest':
-        """Build a digest from a resolved configuration.
-
-        A period the user left off is absent, not None.
-        """
-        return cls(
-            Path(conf.view.source_dir),
-            now,
-            period=getattr(conf, 'period', DEFAULT_PERIOD),
-        )
+    def from_config(
+        cls,
+        conf: Configuration,
+        now: datetime,
+        *,
+        period: str,
+    ) -> 'Digest':
+        """Build the digest of `period` from a resolved configuration."""
+        return cls(Path(conf.view.source_dir), now, period=period)
 
     @cached_property
     def today(self) -> date:

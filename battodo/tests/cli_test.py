@@ -1,4 +1,4 @@
-from argparse import _HelpAction, _SubParsersAction
+from argparse import Namespace, _HelpAction, _SubParsersAction
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from types import SimpleNamespace
@@ -112,9 +112,11 @@ class ArgparserTests(TestCase):
     def test_format(t):
         # TODO: --format cuts across the view and show commands. Move it
         # up one level to serve both, or split the cases per command.
-        with t.subTest('view holds text when the flag is not given'):
+        with t.subTest('view holds None when the flag is not given'):
+            # The schema default answers, below the environment and the
+            # config file.
             args = t.parser.parse_args(['view'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
         with t.subTest('view holds json when json is asked for'):
             args = t.parser.parse_args(['view', '--format', 'json'])
@@ -124,22 +126,26 @@ class ArgparserTests(TestCase):
             args = t.parser.parse_args(['view', '--format', 'text'])
             t.assertEqual(getattr(args, 'battodo.format'), 'text')
 
-        with t.subTest('an unknown format exits with a usage error'):
-            stderr = StringIO()
+        for argv in (['view'], ['show', 'brush pile'], ['completed']):
+            with t.subTest(f'an unknown {argv[0]} format is a usage error'):
+                stderr = StringIO()
 
-            with redirect_stderr(stderr), t.assertRaises(SystemExit) as caught:
-                t.parser.parse_args(['view', '--format', 'xml'])
+                with (
+                    redirect_stderr(stderr),
+                    t.assertRaises(SystemExit) as caught,
+                ):
+                    t.parser.parse_args([*argv, '--format', 'xml'])
 
-            t.assertEqual(caught.exception.code, 2)
-            t.assertIn(
-                "error: argument --format: invalid choice: 'xml'",
-                stderr.getvalue(),
-            )
+                t.assertEqual(caught.exception.code, 2)
+                t.assertIn(
+                    "error: argument --format: invalid choice: 'xml'",
+                    stderr.getvalue(),
+                )
 
         with t.subTest('show holds the same two values'):
             # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['show', 'brush pile'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
             args = t.parser.parse_args(
                 ['show', 'brush pile', '--format', 'json']
@@ -149,7 +155,7 @@ class ArgparserTests(TestCase):
         with t.subTest('and so does completed'):
             # Two cycles: each one checks one of the two accepted values.
             args = t.parser.parse_args(['completed'])
-            t.assertEqual(getattr(args, 'battodo.format'), 'text')
+            t.assertIsNone(getattr(args, 'battodo.format'))
 
             args = t.parser.parse_args(['completed', '--format', 'json'])
             t.assertEqual(getattr(args, 'battodo.format'), 'json')
@@ -179,6 +185,15 @@ class ArgparserTests(TestCase):
                     f'error: argument --top: {count_error}: {value}',
                     stderr.getvalue(),
                 )
+
+    def test_view_all(t):
+        with t.subTest('Default: False'):
+            args = t.parser.parse_args(['view'])
+            t.assertFalse(args.show_all)
+
+        with t.subTest('view --all asks for every item'):
+            args = t.parser.parse_args(['view', '--all'])
+            t.assertTrue(args.show_all)
 
     def test_every_subcommand_reaches_its_command(t):
         cases = [
@@ -213,28 +228,34 @@ class ArgparserTests(TestCase):
         for flag in ('-p', '--priority'):
             with t.subTest(flag):
                 args = t.parser.parse_args(['add', 'chores', 'X', flag, '4'])
-                t.assertEqual(getattr(args, 'battodo.priority'), '4')
+                t.assertEqual(args.priority, '4')
+
+    def test_selector(t):
+        for command in ('show', 'update', 'done', 'scratch'):
+            with t.subTest(command):
+                args = t.parser.parse_args([command, 'brush pile'])
+                t.assertEqual(args.selector, 'brush pile')
 
     def test_done_date(t):
         with t.subTest('Default: None'):
             args = t.parser.parse_args(['done', 'brush pile'])
-            t.assertIsNone(getattr(args, 'battodo.date'))
+            t.assertIsNone(args.date)
 
         with t.subTest('done --date accepts an ISO date string'):
             args = t.parser.parse_args(
                 ['done', 'brush pile', '--date', '2026-08-15'],
             )
-            t.assertEqual(getattr(args, 'battodo.date'), '2026-08-15')
+            t.assertEqual(args.date, '2026-08-15')
 
     def test_completed_period(t):
         with t.subTest('the week when none is named'):
             args = t.parser.parse_args(['completed'])
-            t.assertEqual(getattr(args, 'battodo.period'), DEFAULT_PERIOD)
+            t.assertEqual(args.period, DEFAULT_PERIOD)
 
         for period in PERIODS:
             with t.subTest(period):
                 args = t.parser.parse_args(['completed', period])
-                t.assertEqual(getattr(args, 'battodo.period'), period)
+                t.assertEqual(args.period, period)
 
         with t.subTest('a period with no definition is a usage error'):
             stderr = StringIO()
@@ -297,7 +318,7 @@ class BATCLITests(TestCase):
                         config_file_name=args.config_file,
                         config_env=args.config_env,
                     )
-                    m_cmd.assert_called_with(t.get_config.return_value)
+                    m_cmd.assert_called_with(t.get_config.return_value, args)
                     t.exit.assert_called_with(0)
 
     @patch(f'{SRC}.Commands.view', autospec=True)
@@ -332,7 +353,7 @@ class BATCLITests(TestCase):
 
         exc = Exception('boom')
 
-        def fail(conf):
+        def fail(conf, args):
             raise exc
 
         args = argparser().parse_args([])
@@ -389,15 +410,17 @@ class CommandsViewTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'show_all', 'format'])
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(show_all=True)
 
     def test_view(t):
-        Commands.view(t.conf)
+        Commands.view(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_view.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                show_all=True,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -420,9 +443,10 @@ class CommandsBackfillTests(TestCase):
         t.addCleanup(patcher.stop)
 
         t.conf = Mock(spec=['view'])
+        t.args = Namespace()
 
     def test_backfill(t):
-        Commands.backfill(t.conf)
+        Commands.backfill(t.conf, t.args)
 
         with t.subTest('the configuration reaches the library unread'):
             t.backfill_items.assert_called_once_with(
@@ -449,15 +473,33 @@ class CommandsAddTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(
+            list_name='a list',
+            title='a title',
+            parent='a parent',
+            priority='a priority',
+            loe='a loe',
+            due='a due date',
+            repeat='a repeat',
+            tags='some tags',
+        )
 
     def test_add(t):
-        Commands.add(t.conf)
+        Commands.add(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.add_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                list_name='a list',
+                title='a title',
+                parent='a parent',
+                priority='a priority',
+                loe='a loe',
+                due='a due date',
+                repeat='a repeat',
+                tags='some tags',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -479,15 +521,17 @@ class CommandsShowTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector', 'format'])
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(selector='a selector')
 
     def test_show(t):
-        Commands.show(t.conf)
+        Commands.show(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -509,15 +553,17 @@ class CommandsCompletedTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'period', 'format'])
+        t.conf = Mock(spec=['view', 'format'])
+        t.args = Namespace(period='a period')
 
     def test_completed(t):
-        Commands.completed(t.conf)
+        Commands.completed(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.get_completed.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                period='a period',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -539,15 +585,27 @@ class CommandsUpdateTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(
+            selector='a selector',
+            title='a title',
+            priority='a priority',
+            due='a due date',
+            tags='some tags',
+        )
 
     def test_update(t):
-        Commands.update(t.conf)
+        Commands.update(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.update_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
+                title='a title',
+                priority='a priority',
+                due='a due date',
+                tags='some tags',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -569,15 +627,18 @@ class CommandsDoneTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector'])
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(selector='a selector', date='a date')
 
     def test_done(t):
-        Commands.done(t.conf)
+        Commands.done(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the inputs reach the library beside the config'):
             t.complete_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
+                date='a date',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):
@@ -599,15 +660,17 @@ class CommandsScratchTests(TestCase):
         t.print = patcher.start()
         t.addCleanup(patcher.stop)
 
-        t.conf = Mock(spec=['view', 'selector'])
+        t.conf = Mock(spec=['view'])
+        t.args = Namespace(selector='a selector')
 
     def test_scratch(t):
-        Commands.scratch(t.conf)
+        Commands.scratch(t.conf, t.args)
 
-        with t.subTest('the configuration reaches the library unread'):
+        with t.subTest('the input reaches the library beside the config'):
             t.scratch_item.assert_called_once_with(
                 t.conf,
                 t.datetime.now.return_value,
+                selector='a selector',
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

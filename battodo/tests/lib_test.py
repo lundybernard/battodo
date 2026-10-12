@@ -30,18 +30,20 @@ class GetViewTests(TestCase):
         t.selection = t.Selection.from_config.return_value
 
         t.now = sentinel.now
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['view', 'format'])
         t.conf.format = 'text'
 
     def test_selection(t):
-        get_view(t.conf, t.now)
+        get_view(t.conf, t.now, show_all=True)
         # The configuration is decoded once, by the selection.
-        t.Selection.from_config.assert_called_once_with(t.conf, t.now)
+        t.Selection.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            show_all=True,
+        )
 
     def test_text(t):
-        rendered = get_view(t.conf, t.now)
+        rendered = get_view(t.conf, t.now, show_all=True)
         t.View.assert_called_once_with(t.selection)
         t.assertEqual(rendered, t.View.return_value.text)
 
@@ -49,7 +51,7 @@ class GetViewTests(TestCase):
     def test_json(t, selection_json_view):
         t.conf.format = 'json'
 
-        rendered = get_view(t.conf, t.now)
+        rendered = get_view(t.conf, t.now, show_all=True)
 
         selection_json_view.assert_called_once_with(t.selection)
         t.assertEqual(rendered, selection_json_view.return_value.json)
@@ -57,10 +59,16 @@ class GetViewTests(TestCase):
         # built.
         t.View.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=['view'])
-        rendered = get_view(conf, t.now)
-        t.assertEqual(rendered, t.View.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_view(t.conf, t.now, show_all=True)
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class GetCompletedTests(TestCase):
@@ -78,12 +86,16 @@ class GetCompletedTests(TestCase):
         t.conf.format = 'text'
 
     def test_digest(t):
-        get_completed(t.conf, t.now)
+        get_completed(t.conf, t.now, period='a period')
         # The configuration is decoded once, by the digest.
-        t.Digest.from_config.assert_called_once_with(t.conf, t.now)
+        t.Digest.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            period='a period',
+        )
 
     def test_text(t):
-        rendered = get_completed(t.conf, t.now)
+        rendered = get_completed(t.conf, t.now, period='a period')
         t.DigestView.assert_called_once_with(t.digest)
         t.assertEqual(rendered, t.DigestView.return_value.text)
 
@@ -91,17 +103,23 @@ class GetCompletedTests(TestCase):
     def test_json(t, digest_json_view):
         t.conf.format = 'json'
 
-        rendered = get_completed(t.conf, t.now)
+        rendered = get_completed(t.conf, t.now, period='a period')
 
         digest_json_view.assert_called_once_with(t.digest)
         t.assertEqual(rendered, digest_json_view.return_value.json)
         # The JSON view serializes the digest; the text view is not built.
         t.DigestView.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=['view'])
-        rendered = get_completed(conf, t.now)
-        t.assertEqual(rendered, t.DigestView.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_completed(t.conf, t.now, period='a period')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class GetItemTests(TestCase):
@@ -116,18 +134,20 @@ class GetItemTests(TestCase):
         t.item = t.Item.from_config.return_value
 
         t.now = sentinel.now
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
         t.conf = Mock(spec=['format'])
         t.conf.format = 'text'
 
     def test_item(t):
-        get_item(t.conf, t.now)
+        get_item(t.conf, t.now, selector='a selector')
         # The configuration is decoded once, by the item.
-        t.Item.from_config.assert_called_once_with(t.conf, t.now)
+        t.Item.from_config.assert_called_once_with(
+            t.conf,
+            t.now,
+            selector='a selector',
+        )
 
     def test_text(t):
-        rendered = get_item(t.conf, t.now)
+        rendered = get_item(t.conf, t.now, selector='a selector')
         t.ItemView.assert_called_once_with(t.item)
         t.assertEqual(rendered, t.ItemView.return_value.text)
 
@@ -135,17 +155,23 @@ class GetItemTests(TestCase):
     def test_json(t, item_json_view):
         t.conf.format = 'json'
 
-        rendered = get_item(t.conf, t.now)
+        rendered = get_item(t.conf, t.now, selector='a selector')
 
         item_json_view.assert_called_once_with(t.item)
         t.assertEqual(rendered, item_json_view.return_value.json)
         # The JSON view serializes the item; the text view is not built.
         t.ItemView.assert_not_called()
 
-    def test_unconfigured_format(t):
-        conf = Mock(spec=[])
-        rendered = get_item(conf, t.now)
-        t.assertEqual(rendered, t.ItemView.return_value.text)
+    def test_unknown_format(t):
+        t.conf.format = 'xml'
+
+        with t.assertRaises(ValueError) as caught:
+            get_item(t.conf, t.now, selector='a selector')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown format 'xml'; choose one of text, json",
+        )
 
 
 class AddItemTests(TestCase):
@@ -163,60 +189,62 @@ class AddItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        # spec models batconf: an argument the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'list', 'title', 'priority', 'due'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.list = 'a-list'
-        t.conf.title = 'A task title'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
+        t.inputs = {
+            'list_name': 'a-list',
+            'title': 'A task title',
+            'priority': '4',
+            'loe': '2',
+            'due': '2026-09-01',
+            'repeat': '15d',
+            'tags': 'yard,summer',
+        }
 
     def test_forwarded(t):
-        add_item(t.conf, t.now)
+        add_item(t.conf, t.now, **t.inputs)
         t.Addition.assert_called_once_with(
             SOURCE,
             'a-list',
             'A task title',
-            {'P': '4', 'DUE': '2026-09-01'},
+            {
+                'P': '4',
+                'LOE': '2',
+                'DUE': '2026-09-01',
+                'REPEAT': '15d',
+                'TAGS': 'yard,summer',
+            },
             t.today,
         )
 
     def test_written(t):
-        add_item(t.conf, t.now)
+        add_item(t.conf, t.now, **t.inputs)
         t.addition.write.assert_called_once_with()
 
     def test_result(t):
-        written = add_item(t.conf, t.now)
+        written = add_item(t.conf, t.now, **t.inputs)
         # A P-less add ranks near 0 and will not show in a view, so
         # this is the only confirmation of the write.
         t.assertEqual(written, f'{t.addition.entry}\n{t.addition.path}')
 
     def test_no_fields(t):
-        conf = Mock(spec=['view', 'list', 'title'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'a-list'
-        conf.title = 'A task title'
-
-        add_item(conf, t.now)
-
+        add_item(t.conf, t.now, list_name='a-list', title='A task title')
         t.assertEqual(t.Addition.call_args[0][3], {})
 
     def test_subtask(t):
-        conf = Mock(spec=['view', 'list', 'title', 'parent', 'loe'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.list = 'a-list'
-        conf.title = 'A subtask title'
-        conf.parent = '9o71lx'
-        conf.loe = '2'
         addition = t.SubtaskAddition.return_value
         addition.path = Path('~/a-source-dir/a-list.md')
         addition.entry = '  - [ ] A subtask title [LOE:2] [ID:cd34ef]'
 
-        written = add_item(conf, t.now)
+        written = add_item(
+            t.conf,
+            t.now,
+            list_name='a-list',
+            title='A subtask title',
+            parent='9o71lx',
+            loe='2',
+        )
 
         with t.subTest('a parent sends the add to a subtask'):
             t.Addition.assert_not_called()
@@ -252,18 +280,18 @@ class UpdateItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        # spec models batconf: an option the user did not supply is
-        # absent from the Configuration, not None.
-        t.conf = Mock(spec=['view', 'selector', 'priority', 'due', 'title'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.selector = 'a selector'
-        t.conf.priority = '4'
-        t.conf.due = '2026-09-01'
-        t.conf.title = 'A task title'
+        t.inputs = {
+            'selector': 'a selector',
+            'priority': '4',
+            'due': '2026-09-01',
+            'title': 'A task title',
+        }
 
     def test_forwarded(t):
-        update_item(t.conf, t.now)
+        update_item(t.conf, t.now, **t.inputs)
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
         t.Update.assert_called_once_with(
@@ -273,21 +301,20 @@ class UpdateItemTests(TestCase):
         )
 
     def test_written(t):
-        update_item(t.conf, t.now)
+        update_item(t.conf, t.now, **t.inputs)
         t.update.write.assert_called_once_with()
 
     def test_result(t):
-        written = update_item(t.conf, t.now)
+        written = update_item(t.conf, t.now, **t.inputs)
         t.assertEqual(written, f'{t.update.entry}\n{t.update.path}')
 
     def test_option_left_off(t):
-        conf = Mock(spec=['view', 'selector', 'tags'])
-        conf.view = Mock(spec=['source_dir'])
-        conf.view.source_dir = '~/a-source-dir'
-        conf.selector = 'a selector'
-        conf.tags = 'a-tag,another-tag'
-
-        update_item(conf, t.now)
+        update_item(
+            t.conf,
+            t.now,
+            selector='a selector',
+            tags='a-tag,another-tag',
+        )
 
         # An option left off names no change to that field.
         args, kwargs = t.Update.call_args
@@ -314,8 +341,8 @@ class CompleteItemTests(TestCase):
 
         t.now = sentinel.now
         # The task decodes the configuration, so this call reads no
-        # value off it. The spec still names what a `done` carries.
-        t.conf = Mock(spec=['view', 'selector'])
+        # value off it.
+        t.conf = Mock(spec=['view'])
 
     def test_result(t):
         # Completing the last open child completes its parent too, so
@@ -325,7 +352,7 @@ class CompleteItemTests(TestCase):
             '2026-08-08 | a-list | DONE | A parent',
         ]
 
-        logged = complete_item(t.conf, t.now)
+        logged = complete_item(t.conf, t.now, selector='a selector')
 
         t.assertEqual(
             logged,
@@ -334,20 +361,37 @@ class CompleteItemTests(TestCase):
         )
 
     def test_task(t):
-        complete_item(t.conf, t.now)
+        complete_item(t.conf, t.now, selector='a selector', date='a date')
 
-        with t.subTest('the configuration is decoded once, by the task'):
-            t.Task.from_config.assert_called_once_with(t.conf, t.now)
+        with t.subTest('the task decodes the configuration and the inputs'):
+            t.Task.from_config.assert_called_once_with(
+                t.conf,
+                t.now,
+                selector='a selector',
+                date='a date',
+            )
 
         with t.subTest('which the completion is built on'):
             t.Completion.assert_called_once_with(t.task)
 
+        with t.subTest('a date left off is None'):
+            t.Task.from_config.reset_mock()
+
+            complete_item(t.conf, t.now, selector='a selector')
+
+            t.Task.from_config.assert_called_once_with(
+                t.conf,
+                t.now,
+                selector='a selector',
+                date=None,
+            )
+
     def test_written(t):
-        complete_item(t.conf, t.now)
+        complete_item(t.conf, t.now, selector='a selector')
         t.completion.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        logged = complete_item(t.conf, t.now)
+        logged = complete_item(t.conf, t.now, selector='a selector')
         t.assertEqual(logged, 'checked off')
 
 
@@ -365,17 +409,16 @@ class ScratchItemTests(TestCase):
 
         t.now = Mock(spec=datetime)
         t.today = t.now.date.return_value
-        t.conf = Mock(spec=['view', 'selector'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir'])
         t.conf.view.source_dir = '~/a-source-dir'
-        t.conf.selector = 'a selector'
 
     def test_result(t):
         t.scratch.entries = [
             '2026-08-08 | a-list | SCRATCHED | A parent > A child',
         ]
 
-        logged = scratch_item(t.conf, t.now)
+        logged = scratch_item(t.conf, t.now, selector='a selector')
 
         t.assertEqual(
             logged,
@@ -383,17 +426,17 @@ class ScratchItemTests(TestCase):
         )
 
     def test_forwarded(t):
-        scratch_item(t.conf, t.now)
+        scratch_item(t.conf, t.now, selector='a selector')
 
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
         t.Scratch.assert_called_once_with(t.Task.return_value)
 
     def test_written(t):
-        scratch_item(t.conf, t.now)
+        scratch_item(t.conf, t.now, selector='a selector')
         t.scratch.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        logged = scratch_item(t.conf, t.now)
+        logged = scratch_item(t.conf, t.now, selector='a selector')
         t.assertEqual(logged, 'dropped')
 
 

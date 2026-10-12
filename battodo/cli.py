@@ -7,6 +7,7 @@ from logging.config import dictConfig
 from battodo.conf import CONFIG_ROOT, get_config
 from battodo.lib import (
     DEFAULT_PERIOD,
+    FORMATS,
     PERIODS,
     TZ,
     add_item,
@@ -39,7 +40,7 @@ def BATCLI(ARGS=None):
     Commands.set_log_level(conf)
     # execute function set for parsed command
     try:
-        args.func(conf)
+        args.func(conf, args)
     # Top-level CLI boundary: any command failure becomes a message on
     # stderr, never a traceback. stdout carries the command's output and
     # nothing else, so a consumer can parse it unconditionally; the help
@@ -98,13 +99,14 @@ def argparser():
         help=MESSAGES['view.help'],
     )
     view.set_defaults(func=Commands.view)
-    # Arguments read back through the Configuration are named for their
-    # dotted config path: batconf looks up `{path}.{key}` as one flat
-    # attribute (batconf.sources.argparse.NamespaceConfig), never the
-    # bare dest. Arguments read straight off `args` stay unprefixed.
+    # A config option takes its dotted config path as the dest, because
+    # batconf looks up `{path}.{key}` as one flat attribute. It takes no
+    # default: batconf takes the first truthy source, so a default
+    # blocks the environment and the file. A command input takes a bare
+    # dest, and the command passes it beside the configuration.
     view.add_argument(
         '--all',
-        dest=f'{CONFIG_ROOT}.show_all',
+        dest='show_all',
         action='store_true',
         help=MESSAGES['view.all.help'],
     )
@@ -117,8 +119,7 @@ def argparser():
     view.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['view.format.help'],
     )
 
@@ -129,44 +130,38 @@ def argparser():
     )
     add.set_defaults(func=Commands.add)
     add.add_argument(
-        f'{CONFIG_ROOT}.list',
+        'list_name',
         metavar=MESSAGES['add.list.metavar'],
         help=MESSAGES['add.list.help'],
     )
     add.add_argument(
-        f'{CONFIG_ROOT}.title',
+        'title',
         metavar=MESSAGES['add.title.metavar'],
         help=MESSAGES['add.title.help'],
     )
     add.add_argument(
         '-p',
         '--priority',
-        dest=f'{CONFIG_ROOT}.priority',
         help=MESSAGES['add.priority.help'],
     )
     add.add_argument(
         '--loe',
-        dest=f'{CONFIG_ROOT}.loe',
         help=MESSAGES['add.loe.help'],
     )
     add.add_argument(
         '--due',
-        dest=f'{CONFIG_ROOT}.due',
         help=MESSAGES['add.due.help'],
     )
     add.add_argument(
         '--repeat',
-        dest=f'{CONFIG_ROOT}.repeat',
         help=MESSAGES['add.repeat.help'],
     )
     add.add_argument(
         '--tags',
-        dest=f'{CONFIG_ROOT}.tags',
         help=MESSAGES['add.tags.help'],
     )
     add.add_argument(
         '--parent',
-        dest=f'{CONFIG_ROOT}.parent',
         help=MESSAGES['add.parent.help'],
     )
 
@@ -177,15 +172,14 @@ def argparser():
     )
     show.set_defaults(func=Commands.show)
     show.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['show.selector.metavar'],
         help=MESSAGES['show.selector.help'],
     )
     show.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['show.format.help'],
     )
 
@@ -196,29 +190,25 @@ def argparser():
     )
     update.set_defaults(func=Commands.update)
     update.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['update.selector.metavar'],
         help=MESSAGES['update.selector.help'],
     )
     update.add_argument(
         '-p',
         '--priority',
-        dest=f'{CONFIG_ROOT}.priority',
         help=MESSAGES['update.priority.help'],
     )
     update.add_argument(
         '--due',
-        dest=f'{CONFIG_ROOT}.due',
         help=MESSAGES['update.due.help'],
     )
     update.add_argument(
         '--tags',
-        dest=f'{CONFIG_ROOT}.tags',
         help=MESSAGES['update.tags.help'],
     )
     update.add_argument(
         '--title',
-        dest=f'{CONFIG_ROOT}.title',
         help=MESSAGES['update.title.help'],
     )
 
@@ -229,13 +219,12 @@ def argparser():
     )
     done.set_defaults(func=Commands.done)
     done.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['done.selector.metavar'],
         help=MESSAGES['done.selector.help'],
     )
     done.add_argument(
         '--date',
-        dest=f'{CONFIG_ROOT}.date',
         help=MESSAGES['done.date.help'],
     )
 
@@ -246,7 +235,7 @@ def argparser():
     )
     drop.set_defaults(func=Commands.scratch)
     drop.add_argument(
-        f'{CONFIG_ROOT}.selector',
+        'selector',
         metavar=MESSAGES['scratch.selector.metavar'],
         help=MESSAGES['scratch.selector.help'],
     )
@@ -265,7 +254,7 @@ def argparser():
     )
     completed.set_defaults(func=Commands.completed)
     completed.add_argument(
-        f'{CONFIG_ROOT}.period',
+        'period',
         nargs='?',
         choices=PERIODS,
         default=DEFAULT_PERIOD,
@@ -275,8 +264,7 @@ def argparser():
     completed.add_argument(
         '--format',
         dest=f'{CONFIG_ROOT}.format',
-        choices=('text', 'json'),
-        default='text',
+        choices=FORMATS,
         help=MESSAGES['completed.format.help'],
     )
 
@@ -301,7 +289,7 @@ def checked_count(value: str) -> str:
 
 
 def get_help(parser):
-    def help(args):
+    def help(conf, args):
         parser.print_help()
 
     return help
@@ -309,36 +297,66 @@ def get_help(parser):
 
 class Commands:
     @staticmethod
-    def add(conf):
-        print(add_item(conf, datetime.now(TZ)))
+    def add(conf, args):
+        print(
+            add_item(
+                conf,
+                datetime.now(TZ),
+                list_name=args.list_name,
+                title=args.title,
+                parent=args.parent,
+                priority=args.priority,
+                loe=args.loe,
+                due=args.due,
+                repeat=args.repeat,
+                tags=args.tags,
+            )
+        )
 
     @staticmethod
-    def show(conf):
-        print(get_item(conf, datetime.now(TZ)))
+    def show(conf, args):
+        print(get_item(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
-    def update(conf):
-        print(update_item(conf, datetime.now(TZ)))
+    def update(conf, args):
+        print(
+            update_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                title=args.title,
+                priority=args.priority,
+                due=args.due,
+                tags=args.tags,
+            )
+        )
 
     @staticmethod
-    def done(conf):
-        print(complete_item(conf, datetime.now(TZ)))
+    def done(conf, args):
+        print(
+            complete_item(
+                conf,
+                datetime.now(TZ),
+                selector=args.selector,
+                date=args.date,
+            )
+        )
 
     @staticmethod
-    def scratch(conf):
-        print(scratch_item(conf, datetime.now(TZ)))
+    def scratch(conf, args):
+        print(scratch_item(conf, datetime.now(TZ), selector=args.selector))
 
     @staticmethod
-    def backfill(conf):
+    def backfill(conf, args):
         print(backfill_items(conf, datetime.now(TZ)))
 
     @staticmethod
-    def view(conf):
-        print(get_view(conf, datetime.now(TZ)))
+    def view(conf, args):
+        print(get_view(conf, datetime.now(TZ), show_all=args.show_all))
 
     @staticmethod
-    def completed(conf):
-        print(get_completed(conf, datetime.now(TZ)))
+    def completed(conf, args):
+        print(get_completed(conf, datetime.now(TZ), period=args.period))
 
     @staticmethod
     def set_log_level(conf):

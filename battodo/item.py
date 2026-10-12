@@ -44,14 +44,20 @@ class Item:
         self.task = task
 
     @classmethod
-    def from_config(cls, conf: Configuration, now: datetime) -> 'Item':
-        """Build an item from a resolved configuration.
+    def from_config(
+        cls,
+        conf: Configuration,
+        now: datetime,
+        *,
+        selector: str,
+    ) -> 'Item':
+        """Build the item `selector` names from a resolved configuration.
 
         The local day of the clock decides the rank.
         """
         task = Task(
             Path(conf.view.source_dir),
-            conf.selector,
+            selector,
             now.date(),
         )
         return cls(task)

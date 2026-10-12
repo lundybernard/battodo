@@ -242,14 +242,13 @@ class SelectionFromConfigTests(TestCase):
 
     def setUp(t) -> None:
         t.now = at('2026-08-05T10:30')
-        t.conf = Mock(spec=['view', 'show_all'])
+        t.conf = Mock(spec=['view'])
         t.conf.view = Mock(spec=['source_dir', 'top'])
         t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
-        t.conf.show_all = True
 
     def test_from_config(t) -> None:
-        selection = Selection.from_config(t.conf, t.now)
+        selection = Selection.from_config(t.conf, t.now, show_all=True)
 
         with t.subTest('the source directory is left unexpanded'):
             t.assertEqual(selection.directory, Path('~/a-source-dir'))
@@ -260,23 +259,13 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('the count is read as a number'):
             t.assertEqual(selection.top_n, 2)
 
-        with t.subTest('and the flag as a flag'):
+        with t.subTest('and the flag is the one given'):
             t.assertTrue(selection.show_all)
-
-        with t.subTest('an unsupplied flag reads as off'):
-            conf = Mock(spec=['view'])
-            conf.view = Mock(spec=['source_dir', 'top'])
-            conf.view.source_dir = '~/a-source-dir'
-            conf.view.top = str(TOP_N)
-
-            ret = Selection.from_config(conf, t.now)
-
-            t.assertFalse(ret.show_all)
 
         with t.subTest('a count below one is refused'):
             t.conf.view.top = '0'
             with t.assertRaises(ValueError):
-                Selection.from_config(t.conf, t.now)
+                Selection.from_config(t.conf, t.now, show_all=False)
 
 
 class TodoListTests(TestCase):

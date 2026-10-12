@@ -1,31 +1,58 @@
-"""Contract test for the seam between the parser and the configuration.
+"""Contract tests for the seam between the parser and the configuration.
 
-Parsed CLI arguments must resolve through the real `Configuration`.
-The contract only exists when the real parser and the real
-`get_config` meet, so both are real here; the config file is the one
-dependency stood in for.
+A config option resolves through the real `Configuration`. A command
+input passes beside it, so no environment variable and no config file
+reaches it. The contract only exists when the real parser and the real
+`get_config` meet, so both are real here. The config file is stood in
+for, unless a test writes one.
 """
 
+from contextlib import redirect_stdout
+from datetime import datetime
+from io import StringIO
+from json import loads
+from os import environ
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from battodo.cli import DEFAULT_PERIOD, argparser, get_config
+from batconf import TomlSource
+from batconf.types import SourceInterfaceP
+
+from battodo.cli import TZ, argparser, get_config
 from battodo.view import TOP_N
+
+SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
+FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
+# A day other than the clock's, so a value that leaks in shows.
+STRAY_DATE = '2020-01-01'
+# No category window shuts this list: the display order does not name
+# it.
+YARD = (
+    '# Yard\n'
+    '\n'
+    '## Open\n'
+    '\n'
+    '- [ ] Rake leaves [P:3] [ID:rk01lv]\n'
+    '- [ ] Sweep deck [P:2]\n'
+)
+
+
+class NullFileSource:
+    """Stands in for the config file; the filesystem is out of scope."""
+
+    def get(self, key: str, path: str | None = None) -> None:
+        return None
 
 
 class CliArgsResolutionTests(TestCase):
-    """Parsed CLI arguments must resolve through the real Configuration.
+    """Parsed config options must resolve through the real Configuration.
 
     Cross-module by necessity: the contract under test is the seam
     between argparse dests and batconf's dotted config paths, which only
     exists when the real parser and the real get_config meet.
     """
-
-    class NullFileSource:
-        """Stands in for the config file; the filesystem is out of scope."""
-
-        def get(self, key: str, path: str | None = None) -> None:
-            return None
 
     def setUp(t):
         # The environment source outranks the schema defaults: an
@@ -36,20 +63,23 @@ class CliArgsResolutionTests(TestCase):
 
     def resolve(t, argv):
         args = argparser().parse_args(argv)
-        return get_config(cli_args=args, config_file=t.NullFileSource())
+        return get_config(cli_args=args, config_file=NullFileSource())
 
     def test_cli_args(t):
-        with t.subTest('a positional reaches the command'):
-            conf = t.resolve(['done', 'brush pile'])
-            t.assertEqual(conf.selector, 'brush pile')
-
-        with t.subTest('an option reaches the command'):
+        with t.subTest('a format reaches the command'):
             conf = t.resolve(['view', '--format', 'json'])
             t.assertEqual(conf.format, 'json')
 
-        with t.subTest('a flag reaches the command'):
-            conf = t.resolve(['view', '--all'])
-            t.assertTrue(conf.show_all)
+        with (
+            t.subTest('and the environment answers when no flag is given'),
+            patch.dict(environ, {'BATTODO_FORMAT': 'json'}),
+        ):
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.format, 'json')
+
+        with t.subTest('and the schema answers when no source does'):
+            conf = t.resolve(['view'])
+            t.assertEqual(conf.format, 'text')
 
         with t.subTest('the log level reaches the command'):
             conf = t.resolve(['--debug', 'view'])
@@ -67,52 +97,139 @@ class CliArgsResolutionTests(TestCase):
             conf = t.resolve(['view'])
             t.assertEqual(conf.view.top, str(TOP_N))
 
-        with t.subTest('both add positionals reach the command'):
-            conf = t.resolve(['add', 'chores', 'Water it'])
-            t.assertEqual(conf.list, 'chores')
-            t.assertEqual(conf.title, 'Water it')
 
-        with t.subTest('every add field reaches the command'):
-            conf = t.resolve(
-                [
-                    'add',
-                    'chores',
-                    'X',
-                    '-p',
-                    '4',
-                    '--loe',
-                    '2',
-                    '--due',
-                    '2026-09-01',
-                    '--repeat',
-                    '15d',
-                    '--tags',
-                    'yard,summer',
-                ]
+class CommandInputTests(TestCase):
+    """Contract tests for the command inputs of battodo.cli.Commands.
+
+    A command input passes beside the configuration, so no environment
+    variable and no config file reaches it. Each run reads and writes a
+    real list in a temporary source directory.
+    """
+
+    maxDiff = None
+
+    def setUp(t):
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        t.root = Path(tmp.name)
+        t.source = t.root / 'todo'
+        t.source.mkdir()
+        (t.source / 'yard.md').write_text(YARD, encoding='utf-8')
+
+        patcher = patch('battodo.cli.datetime', autospec=True)
+        t.datetime = patcher.start()
+        t.addCleanup(patcher.stop)
+        t.datetime.now.return_value = FROZEN
+
+    def run_command(
+        t,
+        argv: list[str],
+        env: dict[str, str],
+        config_file: SourceInterfaceP | None = None,
+    ) -> str:
+        """Run one command with `env` as the whole environment.
+
+        The configuration reads its sources lazily, so the command runs
+        inside the patched environment. Returns what the command
+        printed.
+        """
+        args = argparser().parse_args(argv)
+        out = StringIO()
+        with (
+            patch.dict(environ, {SOURCE_VAR: str(t.source)} | env, clear=True),
+            redirect_stdout(out),
+        ):
+            conf = get_config(
+                cli_args=args,
+                config_file=config_file or NullFileSource(),
+            )
+            args.func(conf, args)
+        return out.getvalue()
+
+    @patch('battodo.mutate.new_task_id', autospec=True)
+    def test_add(t, new_task_id: MagicMock):
+        new_task_id.return_value = 'nw01id'
+        listed = t.source / 'yard.md'
+
+        with t.subTest('BATTODO_PARENT does not reach add'):
+            ret = t.run_command(
+                ['add', 'yard', 'Water it'],
+                {'BATTODO_PARENT': 'rk01lv'},
             )
 
-            t.assertEqual(conf.priority, '4')
-            t.assertEqual(conf.loe, '2')
-            t.assertEqual(conf.due, '2026-09-01')
-            t.assertEqual(conf.repeat, '15d')
-            t.assertEqual(conf.tags, 'yard,summer')
+            t.assertEqual(
+                ret,
+                f'- [ ] Water it [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
+            )
 
-        with t.subTest('an omitted add field is absent, not empty'):
-            conf = t.resolve(['add', 'chores', 'X'])
-            t.assertIsNone(getattr(conf, 'due', None))
+        with t.subTest('BATTODO_LOE does not reach add'):
+            ret = t.run_command(
+                ['add', 'yard', 'Mow lawn'],
+                {'BATTODO_LOE': '8'},
+            )
 
-        with t.subTest('an optional positional reaches the command'):
-            conf = t.resolve(['completed', 'month'])
-            t.assertEqual(conf.period, 'month')
+            t.assertEqual(
+                ret,
+                f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
+            )
 
-        with t.subTest('and an omitted one falls back to the default'):
-            conf = t.resolve(['completed'])
-            t.assertEqual(conf.period, DEFAULT_PERIOD)
+    def test_view(t):
+        with t.subTest('BATTODO_SHOW_ALL does not reach view'):
+            ret = t.run_command(
+                ['view', '--format', 'json'],
+                {'BATTODO_SHOW_ALL': 'false', 'BATTODO_VIEW_TOP': '1'},
+            )
 
-        with t.subTest('a completion date reaches the command'):
-            conf = t.resolve(['done', 'brush pile', '--date', '2026-08-15'])
-            t.assertEqual(conf.date, '2026-08-15')
+            # One of the two open tasks shows. The other is abridged.
+            t.assertEqual(loads(ret)['categories'][0]['hidden'], 1)
 
-        with t.subTest('and an omitted one is absent, not empty'):
-            conf = t.resolve(['done', 'brush pile'])
-            t.assertIsNone(getattr(conf, 'date', None))
+    def test_done(t):
+        with t.subTest('BATTODO_DATE does not reach done'):
+            ret = t.run_command(
+                ['done', 'rk01lv'],
+                {'BATTODO_DATE': STRAY_DATE},
+            )
+
+            t.assertEqual(
+                ret, '2026-08-05 | yard | DONE | Rake leaves [P:3]\n'
+            )
+
+        with t.subTest('a date in the config file does not reach done'):
+            config_file = t.root / 'battodo.toml'
+            config_file.write_text(
+                f'[test.battodo]\ndate = "{STRAY_DATE}"\n',
+                encoding='utf-8',
+            )
+
+            ret = t.run_command(
+                ['done', 'Sweep deck'],
+                {},
+                TomlSource(str(config_file), config_env='test'),
+            )
+
+            t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+    def test_update(t):
+        listed = t.source / 'yard.md'
+
+        with t.subTest('BATTODO_TITLE does not reach update'):
+            ret = t.run_command(
+                ['update', 'rk01lv', '-p', '4'],
+                {'BATTODO_TITLE': 'Renamed'},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:4] [ID:rk01lv]\n{listed}\n',
+            )
+
+        with t.subTest('BATTODO_DUE does not reach update'):
+            ret = t.run_command(
+                ['update', 'rk01lv', '-p', '5'],
+                {'BATTODO_DUE': STRAY_DATE},
+            )
+
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
+            )

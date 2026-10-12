@@ -1,16 +1,14 @@
 """The functions a UI calls to do one whole job.
 
-Each takes the resolved configuration and returns finished output, so
-a UI holds only its own input and display. A script imports the same
-functions.
+Each takes the resolved configuration, then the command inputs as
+keyword arguments, and returns finished output, so a UI holds only its
+own input and display. A keyword of None means that the input was not
+given. A script imports the same functions.
 
 Every code path a UI executes runs through this module. The names its
 own input handling needs are re-exported here: the zone of the clock,
-the periods, and the count check. Startup wiring stays out: a UI reads
-its logging configuration from `logconf`.
-
-The interface is provisional: what a function takes, a configuration
-or plain arguments, is not settled.
+the periods, the formats, and the count check. Startup wiring stays
+out: a UI reads its logging configuration from `logconf`.
 """
 
 from datetime import datetime
@@ -41,6 +39,7 @@ from .view import Selection, SelectionJsonView, View
 
 __all__ = [
     'DEFAULT_PERIOD',
+    'FORMATS',
     'PERIODS',
     'TZ',
     'add_item',
@@ -54,19 +53,8 @@ __all__ = [
     'update_item',
 ]
 
-# The SCHEMA.md fields an add can write, by the option that supplies
-# each. Every one is optional.
-ADD_FIELDS = {
-    'P': 'priority',
-    'LOE': 'loe',
-    'DUE': 'due',
-    'REPEAT': 'repeat',
-    'TAGS': 'tags',
-}
-# The subset an update writes. `LOE` and `REPEAT` are left out: R3
-# names neither, and a changed `REPEAT` reschedules the task on its
-# next completion, which is a decision of its own.
-UPDATE_FIELDS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
+# The output forms a command that prints can take.
+FORMATS = ('text', 'json')
 
 
 def _source(conf: Configuration) -> Path:
@@ -75,24 +63,36 @@ def _source(conf: Configuration) -> Path:
 
 
 def _is_json(conf: Configuration) -> bool:
-    """Whether the configuration asks for the machine-readable form."""
-    return getattr(conf, 'format', 'text') == 'json'
+    """Whether the configuration asks for the machine-readable form.
 
-
-def _fields(conf: Configuration, options: dict[str, str]) -> dict[str, str]:
-    """The fields `options` names and the configuration carries.
-
-    An option the user left off is absent from the Configuration
-    rather than None, so only the supplied ones are passed on.
+    Raises
+    ------
+    ValueError
+        The configured format is not one of FORMATS.
     """
+    form = conf.format
+    if form not in FORMATS:
+        raise ValueError(
+            f'unknown format {form!r}; choose one of {", ".join(FORMATS)}'
+        )
+    return form == 'json'
+
+
+def _supplied(fields: dict[str, str | None]) -> dict[str, str]:
+    """The fields of `fields` that hold a value. None means not given."""
     return {
         name: value
-        for name, option in options.items()
-        if (value := getattr(conf, option, None)) is not None
-    }
+        for name, value in fields.items()
+            if value is not None
+    }  # fmt: skip
 
 
-def get_view(conf: Configuration, now: datetime) -> str:
+def get_view(
+    conf: Configuration,
+    now: datetime,
+    *,
+    show_all: bool,
+) -> str:
     """The view the configuration asks for.
 
     Parameters
@@ -101,6 +101,9 @@ def get_view(conf: Configuration, now: datetime) -> str:
         The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, which decides both the active set and every rank.
+    show_all : bool
+        Whether to show every item, whatever the time window and the
+        item count.
 
     Returns
     -------
@@ -113,16 +116,17 @@ def get_view(conf: Configuration, now: datetime) -> str:
     SourceError
         The source directory is missing, or holds no todo lists.
     ValueError
-        The configured item count is not a whole number of one or more.
+        The configured item count is not a whole number of one or more,
+        or the configured format is not one of FORMATS.
     """
-    selection = Selection.from_config(conf, now)
+    selection = Selection.from_config(conf, now, show_all=show_all)
     if _is_json(conf):
         return SelectionJsonView(selection).json
     return View(selection).text
 
 
-def get_completed(conf: Configuration, now: datetime) -> str:
-    """The completed digest the configuration asks for.
+def get_completed(conf: Configuration, now: datetime, *, period: str) -> str:
+    """The completed digest of `period`.
 
     Parameters
     ----------
@@ -130,6 +134,8 @@ def get_completed(conf: Configuration, now: datetime) -> str:
         The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, whose local day ends the period.
+    period : str
+        One of PERIODS.
 
     Returns
     -------
@@ -142,24 +148,26 @@ def get_completed(conf: Configuration, now: datetime) -> str:
     CompletedError
         The source directory holds no completed log.
     ValueError
-        The configured period has no definition.
+        `period` has no definition, or the configured format is not
+        one of FORMATS.
     """
-    digest = Digest.from_config(conf, now)
+    digest = Digest.from_config(conf, now, period=period)
     if _is_json(conf):
         return DigestJsonView(digest).json
     return DigestView(digest).text
 
 
-def get_item(conf: Configuration, now: datetime) -> str:
-    """The one item the configuration names.
+def get_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+    """The one item `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the item and
-        `format` chooses the form.
+        The resolved configuration. `format` chooses the form.
     now : datetime
         The clock, whose local day decides the rank.
+    selector : str
+        Names the item.
 
     Returns
     -------
@@ -171,25 +179,48 @@ def get_item(conf: Configuration, now: datetime) -> str:
     ------
     SelectionError
         The selector does not name exactly one open task.
+    ValueError
+        The configured format is not one of FORMATS.
     """
-    item = Item.from_config(conf, now)
+    item = Item.from_config(conf, now, selector=selector)
     if _is_json(conf):
         return ItemJsonView(item).json
     return ItemView(item).text
 
 
-def add_item(conf: Configuration, now: datetime) -> str:
-    """Write the task the configuration describes.
+def add_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    list_name: str,
+    title: str,
+    parent: str | None = None,
+    priority: str | None = None,
+    loe: str | None = None,
+    due: str | None = None,
+    repeat: str | None = None,
+    tags: str | None = None,
+) -> str:
+    """Write the task the inputs describe.
+
+    Only the field inputs that are not None are written.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `list` and `title` name the task,
-        and `parent` makes it a subtask of the task named there. Each
-        ADD_FIELDS option the user supplied is written.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day is the add date. A subtask carries
         no add date, so none is written for one.
+    list_name : str
+        The list that receives the task.
+    title : str
+        The title of the task.
+    parent : str or None
+        A selector. The task becomes a subtask of the task it names.
+    priority, loe, due, repeat, tags : str or None
+        The values of the `P`, `LOE`, `DUE`, `REPEAT` and `TAGS`
+        fields.
 
     Returns
     -------
@@ -199,7 +230,7 @@ def add_item(conf: Configuration, now: datetime) -> str:
     Raises
     ------
     ListError
-        The configured list does not exist.
+        `list_name` names no list.
     SelectionError
         The parent does not name exactly one open task.
     ValueError
@@ -208,33 +239,58 @@ def add_item(conf: Configuration, now: datetime) -> str:
         written.
     """
     source = _source(conf)
-    fields = _fields(conf, ADD_FIELDS)
-    parent = getattr(conf, 'parent', None)
+    fields = _supplied(
+        {
+            'P': priority,
+            'LOE': loe,
+            'DUE': due,
+            'REPEAT': repeat,
+            'TAGS': tags,
+        }
+    )
     addition: Addition | SubtaskAddition
     if parent is None:
-        addition = Addition(source, conf.list, conf.title, fields, now.date())
+        addition = Addition(source, list_name, title, fields, now.date())
     else:
         addition = SubtaskAddition(
             Task(source, parent, now.date()),
-            conf.list,
-            conf.title,
+            list_name,
+            title,
             fields,
         )
     addition.write()
     return f'{addition.entry}\n{addition.path}'
 
 
-def update_item(conf: Configuration, now: datetime) -> str:
-    """Rewrite the task the configuration names.
+def update_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    title: str | None = None,
+    priority: str | None = None,
+    due: str | None = None,
+    tags: str | None = None,
+) -> str:
+    """Rewrite the task `selector` names.
+
+    Only the inputs that are not None are written. An update writes
+    no `LOE` and no `REPEAT`: R3 names neither, and a changed `REPEAT`
+    reschedules the task on its next completion, which is a decision
+    of its own.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task, `title`
-        renames it, and each UPDATE_FIELDS option the user supplied is
-        written.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day validates a `REPEAT`.
+    selector : str
+        Names the task.
+    title : str or None
+        The new title.
+    priority, due, tags : str or None
+        The new values of the `P`, `DUE` and `TAGS` fields.
 
     Returns
     -------
@@ -251,25 +307,33 @@ def update_item(conf: Configuration, now: datetime) -> str:
         Raised before anything is written.
     """
     update = Update(
-        Task(_source(conf), conf.selector, now.date()),
-        _fields(conf, UPDATE_FIELDS),
-        title=getattr(conf, 'title', None),
+        Task(_source(conf), selector, now.date()),
+        _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
+        title=title,
     )
     update.write()
     return f'{update.entry}\n{update.path}'
 
 
-def complete_item(conf: Configuration, now: datetime) -> str:
-    """Complete the task the configuration names.
+def complete_item(
+    conf: Configuration,
+    now: datetime,
+    *,
+    selector: str,
+    date: str | None = None,
+) -> str:
+    """Complete the task `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task, and
-        `date` is the day it was completed.
+        The resolved configuration. Only the source directory is read.
     now : datetime
-        The clock, whose local day stamps the log where the
-        configuration names no date.
+        The clock, whose local day stamps the log when `date` is None.
+    selector : str
+        Names the task.
+    date : str or None
+        The ISO day the task was completed.
 
     Returns
     -------
@@ -285,24 +349,26 @@ def complete_item(conf: Configuration, now: datetime) -> str:
         A completed recurring task carries a `[REPEAT:]` btodo cannot
         read. Raised before anything is written.
     ValueError
-        The configured date is not an ISO date. Raised before anything
-        is written.
+        `date` is not an ISO date. Raised before anything is written.
     """
-    completion = Completion(Task.from_config(conf, now))
+    task = Task.from_config(conf, now, selector=selector, date=date)
+    completion = Completion(task)
     completion.write()
     entries = completion.entries
     return '\n'.join(entries) if entries else 'checked off'
 
 
-def scratch_item(conf: Configuration, now: datetime) -> str:
-    """Drop the task the configuration names.
+def scratch_item(conf: Configuration, now: datetime, *, selector: str) -> str:
+    """Drop the task `selector` names.
 
     Parameters
     ----------
     conf : Configuration
-        The resolved configuration. `selector` names the task.
+        The resolved configuration. Only the source directory is read.
     now : datetime
         The clock, whose local day stamps the log.
+    selector : str
+        Names the task.
 
     Returns
     -------
@@ -315,7 +381,7 @@ def scratch_item(conf: Configuration, now: datetime) -> str:
     SelectionError
         The selector does not name exactly one open task.
     """
-    scratch = Scratch(Task(_source(conf), conf.selector, now.date()))
+    scratch = Scratch(Task(_source(conf), selector, now.date()))
     scratch.write()
     entries = scratch.entries
     return '\n'.join(entries) if entries else 'dropped'
