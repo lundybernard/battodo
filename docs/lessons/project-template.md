@@ -105,6 +105,16 @@ Found during the dev-environment cycle (poetry → PEP 621 + pixi):
   3.13 evaluate them at import and raise `NameError` (#82, fixed by
   quoting them). A default env pins the newest interpreter, so the
   floor version's unit task belongs in the local gate as well as in CI.
+  2026-10-12: the first move of the range, 3.10–3.14 to 3.11–3.15
+  (#110), sets the pattern for a bump. Drop the end-of-life interpreter
+  from `requires-python`, its pixi feature, env and task, and the CI
+  matrix. Add the new interpreter in the shape of the others. Make the
+  lock once the package cooldown admits the new release. Apply the
+  ruff rules that the new floor enables in the same commit: UP017
+  turned seven `timezone.utc` sites into `datetime.UTC`. The default
+  env stayed on 3.14, and a move to 3.15 is a follow-up candidate. The
+  template still ships no CI and still declares `python = '^3.8'`
+  (upstream `4acd6a4`), so the pattern waits for the matrix above.
 - **Message catalog for CLI strings:** extracting every user-facing
   argparse string into a pure-data module (`messages.py`, stable
   namespaced keys) gave three wins at once: a future localization
