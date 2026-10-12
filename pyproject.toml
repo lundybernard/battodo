@@ -5,9 +5,7 @@ authors = [{ name = "Lundy Bernard" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dynamic = ["version"]
-# [toml] extra: on <=3.10 batconf's TomlSource needs the third-party
-# toml package (stdlib tomllib is 3.11+); marker makes it a no-op above.
-dependencies = ["batconf[toml]>=0.4.0"]
+dependencies = ["batconf>=0.4.0"]
 
 [project.scripts]
 btodo = "battodo.cli:BATCLI"
