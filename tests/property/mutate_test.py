@@ -1403,17 +1403,26 @@ def refuse_checklist_item(task: TaskNode) -> None:
 def snapshot(task: TaskNode, file: str) -> dict[str, Any]:
     """The task as `file` states it before the write, and its list.
 
+    The list is the stem of `file`.
+    """
+    return {**state(task), 'list': Path(file).stem}
+
+
+def state(task: TaskNode) -> dict[str, Any]:
+    """The task and every task below it, as the file states them.
+
     Its description lines join into its description, absent when it
-    has none. The list is the stem of `file`.
+    has none. Its children nest in it, absent when it has none.
     """
     found: dict[str, Any] = {
         'title': task.title,
         'done': task.done,
         'fields': task.fields,
-        'list': Path(file).stem,
     }
     if task.description_lines:
         found['description'] = '\n'.join(task.description_lines)
+    if task.children:
+        found['children'] = [state(child) for child in task.children]
     return found
 
 

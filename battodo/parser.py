@@ -130,8 +130,9 @@ class TaskNode:
     def snapshot(self) -> dict[str, Any]:
         """The task's full state, as a journal event records it.
 
-        Snapshots are what make a later authority flip replayable
-        despite hand-edits that never reached the journal.
+        Each child nests in it as its own snapshot. Snapshots are what
+        make a later authority flip replayable despite hand-edits that
+        never reached the journal.
         """
         snapshot: dict[str, Any] = {
             'title': self.title,
@@ -141,6 +142,8 @@ class TaskNode:
         description = self.description
         if description is not None:
             snapshot['description'] = description
+        if self.children:
+            snapshot['children'] = [child.snapshot for child in self.children]
         return snapshot
 
     def listed_snapshot(self, list_name: str) -> dict[str, Any]:
