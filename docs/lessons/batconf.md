@@ -82,6 +82,14 @@ actually hit, since that is what upstream wants to fix:
   (tmpdir `config.toml` through `get_config`, no mocks) across the
   version matrix — our own py310 suite was green before the extra was
   declared, because every test mocked `TomlSource`.
+  2026-10-12: battodo is past the trap, a win. #110 raised the floor to
+  CPython 3.11, where `TomlSource` imports the stdlib `tomllib` first,
+  and dropped the extra. The 0.4.0 metadata declares
+  `toml; python_version <= '3.10'`, so the extra installs nothing at
+  that floor, and the 0.4.0 README already scopes the extra to
+  "python<=3.10". The `[toml]` loss in the global-install entry below
+  no longer applies. The upstream asks above stand for a consumer on
+  3.10.
 - **Config-file conventions are thin.** Quickstart shows only an
   app-level constant (`CONFIG_FILE_NAME = str(Path.cwd() /
   "config.ini")`), and no search-order or env-var-override convention

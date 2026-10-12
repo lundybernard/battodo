@@ -61,7 +61,7 @@ does not change.
 
 ## Options
 
-### Option 1 — Convert the stateful modules, keep pure computation as functions (chosen)
+### Option 1 — Convert the stateful modules, keep pure functions (chosen)
 
 - [pro] The pattern applies where it pays: input/output and multi-step
   derivation

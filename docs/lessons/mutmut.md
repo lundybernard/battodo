@@ -42,3 +42,17 @@ upstream issue candidates against boxed/mutmut.
   The item slice took the project total from 2000 mutants to 1834
   (#72, #77). Read a survivor count of zero in a converted module as
   a smaller target first, and stronger tests second.
+  2026-10-12: re-verified against mutmut 3.7.0, the version in
+  `pixi.lock`. The skip is wider than `@property`.
+  `mutation/file_mutation.py` skips every decorated function except one
+  whose lone decorator is `@staticmethod` or `@classmethod`, so a
+  `@cached_property` body has no mutant either, and its comment gives
+  the reasons. It also skips every decorated class whole: `TaskNode`, a
+  `@dataclass` with 16 methods, is not a target, although #480 is
+  closed. #387 (open) already tracks the function skip, so battodo's
+  case is a data point for #387, not a new issue. In `Reopen` (#111), 27
+  of the 31 functions carry `@property` or `@cached_property`; its
+  constructor and its plain methods are mutated and leave no survivor.
+  Before you trust a "no survivors" line for a module, count its
+  decorated functions and classes: their code has no mutant, so it
+  cannot survive.
