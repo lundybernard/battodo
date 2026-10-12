@@ -903,6 +903,11 @@ class Completion:
             completions.append(completion)
         return completions
 
+    @property
+    def assignments(self) -> list['Event']:
+        """The `TaskUpdated` of each stream task given a new id."""
+        raise NotImplementedError
+
 
 class Scratch:
     """The scratch of a task: its block dropped without completing it.
@@ -1034,6 +1039,16 @@ class Scratch:
         if self.attrs:
             payload['attrs'] = self.attrs
         return [Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)]
+
+    @property
+    def stamp(self) -> 'Event':
+        """The `TaskUpdated` that records the stream task's new id."""
+        raise NotImplementedError
+
+    @property
+    def stamped(self) -> bool:
+        """Whether the stream task of a checklist item is given an id."""
+        raise NotImplementedError
 
 
 class Annotation:

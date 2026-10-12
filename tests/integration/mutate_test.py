@@ -82,6 +82,20 @@ ANOTHER_LIST = '# Another list\n\n## Open\n'
 # A list whose one task carries an `[ID:]` with nothing in it.
 EMPTY_ID_TASK = '- [ ] A task with an empty id [P:2] [ID:]'
 EMPTY_ID_LIST = f'## Open\n\n{EMPTY_ID_TASK}\n'
+# A list whose task has no id and two checklist items, so a write to one
+# item leaves the task in the list. The titles name the role each line
+# plays.
+OWNER_LIST = (
+    '## Open\n\n- [ ] A checklist owner with no id [P:3]\n'
+    '  - [ ] A checklist item to write\n'
+    '  - [ ] A checklist item that stays open\n'
+)
+# The owner as the file states it before a write.
+OWNER_SNAPSHOT = {
+    'title': 'A checklist owner with no id',
+    'done': False,
+    'fields': {'P': '3'},
+}
 
 
 class AdditionTests(TestCase):
@@ -756,6 +770,19 @@ class CompletionTests(TestCase):
             (event,) = Journal(source).events
             t.assertIs(event['payload']['checklist_item'], True)
 
+        with t.subTest('a checklist item journals its owner stamp first'):
+            completion = completion_of(
+                an_owner_source(t), 'A checklist item to write'
+            )
+
+            completion.write()
+
+            stream = f'task/{completion.ids[2]}'
+            t.assertEqual(
+                journaled(completion.source),
+                [('TaskUpdated', stream), ('TaskCompleted', stream)],
+            )
+
     def test_text(t) -> None:
         with t.subTest('a finished top-level task loses its line'):
             completed = completion_of(t.source, 'A task with no id')
@@ -878,6 +905,27 @@ class CompletionTests(TestCase):
             t.assertEqual(ret.payload['ancestry'], 'A task > A checklist item')
             t.assertIs(ret.payload['checklist_item'], True)
 
+        with t.subTest('an owner with no id is stamped first, on its own'):
+            completed = completion_of(
+                an_owner_source(t), 'A checklist item to write'
+            )
+
+            stamp, item = completed.events
+
+            task_id = completed.ids[2]
+            t.assertEqual(
+                stamp,
+                (
+                    'TaskUpdated',
+                    f'task/{task_id}',
+                    {
+                        'delta': {'ID': [None, task_id]},
+                        'snapshot': OWNER_SNAPSHOT,
+                    },
+                ),
+            )
+            t.assertEqual(item.stream, f'task/{task_id}')
+
         with t.subTest('the attributes go on the named task alone'):
             completed = completion_of(
                 t.source,
@@ -932,6 +980,20 @@ class ScratchTests(TestCase):
 
             (event,) = Journal(source).events
             t.assertIs(event['payload']['checklist_item'], True)
+
+        with t.subTest('a checklist item journals its owner stamp first'):
+            source = an_owner_source(t)
+            scratched = Scratch(
+                Task(source, 'A checklist item to write', TODAY)
+            )
+
+            scratched.write()
+
+            stream = f'task/{scratched.stream_id}'
+            t.assertEqual(
+                journaled(source),
+                [('TaskUpdated', stream), ('TaskScratched', stream)],
+            )
 
     def test_text(t) -> None:
         with t.subTest('the task, its note and its children go'):
@@ -989,6 +1051,26 @@ class ScratchTests(TestCase):
                     )
                 ],
             )
+
+        with t.subTest('an owner with no id is stamped first, on its own'):
+            task = Task(an_owner_source(t), 'A checklist item to write', TODAY)
+            scratched = Scratch(task)
+
+            stamp, item = scratched.events
+
+            task_id = scratched.stream_id
+            t.assertEqual(
+                stamp,
+                (
+                    'TaskUpdated',
+                    f'task/{task_id}',
+                    {
+                        'delta': {'ID': [None, task_id]},
+                        'snapshot': OWNER_SNAPSHOT,
+                    },
+                ),
+            )
+            t.assertEqual(item.stream, f'task/{task_id}')
 
         with t.subTest('the attributes go on its event'):
             task = Task(t.source, '9o71lx', TODAY)
@@ -1263,6 +1345,14 @@ def a_source(t: TestCase) -> Path:
     source = Path(tmp.name)
     (source / 'a-list.md').write_text(A_LIST, encoding='utf-8')
     (source / 'another-list.md').write_text(ANOTHER_LIST, encoding='utf-8')
+    return source
+
+
+def an_owner_source(t: TestCase) -> Path:
+    """A source directory holding both lists and the owner list."""
+    source = a_source(t)
+    owner = source / 'an-owner-list.md'
+    owner.write_text(OWNER_LIST, encoding='utf-8')
     return source
 
 

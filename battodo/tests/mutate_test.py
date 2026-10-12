@@ -1484,10 +1484,12 @@ class CompletionTests(TestCase):
             )
 
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Completion, 'assignments', new_callable=PropertyMock)
     @patch.object(Completion, 'completions', new_callable=PropertyMock)
     def test_events(
         t,
         completions: PropertyMock,
+        assignments: PropertyMock,
         refuse_attributes: MagicMock,
     ) -> None:
         below = MagicMock(spec=['ancestry', 'payload'])
@@ -1500,17 +1502,122 @@ class CompletionTests(TestCase):
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
         t.co.attrs = sentinel.attrs
 
-        ret = t.co.events
+        with t.subTest('one TaskCompleted a completion, deepest first'):
+            assignments.return_value = []
 
-        # The named task checks that it takes the attributes first.
-        refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
-        t.assertEqual(
-            ret,
-            [
-                Event('TaskCompleted', 'task/zz01ab', sentinel.below),
-                Event('TaskCompleted', 'task/9o71lx', sentinel.top),
-            ],
-        )
+            ret = t.co.events
+
+            # The named task checks that it takes the attributes first.
+            refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+            t.assertEqual(
+                ret,
+                [
+                    Event('TaskCompleted', 'task/zz01ab', sentinel.below),
+                    Event('TaskCompleted', 'task/9o71lx', sentinel.top),
+                ],
+            )
+
+        with t.subTest('each id stamp goes before every completion'):
+            assignments.return_value = [sentinel.stamp]
+
+            ret = t.co.events
+
+            t.assertEqual(
+                ret,
+                [
+                    sentinel.stamp,
+                    Event('TaskCompleted', 'task/zz01ab', sentinel.below),
+                    Event('TaskCompleted', 'task/9o71lx', sentinel.top),
+                ],
+            )
+
+    @patch(f'{SRC}.IdAssignment', autospec=True)
+    @patch.object(Completion, 'stamps', new_callable=PropertyMock)
+    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
+    def test_assignments(
+        t,
+        ancestries: PropertyMock,
+        stamps: PropertyMock,
+        id_assignment: MagicMock,
+    ) -> None:
+        bare = bare_node()
+        event = id_assignment.return_value.event
+
+        with t.subTest('a stream with no id: its new id, on its own event'):
+            # A checklist item lands on the stream of its parent.
+            ancestries.return_value = [
+                ancestry_of(bare, checklist_node(), stream=bare),
+            ]
+            stamps.return_value = {1: {'ID': 'zz01ab'}}
+
+            ret = t.co.assignments
+
+            id_assignment.assert_called_once_with(bare, 'zz01ab')
+            t.assertEqual(ret, [event])
+
+        with t.subTest('a stream whose id is empty counts as none'):
+            id_assignment.reset_mock()
+            empty = bare_node()
+            empty.fields = {'P': '2', 'ID': ''}
+            ancestries.return_value = [
+                ancestry_of(empty, checklist_node(), stream=empty),
+            ]
+            stamps.return_value = {1: {'ID': 'ee04gh'}}
+
+            ret = t.co.assignments
+
+            id_assignment.assert_called_once_with(empty, 'ee04gh')
+            t.assertEqual(ret, [event])
+
+        with t.subTest('a stream that keeps its id: none'):
+            id_assignment.reset_mock()
+            ancestries.return_value = [
+                ancestry_of(t.parent, checklist_node(), stream=t.parent),
+            ]
+            stamps.return_value = {1: {'ID': '9o71lx'}}
+
+            ret = t.co.assignments
+
+            id_assignment.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('a recurrence: its new id beside its due date'):
+            id_assignment.reset_mock()
+            ancestries.return_value = [ancestry_of(bare)]
+            stamps.return_value = {1: {'DUE': '2026-08-15', 'ID': 'rr01ab'}}
+
+            ret = t.co.assignments
+
+            id_assignment.assert_called_once_with(bare, 'rr01ab')
+            t.assertEqual(ret, [event])
+
+        with t.subTest('a finished block that goes: none'):
+            id_assignment.reset_mock()
+            stamps.return_value = {}
+
+            ret = t.co.assignments
+
+            id_assignment.assert_not_called()
+            t.assertEqual(ret, [])
+
+        with t.subTest('each stream given an id, deepest first'):
+            id_assignment.reset_mock()
+            ancestries.return_value = [
+                ancestry_of(bare, t.child),
+                ancestry_of(bare),
+            ]
+            stamps.return_value = {
+                3: {'ID': 'cc03ef'},
+                1: {'ID': 'pp02cd'},
+            }
+
+            ret = t.co.assignments
+
+            t.assertEqual(
+                id_assignment.call_args_list,
+                [call(t.child, 'cc03ef'), call(bare, 'pp02cd')],
+            )
+            t.assertEqual(ret, [event, event])
 
 
 class ScratchTests(TestCase):
@@ -1672,16 +1779,22 @@ class ScratchTests(TestCase):
 
     @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Scratch, 'stamped', new_callable=PropertyMock)
+    @patch.object(Scratch, 'stamp', new_callable=PropertyMock)
     @patch.object(Scratch, 'ancestry', new_callable=PropertyMock)
     @patch.object(Scratch, 'stream_id', new_callable=PropertyMock)
     def test_events(
         t,
         stream_id: PropertyMock,
         ancestry: PropertyMock,
+        stamp: PropertyMock,
+        stamped: PropertyMock,
         refuse_attributes: MagicMock,
         snapshot: PropertyMock,
     ) -> None:
         stream_id.return_value = '9o71lx'
+        stamp.return_value = sentinel.stamp
+        stamped.return_value = False
         ancestry.return_value = MagicMock(spec=['path'])
         ancestry.return_value.path = 'a path'
         snapshot.return_value = sentinel.snapshot
@@ -1738,6 +1851,71 @@ class ScratchTests(TestCase):
                     'attrs': {'cost': '45.00'},
                 },
             )
+
+        with t.subTest('the stamp of a stream task with no id goes first'):
+            stamped.return_value = True
+
+            ret = t.sc.events
+
+            scratched = Event(
+                'TaskScratched',
+                'task/9o71lx',
+                {
+                    'delta': {'removed': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
+                },
+            )
+            t.assertEqual(ret, [sentinel.stamp, scratched])
+
+    @patch(f'{SRC}.IdAssignment', autospec=True)
+    @patch.object(Scratch, 'stream', new_callable=PropertyMock)
+    def test_stamp(t, stream: PropertyMock, id_assignment: MagicMock) -> None:
+        bare = bare_node()
+        stream.return_value = bare
+        t.sc.stream_id = 'zz01ab'
+
+        ret = t.sc.stamp
+
+        id_assignment.assert_called_once_with(bare, 'zz01ab')
+        t.assertIs(ret, id_assignment.return_value.event)
+
+    @patch.object(Scratch, 'stream', new_callable=PropertyMock)
+    def test_stamped(t, stream: PropertyMock) -> None:
+        with t.subTest('a task with no id is its own stream: not stamped'):
+            # Its block goes, so no line keeps the id.
+            t.task.node = bare_node()
+            stream.return_value = t.task.node
+
+            ret = t.sc.stamped
+
+            t.assertFalse(ret)
+
+        with t.subTest('a checklist item whose stream has an id: not'):
+            t.task.node = checklist_node()
+            stream.return_value = t.parent
+
+            ret = t.sc.stamped
+
+            t.assertFalse(ret)
+
+        with t.subTest('a checklist item whose stream has none: stamped'):
+            t.task.node = checklist_node()
+            stream.return_value = bare_node()
+
+            ret = t.sc.stamped
+
+            t.assertTrue(ret)
+
+        with t.subTest('a stream whose id is empty counts as none'):
+            t.task.node = checklist_node()
+            stream.return_value = bare_node()
+            stream.return_value.fields = {'P': '2', 'ID': ''}
+
+            ret = t.sc.stamped
+
+            t.assertTrue(ret)
 
 
 class AnnotationTests(TestCase):
