@@ -268,6 +268,28 @@ class ArgparserTests(TestCase):
                 args = t.parser.parse_args([*argv, '--description', ''])
                 t.assertEqual(args.description, '')
 
+    def test_update_list(t):
+        with t.subTest('None when not given'):
+            args = t.parser.parse_args(['update', 'brush pile'])
+            t.assertIsNone(args.list_name)
+
+        with t.subTest('--list holds the name of a list'):
+            args = t.parser.parse_args(
+                ['update', 'brush pile', '--list', 'chores'],
+            )
+            t.assertEqual(args.list_name, 'chores')
+
+    def test_update_with_subtasks(t):
+        with t.subTest('off when not given'):
+            args = t.parser.parse_args(['update', 'brush pile'])
+            t.assertFalse(args.with_subtasks)
+
+        with t.subTest('on when given'):
+            args = t.parser.parse_args(
+                ['update', 'brush pile', '--with-subtasks'],
+            )
+            t.assertTrue(args.with_subtasks)
+
     def test_done_date(t):
         with t.subTest('Default: None'):
             args = t.parser.parse_args(['done', 'brush pile'])
@@ -705,6 +727,8 @@ class CommandsUpdateTests(TestCase):
             description='a description',
             attrs='some attrs',
             note='a note',
+            list_name='a list',
+            with_subtasks=True,
         )
 
     def test_update(t):
@@ -722,6 +746,8 @@ class CommandsUpdateTests(TestCase):
                 description='a description',
                 attrs='some attrs',
                 note='a note',
+                list_name='a list',
+                with_subtasks=True,
             )
 
         with t.subTest('the clock is read in the local zone, not the host'):

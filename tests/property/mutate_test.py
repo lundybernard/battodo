@@ -24,7 +24,7 @@ from typing import Any, NamedTuple
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from battodo.conf import TZ
@@ -69,6 +69,10 @@ NEW_ID = 'fresh[{:04}'
 NEW_ID_RE = re.compile(r'fresh\[\d{4,}')
 # The event fields that differ on every run.
 VOLATILE = frozenset({'event_id', 'occurred_at', 'recorded_at'})
+# The stream a reopen case closes its task on. No drawn text holds it.
+CLOSED_ID = 'closed-stream'
+# How a selector that names no open task is refused.
+NO_OPEN_TASK = 'no open task matches'
 # The errors a write refuses with, before it writes anything.
 REFUSALS = (ListError, SelectionError, ValueError)
 # The options a write reads, by the field each supplies, in the order
@@ -213,6 +217,8 @@ class UpdateItemTests(TestCase):
         options = data.draw(supplied_options(UPDATE_OPTIONS))
         title = data.draw(st.one_of(st.none(), supplied_titles()))
         description = data.draw(supplied_descriptions())
+        list_name = data.draw(st.one_of(st.none(), list_names()))
+        with_subtasks = data.draw(either(st.just(False), st.booleans()))
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
         given = data.draw(supplied_attributes())
@@ -226,6 +232,9 @@ class UpdateItemTests(TestCase):
             options,
             description,
             given,
+            list_name,
+            selector,
+            with_subtasks,
         )
 
         with written(before) as directory:
@@ -238,6 +247,95 @@ class UpdateItemTests(TestCase):
                 **named,
                 attrs=given.text,
                 note=given.note,
+                list_name=list_name,
+                with_subtasks=with_subtasks,
+            )
+
+        t.assertEqual(ret, expected)
+
+    @given(grammar.documents, st.data())
+    def test_move(
+        t,
+        drawn: tuple[str, list[Node]],
+        data: st.DataObject,
+    ) -> None:
+        text, _ = drawn
+        ancestries = descend(TodoDocument(text).tasks, [])
+        selector = data.draw(item_selectors(ancestries))
+        before = Source(source_lists(text), None, [])
+        found = outcome(text, ancestries, selector)
+        list_name = Path(OTHER_FILE).stem
+        unnamed = Attributes(None, None)
+        expected = foreseen(
+            updated,
+            before,
+            found,
+            None,
+            {},
+            None,
+            unnamed,
+            list_name,
+            selector,
+            False,
+        )
+
+        with written(before) as directory:
+            conf = configuration(directory)
+            ret = observed(
+                update_item,
+                conf,
+                directory,
+                selector=selector,
+                list_name=list_name,
+            )
+
+        t.assertEqual(ret, expected)
+
+    @given(grammar.documents, st.data())
+    def test_reopen(
+        t,
+        drawn: tuple[str, list[Node]],
+        data: st.DataObject,
+    ) -> None:
+        text, _ = drawn
+        tasks = TodoDocument(text).tasks
+        assume(tasks)
+        closed = data.draw(st.sampled_from(tasks))
+        recorded = data.draw(either(st.just(True), st.booleans()))
+        options = data.draw(supplied_options(UPDATE_OPTIONS))
+        title = data.draw(st.one_of(st.none(), supplied_titles()))
+        description = data.draw(supplied_descriptions())
+        list_name = data.draw(st.one_of(st.none(), list_names()))
+        with_subtasks = data.draw(st.booleans())
+        titled = options if title is None else {**options, 'title': title}
+        named = described(titled, description)
+        given = data.draw(supplied_attributes())
+        before = closed_source(text, closed, recorded)
+        expected = foreseen(
+            reopened,
+            before,
+            closed,
+            recorded,
+            title,
+            options,
+            description,
+            given,
+            list_name,
+            with_subtasks,
+        )
+
+        with written(before) as directory:
+            conf = configuration(directory)
+            ret = observed(
+                update_item,
+                conf,
+                directory,
+                selector=CLOSED_ID,
+                **named,
+                attrs=given.text,
+                note=given.note,
+                list_name=list_name,
+                with_subtasks=with_subtasks,
             )
 
         t.assertEqual(ret, expected)
@@ -629,7 +727,7 @@ def added(
     doc.set_fields(index, fields)
     describe(doc, index, '', lines)
     entry = doc.lines[index]
-    payload = addition(block(doc, index, lines), fields, attrs)
+    payload = addition(block(doc, index, lines), fields, attrs, name)
     event = Appended('TaskAdded', f'task/{fields["ID"]}', payload, name)
     lists = {**before.lists, name: doc.text}
     after = Source(lists, before.log, journal([event]))
@@ -638,13 +736,22 @@ def added(
 
 @contextmanager
 def written(before: Source) -> Iterator[Path]:
-    """A source directory holding the lists and the log of `before`."""
+    """A source directory holding the lists, the log and the events."""
     with TemporaryDirectory() as tmp:
         directory = Path(tmp)
         for name, text in before.lists.items():
             (directory / name).write_text(text, encoding='utf-8')
         if before.log is not None:
             (directory / LOG_FILE).write_text(before.log, encoding='utf-8')
+        journal = Journal(directory)
+        for event in before.events:
+            journal.append(
+                event['type'],
+                event['stream_id'],
+                event['payload'],
+                actor=event['metadata']['actor'],
+                source_file=event['metadata']['source_file'],
+            )
         yield directory
 
 
@@ -660,7 +767,7 @@ def observed(
     write: Callable[..., str],
     conf: Mock,
     directory: Path,
-    **inputs: str | None,
+    **inputs: str | bool | None,
 ) -> Any:
     """What `write` answers and leaves in `directory`, canonical.
 
@@ -737,13 +844,14 @@ def added_below(
     if stamped:
         stamp = {
             'delta': {'ID': [None, parent_id]},
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
         }
         events.append(
             Appended('TaskUpdated', f'task/{parent_id}', stamp, LIST_FILE)
         )
     added_block = block(doc, index, lines)
-    child = {**addition(added_block, child_fields, attrs), 'parent': parent_id}
+    added_payload = addition(added_block, child_fields, attrs, LIST_FILE)
+    child = {**added_payload, 'parent': parent_id}
     child_stream = f'task/{child_fields["ID"]}'
     events.append(Appended('TaskAdded', child_stream, child, LIST_FILE))
     lists = {**before.lists, LIST_FILE: doc.text}
@@ -758,29 +866,56 @@ def updated(
     options: dict[str, str],
     description: str | None,
     given: 'Attributes',
+    list_name: str | None,
+    selector: str,
+    with_subtasks: bool,
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
     one clears them. A task with no id is given one. The event carries
-    the attributes.
+    the attributes. A top-level task bound for another list takes its
+    whole block there, last in the open section. An open task refuses
+    the subtasks of a reopen.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
-    if not fields and title is None and description is None:
+    if isinstance(found, str) and found.startswith(NO_OPEN_TASK):
+        # No open task answers, so the update reopens a closed one, and
+        # the journal of the case holds none.
+        checked(fields)
+        raise SelectionError(found)
+    if with_subtasks:
         raise ValueError(
-            'nothing to update: name a field, a title or a description'
+            f'{selector!r} names an open task: --with-subtasks reopens a '
+            'closed task and its subtasks'
         )
+    if not fields and title is None and description is None:
+        # The list counts only where it moves the task.
+        file = None if list_name is None else list_file(before, list_name)
+        if file is not None:
+            reached(found)
+        if file in (None, LIST_FILE):
+            raise ValueError(
+                'nothing to update: name a field, a title, a description '
+                'or a list'
+            )
     values = checked(fields)
     text, ancestry = reached(found)
     node = ancestry[-1]
     refuse_checklist_item(node)
     nested = len(ancestry) > 1
+    if nested and list_name is not None:
+        raise ValueError(
+            f'{node.title!r} is a subtask: --list moves a top-level task, '
+            'and its subtasks with it'
+        )
     if nested:
         refuse_root_fields(fields)
     if title is not None:
         refuse_line_break(title)
     lines = None if description is None else description_lines(description)
+    name = LIST_FILE if list_name is None else list_file(before, list_name)
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -794,6 +929,9 @@ def updated(
         indent = ' ' * node.indent
         describe(doc, node.raw_index, indent, lines)
     entry = doc.lines[node.raw_index]
+    lists = {**before.lists, LIST_FILE: doc.text}
+    if name != LIST_FILE:
+        lists.update(moved(doc, node.raw_index, before.lists[name], name))
     delta = {
         field: [node.fields.get(field), value]
         for field, value in written_fields.items()
@@ -803,15 +941,212 @@ def updated(
     if lines is not None:
         before_text = '\n'.join(node.description_lines) or None
         delta['description'] = [before_text, '\n'.join(lines) or None]
-    payload: dict[str, Any] = {'delta': delta, 'snapshot': snapshot(node)}
+    if name != LIST_FILE:
+        delta['list'] = [Path(LIST_FILE).stem, Path(name).stem]
+    payload: dict[str, Any] = {
+        'delta': delta,
+        'snapshot': snapshot(node, LIST_FILE),
+    }
     if nested:
         payload['ancestry'] = path_of(ancestry)
     if attrs:
         payload['attrs'] = attrs
-    event = Appended('TaskUpdated', f'task/{task_id}', payload, LIST_FILE)
-    lists = {**before.lists, LIST_FILE: doc.text}
+    event = Appended('TaskUpdated', f'task/{task_id}', payload, name)
     after = Source(lists, before.log, journal([event]))
-    return Outcome(f'{entry}\n{SOURCE}/{LIST_FILE}', after)
+    return Outcome(f'{entry}\n{SOURCE}/{name}', after)
+
+
+def moved(
+    doc: TodoDocument,
+    index: int,
+    target: str,
+    name: str,
+) -> dict[str, str]:
+    """The list the task at `index` leaves, and the list `name` it joins.
+
+    Each line of its block goes in the order of the file, last in the
+    open section of `target`.
+    """
+    (task,) = [
+        each
+        for each in TodoDocument(doc.text).tasks
+            if each.raw_index == index
+    ]  # fmt: skip
+    block = [doc.lines[line] for line in sorted(task.block)]
+    left = TodoDocument(doc.text)
+    left.drop(task.block)
+    joined = TodoDocument(target)
+    end = joined.open_end
+    for offset, line in enumerate(block):
+        joined.insert(end + offset, line)
+    return {LIST_FILE: left.text, name: joined.text}
+
+
+def closed_source(text: str, task: TaskNode, recorded: bool) -> Source:
+    """The drawn list without the block of `task`, which its journal closed.
+
+    The journal holds the scratch of the task, on the stream CLOSED_ID.
+    """
+    doc = TodoDocument(text)
+    doc.drop(task.block)
+    lists = {LIST_FILE: doc.text, OTHER_FILE: OTHER}
+    return Source(lists, None, journal([closing(task, recorded)]))
+
+
+def closing(task: TaskNode, recorded: bool) -> 'Appended':
+    """The scratch of `task` on the stream CLOSED_ID.
+
+    Its snapshot names the list where `recorded`, as a write from before
+    the list in the snapshot does not.
+    """
+    payload = {
+        'delta': {'removed': [False, True]},
+        'snapshot': closed_snapshot(task, recorded),
+        'ancestry': task.title,
+    }
+    return Appended('TaskScratched', f'task/{CLOSED_ID}', payload, LIST_FILE)
+
+
+def closed_snapshot(task: TaskNode, recorded: bool) -> dict[str, Any]:
+    """The task as its scratch records it, its id CLOSED_ID."""
+    found = {**state(task), 'fields': {**task.fields, 'ID': CLOSED_ID}}
+    if recorded:
+        found['list'] = Path(LIST_FILE).stem
+    return found
+
+
+def reopened(
+    before: Source,
+    task: TaskNode,
+    recorded: bool,
+    title: str | None,
+    options: dict[str, str],
+    description: str | None,
+    given: 'Attributes',
+    list_name: str | None,
+    with_subtasks: bool,
+) -> 'Outcome':
+    """The closed task open again, last in the open section of its list.
+
+    Its block comes back as its snapshot records it, each line checked
+    off, to the list named or else to its recorded list. The task then
+    opens and takes the named fields, title and description; its
+    children stay closed. One TaskUpdated records the opening and the
+    changes, and carries the attributes. With its subtasks, each
+    subtask below it opens too, in file order, each on a TaskUpdated of
+    its own; a subtask with no id takes a new one.
+    """
+    attrs = attributes(given)
+    values = checked(supplied(options, UPDATE_OPTIONS))
+    left = Path(LIST_FILE).stem if recorded else None
+    name = list_name or left
+    if name is None:
+        raise ValueError(
+            f'{task.title!r} was closed before btodo recorded its list: '
+            'name the list with --list'
+        )
+    file = list_file(before, name)
+    if title is not None:
+        refuse_line_break(title)
+    lines = None if description is None else description_lines(description)
+    doc = TodoDocument(before.lists[file])
+    index = doc.open_end
+    block = recorded_lines(closed_snapshot(task, recorded), 0)
+    for offset, line in enumerate(block):
+        doc.insert(index + offset, line)
+    (root,) = [
+        each
+        for each in TodoDocument(doc.text).tasks
+            if each.raw_index == index
+    ]  # fmt: skip
+    below = subtasks_below([root]) if with_subtasks else []
+    new = new_ids()
+    stamped = {
+        chain[-1].raw_index: chain[-1].task_id or next(new) for chain in below
+    }
+    doc.lines[index] = doc.lines[index].replace('- [x]', '- [ ]', 1)
+    for chain in below:
+        at = chain[-1].raw_index
+        doc.lines[at] = doc.lines[at].replace('- [x]', '- [ ]', 1)
+        if not chain[-1].task_id:
+            doc.set_field(at, 'ID', stamped[at])
+    doc.set_fields(index, values)
+    if title is not None:
+        doc.set_title(index, title)
+    if lines is not None:
+        doc.drop(set(root.note_indices))
+        describe(doc, index, '', lines)
+    entry = doc.lines[index]
+    delta: dict[str, Any] = {
+        field: [root.fields.get(field), value]
+        for field, value in values.items()
+    }
+    if title is not None:
+        delta['title'] = [root.title, title]
+    if lines is not None:
+        before_text = '\n'.join(root.description_lines) or None
+        delta['description'] = [before_text, '\n'.join(lines) or None]
+    if left != Path(file).stem:
+        delta['list'] = [left, Path(file).stem]
+    delta['done'] = [True, False]
+    payload: dict[str, Any] = {
+        'delta': delta,
+        'snapshot': {**state(root), 'list': left},
+    }
+    if attrs:
+        payload['attrs'] = attrs
+    stream = f'task/{CLOSED_ID}'
+    opened = [Appended('TaskUpdated', stream, payload, file)]
+    for chain in below:
+        subtask = chain[-1]
+        sub_delta: dict[str, Any] = {}
+        if not subtask.task_id:
+            sub_delta['ID'] = [None, stamped[subtask.raw_index]]
+        sub_delta['done'] = [True, False]
+        sub_payload = {
+            'delta': sub_delta,
+            'snapshot': {**state(subtask), 'list': left},
+            'ancestry': path_of(chain),
+        }
+        sub_stream = f'task/{stamped[subtask.raw_index]}'
+        opened.append(Appended('TaskUpdated', sub_stream, sub_payload, file))
+    events = journal([closing(task, recorded), *opened])
+    lists = {**before.lists, file: doc.text}
+    return Outcome(f'{entry}\n{SOURCE}/{file}', Source(lists, None, events))
+
+
+def subtasks_below(chain: list[TaskNode]) -> list[list[TaskNode]]:
+    """Each subtask below the last of `chain`, with every task above it.
+
+    In file order, at any depth. A checklist item is not a subtask.
+    """
+    found = []
+    for child in chain[-1].children:
+        below = [*chain, child]
+        if not is_checklist_item(child):
+            found.append(below)
+        found.extend(subtasks_below(below))
+    return found
+
+
+def recorded_lines(snapshot: dict[str, Any], depth: int) -> list[str]:
+    """The lines of a recorded task, checked off, `depth` levels down.
+
+    Its description lines follow it, then each child one level deeper.
+    """
+    indent = INDENT * depth
+    fields = ''.join(
+        f' [{field}:{value}]' for field, value in snapshot['fields'].items()
+    )
+    lines = [f'{indent}- [x] {snapshot["title"]}{fields}']
+    if 'description' in snapshot:
+        lines.extend(
+            f'{indent}{DESCRIPTION_INDENT}{line}'
+            for line in snapshot['description'].split('\n')
+        )
+    for child in snapshot.get('children', []):
+        lines.extend(recorded_lines(child, depth + 1))
+    return lines
 
 
 def logs() -> st.SearchStrategy[str | None]:
@@ -882,7 +1217,7 @@ def completed(
             delta['DUE'] = [root.due, rescheduled.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
             'ancestry': path_of(each),
             'completed_on': TODAY.isoformat(),
         }
@@ -931,7 +1266,7 @@ def scratched(
     )
     payload: dict[str, Any] = {
         'delta': {'removed': [False, True]},
-        'snapshot': snapshot(node),
+        'snapshot': snapshot(node, LIST_FILE),
         'ancestry': path_of(ancestry),
     }
     if is_checklist_item(node):
@@ -974,12 +1309,12 @@ def annotated(
         doc.set_field(node.raw_index, 'ID', task_id)
         stamp = {
             'delta': {'ID': [None, task_id]},
-            'snapshot': snapshot(node),
+            'snapshot': snapshot(node, LIST_FILE),
         }
         events.append(
             Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
         )
-    payload: dict[str, Any] = {'snapshot': snapshot(node)}
+    payload: dict[str, Any] = {'snapshot': snapshot(node, LIST_FILE)}
     if len(ancestry) > 1:
         payload['ancestry'] = path_of(ancestry)
     payload['attrs'] = attrs
@@ -1015,7 +1350,7 @@ def backfilled(before: Source) -> 'Outcome':
             titles.append(task.title)
             payload = {
                 'delta': {'ADDED': [None, TODAY.isoformat()]},
-                'snapshot': snapshot(task),
+                'snapshot': snapshot(task, name),
                 'backfilled': True,
             }
             events.append(
@@ -1271,7 +1606,10 @@ def ordered(fields: dict[str, str]) -> dict[str, str]:
 
 def id_stamp(task: TaskNode, task_id: str) -> 'Appended':
     """The `TaskUpdated` that records `task_id` given to `task`."""
-    stamp = {'delta': {'ID': [None, task_id]}, 'snapshot': snapshot(task)}
+    stamp = {
+        'delta': {'ID': [None, task_id]},
+        'snapshot': snapshot(task, LIST_FILE),
+    }
     return Appended('TaskUpdated', f'task/{task_id}', stamp, LIST_FILE)
 
 
@@ -1284,8 +1622,9 @@ def addition(
     written: str,
     fields: dict[str, str],
     attrs: dict[str, str],
+    file: str,
 ) -> dict[str, Any]:
-    """The payload of a new task: each field against nothing.
+    """The payload of a new task in `file`: each field against nothing.
 
     The snapshot is the task line and its description lines as the
     parser reads them back. The attributes go in where any are given.
@@ -1293,7 +1632,7 @@ def addition(
     task = TodoDocument(f'{OPEN_HEADING}\n{written}').tasks[0]
     payload = {
         'delta': {field: [None, value] for field, value in fields.items()},
-        'snapshot': snapshot(task),
+        'snapshot': snapshot(task, file),
     }
     if attrs:
         payload['attrs'] = attrs
@@ -1392,15 +1731,29 @@ def refuse_checklist_item(task: TaskNode) -> None:
         )
 
 
-def snapshot(task: TaskNode) -> dict[str, Any]:
-    """The task as the file states it before the write.
+def snapshot(task: TaskNode, file: str) -> dict[str, Any]:
+    """The task as `file` states it before the write, and its list.
+
+    The list is the stem of `file`.
+    """
+    return {**state(task), 'list': Path(file).stem}
+
+
+def state(task: TaskNode) -> dict[str, Any]:
+    """The task and every task below it, as the file states them.
 
     Its description lines join into its description, absent when it
-    has none.
+    has none. Its children nest in it, absent when it has none.
     """
-    found = {'title': task.title, 'done': task.done, 'fields': task.fields}
+    found: dict[str, Any] = {
+        'title': task.title,
+        'done': task.done,
+        'fields': task.fields,
+    }
     if task.description_lines:
         found['description'] = '\n'.join(task.description_lines)
+    if task.children:
+        found['children'] = [state(child) for child in task.children]
     return found
 
 

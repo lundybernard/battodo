@@ -91,15 +91,21 @@ class Recorded(NamedTuple):
 def recorded_events(draw: st.DrawFn) -> Recorded:
     """One event in the shape a write records it.
 
-    An update may rename the task. A completion or a scratch may be a
-    checklist item's, which carries no attributes. A completion may
-    predate `completed_on`. A note always carries attributes.
+    An update may rename the task, and may reopen it. A completion or a
+    scratch may be a checklist item's, which carries no attributes. A
+    completion may predate `completed_on`. A note always carries
+    attributes.
     """
     kind = draw(st.sampled_from(WRITES))
     title = draw(titles())
     payload: dict[str, Any] = {'snapshot': {'title': title}}
-    if kind == 'TaskUpdated' and draw(st.booleans()):
-        payload['delta'] = {'title': [title, draw(titles())]}
+    if kind == 'TaskUpdated':
+        delta: dict[str, Any] = {}
+        if draw(st.booleans()):
+            delta['title'] = [title, draw(titles())]
+        if draw(st.booleans()):
+            delta['done'] = [True, False]
+        payload['delta'] = delta
     checklist = kind in CHECKLIST_WRITES and draw(st.booleans())
     if checklist:
         payload['checklist_item'] = True
@@ -215,7 +221,8 @@ def stream_of(events: list[Recorded], selector: str) -> str:
     Raises
     ------
     ValueError
-        The selector names no task in the journal, or several.
+        The selector names no task in the journal, or several. Several
+        are named one per line, newest last event first.
     """
     if any(event.task_id == selector for event in events):
         return selector
@@ -236,12 +243,30 @@ def stream_of(events: list[Recorded], selector: str) -> str:
     if not matched:
         raise ValueError(f'no task in the journal matches {selector!r}')
     if len(matched) > 1:
-        named = ', '.join(repr(title) for _, title in matched)
+        newest = sorted(
+            matched,
+            key=lambda pair: last_of(events, pair[0]),
+            reverse=True,
+        )
+        lines = '\n'.join(
+            f'{task_id}{INDENT}{last_of(events, task_id)[0]}{INDENT}{title}'
+            for task_id, title in newest
+        )
         raise ValueError(
-            f'{selector!r} matches {len(matched)} tasks in the journal: '
-            f'{named}'
+            f'{selector!r} matches {len(matched)} tasks in the journal:\n'
+            f'{lines}'
         )
     return matched[0][0]
+
+
+def last_of(events: list[Recorded], task_id: str) -> tuple[date, int]:
+    """The day of the last event of a task, and its place in the journal."""
+    position, last = max(
+        (position, event)
+        for position, event in enumerate(events)
+            if event.task_id == task_id
+    )  # fmt: skip
+    return day_of(last), position
 
 
 def current_title(events: list[Recorded], task_id: str) -> str | None:
@@ -255,15 +280,18 @@ def current_title(events: list[Recorded], task_id: str) -> str | None:
 
 
 def entries_of(events: list[Recorded], task_id: str) -> list[Recorded]:
-    """The completions and the events with attributes, newest first.
+    """The completions, the reopens and the events with attributes.
 
-    A later event in the journal comes before an earlier one of its day.
+    Newest first: a later event in the journal comes before an earlier
+    one of its day.
     """
     listed = [
         (position, event)
         for position, event in enumerate(events)
             if event.task_id == task_id
-            if event.type == COMPLETED or event.payload.get('attrs')
+            if event.type == COMPLETED
+                or event.payload.get('delta', {}).get('done') == [True, False]
+                or event.payload.get('attrs')
     ]  # fmt: skip
     ordered = sorted(
         listed,

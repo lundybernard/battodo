@@ -12,6 +12,7 @@
       "hidden": 1,
       "tasks": [
         {
+          "list": "work",
           "id": null,
           "title": "Overdue task",
           "rank": 10.29,
@@ -24,6 +25,7 @@
           "subtasks": 0
         },
         {
+          "list": "work",
           "id": null,
           "title": "Due today task",
           "rank": 6.0,
@@ -36,6 +38,7 @@
           "subtasks": 0
         },
         {
+          "list": "work",
           "id": null,
           "title": "Legacy priority task",
           "rank": 4.8,
@@ -48,6 +51,7 @@
           "subtasks": 2
         },
         {
+          "list": "work",
           "id": null,
           "title": "A very long task title that the task column has to clip to fit",
           "rank": 4.5,
@@ -60,6 +64,7 @@
           "subtasks": 0
         },
         {
+          "list": "work",
           "id": null,
           "title": "Placeholder due date task",
           "rank": 3.0,
@@ -78,6 +83,7 @@
       "hidden": 0,
       "tasks": [
         {
+          "list": "side-quests",
           "id": null,
           "title": "Future due date task",
           "rank": 2.0,
@@ -90,6 +96,7 @@
           "subtasks": 0
         },
         {
+          "list": "side-quests",
           "id": null,
           "title": "Fractional rank task",
           "rank": 1.23,

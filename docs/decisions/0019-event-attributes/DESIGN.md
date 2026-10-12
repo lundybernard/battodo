@@ -239,3 +239,61 @@ format lays out, as `show --format json` does.
 note that the stream's events carry after its last completion, newest
 first, each with its day. `show --format json` gains a `notes` key.
 `view` does not change.
+
+## Reopen
+
+The specification behind [ADR 0025](../0025-reopen-by-update.md), slice
+S7.
+
+**Snapshot.** Every event's snapshot gains `list`, the filename stem of
+the list that holds the task. A snapshot of a task with children gains
+`children`: each child as a snapshot of its own, in file order, without
+`list`. Both keys are additive, as the others of this design are.
+
+**Selector.** `update` resolves its selector against the open tasks
+first, as before. When no open task answers, it resolves the selector
+against the closed streams of the journal, by the rule of `history`. A
+stream is closed when its last event of its own is a scratch, or a
+completion that does not reschedule it. When several closed streams
+answer, the refusal names each on its own line as
+`<id>  <last event day>  <title>`, newest first; `history` names
+several candidates the same way. When nothing answers, the refusal of
+the open selection stands, unless a checklist item in the journal holds
+the selector: then the refusal names the id of the task that owns it.
+
+**Restore.** A closed top-level task comes back last in the open
+section of the list that `--list` names, or else the list its last
+snapshot names. Its record is that snapshot: the title, the fields in
+recorded order, the description and the children. Each line comes back
+checked off, and the task line takes the id of the stream where the
+record carries none. The task then opens. A closed subtask whose line a
+list still holds opens where it stands. A closed subtask whose line
+left with its top-level task comes back with the record of that task,
+the closed top-level stream whose snapshot holds the id of the subtask.
+Each closed task between the top-level task and the subtask opens with
+it, and the other children stay closed. `--with-subtasks` opens each
+closed subtask below the task too; a checklist item stays closed.
+
+**Events.** Each task that opens gets one `TaskUpdated` on its own
+stream. Its delta carries `done: [true, false]`, and `ID: [null, id]`
+for a task that takes a new id. The event of the task the update names
+also carries the field, title and description deltas, and
+`list: [old, new]` when the list changes; `old` is null for a record
+with no list. Its payload carries the attributes. The snapshot is the
+task as restored, checked off, with the list it closed in.
+`update --list` on an open top-level task moves its whole block, last in
+the open section of that list, in one write of both lists, and its
+`TaskUpdated` carries the `list` delta.
+
+**Refusals.** Before anything is written, a reopen refuses: a subtask
+given `--list` or a field only the top-level task carries, a record
+with no list when `--list` is left off, a list that is not there, and a
+subtask whose line no list and no record holds; that refusal names the
+parent by id where its add recorded one. An open task refuses
+`--with-subtasks`. An update with no change on an open task still
+refuses with "nothing to update", and `--list` that names the list of
+the task is no change: an unchanged result writes nothing. On a closed
+task, an update with no change reopens the task unchanged.
+
+**History.** A `TaskUpdated` whose delta turns `done` to false is an
+entry of `history`, with its day and its attributes.

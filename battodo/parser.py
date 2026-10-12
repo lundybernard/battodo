@@ -130,8 +130,9 @@ class TaskNode:
     def snapshot(self) -> dict[str, Any]:
         """The task's full state, as a journal event records it.
 
-        Snapshots are what make a later authority flip replayable
-        despite hand-edits that never reached the journal.
+        Each child nests in it as its own snapshot. Snapshots are what
+        make a later authority flip replayable despite hand-edits that
+        never reached the journal.
         """
         snapshot: dict[str, Any] = {
             'title': self.title,
@@ -141,7 +142,17 @@ class TaskNode:
         description = self.description
         if description is not None:
             snapshot['description'] = description
+        if self.children:
+            snapshot['children'] = [child.snapshot for child in self.children]
         return snapshot
+
+    def listed_snapshot(self, list_name: str | None) -> dict[str, Any]:
+        """The snapshot of the task and the list that holds it.
+
+        A journal event names the list of its task by the filename stem,
+        or null where no record names one.
+        """
+        return {**self.snapshot, 'list': list_name}
 
     @property
     def schema_fields(self) -> dict[str, str]:
@@ -464,6 +475,12 @@ class TodoDocument:
     def mark_done(self, index: int) -> None:
         """Check the box of the task line at `index`."""
         self.lines[index] = self.lines[index].replace('- [ ]', '- [x]', 1)
+
+    def mark_open(self, index: int) -> None:
+        """Clear the box of the task line at `index`, either case of x."""
+        self.lines[index] = re.sub(
+            r'^(\s*- \[)[xX]\]', r'\1 ]', self.lines[index]
+        )
 
 
 def parse_date(value: str | None) -> date | None:

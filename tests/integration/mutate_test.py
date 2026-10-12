@@ -10,8 +10,10 @@ from datetime import date
 from os import utime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest import TestCase
 
+from battodo.conf import TZ
 from battodo.journal import Journal
 from battodo.mutate import (
     Addition,
@@ -22,6 +24,7 @@ from battodo.mutate import (
     Completion,
     Event,
     ListError,
+    Reopen,
     Scratch,
     SubtaskAddition,
     Update,
@@ -76,6 +79,11 @@ RESCHEDULED_RECURRENCE = (
     '[ID:dr01ab]\n'
     '      A description line.\n'
 )
+# The children of A task, as its snapshot records them.
+A_TASK_CHILDREN = [
+    {'title': 'A subtask of it', 'done': False, 'fields': {'LOE': '2'}},
+    {'title': 'A checklist item', 'done': False, 'fields': {}},
+]
 # The attributes of a note.
 A_NOTE = {'note': 'Waiting on the vendor'}
 # A second list, its open section empty.
@@ -93,10 +101,190 @@ OWNER_LIST = (
 )
 # The owner as the file states it before a write.
 OWNER_SNAPSHOT = {
+    'list': 'an-owner-list',
     'title': 'A checklist owner with no id',
     'done': False,
     'fields': {'P': '3'},
+    'children': [
+        {'title': 'A checklist item to write', 'done': False, 'fields': {}},
+        {
+            'title': 'A checklist item that stays open',
+            'done': False,
+            'fields': {},
+        },
+    ],
 }
+
+
+# A list whose top-level task keeps a closed subtask, and a closed
+# subtask below that. The titles name the role each line plays.
+HELD_LIST = (
+    '## Open\n\n'
+    '- [ ] A task with a closed step [P:2] [ID:hp01ab]\n'
+    '  - [x] A closed step [LOE:1] [ID:ds02cd]\n'
+    '    - [x] A closed step below it [LOE:1] [ID:db03ef]\n'
+)
+# The last snapshot of a finished top-level task with a description, a
+# subtask and a checklist item.
+FINISHED_SNAPSHOT = {
+    'title': 'A finished task',
+    'done': False,
+    'fields': {'P': '2', 'ADDED': '2026-07-01', 'ID': 'ft01ab'},
+    'description': 'Its note.',
+    'children': [
+        {
+            'title': 'Its subtask',
+            'done': True,
+            'fields': {'LOE': '1', 'ID': 'fs02cd'},
+        },
+        {'title': 'Its checklist item', 'done': True, 'fields': {}},
+    ],
+    'list': 'a-list',
+}
+# The finished task as a reopen restores it: closed, each child closed.
+FINISHED_BLOCK = [
+    '- [x] A finished task [P:2] [ADDED:2026-07-01] [ID:ft01ab]',
+    '      Its note.',
+    '  - [x] Its subtask [LOE:1] [ID:fs02cd]',
+    '  - [x] Its checklist item',
+]
+# Where a block restored to `a-list` goes: after its last open entry.
+RESTORED_INDEX = 13
+# Each event of the closed-task journal: type, stream and payload.
+CLOSED_EVENTS = (
+    (
+        'TaskCompleted',
+        'task/fs02cd',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'Its subtask',
+                'done': False,
+                'fields': {'LOE': '1', 'ID': 'fs02cd'},
+                'list': 'a-list',
+            },
+            'ancestry': 'A finished task > Its subtask',
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/ft01ab',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'Its checklist item',
+                'done': False,
+                'fields': {},
+                'list': 'a-list',
+            },
+            'ancestry': 'A finished task > Its checklist item',
+            'checklist_item': True,
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/ft01ab',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': FINISHED_SNAPSHOT,
+            'ancestry': 'A finished task',
+        },
+    ),
+    (
+        'TaskScratched',
+        'task/sc01ab',
+        {
+            'delta': {'removed': [False, True]},
+            'snapshot': {
+                'title': 'A task scratched before the list',
+                'done': False,
+                'fields': {'P': '1', 'ID': 'sc01ab'},
+            },
+            'ancestry': 'A task scratched before the list',
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/db03ef',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'A closed step below it',
+                'done': False,
+                'fields': {'LOE': '1', 'ID': 'db03ef'},
+                'list': 'a-held-list',
+            },
+            'ancestry': (
+                'A task with a closed step > A closed step > '
+                'A closed step below it'
+            ),
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/ds02cd',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'A closed step',
+                'done': False,
+                'fields': {'LOE': '1', 'ID': 'ds02cd'},
+                'list': 'a-held-list',
+            },
+            'ancestry': 'A task with a closed step > A closed step',
+        },
+    ),
+    (
+        'TaskAdded',
+        'task/ls01ab',
+        {
+            'delta': {},
+            'snapshot': {'title': 'A lost subtask', 'fields': {'LOE': '1'}},
+            'parent': 'lp00ab',
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/ls01ab',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'A lost subtask',
+                'fields': {'LOE': '1', 'ID': 'ls01ab'},
+                'list': 'a-list',
+            },
+            'ancestry': 'A lost parent > A lost subtask',
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/tw01ab',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'A twin task',
+                'fields': {},
+                'list': 'a-list',
+            },
+            'ancestry': 'A twin task',
+            'completed_on': '2026-08-01',
+        },
+    ),
+    (
+        'TaskCompleted',
+        'task/tw02cd',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {
+                'title': 'A twin task',
+                'fields': {},
+                'list': 'a-list',
+            },
+            'ancestry': 'A twin task',
+            'completed_on': '2026-08-03',
+        },
+    ),
+)
 
 
 class AdditionTests(TestCase):
@@ -250,6 +438,7 @@ class AdditionTests(TestCase):
                             'ID': [None, task_id],
                         },
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A new task',
                             'done': False,
                             'fields': {
@@ -463,6 +652,7 @@ class SubtaskAdditionTests(TestCase):
                     {
                         'delta': {'LOE': [None, '2'], 'ID': [None, child_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A new subtask',
                             'done': False,
                             'fields': {'LOE': '2', 'ID': child_id},
@@ -496,6 +686,7 @@ class SubtaskAdditionTests(TestCase):
                     {
                         'delta': {'ID': [None, parent_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A task with no id',
                             'done': False,
                             'fields': {'P': '2'},
@@ -606,6 +797,15 @@ class UpdateTests(TestCase):
                 ValueError,
                 'P belongs to the top-level task',
             ),
+            'an open task with its subtasks': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    with_subtasks=True,
+                ),
+                ValueError,
+                "'9o71lx' names an open task: --with-subtasks reopens",
+            ),
             'a checklist item, which a field would promote': (
                 Update(
                     Task(t.source, 'A checklist item', TODAY),
@@ -618,6 +818,33 @@ class UpdateTests(TestCase):
                 Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
                 SelectionError,
                 "no open task matches 'nothing'",
+            ),
+            'a list that is not there': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='wrk',
+                ),
+                ListError,
+                "no list named 'wrk'",
+            ),
+            'the list the task is in, and no other change': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='a-list',
+                ),
+                ValueError,
+                'nothing to update',
+            ),
+            'a subtask, which moves with its top-level task': (
+                Update(
+                    Task(t.source, 'A subtask of it', TODAY),
+                    {},
+                    list_name='another-list',
+                ),
+                ValueError,
+                "'A subtask of it' is a subtask",
             ),
             'a title with a line break': (
                 Update(
@@ -647,6 +874,36 @@ class UpdateTests(TestCase):
         ret = t.up.entry
         t.assertEqual(ret, RENAMED_TASK)
 
+    def test_lists(t) -> None:
+        with t.subTest('an update in place writes the list of the task'):
+            ret = t.up.lists
+            t.assertEqual(ret, {t.source / 'a-list.md': t.up.text})
+
+        with t.subTest('a move takes the whole block to the other list'):
+            moved = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {'P': '5'},
+                list_name='another-list',
+            )
+
+            ret = moved.lists
+
+            block = [
+                A_TASK.replace('[P:4]', '[P:5]'),
+                '      A note that stays put.',
+                A_CHILD,
+                '  - [ ] A checklist item',
+            ]
+            t.assertEqual(
+                ret,
+                {
+                    t.source / 'a-list.md': without(A_LIST, 4, 5, 6, 7),
+                    t.source / 'another-list.md': '\n'.join(
+                        ['# Another list', '', '## Open', *block, '']
+                    ),
+                },
+            )
+
     def test_events(t) -> None:
         with t.subTest('one TaskUpdated: what changed, and from what'):
             ret = t.up.events
@@ -663,6 +920,7 @@ class UpdateTests(TestCase):
                                 'title': ['A task', 'A renamed task'],
                             },
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -672,6 +930,7 @@ class UpdateTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                         },
                     )
@@ -728,6 +987,291 @@ class UpdateTests(TestCase):
             (event,) = updated.events
 
             t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
+
+        with t.subTest('a move records the list it leaves and joins'):
+            moved = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {},
+                list_name='another-list',
+            )
+
+            (event,) = moved.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {'list': ['a-list', 'another-list']},
+            )
+            t.assertEqual(event.payload['snapshot']['list'], 'a-list')
+
+
+class ReopenTests(TestCase):
+    """Contract tests for battodo.mutate.Reopen."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.source = a_closed_source(t)
+        t.ro = reopen_of(t.source, 'ft01ab', {'P': '5'})
+
+    def test_write(t) -> None:
+        # Read before the write: once written, the task is open.
+        text, events = t.ro.text, t.ro.events
+        before = journaled(t.source)
+
+        t.ro.write()
+
+        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+        # The list holds the text the reopen derives, the journal its
+        # events after the events it read.
+        t.assertEqual(written, text)
+        t.assertEqual(journaled(t.source), before + as_journaled(events))
+
+    def test_text(t) -> None:
+        opened = [
+            FINISHED_BLOCK[0].replace('[x]', '[ ]').replace('[P:2]', '[P:5]'),
+            *FINISHED_BLOCK[1:],
+        ]
+        cases = {
+            'a top-level task, open, its children closed': (
+                t.ro,
+                'a-list.md',
+                with_lines(A_LIST, RESTORED_INDEX, opened),
+            ),
+            'a reopen that names nothing reopens the task unchanged': (
+                reopen_of(t.source, 'A finished task'),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [FINISHED_BLOCK[0].replace('[x]', '[ ]')]
+                    + FINISHED_BLOCK[1:],
+                ),
+            ),
+            'a description replaces the recorded one': (
+                reopen_of(t.source, 'ft01ab', description='A new note.'),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [
+                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                        '      A new note.',
+                        *FINISHED_BLOCK[2:],
+                    ],
+                ),
+            ),
+            'a scratched task, to the list a reopen names': (
+                reopen_of(t.source, 'sc01ab', list_name='another-list'),
+                'another-list.md',
+                ANOTHER_LIST + '- [ ] A task scratched before the list [P:1] '
+                '[ID:sc01ab]\n',
+            ),
+            'a subtask whose line a list holds, each closed task above': (
+                reopen_of(t.source, 'db03ef'),
+                'a-held-list.md',
+                HELD_LIST.replace('[x]', '[ ]'),
+            ),
+            'a top-level task with its subtasks, a checklist item closed': (
+                reopen_of(t.source, 'ft01ab', with_subtasks=True),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [
+                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[1],
+                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[3],
+                    ],
+                ),
+            ),
+            'a subtask with the closed subtask below it': (
+                reopen_of(t.source, 'ds02cd', with_subtasks=True),
+                'a-held-list.md',
+                HELD_LIST.replace('[x]', '[ ]'),
+            ),
+            'a subtask in the record of its top-level task': (
+                reopen_of(t.source, 'fs02cd'),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [
+                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[1],
+                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
+                        FINISHED_BLOCK[3],
+                    ],
+                ),
+            ),
+        }
+        for name, (reopen, list_file, expected) in cases.items():
+            with t.subTest(name):
+                ret = reopen.text
+                t.assertEqual(reopen.path, t.source / list_file)
+                t.assertEqual(ret, expected)
+
+        refused = {
+            'a value that does not read': (
+                reopen_of(t.source, 'ft01ab', {'DUE': 'x'}),
+                ValueError,
+                "DUE must be an ISO date, not 'x'",
+            ),
+            'a selector that names no task at all': (
+                reopen_of(t.source, 'nothing'),
+                SelectionError,
+                "no open task matches 'nothing'",
+            ),
+            'a title that names several closed tasks': (
+                reopen_of(t.source, 'twin'),
+                ValueError,
+                (
+                    "'twin' matches 2 tasks in the journal:\n"
+                    'tw02cd  2026-08-03  A twin task\n'
+                    'tw01ab  2026-08-01  A twin task'
+                ),
+            ),
+            'a checklist item, named with its task': (
+                reopen_of(t.source, 'Its checklist item'),
+                ValueError,
+                r'names a checklist item of \[ID:ft01ab\]',
+            ),
+            'a record from before the list, with no list named': (
+                reopen_of(t.source, 'sc01ab'),
+                ValueError,
+                (
+                    "'A task scratched before the list' was closed before "
+                    'btodo recorded its list: name the list with --list'
+                ),
+            ),
+            'a list that is not there': (
+                reopen_of(t.source, 'ft01ab', list_name='wrk'),
+                ListError,
+                "no list named 'wrk'",
+            ),
+            'a list for a subtask': (
+                reopen_of(t.source, 'fs02cd', list_name='a-list'),
+                ValueError,
+                "'Its subtask' is a subtask: --list moves a top-level task",
+            ),
+            'a field only the top-level task carries, on a subtask': (
+                reopen_of(t.source, 'db03ef', {'P': '3'}),
+                ValueError,
+                'P belongs to the top-level task',
+            ),
+            'a subtask whose line no list and no record holds': (
+                reopen_of(t.source, 'ls01ab'),
+                ValueError,
+                (
+                    r"'A lost subtask' is a subtask of \[ID:lp00ab\], and "
+                    'no list and no record of a closed task holds its line'
+                ),
+            ),
+            'a title with a line break': (
+                reopen_of(t.source, 'ft01ab', title='A finished\rtask'),
+                ValueError,
+                'title must hold no line break',
+            ),
+        }
+        for name, (refusal, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                _ = refusal.text
+
+    def test_entry(t) -> None:
+        ret = t.ro.entry
+        t.assertEqual(
+            ret,
+            '- [ ] A finished task [P:5] [ADDED:2026-07-01] [ID:ft01ab]',
+        )
+
+    def test_events(t) -> None:
+        restored = {
+            **FINISHED_SNAPSHOT,
+            'done': True,
+            'children': [
+                {
+                    'title': 'Its subtask',
+                    'done': True,
+                    'fields': {'LOE': '1', 'ID': 'fs02cd'},
+                },
+                {'title': 'Its checklist item', 'done': True, 'fields': {}},
+            ],
+        }
+
+        with t.subTest('one TaskUpdated: the opening and the changes'):
+            ret = t.ro.events
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        'TaskUpdated',
+                        'task/ft01ab',
+                        {
+                            'delta': {
+                                'P': ['2', '5'],
+                                'done': [True, False],
+                            },
+                            'snapshot': restored,
+                        },
+                    ),
+                ],
+            )
+
+        with t.subTest('a record from before the list, against null'):
+            scratched = reopen_of(t.source, 'sc01ab', list_name='a-list')
+
+            (event,) = scratched.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {'done': [True, False], 'list': [None, 'a-list']},
+            )
+            t.assertIsNone(event.payload['snapshot']['list'])
+
+        with t.subTest(
+            'each closed task above a subtask opens, outermost first'
+        ):
+            step = reopen_of(t.source, 'db03ef', attrs={'cost': '45.00'})
+
+            above, named = step.events
+
+            t.assertEqual(
+                (above.stream, above.payload['delta']),
+                ('task/ds02cd', {'done': [True, False]}),
+            )
+            t.assertEqual(
+                above.payload['ancestry'],
+                'A task with a closed step > A closed step',
+            )
+            t.assertEqual(named.stream, 'task/db03ef')
+            t.assertEqual(named.payload['attrs'], {'cost': '45.00'})
+            t.assertEqual(named.payload['snapshot']['list'], 'a-held-list')
+
+        with t.subTest('with its subtasks, each opens on its own stream'):
+            whole = reopen_of(t.source, 'ft01ab', with_subtasks=True)
+
+            top, below = whole.events
+
+            t.assertEqual(
+                [top.stream, below.stream],
+                ['task/ft01ab', 'task/fs02cd'],
+            )
+            t.assertEqual(below.payload['delta'], {'done': [True, False]})
+            t.assertEqual(
+                below.payload['ancestry'],
+                'A finished task > Its subtask',
+            )
+
+        with t.subTest('a subtask in a record opens its top-level task'):
+            child = reopen_of(t.source, 'fs02cd')
+
+            top, named = child.events
+
+            t.assertEqual(
+                [top.stream, named.stream],
+                ['task/ft01ab', 'task/fs02cd'],
+            )
+            t.assertEqual(named.payload['delta'], {'done': [True, False]})
 
 
 class CompletionTests(TestCase):
@@ -882,6 +1426,7 @@ class CompletionTests(TestCase):
                             'DUE': ['2026-08-05', '2026-08-15'],
                         },
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A recurring task',
                             'done': False,
                             'fields': {
@@ -890,6 +1435,13 @@ class CompletionTests(TestCase):
                                 'REPEAT': '7d',
                                 'ID': 'rr01ab',
                             },
+                            'children': [
+                                {
+                                    'title': 'A subtask that does not recur',
+                                    'done': False,
+                                    'fields': {'LOE': '1'},
+                                },
+                            ],
                         },
                         'ancestry': 'A recurring task',
                         'completed_on': '2026-08-08',
@@ -1037,6 +1589,7 @@ class ScratchTests(TestCase):
                         {
                             'delta': {'removed': [False, True]},
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -1046,6 +1599,7 @@ class ScratchTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                             'ancestry': 'A task',
                         },
@@ -1177,6 +1731,7 @@ class AnnotationTests(TestCase):
                         'task/9o71lx',
                         {
                             'snapshot': {
+                                'list': 'a-list',
                                 'title': 'A task',
                                 'done': False,
                                 'fields': {
@@ -1186,6 +1741,7 @@ class AnnotationTests(TestCase):
                                     'ID': '9o71lx',
                                 },
                                 'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
                             },
                             'attrs': {'note': 'Waiting on the vendor'},
                         },
@@ -1207,6 +1763,7 @@ class AnnotationTests(TestCase):
                     {
                         'delta': {'ID': [None, task_id]},
                         'snapshot': {
+                            'list': 'a-list',
                             'title': 'A task with no id',
                             'done': False,
                             'fields': {'P': '2'},
@@ -1286,6 +1843,7 @@ class BackfillTests(TestCase):
                 {
                     'delta': {'ADDED': [None, '2026-08-08']},
                     'snapshot': {
+                        'list': 'a-list',
                         'title': 'A task with no id',
                         'done': False,
                         'fields': {'P': '2'},
@@ -1330,7 +1888,10 @@ class ChangesetTests(TestCase):
         t.source = a_source(t)
         t.path = t.source / 'a-list.md'
         t.cs = Changeset(
-            'the list as written\n',
+            {
+                t.path: 'the list as written\n',
+                t.source / 'another-list.md': 'the other list as written\n',
+            },
             ['a record'],
             [Event('TaskAdded', 'task/zz01ab', {'delta': {}})],
             t.path,
@@ -1342,9 +1903,14 @@ class ChangesetTests(TestCase):
             t.cs.write()
 
             written = t.path.read_text(encoding='utf-8')
+            other = t.source / 'another-list.md'
             logged = (t.source / 'completed.md').read_text(encoding='utf-8')
             (event,) = Journal(t.source).events
             t.assertEqual(written, 'the list as written\n')
+            t.assertEqual(
+                other.read_text(encoding='utf-8'),
+                'the other list as written\n',
+            )
             t.assertEqual(logged, 'a record\n')
             t.assertEqual(
                 (event['type'], event['stream_id'], event['payload']),
@@ -1361,7 +1927,7 @@ class ChangesetTests(TestCase):
             # A known mtime, so a rewrite shows without a wait.
             utime(path, ns=(0, 0))
             unchanged = Changeset(
-                A_LIST,
+                {path: A_LIST},
                 ['a record'],
                 [Event('TaskAdded', 'task/zz01ab', {'delta': {}})],
                 path,
@@ -1384,6 +1950,33 @@ def a_source(t: TestCase) -> Path:
     (source / 'a-list.md').write_text(A_LIST, encoding='utf-8')
     (source / 'another-list.md').write_text(ANOTHER_LIST, encoding='utf-8')
     return source
+
+
+def a_closed_source(t: TestCase) -> Path:
+    """A source whose journal holds CLOSED_EVENTS, beside HELD_LIST."""
+    source = a_source(t)
+    held = source / 'a-held-list.md'
+    held.write_text(HELD_LIST, encoding='utf-8')
+    journal = Journal(source)
+    for event_type, stream_id, payload in CLOSED_EVENTS:
+        journal.append(
+            event_type,
+            stream_id,
+            payload,
+            actor='agent',
+            source_file='a-list.md',
+        )
+    return source
+
+
+def reopen_of(
+    source: Path,
+    selector: str,
+    fields: dict[str, str] | None = None,
+    **named: Any,
+) -> Reopen:
+    """A reopen of the closed task `selector` names in `source`."""
+    return Reopen(Task(source, selector, TODAY), TZ, fields or {}, **named)
 
 
 def an_owner_source(t: TestCase) -> Path:

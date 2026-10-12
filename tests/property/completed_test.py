@@ -103,7 +103,7 @@ def stand_in(
         for index, title in enumerate(titles)
     ]
     tasks[-1].fields = fields
-    return TaskCompletion(Ancestry(tasks), None, day, attrs)
+    return TaskCompletion(Ancestry(tasks), None, day, 'a-list', attrs)
 
 
 def shown(titles: list[str]) -> str:

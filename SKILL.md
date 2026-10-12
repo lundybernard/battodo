@@ -45,10 +45,11 @@ btodo completed [today|week|month] [--format text|json]
 entry of `subtasks`: the description lines joined by `\n`, or `null`
 when the task has none.
 
-`history` lists each completion of one task, and every other event of
-that task that carries attributes, newest first. Its JSON holds `id`,
-`title` and `entries`. Each entry holds `kind` (the event type, such as
-`TaskCompleted` or `TaskAnnotated`), `checklist_item` (true for the
+`history` lists each completion and each reopen of one task, and every
+other event of that task that carries attributes, newest first. Its
+JSON holds `id`, `title` and `entries`. Each entry holds `kind` (the
+event type: `TaskCompleted`, `TaskAnnotated`, or `TaskUpdated` for a
+reopen and an update with attributes), `checklist_item` (true for the
 completion of a checklist item under the task), `day` and `attrs`.
 [README.md](README.md#history-of-a-task) states how each entry takes
 its day and its place in the order.
@@ -65,7 +66,9 @@ The `view` JSON schema is documented in
 [README.md](README.md#machine-readable-output). It grows by addition:
 new keys appear, existing keys keep their meaning. Read each task array
 in the order given rather than re-sorting by `rank`, and read `hidden`
-to learn how many open items the selection left out.
+to learn how many open items the selection left out. Each task of
+`view --format json`, and the item of `show --format json`, carries
+`list`: the filename stem of the list that holds it.
 
 ## Write
 
@@ -76,6 +79,7 @@ btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
 btodo add <list> <title> --parent <selector>
 btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
                         [--title TITLE] [--description TEXT]
+                        [--list <list>] [--with-subtasks]
                         [--attrs ATTRS] [--note TEXT]
 btodo done <selector> [--date YYYY-MM-DD] [--attrs ATTRS] [--note TEXT]
 btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
@@ -95,13 +99,14 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   carriage return. `show` prints the description.
 - Before `add`, look for a finished task with the same meaning:
   `btodo history <a key word of the title>`. One match prints that
-  task's history. Several matches exit 1 and name the candidate titles
-  on stderr, which is the search result. No match exits 1 and says so.
-  When a finished task matches, ask the user whether to reopen or
-  reschedule it under its own `[ID:]` instead of adding a new task. One
-  id keeps the history of a task in one place, where a new title
-  scatters it across names. btodo has no reopen command yet, so a
-  reopen is a request to the user.
+  task's history. Several matches exit 1 and print one candidate per
+  line on stderr, `<id>  <last event day>  <title>`, newest first,
+  which is the search result. No match exits 1 and says so. When a
+  finished task matches, ask the user whether to reopen or reschedule
+  it under its own `[ID:]` instead of adding a new task. One id keeps
+  the history of a task in one place, where a new title scatters it
+  across names. On a yes, reopen it with `btodo update <id>`, adding
+  `--due` for a new due date; see [Reopen and move](#reopen-and-move).
 - `add` echoes the line it wrote and the file it wrote to. Read that
   echo to confirm the write. A task with no `-p` gets a neutral
   priority and still ranks by its dates; an explicit `-p 0` parks the
@@ -115,6 +120,36 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   rather than the day it is marked off. A repeating task is rescheduled
   from that day too.
 - Checking off the last open child completes its parent.
+
+## Reopen and move
+
+`done` and `scratch` close a task. `update <id>` on a closed task
+reopens it under the same id.
+
+- `update` reaches an open task first. When no open task answers, it
+  reaches a closed task in the journal, by the selector rule of
+  `history`. Name a closed task by its `[ID:]`; take the id from
+  `history`.
+- The task comes back open, last in the open section of its list, with
+  the fields, title and description it closed with. The options of the
+  call apply on top. A call with no option reopens it unchanged.
+- Its subtasks come back checked off. `--with-subtasks` opens each of
+  them too. A closed subtask reopens with each closed task above it;
+  its siblings keep their state. A checklist item reopens only with
+  its task: naming one exits 1 and names the `[ID:]` of its task.
+- `--list <list>` reopens a top-level task into that list. A task
+  closed before btodo recorded lists exits 1 until `--list` names one.
+- `--list <list>` on an open top-level task moves it, its description
+  and subtasks with it, to the end of that list. A subtask refuses
+  `--list`: it moves with its top-level task. `--list` that names the
+  task's own list is no change: with no other option, `update` exits 1
+  with "nothing to update" and writes nothing.
+- `--with-subtasks` on an open task exits 1.
+- Several closed tasks that match exit 1 and print one per line,
+  `<id>  <last event day>  <title>`, as `history` does.
+- The completed log keeps the record of each closing. A later `done`
+  adds a new record on the same id. `history` lists the reopen as a
+  `TaskUpdated` entry.
 
 ## Attributes and notes
 
@@ -136,9 +171,9 @@ task the command names. `note` records them with no other change.
   an empty value (`--attrs ''` and `--note ''` count), a line break, a
   segment with no `=`, a key outside the grammar, and any attribute on
   a checklist item.
-- Attributes ride on a change. `update` with `--attrs` or `--note` and
-  no other change refuses with "nothing to update". Record a note alone
-  with `note`.
+- Attributes ride on a change. On an open task, `update` with `--attrs`
+  or `--note` and no other change refuses with "nothing to update".
+  Record a note alone with `note`.
 - `note <selector> [TEXT] [--attrs ATTRS]` takes `TEXT` as the
   attribute `note`. It takes no `--note` option. Give it `TEXT`,
   `--attrs`, or both; `note` refuses a call with neither.
@@ -159,7 +194,8 @@ the id from `--format json` output.
 `history` resolves its selector against the journal instead of the
 lists. A title selector matches the current title of each task, and a
 finished task stays in reach. Read a finished task's attributes and
-notes through `history`.
+notes through `history`. `update` falls back to the closed tasks of the
+journal when no open task matches.
 
 ## Subtasks
 

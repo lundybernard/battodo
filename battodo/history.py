@@ -1,8 +1,9 @@
 """Read the history of one task from the journal (ADR 0022).
 
 `TaskHistory` resolves a selector against the journal, not the lists,
-so a finished task stays in reach. `HistoryEntry` holds one entry of
-the history.
+so a finished task stays in reach. `StreamSelection` finds the stream a
+selector names among the `TaskStream`s of the journal, one per task.
+`HistoryEntry` holds one entry of the history.
 
 Each form is a view that reads the history through its attributes:
 `HistoryView` lays it out as text, and `HistoryJsonView` as JSON.
@@ -16,7 +17,7 @@ from typing import Any
 
 from batconf import Configuration
 
-from .journal import COMPLETED_EVENT, Journal
+from .journal import COMPLETED_EVENT, SCRATCHED_EVENT, Journal
 
 # The text form of a history indents each level by two spaces.
 INDENT = '  '
@@ -60,58 +61,26 @@ class TaskHistory:
     @property
     def task_id(self) -> str:
         """The id of the task: its stream id after `task/`."""
-        return self.stream_id.removeprefix('task/')
+        return self.stream.task_id
 
     @property
-    def stream_id(self) -> str:
+    def stream(self) -> 'TaskStream':
         """The stream the selector names.
-
-        A stream id narrows out every title match.
 
         Raises
         ------
         ValueError
             The selector names no stream, or several.
         """
-        named = f'task/{self.selector}'
-        if any(event['stream_id'] == named for event in self.journal.events):
-            return named
-        part = self.selector.lower()
-        found = {
-            stream_id: title
-            for stream_id, title in self.titles.items()
-                if part in title.lower()
-        }  # fmt: skip
-        if not found:
-            raise ValueError(
-                f'no task in the journal matches {self.selector!r}'
-            )
-        if len(found) > 1:
-            named = ', '.join(repr(title) for title in found.values())
-            raise ValueError(
-                f'{self.selector!r} matches {len(found)} tasks in the '
-                f'journal: {named}'
-            )
-        (stream_id,) = found
-        return stream_id
+        return StreamSelection(self.streams, self.selector).stream
 
     @property
-    def titles(self) -> dict[str, str]:
-        """The current title of each stream, by stream id.
-
-        The snapshot title, with the title delta applied, of the last
-        event of the task's own. A checklist item's event carries the
-        snapshot of the item, so it gives no title.
-        """
-        titles: dict[str, str] = {}
-        for event in self.journal.events:
-            payload = event['payload']
-            if payload.get('checklist_item'):
-                continue
-            renamed = payload.get('delta', {}).get('title')
-            title = renamed[1] if renamed else payload['snapshot']['title']
-            titles[event['stream_id']] = title
-        return titles
+    def streams(self) -> list['TaskStream']:
+        """Every stream of the journal, read in the zone of the history."""
+        return [
+            TaskStream(stream_id, events, self.zone)
+            for stream_id, events in self.journal.streams.items()
+        ]
 
     @property
     def title(self) -> str | None:
@@ -119,31 +88,196 @@ class TaskHistory:
 
         None when the stream holds no event of the task's own.
         """
-        return self.titles.get(self.stream_id)
+        return self.stream.title
 
     @property
     def entries(self) -> list['HistoryEntry']:
-        """Each completion, and each other event that carries attributes.
+        """Each completion and reopen, and each other event with attributes.
 
         Newest first: by day, then the later event in the journal first.
         """
-        read = [HistoryEntry(event, self.zone) for event in self.events]
+        read = [HistoryEntry(event, self.zone) for event in self.stream.events]
         listed = [
             entry
             for entry in read
-                if entry.kind == COMPLETED_EVENT or entry.attrs
+                if entry.kind == COMPLETED_EVENT or entry.reopen or entry.attrs
         ]  # fmt: skip
         newest = reversed(listed)
         return sorted(newest, key=attrgetter('day'), reverse=True)
 
+
+class StreamSelection:
+    """The stream of the journal a selector names (ADR 0022).
+
+    A stream id narrows out every title match. Otherwise a
+    case-insensitive part of the current title names each stream whose
+    title holds it.
+    """
+
+    def __init__(self, streams: list['TaskStream'], selector: str) -> None:
+        self.streams = streams
+        self.selector = selector
+
     @property
-    def events(self) -> list[dict[str, Any]]:
-        """The events of the task's stream, in journal order."""
-        stream_id = self.stream_id
+    def stream(self) -> 'TaskStream':
+        """The one stream the selector names.
+
+        Raises
+        ------
+        ValueError
+            The selector names no stream, or several. Several are named
+            one per line: the id, the day of the last event and the
+            title, newest first.
+        """
+        found = self.candidates
+        if not found:
+            raise ValueError(
+                f'no task in the journal matches {self.selector!r}'
+            )
+        if len(found) > 1:
+            newest = sorted(found, key=attrgetter('day', 'seq'), reverse=True)
+            lines = '\n'.join(
+                f'{stream.task_id}{INDENT}{stream.day}{INDENT}{stream.title}'
+                for stream in newest
+            )
+            raise ValueError(
+                f'{self.selector!r} matches {len(found)} tasks in the '
+                f'journal:\n{lines}'
+            )
+        return found[0]
+
+    @property
+    def candidates(self) -> list['TaskStream']:
+        """Every stream the selector names, in journal order."""
+        named = [
+            stream
+            for stream in self.streams
+                if stream.task_id == self.selector
+        ]  # fmt: skip
+        part = self.selector.lower()
+        return named or [
+            stream
+            for stream in self.streams
+                if stream.title is not None and part in stream.title.lower()
+        ]  # fmt: skip
+
+
+class TaskStream:
+    """One task's stream: its events, in journal order (ADR 0014).
+
+    The events of a checklist item go on the stream of its owner, marked
+    as such. Every other event of the stream is the task's own.
+    """
+
+    def __init__(
+        self,
+        stream_id: str,
+        events: list[dict[str, Any]],
+        zone: tzinfo | None,
+    ) -> None:
+        self.stream_id = stream_id
+        self.events = events
+        self.zone = zone
+
+    @property
+    def task_id(self) -> str:
+        """The id of the task: the stream id after `task/`."""
+        return self.stream_id.removeprefix('task/')
+
+    @property
+    def title(self) -> str | None:
+        """The current title of the task.
+
+        The snapshot title, with the title delta applied, of the last
+        event of the task's own. None when the stream holds none.
+        """
+        own = self.own
+        if not own:
+            return None
+        payload = own[-1]['payload']
+        renamed = payload.get('delta', {}).get('title')
+        return renamed[1] if renamed else payload['snapshot']['title']
+
+    @property
+    def day(self) -> date:
+        """The day of the last event, as a history entry reads it."""
+        return HistoryEntry(self.events[-1], self.zone).day
+
+    @property
+    def seq(self) -> int:
+        """The place of the last event in the journal."""
+        return self.events[-1]['seq']
+
+    @property
+    def closed(self) -> bool:
+        """Whether the last event of the task's own closes the task.
+
+        A scratch closes it, and so does a completion that does not
+        reschedule it.
+        """
+        own = self.own
+        if not own:
+            return False
+        last = own[-1]
+        if last['type'] == SCRATCHED_EVENT:
+            return True
+        delta = last['payload'].get('delta', {})
+        return last['type'] == COMPLETED_EVENT and 'DUE' not in delta
+
+    @property
+    def snapshot(self) -> dict[str, Any] | None:
+        """The snapshot of the last event of the task's own, or None."""
+        own = self.own
+        return own[-1]['payload']['snapshot'] if own else None
+
+    @property
+    def list_name(self) -> str | None:
+        """The list the snapshot names, or None where it names none."""
+        snapshot = self.snapshot
+        return snapshot.get('list') if snapshot else None
+
+    @property
+    def nested(self) -> bool:
+        """Whether the last event of the task's own places it under another.
+
+        Its ancestry is a path longer than its own title.
+        """
+        own = self.own
+        if not own:
+            return False
+        payload = own[-1]['payload']
+        ancestry = payload.get('ancestry')
+        title = payload['snapshot']['title']
+        return ancestry is not None and ancestry != title
+
+    @property
+    def parent_id(self) -> str | None:
+        """The id of the parent its add names, or None."""
+        return next(
+            (
+                event['payload']['parent']
+                for event in self.own
+                    if 'parent' in event['payload']
+            ),
+            None,
+        )  # fmt: skip
+
+    @property
+    def checklist_titles(self) -> list[str]:
+        """The title of each checklist item event on the stream."""
+        return [
+            event['payload']['snapshot']['title']
+            for event in self.events
+                if event['payload'].get('checklist_item')
+        ]  # fmt: skip
+
+    @property
+    def own(self) -> list[dict[str, Any]]:
+        """The events of the task's own, in journal order."""
         return [
             event
-            for event in self.journal.events
-                if event['stream_id'] == stream_id
+            for event in self.events
+                if not event['payload'].get('checklist_item')
         ]  # fmt: skip
 
 
@@ -182,6 +316,12 @@ class HistoryEntry:
     def attrs(self) -> dict[str, str]:
         """The attributes, in recorded order. Absent reads as none."""
         return self.event['payload'].get('attrs', {})
+
+    @property
+    def reopen(self) -> bool:
+        """Whether the event reopens the task: done turns false."""
+        delta = self.event['payload'].get('delta', {})
+        return delta.get('done') == [True, False]
 
 
 class HistoryView:

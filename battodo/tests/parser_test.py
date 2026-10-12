@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Any
 from unittest import TestCase
-from unittest.mock import PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch, sentinel
 
 from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
 
@@ -228,6 +229,27 @@ class TaskNodeTests(TestCase):
             description.return_value = 'A description.'
             ret = t.tk.snapshot
             t.assertEqual(ret['description'], 'A description.')
+
+        with t.subTest('and its children, each as its own snapshot'):
+            description.return_value = None
+            child: Any = Mock(spec=['snapshot'], snapshot=sentinel.child)
+            t.tk.children = [child]
+
+            ret = t.tk.snapshot
+
+            t.assertEqual(ret['children'], [sentinel.child])
+
+    @patch.object(TaskNode, 'snapshot', new_callable=PropertyMock)
+    def test_listed_snapshot(t, snapshot: PropertyMock) -> None:
+        snapshot.return_value = {'title': 'A task'}
+
+        with t.subTest('the snapshot beside the list'):
+            ret = t.tk.listed_snapshot('a-list')
+            t.assertEqual(ret, {'title': 'A task', 'list': 'a-list'})
+
+        with t.subTest('a list no record names reads as null'):
+            ret = t.tk.listed_snapshot(None)
+            t.assertEqual(ret, {'title': 'A task', 'list': None})
 
     def test_schema_fields(t) -> None:
         t.tk.fields = {
@@ -681,3 +703,27 @@ class TodoDocumentTests(TestCase):
             t.td.mark_done(1)
             ret = t.td.lines[1]
             t.assertEqual(ret, '- [x] Quote - [ ] in a title')
+
+    def test_mark_open(t) -> None:
+        cases = {
+            'the box is cleared, the rest of the line kept': (
+                '- [x] A task [P:2]',
+                '- [ ] A task [P:2]',
+            ),
+            'a capital X too': ('- [X] A task', '- [ ] A task'),
+            'an indented task keeps its indent': (
+                '    - [x] A subtask [LOE:1]',
+                '    - [ ] A subtask [LOE:1]',
+            ),
+            'a box quoted in the title is left alone': (
+                '- [x] Quote - [x] in a title',
+                '- [ ] Quote - [x] in a title',
+            ),
+        }
+        for name, (line, expected) in cases.items():
+            with t.subTest(name):
+                t.td.lines = ['## Open', line]
+
+                t.td.mark_open(1)
+
+                t.assertEqual(t.td.lines[1], expected)

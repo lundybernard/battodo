@@ -67,8 +67,9 @@ MESSAGES = {
     'show.selector.help': "the task's [ID:] value, or part of its title",
     'show.format.help': 'output format: text for a terminal, json for agents',
     # history
-    'history.description': "list one task's completions and its other"
-    ' events that carry attributes, newest first, from the journal',
+    'history.description': "list one task's completions, its reopens and"
+    ' its other events that carry attributes, newest first, from the'
+    ' journal',
     'history.help': 'for details use history --help',
     'history.selector.metavar': 'selector',
     'history.selector.help': "the task's [ID:] value, or part of its"
@@ -89,6 +90,10 @@ MESSAGES = {
     'update.attrs.help': 'attributes of the update: key=value, ...;'
     ' a key is a lowercase identifier, a value may hold commas and =',
     'update.note.help': 'a note on the update; the attribute note',
+    'update.list.help': 'move the task and its subtasks to this list: the'
+    " list's filename stem, e.g. chores for chores.md",
+    'update.with_subtasks.help': 'reopen a closed task and each closed'
+    ' subtask below it; without it, its subtasks stay closed',
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',

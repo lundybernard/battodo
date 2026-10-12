@@ -18,7 +18,9 @@ from battodo.history import (
     HistoryEntry,
     HistoryJsonView,
     HistoryView,
+    StreamSelection,
     TaskHistory,
+    TaskStream,
 )
 from battodo.journal import Journal
 
@@ -111,6 +113,71 @@ HISTORY = (
             'checklist_item': True,
         },
         '2026-08-04T16:00:00+00:00',
+    ),
+    (
+        'TaskAdded',
+        'task/pf11pf',
+        {'delta': {}, 'snapshot': {'title': 'Paint a fence'}},
+        '2026-08-05T16:00:00+00:00',
+    ),
+    (
+        'TaskAdded',
+        'task/bp22bp',
+        {
+            'delta': {},
+            'snapshot': {'title': 'Buy paint'},
+            'parent': 'pf11pf',
+        },
+        '2026-08-05T16:00:00+00:00',
+    ),
+    (
+        'TaskCompleted',
+        'task/bp22bp',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {'title': 'Buy paint', 'list': 'chores'},
+            'ancestry': 'Paint a fence > Buy paint',
+            'completed_on': '2026-08-06',
+        },
+        '2026-08-06T16:00:00+00:00',
+    ),
+    (
+        'TaskScratched',
+        'task/pf11pf',
+        {
+            'delta': {'removed': [False, True]},
+            'snapshot': {'title': 'Paint a fence', 'list': 'chores'},
+            'ancestry': 'Paint a fence',
+        },
+        '2026-08-07T16:00:00+00:00',
+    ),
+    (
+        'TaskCompleted',
+        'task/rx33rx',
+        {
+            'delta': {'done': [False, True]},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+            'completed_on': '2026-08-08',
+        },
+        '2026-08-08T16:00:00+00:00',
+    ),
+    (
+        'TaskUpdated',
+        'task/rx33rx',
+        {
+            'delta': {'DUE': [None, '2026-09-08'], 'done': [True, False]},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+        },
+        '2026-08-09T16:00:00+00:00',
+    ),
+    (
+        'TaskUpdated',
+        'task/rx33rx',
+        {
+            'delta': {'DUE': ['2026-09-08', '2026-09-09']},
+            'snapshot': {'title': 'Rx refill', 'list': 'chores'},
+        },
+        '2026-08-10T16:00:00+00:00',
     ),
 )
 
@@ -205,9 +272,10 @@ class TaskHistoryTests(TestCase):
             'a part of several titles, each named': (
                 'the',
                 (
-                    "'the' matches 3 tasks in the journal: "
-                    "'Renew the parking permit', 'Water the plants', "
-                    "'Sweep the deck'"
+                    "'the' matches 3 tasks in the journal:\n"
+                    'ab12cd  2026-10-01  Renew the parking permit\n'
+                    'qq11rr  2026-08-03  Sweep the deck\n'
+                    'zz99yy  2026-08-02  Water the plants'
                 ),
             ),
         }
@@ -263,11 +331,149 @@ class TaskHistoryTests(TestCase):
                 [('TaskCompleted', False, date(2026, 7, 31), {})],
             ),
             'a stream with no entries': ('qq11rr', []),
+            'a reopen, beside its completion; a plain update is no entry': (
+                'rx33rx',
+                [
+                    ('TaskUpdated', False, date(2026, 8, 9), {}),
+                    ('TaskCompleted', False, date(2026, 8, 8), {}),
+                ],
+            ),
         }
         for name, (selector, expected) in cases.items():
             with t.subTest(name):
                 ret = history_of(t.dir, selector).entries
                 t.assertEqual([described(entry) for entry in ret], expected)
+
+
+class StreamSelectionTests(TestCase):
+    """Contract tests for battodo.history.StreamSelection."""
+
+    def setUp(t) -> None:
+        t.dir = history_source(t)
+
+    def test_stream(t) -> None:
+        cases = {
+            'an id names its stream, over the titles that quote it': (
+                'ab12cd',
+                'ab12cd',
+            ),
+            'part of the current title, in any case': ('PLANTS', 'zz99yy'),
+            'a stream with no event of its own, by id': ('dd44ee', 'dd44ee'),
+        }
+        for name, (selector, expected) in cases.items():
+            with t.subTest(name):
+                ret = selection_of(t.dir, selector).stream
+                t.assertEqual(ret.task_id, expected)
+
+        refused = {
+            'the title of a checklist item': (
+                'Buy nails',
+                "no task in the journal matches 'Buy nails'",
+            ),
+            'a part of several titles, each named': (
+                'the',
+                (
+                    "'the' matches 3 tasks in the journal:\n"
+                    'ab12cd  2026-10-01  Renew the parking permit\n'
+                    'qq11rr  2026-08-03  Sweep the deck\n'
+                    'zz99yy  2026-08-02  Water the plants'
+                ),
+            ),
+        }
+        for name, (selector, message) in refused.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    _ = selection_of(t.dir, selector).stream
+
+                t.assertEqual(str(caught.exception), message)
+
+
+class TaskStreamTests(TestCase):
+    """Contract tests for battodo.history.TaskStream."""
+
+    def setUp(t) -> None:
+        streams = Journal(history_source(t)).streams
+        t.permit = TaskStream('task/ab12cd', streams['task/ab12cd'], TZ)
+        t.nails = TaskStream('task/dd44ee', streams['task/dd44ee'], TZ)
+        t.fence = TaskStream('task/pf11pf', streams['task/pf11pf'], TZ)
+        t.paint = TaskStream('task/bp22bp', streams['task/bp22bp'], TZ)
+
+    def test_task_id(t) -> None:
+        ret = t.permit.task_id
+        t.assertEqual(ret, 'ab12cd')
+
+    def test_title(t) -> None:
+        with t.subTest('the title of the last event of its own'):
+            ret = t.permit.title
+            t.assertEqual(ret, 'Renew the parking permit')
+
+        with t.subTest('none without an event of its own'):
+            ret = t.nails.title
+            t.assertIsNone(ret)
+
+    def test_day(t) -> None:
+        ret = t.permit.day
+        # The note of 2026-10-02 05:30 UTC, on its local day.
+        t.assertEqual(ret, date(2026, 10, 1))
+
+    def test_seq(t) -> None:
+        ret = t.permit.seq
+        t.assertEqual(ret, 6)
+
+    def test_closed(t) -> None:
+        cases = {
+            'a note after the completion: open': (t.permit, False),
+            'a scratch closes the task': (t.fence, True),
+            'and so does a completion': (t.paint, True),
+            'no event of its own: open': (t.nails, False),
+        }
+        for name, (stream, expected) in cases.items():
+            with t.subTest(name):
+                ret = stream.closed
+                t.assertIs(ret, expected)
+
+    def test_snapshot(t) -> None:
+        ret = t.fence.snapshot
+        t.assertEqual(ret, {'title': 'Paint a fence', 'list': 'chores'})
+
+    def test_list_name(t) -> None:
+        with t.subTest('the list the last snapshot names'):
+            ret = t.fence.list_name
+            t.assertEqual(ret, 'chores')
+
+        with t.subTest('none from a snapshot that names none'):
+            ret = t.permit.list_name
+            t.assertIsNone(ret)
+
+    def test_nested(t) -> None:
+        with t.subTest('a subtask'):
+            ret = t.paint.nested
+            t.assertTrue(ret)
+
+        with t.subTest('a top-level task'):
+            ret = t.fence.nested
+            t.assertFalse(ret)
+
+    def test_parent_id(t) -> None:
+        with t.subTest('the parent its add names'):
+            ret = t.paint.parent_id
+            t.assertEqual(ret, 'pf11pf')
+
+        with t.subTest('none for a top-level task'):
+            ret = t.fence.parent_id
+            t.assertIsNone(ret)
+
+    def test_checklist_titles(t) -> None:
+        ret = t.permit.checklist_titles
+        t.assertEqual(ret, ['Print the receipt'])
+
+    def test_own(t) -> None:
+        ret = t.permit.own
+        # The checklist item's completion is not the task's own.
+        t.assertEqual(
+            [event['type'] for event in ret],
+            ['TaskAdded', 'TaskUpdated', 'TaskCompleted', 'TaskAnnotated'],
+        )
 
 
 class HistoryViewTests(TestCase):
@@ -339,6 +545,15 @@ def history_source(t: TestCase) -> Path:
 def history_of(source: Path, selector: str) -> TaskHistory:
     """The history `selector` names in `source`, read in TZ."""
     return TaskHistory(Journal(source), selector, TZ)
+
+
+def selection_of(source: Path, selector: str) -> StreamSelection:
+    """The selection `selector` makes of every stream in `source`."""
+    streams = [
+        TaskStream(stream_id, events, TZ)
+        for stream_id, events in Journal(source).streams.items()
+    ]
+    return StreamSelection(streams, selector)
 
 
 def described(entry: HistoryEntry) -> tuple[str, bool, date, dict[str, Any]]:

@@ -10,7 +10,9 @@ from ..history import (
     HistoryEntryView,
     HistoryJsonView,
     HistoryView,
+    StreamSelection,
     TaskHistory,
+    TaskStream,
 )
 
 SRC = 'battodo.history'
@@ -24,7 +26,7 @@ class TaskHistoryTests(TestCase):
     """Unit tests for battodo.history.TaskHistory."""
 
     def setUp(t) -> None:
-        t.journal = Mock(spec=['events'])
+        t.journal = Mock(spec=['streams'])
         t.th = TaskHistory(t.journal, 'a selector', sentinel.zone)
 
     @patch(f'{SRC}.Journal', autospec=True)
@@ -42,43 +44,79 @@ class TaskHistoryTests(TestCase):
         t.assertEqual(ret.selector, 'a selector')
         t.assertIs(ret.zone, sentinel.zone)
 
-    @patch.object(TaskHistory, 'stream_id', new_callable=PropertyMock)
-    def test_task_id(t, stream_id: PropertyMock) -> None:
-        stream_id.return_value = 'task/ab12cd'
+    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
+    def test_task_id(t, stream: PropertyMock) -> None:
+        stream.return_value = Mock(spec=['task_id'], task_id='ab12cd')
         ret = t.th.task_id
         t.assertEqual(ret, 'ab12cd')
 
-    @patch.object(TaskHistory, 'titles', new_callable=PropertyMock)
-    @patch.object(TaskHistory, 'stream_id', new_callable=PropertyMock)
-    def test_title(t, stream_id: PropertyMock, titles: PropertyMock) -> None:
-        stream_id.return_value = 'task/ab12cd'
+    @patch(f'{SRC}.StreamSelection', autospec=True)
+    @patch.object(TaskHistory, 'streams', new_callable=PropertyMock)
+    def test_stream(
+        t,
+        streams: PropertyMock,
+        stream_selection: MagicMock,
+    ) -> None:
+        streams.return_value = sentinel.streams
 
-        with t.subTest('the current title of the stream'):
-            titles.return_value = {'task/ab12cd': 'A task title'}
-            ret = t.th.title
-            t.assertEqual(ret, 'A task title')
+        ret = t.th.stream
 
-        with t.subTest('none where the stream records no title'):
-            titles.return_value = {'task/zz99yy': 'Another task title'}
-            ret = t.th.title
-            t.assertIsNone(ret)
+        stream_selection.assert_called_once_with(
+            sentinel.streams, 'a selector'
+        )
+        t.assertIs(ret, stream_selection.return_value.stream)
+
+    @patch(f'{SRC}.TaskStream', autospec=True)
+    def test_streams(t, task_stream: MagicMock) -> None:
+        t.journal.streams = {
+            'task/aa': sentinel.aa_events,
+            'task/bb': sentinel.bb_events,
+        }
+        task_stream.side_effect = [sentinel.aa, sentinel.bb]
+
+        ret = t.th.streams
+
+        t.assertEqual(ret, [sentinel.aa, sentinel.bb])
+        t.assertEqual(
+            task_stream.call_args_list,
+            [
+                call('task/aa', sentinel.aa_events, sentinel.zone),
+                call('task/bb', sentinel.bb_events, sentinel.zone),
+            ],
+        )
+
+    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
+    def test_title(t, stream: PropertyMock) -> None:
+        stream.return_value = Mock(spec=['title'], title='A task title')
+        ret = t.th.title
+        t.assertEqual(ret, 'A task title')
 
     @patch(f'{SRC}.HistoryEntry', autospec=True)
-    @patch.object(TaskHistory, 'events', new_callable=PropertyMock)
+    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
     def test_entries(
-        t, events: PropertyMock, history_entry: MagicMock
+        t, stream: PropertyMock, history_entry: MagicMock
     ) -> None:
-        events.return_value = [
+        stream.return_value = Mock(spec=['events'])
+        stream.return_value.events = [
             sentinel.added,
             sentinel.updated,
             sentinel.completed,
             sentinel.annotated,
+            sentinel.reopened,
         ]
         added = an_entry('TaskAdded', date(2026, 9, 1), {})
         updated = an_entry('TaskUpdated', date(2026, 9, 2), {'k': 'v'})
         completed = an_entry('TaskCompleted', date(2026, 9, 30), {})
         annotated = an_entry('TaskAnnotated', date(2026, 9, 30), {'k': 'v'})
-        history_entry.side_effect = [added, updated, completed, annotated]
+        reopened = an_entry('TaskUpdated', date(2026, 10, 1), {})
+        reopened.reopen = True
+        history_entry.side_effect = [
+            added,
+            updated,
+            completed,
+            annotated,
+            reopened,
+        ]
 
         ret = t.th.entries
 
@@ -89,121 +127,265 @@ class TaskHistoryTests(TestCase):
                     call(sentinel.updated, sentinel.zone),
                     call(sentinel.completed, sentinel.zone),
                     call(sentinel.annotated, sentinel.zone),
+                    call(sentinel.reopened, sentinel.zone),
                 ]
             )
 
-        with t.subTest('a completion, and another event with attributes'):
+        with t.subTest('a completion, a reopen, an event with attributes'):
             # Newest first by day. In a tie, the later event comes first.
-            t.assertEqual(ret, [annotated, completed, updated])
+            t.assertEqual(ret, [reopened, annotated, completed, updated])
 
-    @patch.object(TaskHistory, 'stream_id', new_callable=PropertyMock)
-    def test_events(t, stream_id: PropertyMock) -> None:
-        stream_id.return_value = 'task/aa'
-        t.journal.events = [
-            {'seq': 1, 'stream_id': 'task/aa'},
-            {'seq': 2, 'stream_id': 'task/bb'},
-            {'seq': 3, 'stream_id': 'task/aa'},
-        ]
 
-        ret = t.th.events
+class StreamSelectionTests(TestCase):
+    """Unit tests for battodo.history.StreamSelection."""
 
-        t.assertEqual(
-            ret,
-            [
-                {'seq': 1, 'stream_id': 'task/aa'},
-                {'seq': 3, 'stream_id': 'task/aa'},
-            ],
-        )
+    def setUp(t) -> None:
+        t.permit = a_stream('ab12cd', 'Renew the permit', 1)
+        t.follow_up = a_stream('zz99yy', 'Follow up on ab12cd', 2)
+        # The later event of a tie on 2026-09-30 is the sweep's.
+        t.water = a_stream('qq11rr', 'Water the plants', 30)
+        t.sweep = a_stream('dd44ee', 'Sweep the plants', 30)
+        t.water.seq, t.sweep.seq = 5, 6
+        t.untitled = a_stream('ee55ff', None, 3)
+        t.streams = [t.permit, t.follow_up, t.water, t.sweep, t.untitled]
+        t.ss = StreamSelection(t.streams, 'a selector')
 
-    @patch.object(TaskHistory, 'titles', new_callable=PropertyMock)
-    def test_stream_id(t, titles: PropertyMock) -> None:
-        t.journal.events = [
-            {'stream_id': 'task/ab12cd'},
-            {'stream_id': 'task/zz99yy'},
-        ]
-        titles.return_value = {
-            'task/zz99yy': 'Follow up on ab12cd',
-            'task/qq11rr': 'Water the plants',
-            'task/dd44ee': 'Sweep the plants',
-        }
-        cases = {
-            'an id names its stream, over the titles that quote it': (
-                'ab12cd',
-                'task/ab12cd',
-            ),
-            'part of one title, in any case': ('WATER', 'task/qq11rr'),
-        }
-        for name, (selector, expected) in cases.items():
-            with t.subTest(name):
-                t.th.selector = selector
-                ret = t.th.stream_id
-                t.assertEqual(ret, expected)
+    @patch.object(StreamSelection, 'candidates', new_callable=PropertyMock)
+    def test_stream(t, candidates: PropertyMock) -> None:
+        with t.subTest('the one stream the selector names'):
+            candidates.return_value = [t.water]
+            ret = t.ss.stream
+            t.assertIs(ret, t.water)
 
         refused = {
-            'no title holds it': (
-                'nothing',
-                "no task in the journal matches 'nothing'",
+            'no stream': (
+                [],
+                "no task in the journal matches 'a selector'",
             ),
-            'two do, each named': (
-                'plants',
+            'several streams, each on a line, newest first': (
+                [t.permit, t.water, t.sweep],
                 (
-                    "'plants' matches 2 tasks in the journal: "
-                    "'Water the plants', 'Sweep the plants'"
+                    "'a selector' matches 3 tasks in the journal:\n"
+                    'dd44ee  2026-09-30  Sweep the plants\n'
+                    'qq11rr  2026-09-30  Water the plants\n'
+                    'ab12cd  2026-09-01  Renew the permit'
                 ),
             ),
         }
-        for name, (selector, message) in refused.items():
+        for name, (found, message) in refused.items():
             with t.subTest(name):
-                t.th.selector = selector
+                candidates.return_value = found
 
                 with t.assertRaises(ValueError) as caught:
-                    _ = t.th.stream_id
+                    _ = t.ss.stream
 
                 t.assertEqual(str(caught.exception), message)
 
-    def test_titles(t) -> None:
-        t.journal.events = [
+    def test_candidates(t) -> None:
+        cases = {
+            'an id names its stream, over the titles that quote it': (
+                'ab12cd',
+                [t.permit],
+            ),
+            'a stream with no title, by id': ('ee55ff', [t.untitled]),
+            'part of a title, in any case': ('WATER', [t.water]),
+            'part of several titles, in journal order': (
+                'plants',
+                [t.water, t.sweep],
+            ),
+            'no title holds it': ('nothing', []),
+        }
+        for name, (selector, expected) in cases.items():
+            with t.subTest(name):
+                t.ss.selector = selector
+                ret = t.ss.candidates
+                t.assertEqual(ret, expected)
+
+
+def a_stream(task_id: str, title: str | None, day: int) -> Any:
+    """A stand-in for one stream whose last event falls on a September day.
+
+    Its last event is the `day`-th of the journal.
+    """
+    stream = Mock(spec=['task_id', 'title', 'day', 'seq'])
+    stream.task_id, stream.title = task_id, title
+    stream.day, stream.seq = date(2026, 9, day), day
+    return stream
+
+
+class TaskStreamTests(TestCase):
+    """Unit tests for battodo.history.TaskStream."""
+
+    def setUp(t) -> None:
+        t.events: list[dict[str, Any]] = [
+            {'payload': {'delta': {}, 'snapshot': {'title': 'A first'}}},
             {
-                'stream_id': 'task/aa',
-                'payload': {'delta': {}, 'snapshot': {'title': 'A first'}},
-            },
-            {
-                'stream_id': 'task/aa',
-                'payload': {'snapshot': {'title': 'A second'}},
-            },
-            {
-                'stream_id': 'task/bb',
                 'payload': {
-                    'delta': {'title': ['B before', 'B after']},
-                    'snapshot': {'title': 'B before'},
+                    'delta': {'title': ['A second', 'A third']},
+                    'snapshot': {'title': 'A second'},
                 },
             },
             {
-                'stream_id': 'task/aa',
                 'payload': {
                     'snapshot': {'title': 'A checklist item'},
                     'checklist_item': True,
                 },
             },
-            {
-                'stream_id': 'task/cc',
-                'payload': {
-                    'snapshot': {'title': 'C checklist item'},
-                    'checklist_item': True,
-                },
-            },
         ]
+        t.ts = TaskStream('task/ab12cd', t.events, ZONE)
 
-        ret = t.th.titles
+    def test_task_id(t) -> None:
+        ret = t.ts.task_id
+        t.assertEqual(ret, 'ab12cd')
 
-        # The last own event of aa, the delta of bb, no title for cc.
-        t.assertEqual(ret, {'task/aa': 'A second', 'task/bb': 'B after'})
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_title(t, own: PropertyMock) -> None:
+        cases = {
+            'the snapshot title of the last event of its own': (
+                [{'payload': {'snapshot': {'title': 'A first'}}}],
+                'A first',
+            ),
+            'with its title delta applied': (
+                [t.events[0], t.events[1]],
+                'A third',
+            ),
+            'none without an event of its own': ([], None),
+        }
+        for name, (events, expected) in cases.items():
+            with t.subTest(name):
+                own.return_value = events
+                ret = t.ts.title
+                t.assertEqual(ret, expected)
+
+    @patch(f'{SRC}.HistoryEntry', autospec=True)
+    def test_day(t, history_entry: MagicMock) -> None:
+        ret = t.ts.day
+        history_entry.assert_called_once_with(t.events[-1], ZONE)
+        t.assertIs(ret, history_entry.return_value.day)
+
+    def test_seq(t) -> None:
+        t.events[-1]['seq'] = 7
+        ret = t.ts.seq
+        t.assertEqual(ret, 7)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_closed(t, own: PropertyMock) -> None:
+        cases = {
+            'a stream with no event of its own': ([], False),
+            'a completion closes the task': (
+                [{'type': 'TaskCompleted', 'payload': {'delta': {}}}],
+                True,
+            ),
+            'a scratch closes it too': (
+                [{'type': 'TaskScratched', 'payload': {'delta': {}}}],
+                True,
+            ),
+            'a completion that reschedules leaves it open': (
+                [
+                    {
+                        'type': 'TaskCompleted',
+                        'payload': {'delta': {'DUE': ['a', 'b']}},
+                    },
+                ],
+                False,
+            ),
+            'a later event of its own reopens it': (
+                [
+                    {'type': 'TaskCompleted', 'payload': {'delta': {}}},
+                    {'type': 'TaskUpdated', 'payload': {'delta': {}}},
+                ],
+                False,
+            ),
+        }
+        for name, (events, expected) in cases.items():
+            with t.subTest(name):
+                own.return_value = events
+                ret = t.ts.closed
+                t.assertIs(ret, expected)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_snapshot(t, own: PropertyMock) -> None:
+        with t.subTest('the snapshot of the last event of its own'):
+            own.return_value = t.events[:2]
+            ret = t.ts.snapshot
+            t.assertEqual(ret, {'title': 'A second'})
+
+        with t.subTest('none without an event of its own'):
+            own.return_value = []
+            ret = t.ts.snapshot
+            t.assertIsNone(ret)
+
+    @patch.object(TaskStream, 'snapshot', new_callable=PropertyMock)
+    def test_list_name(t, snapshot: PropertyMock) -> None:
+        cases = {
+            'the list the snapshot names': ({'list': 'chores'}, 'chores'),
+            'none where it names none': ({'title': 'A task'}, None),
+            'none without a snapshot': (None, None),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                snapshot.return_value = found
+                ret = t.ts.list_name
+                t.assertEqual(ret, expected)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_nested(t, own: PropertyMock) -> None:
+        cases = {
+            'a path past its own title': (
+                'A subtask',
+                'A task > A subtask',
+                True,
+            ),
+            'its own title alone': ('A subtask', 'A subtask', False),
+            'a title that holds the separator': ('A > B', 'A > B', False),
+            'no ancestry recorded': ('A subtask', None, False),
+        }
+        for name, (title, ancestry, expected) in cases.items():
+            with t.subTest(name):
+                payload: dict[str, Any] = {'snapshot': {'title': title}}
+                if ancestry is not None:
+                    payload['ancestry'] = ancestry
+                own.return_value = [{'payload': payload}]
+
+                ret = t.ts.nested
+
+                t.assertIs(ret, expected)
+
+        with t.subTest('a stream with no event of its own'):
+            own.return_value = []
+            ret = t.ts.nested
+            t.assertFalse(ret)
+
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_parent_id(t, own: PropertyMock) -> None:
+        with t.subTest('the parent its add names'):
+            own.return_value = [
+                {'payload': {'snapshot': {}, 'parent': 'pf11pf'}},
+                {'payload': {'snapshot': {}}},
+            ]
+            ret = t.ts.parent_id
+            t.assertEqual(ret, 'pf11pf')
+
+        with t.subTest('none where no event names one'):
+            own.return_value = [{'payload': {'snapshot': {}}}]
+            ret = t.ts.parent_id
+            t.assertIsNone(ret)
+
+    def test_checklist_titles(t) -> None:
+        ret = t.ts.checklist_titles
+        t.assertEqual(ret, ['A checklist item'])
+
+    def test_own(t) -> None:
+        ret = t.ts.own
+        # A checklist item's event belongs to the item, not the task.
+        t.assertEqual(ret, t.events[:2])
 
 
 def an_entry(kind: str, day: date, attrs: dict[str, str]) -> Mock:
-    """A stand-in for one entry of a history."""
-    entry = Mock(spec=['kind', 'day', 'attrs'])
+    """A stand-in for one entry of a history that reopens nothing."""
+    entry = Mock(spec=['kind', 'day', 'attrs', 'reopen'])
     entry.kind, entry.day, entry.attrs = kind, day, attrs
+    entry.reopen = False
     return entry
 
 
@@ -247,6 +429,22 @@ class HistoryEntryTests(TestCase):
             t.payload['completed_on'] = '2026-09-30'
             ret = t.he.day
             t.assertEqual(ret, date(2026, 9, 30))
+
+    def test_reopen(t) -> None:
+        cases: dict[str, tuple[dict[str, Any], bool]] = {
+            'no delta': ({}, False),
+            'a delta without done': ({'delta': {'P': ['1', '2']}}, False),
+            'a completion': ({'delta': {'done': [False, True]}}, False),
+            'done turns false': ({'delta': {'done': [True, False]}}, True),
+        }
+        for name, (payload, expected) in cases.items():
+            with t.subTest(name):
+                t.payload.clear()
+                t.payload.update(payload)
+
+                ret = t.he.reopen
+
+                t.assertIs(ret, expected)
 
     def test_attrs(t) -> None:
         with t.subTest('absent reads as none'):

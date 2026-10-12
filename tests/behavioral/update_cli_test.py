@@ -118,10 +118,49 @@ class UpdateCommandTests(TestCase):
             },
         )
 
+    def test_move(t) -> None:
+        before = t.show(SELECTOR)
+
+        echoed = t.run_ok('update', SELECTOR, '--list', 'chores', '-p', '3')
+
+        after = t.show(SELECTOR)
+        work = (t.source / 'work.md').read_text(encoding='utf-8')
+        chores = (t.source / 'chores.md').read_text(encoding='utf-8')
+        (moved,) = Journal(t.source).events
+
+        with t.subTest('the line and the list it joins are echoed'):
+            t.assertIn('- [ ] Legacy priority task [P:3]', echoed)
+            t.assertIn('chores.md', echoed)
+
+        with t.subTest('the task, its subtasks with it, is in the new list'):
+            t.assertEqual(after['list'], 'chores')
+            t.assertEqual(after['subtasks'], before['subtasks'])
+            t.assertNotIn('Legacy priority task', work)
+            t.assertNotIn('Open subtask', work)
+            t.assertIn('  - [ ] Open subtask [LOE:1]', chores)
+
+        with t.subTest('the event records the list it left and joined'):
+            t.assertEqual(
+                moved['payload']['delta']['list'], ['work', 'chores']
+            )
+            t.assertEqual(moved['payload']['snapshot']['list'], 'work')
+
     def test_update_rejected(t) -> None:
         """A rejected update reports on stderr and writes nothing."""
         cases = {
             'an empty update names no change': ('update', SELECTOR),
+            'a list that is not there': (
+                'update',
+                SELECTOR,
+                '--list',
+                'wrk',
+            ),
+            'a subtask moves with its top-level task alone': (
+                'update',
+                'Open subtask',
+                '--list',
+                'chores',
+            ),
             'a subtask is out of reach': (
                 'update',
                 'Open subtask',
@@ -150,6 +189,12 @@ class UpdateCommandTests(TestCase):
                 '--note',
                 'Asked by the team',
             ),
+            'the list the task is in names no change': (
+                'update',
+                SELECTOR,
+                '--list',
+                'work',
+            ),
         }
         original = (t.source / 'work.md').read_text(encoding='utf-8')
 
@@ -164,3 +209,6 @@ class UpdateCommandTests(TestCase):
                     (t.source / 'work.md').read_text(encoding='utf-8'),
                     original,
                 )
+
+        # A refusal journals no event.
+        t.assertEqual(Journal(t.source).events, [])

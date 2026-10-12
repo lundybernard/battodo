@@ -366,7 +366,7 @@ class SelectionJsonView:
             {"date": "2026-08-05",
              "active": ["career", "events", "study", "work"],
              "categories": [{"name": "work", "hidden": 2, "tasks": [
-                 {"id": null, "title": "...", "rank": 6.0,
+                 {"list": "work", "id": null, "title": "...", "rank": 6.0,
                   "priority": 2.0, "loe": null, "due": null,
                   "added": "2026-05-10", "repeat": null,
                   "tags": [], "subtasks": 0}]}]}
@@ -410,14 +410,19 @@ class CategoryJsonView:
     @property
     def rows(self) -> list['RowJsonView']:
         """The rows the category shows, each laid out as JSON."""
-        return [RowJsonView(row) for row in self.category.shown]
+        name = self.category.name
+        return [RowJsonView(row, name) for row in self.category.shown]
 
 
 class RowJsonView:
-    """One task of a selection laid out as JSON."""
+    """One task of a selection laid out as JSON.
 
-    def __init__(self, row: Row) -> None:
+    `list_name` is the name of the category that shows the row.
+    """
+
+    def __init__(self, row: Row, list_name: str) -> None:
         self.row = row
+        self.list_name = list_name
 
     @property
     def data(self) -> dict[str, object]:
@@ -429,6 +434,7 @@ class RowJsonView:
         """
         task = self.row.task
         return {
+            'list': self.list_name,
             'id': task.task_id,
             'title': task.title,
             'rank': round(self.row.rank, RANK_PLACES),

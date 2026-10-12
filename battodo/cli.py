@@ -255,6 +255,16 @@ def argparser():
         '--note',
         help=MESSAGES['update.note.help'],
     )
+    update.add_argument(
+        '--list',
+        dest='list_name',
+        help=MESSAGES['update.list.help'],
+    )
+    update.add_argument(
+        '--with-subtasks',
+        action='store_true',
+        help=MESSAGES['update.with_subtasks.help'],
+    )
 
     done = commands.add_parser(
         'done',
@@ -420,6 +430,8 @@ class Commands:
                 description=args.description,
                 attrs=args.attrs,
                 note=args.note,
+                list_name=args.list_name,
+                with_subtasks=args.with_subtasks,
             )
         )
 

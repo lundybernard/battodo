@@ -32,6 +32,7 @@ from .mutate import (
     Annotation,
     Backfill,
     Completion,
+    Reopen,
     Scratch,
     SubtaskAddition,
     SuppliedAttributes,
@@ -329,10 +330,15 @@ def update_item(
     description: str | None = None,
     attrs: str | None = None,
     note: str | None = None,
+    list_name: str | None = None,
+    with_subtasks: bool = False,
 ) -> str:
-    """Rewrite the task `selector` names.
+    """Rewrite the task `selector` names, or reopen it once closed.
 
-    Only the inputs that are not None are written. An update writes
+    The selector names an open task, or else a closed task in the
+    journal, which the update reopens (ADR 0025). A reopen with no
+    other input reopens the task unchanged. Only the inputs that are not
+    None are written. An update writes
     no `LOE` and no `REPEAT`: R3 names neither, and a changed `REPEAT`
     reschedules the task on its next completion, which is a decision
     of its own.
@@ -342,7 +348,8 @@ def update_item(
     conf : Configuration
         The resolved configuration. Only the source directory is read.
     now : datetime
-        The clock, whose local day validates a `REPEAT`.
+        The clock, whose local day validates a `REPEAT`, and whose zone
+        reads the days of the journal.
     selector : str
         Names the task.
     title : str or None
@@ -356,6 +363,11 @@ def update_item(
         The attributes of the update, as `key=value` segments.
     note : str or None
         A note, which enters the attributes under the key `note`.
+    list_name : str or None
+        The list the task moves to. Only a top-level task moves.
+    with_subtasks : bool
+        Whether a reopen opens each closed subtask below the task too.
+        An open task refuses it.
 
     Returns
     -------
@@ -364,22 +376,45 @@ def update_item(
 
     Raises
     ------
+    ListError
+        `list_name` names no list.
     SelectionError
-        The selector does not name exactly one open task.
+        The selector names several open tasks, or names no open task
+        and no closed task.
     ValueError
         The attributes do not read, nothing was named to change, the
         task cannot carry a field, a supplied value is unreadable, the
         title holds a line break, or a description line is refused.
-        Raised before anything is written.
+        A reopen also refuses several closed tasks, a checklist item,
+        a subtask line that no list and no record holds, and a record
+        that names no list when the update names none. Raised before
+        anything is written.
     """
     checked = SuppliedAttributes(attrs, note).checked
-    update = Update(
-        Task(_source(conf), selector, now.date()),
-        _supplied({'P': priority, 'DUE': due, 'TAGS': tags}),
-        title=title,
-        description=description,
-        attrs=checked,
-    )
+    task = Task(_source(conf), selector, now.date())
+    fields = _supplied({'P': priority, 'DUE': due, 'TAGS': tags})
+    update: Update | Reopen
+    if task.selection.records:
+        update = Update(
+            task,
+            fields,
+            title=title,
+            description=description,
+            attrs=checked,
+            list_name=list_name,
+            with_subtasks=with_subtasks,
+        )
+    else:
+        update = Reopen(
+            task,
+            now.tzinfo,
+            fields,
+            title=title,
+            description=description,
+            attrs=checked,
+            list_name=list_name,
+            with_subtasks=with_subtasks,
+        )
     update.write()
     return f'{update.entry}\n{update.path}'
 

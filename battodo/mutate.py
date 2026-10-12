@@ -18,8 +18,10 @@ ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task instead of removing
 it. `Scratch` abandons a task: the block goes, the log records it as
 SCRATCHED, and nothing cascades or reschedules. `Update` sets the
-fields and the title it is given and leaves the rest of the list.
-`Annotation` records a note on a task and changes nothing in it.
+fields and the title it is given and leaves the rest of the list, or
+moves a top-level task and its block to another list.
+`Reopen` brings a closed task back open, named by its stream in the
+journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
 leaves a list with nothing to stamp unwritten, so file sync sees no
 change.
@@ -30,12 +32,13 @@ so the write edits the document that selection read.
 
 import re
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
+from .history import StreamSelection, TaskStream
 from .journal import (
     ADDED_EVENT,
     ANNOTATED_EVENT,
@@ -47,7 +50,9 @@ from .journal import (
 )
 from .lists import discover_lists
 from .parser import (
+    ANCESTRY_SEPARATOR,
     CHECKBOX_RE,
+    DESCRIPTION_INDENT,
     OPEN_HEADING,
     SCHEMA_FIELDS,
     Ancestry,
@@ -56,6 +61,7 @@ from .parser import (
     parse_date,
 )
 from .repeat import next_due
+from .selector import SelectionError
 from .task import Task
 
 COMPLETED_LOG = 'completed.md'
@@ -122,8 +128,9 @@ class Addition:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -242,7 +249,8 @@ class Addition:
     @property
     def events(self) -> list['Event']:
         """One `TaskAdded`, on the stream of the new task."""
-        payload = AddedLine(self.block, self.written, self.attrs).payload
+        added = AddedLine(self.block, self.written, self.path.stem, self.attrs)
+        payload = added.payload
         return [Event(ADDED_EVENT, f'task/{self.task_id}', payload)]
 
 
@@ -276,8 +284,9 @@ class SubtaskAddition:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -453,23 +462,25 @@ class SubtaskAddition:
         The `TaskAdded` lands on the stream of the subtask, names the
         parent by id and carries the attributes.
         """
-        added = AddedLine(self.block, self.written, self.attrs).payload
-        payload = {**added, 'parent': self.parent_id}
+        added = AddedLine(self.block, self.written, self.path.stem, self.attrs)
+        payload = {**added.payload, 'parent': self.parent_id}
         event = Event(ADDED_EVENT, f'task/{self.task_id}', payload)
         return [self.stamp, event] if self.stamped else [event]
 
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the parent's new id."""
-        return IdAssignment(self.node, self.parent_id).event
+        return IdAssignment(self.node, self.parent_id, self.path.stem).event
 
 
 class Update:
-    """The update of a task: the named fields, title and description.
+    """The update of a task: the named fields, title, description, list.
 
     Only what the update names is written; the rest of the task, and
     every other line of the file, stays as it was. A task with no `[ID:]` is
-    given one, so the caller can name it by id from here on.
+    given one, so the caller can name it by id from here on. A top-level
+    task that `list_name` moves takes its whole block, last in the open
+    section of that list.
     """
 
     def __init__(
@@ -479,12 +490,16 @@ class Update:
         title: str | None = None,
         description: str | None = None,
         attrs: dict[str, str] | None = None,
+        list_name: str | None = None,
+        with_subtasks: bool = False,
     ) -> None:
         self.task = task
         self.fields = fields
         self.title = title
         self.description = description
         self.attrs = attrs
+        self.list_name = list_name
+        self.with_subtasks = with_subtasks
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -492,8 +507,9 @@ class Update:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        lists = self.lists
         changes = Changeset(
-            self.text,
+            lists,
             self.entries,
             self.events,
             self.path,
@@ -502,18 +518,45 @@ class Update:
         changes.write()
 
     @property
+    def lists(self) -> dict[Path, str]:
+        """The text of each list the update writes, by its path.
+
+        A move writes the list the task leaves and the list it joins.
+        """
+        text = self.text
+        if not self.moved:
+            return {self.task.path: text}
+        return {self.task.path: text, self.path: self.joined.text}
+
+    @property
     def source(self) -> Path:
         """The source directory of the task."""
         return self.task.source
 
-    @property
+    @cached_property
     def path(self) -> Path:
-        """The list file that holds the task."""
-        return self.task.path
+        """The list file that holds the task once it is written.
+
+        The list `list_name` names, or else the list of the task. Cached:
+        discovery reads every list in the source.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        """
+        if self.list_name is None:
+            return self.task.path
+        return NamedList(self.source, self.list_name).path
+
+    @property
+    def moved(self) -> bool:
+        """Whether the task moves to another list."""
+        return self.path != self.task.path
 
     @property
     def text(self) -> str:
-        """The list with the task rewritten.
+        """The list with the task rewritten, or without it once it moves.
 
         Raises
         ------
@@ -524,10 +567,15 @@ class Update:
             The selector does not name exactly one open task.
         ValueError
             The task is a checklist item, a subtask is given a field
-            only the top-level task carries, the title holds a line
-            break, or a description line is refused.
+            only the top-level task carries or a list, the title holds
+            a line break, or a description line is refused.
+        ListError
+            `list_name` names no discovered list.
         """
-        return self.document.text
+        document = self.document
+        if self.moved:
+            document.drop(self.rewritten.block)
+        return document.text
 
     @property
     def document(self) -> TodoDocument:
@@ -547,6 +595,40 @@ class Update:
             doc.insert_description(index, new_description.lines)
         return doc
 
+    @cached_property
+    def rewritten(self) -> TaskNode:
+        """The task as the rewritten list reads it.
+
+        Cached: the list is rewritten the same way on every read.
+        """
+        index = self.node.raw_index
+        rewritten = TodoDocument(self.document.text)
+        return next(
+            task
+            for task in rewritten.tasks
+                if task.raw_index == index
+        )  # fmt: skip
+
+    @property
+    def block(self) -> list[str]:
+        """Every line the rewritten task owns, in file order."""
+        lines = self.document.lines
+        return [lines[index] for index in sorted(self.rewritten.block)]
+
+    @property
+    def joined(self) -> TodoDocument:
+        """The list the task moves to, its block last in the open section.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        """
+        doc = TodoDocument(self.path.read_text())
+        for line in self.block:
+            doc.append_open(line)
+        return doc
+
     @property
     def written(self) -> dict[str, str]:
         """The fields written: the named ones, then an id if none."""
@@ -562,12 +644,17 @@ class Update:
         Raises
         ------
         ValueError
-            The task is a checklist item, or a subtask is given a field
-            only the top-level task carries.
+            The task is a checklist item, or a subtask is given a list
+            or a field only the top-level task carries.
         """
         node = self.task.node
         node.refuse_checklist_item()
         if self.nested:
+            if self.list_name is not None:
+                raise ValueError(
+                    f'{node.title!r} is a subtask: --list moves a '
+                    'top-level task, and its subtasks with it'
+                )
             self.supplied.refuse_root_fields()
         return node
 
@@ -601,12 +688,25 @@ class Update:
         Raises
         ------
         ValueError
-            No field, title or description is named, or a supplied value
-            does not read.
+            The update asks for the subtasks of a reopen, no field,
+            title or description is named and no list moves the task,
+            or a supplied value does not read. The list is read only
+            when nothing else is named.
         """
-        if not self.fields and self.title is None and self.description is None:
+        if self.with_subtasks:
             raise ValueError(
-                'nothing to update: name a field, a title or a description'
+                f'{self.task.selector!r} names an open task: '
+                '--with-subtasks reopens a closed task and its subtasks'
+            )
+        named = (self.title, self.description)
+        if (
+            not self.fields
+            and all(value is None for value in named)
+            and not (self.list_name is not None and self.moved)
+        ):
+            raise ValueError(
+                'nothing to update: name a field, a title, a description '
+                'or a list'
             )
         return self.supplied.checked
 
@@ -652,7 +752,7 @@ class Update:
         """
         payload: dict[str, Any] = {
             'delta': self.delta,
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.task.path.stem),
         }
         if self.nested:
             payload['ancestry'] = self.ancestry.path
@@ -676,12 +776,470 @@ class Update:
                 self.node.description,
                 new_description.checked,
             ]
+        if self.moved:
+            delta['list'] = [self.task.path.stem, self.path.stem]
         return delta
 
     @property
     def ancestry(self) -> Ancestry:
         """The task and every task above it."""
         return Ancestry(self.task.ancestry)
+
+
+class Reopen:
+    """The reopen of a closed task, named by its stream in the journal.
+
+    A completion or a scratch closes a task (ADR 0025). The task comes
+    back open, with the fields, the title and the description the reopen
+    names. A top-level task comes back last in the open section of its
+    list, as the last snapshot of its stream records it, each child
+    checked off. A closed subtask opens where its line stands, or comes
+    back with the record of its top-level task, and each closed task
+    above it opens too.
+    """
+
+    def __init__(
+        self,
+        task: Task,
+        zone: tzinfo | None,
+        fields: dict[str, str],
+        title: str | None = None,
+        description: str | None = None,
+        attrs: dict[str, str] | None = None,
+        list_name: str | None = None,
+        with_subtasks: bool = False,
+    ) -> None:
+        self.task = task
+        self.zone = zone
+        self.fields = fields
+        self.title = title
+        self.description = description
+        self.attrs = attrs
+        self.list_name = list_name
+        self.with_subtasks = with_subtasks
+
+    def write(self) -> None:
+        """Write the list and its events.
+
+        Every value is read before the first write, so a refused write
+        writes nothing.
+        """
+        text = self.text
+        changes = Changeset(
+            {self.path: text},
+            self.entries,
+            self.events,
+            self.path,
+            self.source,
+        )
+        changes.write()
+
+    @property
+    def source(self) -> Path:
+        """The source directory of the task."""
+        return self.task.source
+
+    @property
+    def text(self) -> str:
+        """The list with the task open in it.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read, the selector names several
+            closed tasks or a checklist item, a subtask is given a list
+            or a field only the top-level task carries, no list or record
+            holds the line of a subtask, no list is named for a record
+            that names none, the title holds a line break, or a
+            description line is refused.
+        SelectionError
+            The selector names no open task and no closed task.
+        ListError
+            The list named is not a discovered list.
+        """
+        return self.document.text
+
+    @property
+    def document(self) -> TodoDocument:
+        """The restored list: each closed task of the chain open.
+
+        The task the reopen names takes its fields, title and
+        description.
+        """
+        written = self.checked
+        self.refuse_nested_changes()
+        doc = TodoDocument(self.restored.text)
+        for task in self.opened:
+            doc.mark_open(task.raw_index)
+            if not task.task_id:
+                doc.set_field(task.raw_index, 'ID', self.ids[task.raw_index])
+        node = self.node
+        doc.set_fields(node.raw_index, written)
+        new_title = self.new_title
+        if new_title is not None:
+            doc.set_title(node.raw_index, new_title)
+        new_description = self.new_description
+        if new_description is not None:
+            doc.drop(set(node.note_indices))
+            doc.insert_description(node.raw_index, new_description.lines)
+        return doc
+
+    @property
+    def checked(self) -> dict[str, str]:
+        """The named fields, read.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read.
+        """
+        return self.supplied.checked
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The named fields, read against the day of the task."""
+        return SuppliedFields(self.fields, self.task.today)
+
+    @property
+    def stream(self) -> TaskStream:
+        """The closed stream the selector names.
+
+        Raises
+        ------
+        ValueError
+            The selector names several closed tasks, or a checklist
+            item.
+        SelectionError
+            The selector names no closed task either.
+        """
+        closed = [stream for stream in self.streams if stream.closed]
+        selection = StreamSelection(closed, self.task.selector)
+        if not selection.candidates:
+            self.refuse_checklist_item()
+            raise SelectionError(
+                f'no open task matches {self.task.selector!r}'
+            )
+        return selection.stream
+
+    @property
+    def streams(self) -> list[TaskStream]:
+        """Every stream of the journal of the source."""
+        return [
+            TaskStream(stream_id, events, self.zone)
+            for stream_id, events in self.journal.streams.items()
+        ]
+
+    @cached_property
+    def journal(self) -> Journal:
+        """The journal of the source.
+
+        Cached: one journal reads its file once, as it stood before the
+        write.
+        """
+        return Journal(self.source)
+
+    def refuse_checklist_item(self) -> None:
+        """Refuse a selector that names a checklist item in the journal.
+
+        Raises
+        ------
+        ValueError
+            A checklist item's title holds the selector. The refusal
+            names the id of each task that owns one.
+        """
+        part = self.task.selector.lower()
+        owners = [
+            f'[ID:{stream.task_id}]'
+            for stream in self.streams
+                if any(part in title.lower() for title in stream.checklist_titles)
+        ]  # fmt: skip
+        if owners:
+            raise ValueError(
+                f'{self.task.selector!r} names a checklist item of '
+                f'{", ".join(owners)}: a checklist item opens with its '
+                'task, not on its own'
+            )
+
+    def refuse_nested_changes(self) -> None:
+        """Refuse a list, or a field the top-level task owns, on a subtask.
+
+        Raises
+        ------
+        ValueError
+            The stream is a subtask's, and the reopen names a list or
+            such a field.
+        """
+        stream = self.stream
+        if not stream.nested:
+            return
+        if self.list_name is not None:
+            raise ValueError(
+                f'{stream.title!r} is a subtask: --list moves a top-level '
+                'task, and its subtasks with it'
+            )
+        self.supplied.refuse_root_fields()
+
+    @cached_property
+    def path(self) -> Path:
+        """The list the task opens in.
+
+        The list that holds the line of a subtask. Otherwise the list
+        `list_name` names, or else the list the record names. Cached:
+        discovery reads every list in the source.
+
+        Raises
+        ------
+        ValueError
+            Neither names a list.
+        ListError
+            The name is not a discovered list.
+        """
+        held = self.held
+        if held is not None:
+            return held
+        record = self.record
+        name = self.list_name or record.list_name
+        if name is None:
+            raise ValueError(
+                f'{record.title!r} was closed before btodo recorded its '
+                'list: name the list with --list'
+            )
+        return NamedList(self.source, name).path
+
+    @property
+    def held(self) -> Path | None:
+        """The list that holds the closed line of a subtask, or None.
+
+        The lists are the ones the selection read.
+        """
+        stream = self.stream
+        if not stream.nested:
+            return None
+        for path, doc in self.task.selection.lists:
+            tasks = list(doc.tasks)
+            for task in tasks:
+                if task.done and task.task_id == stream.task_id:
+                    return path
+                tasks.extend(task.children)
+        return None
+
+    @property
+    def record(self) -> TaskStream:
+        """The closed top-level stream whose snapshot holds the task.
+
+        The stream itself for a top-level task. Read only where no list
+        holds the line of the task.
+
+        Raises
+        ------
+        ValueError
+            No list and no record holds the line of a subtask. The
+            refusal names the parent.
+        """
+        stream = self.stream
+        if not stream.nested:
+            return stream
+        found = [
+            record
+            for record in self.streams
+                if record.closed and not record.nested and record.snapshot
+                and stream.task_id in RecordedTask(record.snapshot, 0).ids
+        ]  # fmt: skip
+        if not found:
+            raise ValueError(
+                f'{stream.title!r} is a subtask of {self.parent}, and no '
+                'list and no record of a closed task holds its line'
+            )
+        return found[-1]
+
+    @property
+    def parent(self) -> str:
+        """The parent of a subtask: its `[ID:]`, or else its path."""
+        stream = self.stream
+        if stream.parent_id:
+            return f'[ID:{stream.parent_id}]'
+        payload = stream.own[-1]['payload']
+        title = payload['snapshot']['title']
+        path = payload['ancestry'].removesuffix(f'{ANCESTRY_SEPARATOR}{title}')
+        return repr(path)
+
+    @cached_property
+    def restored(self) -> TodoDocument:
+        """The list as read, the recorded block last in its open section.
+
+        Cached: the write changes the list this reads. The document
+        edits a copy.
+        """
+        doc = TodoDocument(self.path.read_text())
+        if self.held is not None:
+            return doc
+        for line in self.recorded.lines:
+            doc.append_open(line)
+        return doc
+
+    @property
+    def recorded(self) -> 'RecordedTask':
+        """The block of the record, with the id of its stream on it."""
+        record = self.record
+        snapshot = record.snapshot or {}
+        fields = dict(snapshot['fields'])
+        if not fields.get('ID'):
+            fields['ID'] = record.task_id
+        return RecordedTask({**snapshot, 'fields': fields}, 0)
+
+    @property
+    def ancestry(self) -> list[TaskNode]:
+        """The task and every task above it in the restored list."""
+        task_id = self.stream.task_id
+        return next(
+            chain
+            for chain in self.chains.values()
+                if chain[-1].task_id == task_id
+        )  # fmt: skip
+
+    @property
+    def chains(self) -> dict[int, list[TaskNode]]:
+        """Each task of the restored list and every task above it.
+
+        By the line of the task, outermost first.
+        """
+        found = [[task] for task in self.restored.tasks]
+        for chain in found:
+            found.extend([*chain, child] for child in chain[-1].children)
+        return {chain[-1].raw_index: chain for chain in found}
+
+    @property
+    def opened(self) -> list[TaskNode]:
+        """The closed tasks of the ancestry, outermost first.
+
+        With `with_subtasks`, each closed subtask below the task follows.
+        """
+        opened = [task for task in self.ancestry if task.done]
+        if self.with_subtasks:
+            opened.extend(self.subtasks)
+        return opened
+
+    @property
+    def subtasks(self) -> list[TaskNode]:
+        """Each closed subtask below the task, in file order.
+
+        A checklist item is not a subtask.
+        """
+        named = self.node.raw_index
+        chains = sorted(self.chains.items())
+        return [
+            chain[-1]
+            for _, chain in chains
+                if any(task.raw_index == named for task in chain[:-1])
+                and chain[-1].done
+                and not chain[-1].is_checklist_item
+        ]  # fmt: skip
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each task the reopen opens, by its line.
+
+        A task with no id takes a new one. Cached: a new id is drawn at
+        random, so every read names one.
+        """
+        return {
+            task.raw_index: task.task_id or new_task_id()
+            for task in self.opened
+        }
+
+    @property
+    def node(self) -> TaskNode:
+        """The task the reopen names, in the restored list."""
+        return self.ancestry[-1]
+
+    @property
+    def new_title(self) -> str | None:
+        """The title the reopen writes, or None where it names none.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line break.
+        """
+        if self.title is None:
+            return None
+        return SuppliedTitle(self.title).checked
+
+    @property
+    def new_description(self) -> 'SuppliedDescription | None':
+        """The description the reopen writes, or None where it names none."""
+        if self.description is None:
+            return None
+        return SuppliedDescription(self.description)
+
+    @property
+    def entry(self) -> str:
+        """The task line as written."""
+        return self.document.lines[self.node.raw_index]
+
+    @property
+    def entries(self) -> list[str]:
+        """None: a reopen logs no completed-log record."""
+        return []
+
+    @property
+    def events(self) -> list['Event']:
+        """One `TaskUpdated` per task the reopen opens, outermost first.
+
+        The event of the task the reopen names carries its changes and
+        its attributes.
+        """
+        named, list_left = self.node.raw_index, self.list_left
+        events = []
+        for task in self.opened:
+            path = Ancestry(self.chains[task.raw_index])
+            changed = task.raw_index == named
+            opened = OpenedTask(
+                path,
+                self.ids[task.raw_index],
+                list_left,
+                self.delta if changed else None,
+                self.attrs if changed else None,
+            )
+            events.append(opened.event)
+        return events
+
+    @property
+    def delta(self) -> dict[str, list[Any]]:
+        """Each value the reopen writes against the one it replaced.
+
+        A top-level task that comes back to another list records the
+        list it left.
+        """
+        node = self.node
+        delta = {
+            name: [node.fields.get(name), value]
+            for name, value in self.checked.items()
+        }
+        new_title = self.new_title
+        if new_title is not None:
+            delta['title'] = [node.title, new_title]
+        new_description = self.new_description
+        if new_description is not None:
+            delta['description'] = [
+                node.description,
+                new_description.checked,
+            ]
+        list_left, list_name = self.list_left, self.path.stem
+        if list_left != list_name:
+            delta['list'] = [list_left, list_name]
+        return delta
+
+    @property
+    def list_left(self) -> str | None:
+        """The list the task was in before the reopen, by its name.
+
+        None where its record names none.
+        """
+        held = self.held
+        if held is not None:
+            return held.stem
+        return self.record.list_name
 
 
 class Completion:
@@ -708,8 +1266,9 @@ class Completion:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -898,11 +1457,12 @@ class Completion:
         """
         recurrence, rescheduled = self.recurrence, self.rescheduled
         day, ancestries = self.completed_on, self.ancestries
+        list_name = self.path.stem
         completions = []
         for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
             attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(ancestry, due, day, attrs)
+            completion = TaskCompletion(ancestry, due, day, list_name, attrs)
             completions.append(completion)
         return completions
 
@@ -918,7 +1478,7 @@ class Completion:
             for ancestry in self.ancestries
         }
         return [
-            IdAssignment(streams[index], fields['ID']).event
+            IdAssignment(streams[index], fields['ID'], self.path.stem).event
             for index, fields in self.stamps.items()
                 if not streams[index].task_id
         ]  # fmt: skip
@@ -947,8 +1507,9 @@ class Scratch:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -1046,7 +1607,7 @@ class Scratch:
         self.node.refuse_attributes(self.attrs)
         payload: dict[str, Any] = {
             'delta': {'removed': [False, True]},
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.path.stem),
             'ancestry': self.ancestry.path,
         }
         if self.node.is_checklist_item:
@@ -1059,7 +1620,7 @@ class Scratch:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the stream task's new id."""
-        return IdAssignment(self.stream, self.stream_id).event
+        return IdAssignment(self.stream, self.stream_id, self.path.stem).event
 
     @property
     def stamped(self) -> bool:
@@ -1087,8 +1648,9 @@ class Annotation:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -1193,7 +1755,7 @@ class Annotation:
     @property
     def stamp(self) -> 'Event':
         """The `TaskUpdated` that records the task's new id."""
-        return IdAssignment(self.node, self.task_id).event
+        return IdAssignment(self.node, self.task_id, self.path.stem).event
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -1201,7 +1763,8 @@ class Annotation:
 
         No delta: a note changes nothing in the task.
         """
-        payload: dict[str, Any] = {'snapshot': self.node.snapshot}
+        snapshot = self.node.listed_snapshot(self.path.stem)
+        payload: dict[str, Any] = {'snapshot': snapshot}
         if self.nested:
             payload['ancestry'] = self.ancestry.path
         payload['attrs'] = self.attrs
@@ -1281,34 +1844,36 @@ class CompletedLog:
 
 
 class Changeset:
-    """What one write changes in a source: a list, the log, the journal.
+    """What one write changes in a source: lists, the log, the journal.
 
-    A write object passes its values in the order the constructor takes
-    them, so the text is read first and its refusals come first.
+    `lists` holds the text of each list the write changes, by its path.
+    Each event names `path` as its source file. A write object reads its
+    list texts first, so their refusals come first.
     """
 
     def __init__(
         self,
-        text: str,
+        lists: dict[Path, str],
         entries: list[str],
         events: list['Event'],
         path: Path,
         source: Path,
     ) -> None:
-        self.text = text
+        self.lists = lists
         self.entries = entries
         self.events = events
         self.path = path
         self.source = source
 
     def write(self) -> None:
-        """Write the list, then the log records, then the events.
+        """Write each list, then the log records, then the events.
 
-        A list that holds the text already is not written, so file sync
+        A list that holds its text already is not written, so file sync
         sees no change.
         """
-        if self.path.read_text() != self.text:
-            self.path.write_text(self.text)
+        for path, text in self.lists.items():
+            if path.read_text() != text:
+                path.write_text(text)
         CompletedLog(self.source).append(self.entries)
         journal = Journal(self.source)
         for event in self.events:
@@ -1588,18 +2153,21 @@ class Event(NamedTuple):
 class AddedLine:
     """A task an add writes, as its `TaskAdded` records it.
 
-    `block` is the task line and its description lines. `attrs` holds
-    the attributes of the add, or None.
+    `block` is the task line and its description lines, and `list_name`
+    the stem of the list that receives it. `attrs` holds the attributes
+    of the add, or None.
     """
 
     def __init__(
         self,
         block: str,
         written: dict[str, str],
+        list_name: str,
         attrs: dict[str, str] | None = None,
     ) -> None:
         self.block = block
         self.written = written
+        self.list_name = list_name
         self.attrs = attrs
 
     @property
@@ -1611,7 +2179,7 @@ class AddedLine:
             # Post-state, unlike every other event here: an add has no
             # prior state for a snapshot to describe. Taken from the block
             # as written, so it records the file, not the intent.
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.list_name),
         }
         if self.attrs:
             payload['attrs'] = self.attrs
@@ -1626,16 +2194,17 @@ class AddedLine:
 class IdAssignment:
     """The `TaskUpdated` that records an id given to a task with none."""
 
-    def __init__(self, node: TaskNode, task_id: str) -> None:
+    def __init__(self, node: TaskNode, task_id: str, list_name: str) -> None:
         self.node = node
         self.task_id = task_id
+        self.list_name = list_name
 
     @property
     def event(self) -> Event:
         """The new id against nothing, on the stream it names."""
         payload = {
             'delta': {'ID': [None, self.task_id]},
-            'snapshot': self.node.snapshot,
+            'snapshot': self.node.listed_snapshot(self.list_name),
         }
         return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
@@ -1645,10 +2214,10 @@ class TaskCompletion:
 
     `rescheduled` is the next due date of a task the completion
     reschedules, and None for every other task. `day` is the day the
-    completion is for. `attrs` holds the attributes of the named task,
-    and None for every other task. The event of a checklist item lands
-    on the stream of an ancestor, so its payload marks it as a
-    checklist item.
+    completion is for, and `list_name` the stem of the list that holds
+    the task. `attrs` holds the attributes of the named task, and None
+    for every other task. The event of a checklist item lands on the
+    stream of an ancestor, so its payload marks it as a checklist item.
     """
 
     def __init__(
@@ -1656,11 +2225,13 @@ class TaskCompletion:
         ancestry: Ancestry,
         rescheduled: date | None,
         day: date,
+        list_name: str,
         attrs: dict[str, str] | None = None,
     ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
         self.day = day
+        self.list_name = list_name
         self.attrs = attrs
 
     @property
@@ -1676,7 +2247,7 @@ class TaskCompletion:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
-            'snapshot': node.snapshot,
+            'snapshot': node.listed_snapshot(self.list_name),
             'ancestry': self.ancestry.path,
         }
         if node.is_checklist_item:
@@ -1690,6 +2261,118 @@ class TaskCompletion:
     def status(self) -> str:
         """The status the log records a completion under."""
         return DONE_STATUS
+
+
+class RecordedTask:
+    """A task as a snapshot records it, closed, as the lines of a list.
+
+    `depth` counts the levels above the task. Each child snapshot comes
+    back one level deeper, closed too.
+    """
+
+    def __init__(self, snapshot: dict[str, Any], depth: int) -> None:
+        self.snapshot = snapshot
+        self.depth = depth
+
+    @property
+    def lines(self) -> list[str]:
+        """The task line, its description lines, then each child's."""
+        return [
+            self.line,
+            *self.description_lines,
+            *(line for child in self.children for line in child.lines),
+        ]
+
+    @property
+    def line(self) -> str:
+        """The task line, checked off, its fields in recorded order."""
+        fields = ''.join(
+            f' [{name}:{value}]'
+            for name, value in self.snapshot['fields'].items()
+        )
+        return f'{self.indent}- [x] {self.snapshot["title"]}{fields}'
+
+    @property
+    def indent(self) -> str:
+        """The indent of the task line."""
+        return ' ' * (self.depth * SUBTASK_INDENT)
+
+    @property
+    def description_lines(self) -> list[str]:
+        """The description lines, under the title."""
+        description = self.snapshot.get('description')
+        if not description:
+            return []
+        lead = self.indent + ' ' * DESCRIPTION_INDENT
+        return [f'{lead}{line}' for line in description.split('\n')]
+
+    @property
+    def children(self) -> list['RecordedTask']:
+        """Each child the snapshot records, one level deeper."""
+        return [
+            RecordedTask(child, self.depth + 1)
+            for child in self.snapshot.get('children', [])
+        ]
+
+    @property
+    def ids(self) -> set[str]:
+        """The id of the task and of each task below it that has one."""
+        own = self.snapshot['fields'].get('ID')
+        found = {own} if own else set()
+        for child in self.children:
+            found |= child.ids
+        return found
+
+
+class OpenedTask:
+    """One task a reopen opens, as its `TaskUpdated` records it.
+
+    `task_id` names its stream. A task with no `[ID:]` takes it on the
+    same event. `list_name` is the list the task was in before the
+    reopen, and None where no record names one. `delta` and `attrs`
+    hold the changes and the attributes of the task the reopen names,
+    and None for every other task.
+    """
+
+    def __init__(
+        self,
+        ancestry: Ancestry,
+        task_id: str,
+        list_name: str | None,
+        delta: dict[str, list[Any]] | None = None,
+        attrs: dict[str, str] | None = None,
+    ) -> None:
+        self.ancestry = ancestry
+        self.task_id = task_id
+        self.list_name = list_name
+        self.delta = delta
+        self.attrs = attrs
+
+    @property
+    def event(self) -> Event:
+        """The `TaskUpdated` on the stream of the task."""
+        return Event(UPDATED_EVENT, f'task/{self.task_id}', self.payload)
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        """The opening, the task as it was, and where a subtask sits.
+
+        The changes and the attributes go in where any are given.
+        """
+        node = self.ancestry.node
+        delta = dict(self.delta or {})
+        if not node.task_id:
+            delta['ID'] = [None, self.task_id]
+        delta['done'] = [True, False]
+        payload: dict[str, Any] = {
+            'delta': delta,
+            'snapshot': node.listed_snapshot(self.list_name),
+        }
+        if len(self.ancestry.tasks) > 1:
+            payload['ancestry'] = self.ancestry.path
+        if self.attrs:
+            payload['attrs'] = self.attrs
+        return payload
 
 
 class LogEntry:
@@ -1786,8 +2469,9 @@ class ListBackfill:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -1873,7 +2557,7 @@ class ListBackfill:
         for task in self.tasks:
             payload = {
                 'delta': delta,
-                'snapshot': task.snapshot,
+                'snapshot': task.listed_snapshot(self.path.stem),
                 'backfilled': True,
             }
             stream = f'task/{self.ids[task.raw_index]}'

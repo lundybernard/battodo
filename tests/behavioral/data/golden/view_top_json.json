@@ -12,6 +12,7 @@
       "hidden": 5,
       "tasks": [
         {
+          "list": "work",
           "id": null,
           "title": "Overdue task",
           "rank": 10.29,
@@ -30,6 +31,7 @@
       "hidden": 1,
       "tasks": [
         {
+          "list": "side-quests",
           "id": null,
           "title": "Future due date task",
           "rank": 2.0,

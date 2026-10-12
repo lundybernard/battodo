@@ -73,6 +73,18 @@ class Journal:
         """Every event the text holds, in order."""
         return [loads(line) for line in self.text.splitlines() if line.strip()]
 
+    @property
+    def streams(self) -> dict[str, list[dict[str, Any]]]:
+        """The events of each stream, by stream id.
+
+        The streams run in the order of their first event, and the
+        events of each in journal order.
+        """
+        streams: dict[str, list[dict[str, Any]]] = {}
+        for event in self.events:
+            streams.setdefault(event['stream_id'], []).append(event)
+        return streams
+
     def _forget(self) -> None:
         """Drop the cached text and the events parsed from it."""
         self.__dict__.pop('text', None)

@@ -19,3 +19,4 @@ stands for; its component ADRs take the following numbers.
 | [0016](0016-property-refactor/) | Property refactor (components 0017–0018) | Accepted |
 | [0019](0019-event-attributes/) | Event attributes (components 0020–0023) | Active |
 | [0024](0024-cli-inputs-config-and-command.md) | Command inputs beside the configuration | Proposed |
+| [0025](0025-reopen-by-update.md) | A closed task reopens through update | Proposed |
