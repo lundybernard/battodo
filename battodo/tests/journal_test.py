@@ -114,6 +114,30 @@ class JournalTests(TestCase):
 
             t.assertEqual(ret, [])
 
+    def test_streams(t) -> None:
+        t.journal.events = [
+            {'seq': 1, 'stream_id': 'task/bb'},
+            {'seq': 2, 'stream_id': 'task/aa'},
+            {'seq': 3, 'stream_id': 'task/bb'},
+        ]
+
+        ret = t.journal.streams
+
+        # In the order of its first event, each in journal order.
+        t.assertEqual(
+            list(ret.items()),
+            [
+                (
+                    'task/bb',
+                    [
+                        {'seq': 1, 'stream_id': 'task/bb'},
+                        {'seq': 3, 'stream_id': 'task/bb'},
+                    ],
+                ),
+                ('task/aa', [{'seq': 2, 'stream_id': 'task/aa'}]),
+            ],
+        )
+
     def test_append(t) -> None:
         event = t.journal.append(
             'TaskAdded',

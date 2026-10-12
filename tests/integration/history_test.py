@@ -18,7 +18,9 @@ from battodo.history import (
     HistoryEntry,
     HistoryJsonView,
     HistoryView,
+    StreamSelection,
     TaskHistory,
+    TaskStream,
 )
 from battodo.journal import Journal
 
@@ -270,6 +272,78 @@ class TaskHistoryTests(TestCase):
                 t.assertEqual([described(entry) for entry in ret], expected)
 
 
+class StreamSelectionTests(TestCase):
+    """Contract tests for battodo.history.StreamSelection."""
+
+    def setUp(t) -> None:
+        t.dir = history_source(t)
+
+    def test_stream(t) -> None:
+        cases = {
+            'an id names its stream, over the titles that quote it': (
+                'ab12cd',
+                'ab12cd',
+            ),
+            'part of the current title, in any case': ('PLANTS', 'zz99yy'),
+            'a stream with no event of its own, by id': ('dd44ee', 'dd44ee'),
+        }
+        for name, (selector, expected) in cases.items():
+            with t.subTest(name):
+                ret = selection_of(t.dir, selector).stream
+                t.assertEqual(ret.task_id, expected)
+
+        refused = {
+            'the title of a checklist item': (
+                'Buy nails',
+                "no task in the journal matches 'Buy nails'",
+            ),
+            'a part of several titles, each named': (
+                'the',
+                (
+                    "'the' matches 3 tasks in the journal: "
+                    "'Renew the parking permit', 'Water the plants', "
+                    "'Sweep the deck'"
+                ),
+            ),
+        }
+        for name, (selector, message) in refused.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    _ = selection_of(t.dir, selector).stream
+
+                t.assertEqual(str(caught.exception), message)
+
+
+class TaskStreamTests(TestCase):
+    """Contract tests for battodo.history.TaskStream."""
+
+    def setUp(t) -> None:
+        streams = Journal(history_source(t)).streams
+        t.permit = TaskStream('task/ab12cd', streams['task/ab12cd'], TZ)
+        t.nails = TaskStream('task/dd44ee', streams['task/dd44ee'], TZ)
+
+    def test_task_id(t) -> None:
+        ret = t.permit.task_id
+        t.assertEqual(ret, 'ab12cd')
+
+    def test_title(t) -> None:
+        with t.subTest('the title of the last event of its own'):
+            ret = t.permit.title
+            t.assertEqual(ret, 'Renew the parking permit')
+
+        with t.subTest('none without an event of its own'):
+            ret = t.nails.title
+            t.assertIsNone(ret)
+
+    def test_own(t) -> None:
+        ret = t.permit.own
+        # The checklist item's completion is not the task's own.
+        t.assertEqual(
+            [event['type'] for event in ret],
+            ['TaskAdded', 'TaskUpdated', 'TaskCompleted', 'TaskAnnotated'],
+        )
+
+
 class HistoryViewTests(TestCase):
     """Contract tests for battodo.history.HistoryView.text."""
 
@@ -339,6 +413,15 @@ def history_source(t: TestCase) -> Path:
 def history_of(source: Path, selector: str) -> TaskHistory:
     """The history `selector` names in `source`, read in TZ."""
     return TaskHistory(Journal(source), selector, TZ)
+
+
+def selection_of(source: Path, selector: str) -> StreamSelection:
+    """The selection `selector` makes of every stream in `source`."""
+    streams = [
+        TaskStream(stream_id, events, TZ)
+        for stream_id, events in Journal(source).streams.items()
+    ]
+    return StreamSelection(streams, selector)
 
 
 def described(entry: HistoryEntry) -> tuple[str, bool, date, dict[str, Any]]:

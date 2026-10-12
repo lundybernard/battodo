@@ -179,3 +179,23 @@ class JournalTests(TestCase):
             ret = Journal(t.dir).events
 
             t.assertEqual(ret[-1], legacy)
+
+    def test_streams(t) -> None:
+        t.append(stream_id='task/bb')
+        t.append(stream_id='task/aa', event_type='TaskAdded')
+        t.append(stream_id='task/bb', event_type='TaskCompleted')
+
+        ret = Journal(t.dir).streams
+
+        # In the order of its first event, each in journal order.
+        t.assertEqual(
+            {
+                stream_id: [event['type'] for event in events]
+                for stream_id, events in ret.items()
+            },
+            {
+                'task/bb': ['TaskUpdated', 'TaskCompleted'],
+                'task/aa': ['TaskAdded'],
+            },
+        )
+        t.assertEqual(list(ret), ['task/bb', 'task/aa'])
