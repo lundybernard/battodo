@@ -89,6 +89,8 @@ MESSAGES = {
     'update.attrs.help': 'attributes of the update: key=value, ...;'
     ' a key is a lowercase identifier, a value may hold commas and =',
     'update.note.help': 'a note on the update; the attribute note',
+    'update.list.help': 'move the task and its subtasks to this list: the'
+    " list's filename stem, e.g. chores for chores.md",
     # done
     'done.description': 'complete a task and log it to completed.md',
     'done.help': 'for details use done --help',

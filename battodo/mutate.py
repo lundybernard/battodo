@@ -18,7 +18,8 @@ ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task instead of removing
 it. `Scratch` abandons a task: the block goes, the log records it as
 SCRATCHED, and nothing cascades or reschedules. `Update` sets the
-fields and the title it is given and leaves the rest of the list.
+fields and the title it is given and leaves the rest of the list, or
+moves a top-level task and its block to another list.
 `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
 leaves a list with nothing to stamp unwritten, so file sync sees no
@@ -499,9 +500,9 @@ class Update:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
-        text = self.text
+        lists = self.lists
         changes = Changeset(
-            {self.path: text},
+            lists,
             self.entries,
             self.events,
             self.path,
@@ -515,7 +516,10 @@ class Update:
 
         A move writes the list the task leaves and the list it joins.
         """
-        raise NotImplementedError
+        text = self.text
+        if not self.moved:
+            return {self.task.path: text}
+        return {self.task.path: text, self.path: self.joined.text}
 
     @property
     def source(self) -> Path:
@@ -524,17 +528,28 @@ class Update:
 
     @cached_property
     def path(self) -> Path:
-        """The list file that holds the task."""
-        return self.task.path
+        """The list file that holds the task once it is written.
+
+        The list `list_name` names, or else the list of the task. Cached:
+        discovery reads every list in the source.
+
+        Raises
+        ------
+        ListError
+            `list_name` names no discovered list.
+        """
+        if self.list_name is None:
+            return self.task.path
+        return NamedList(self.source, self.list_name).path
 
     @property
     def moved(self) -> bool:
         """Whether the task moves to another list."""
-        raise NotImplementedError
+        return self.path != self.task.path
 
     @property
     def text(self) -> str:
-        """The list with the task rewritten.
+        """The list with the task rewritten, or without it once it moves.
 
         Raises
         ------
@@ -545,10 +560,15 @@ class Update:
             The selector does not name exactly one open task.
         ValueError
             The task is a checklist item, a subtask is given a field
-            only the top-level task carries, the title holds a line
-            break, or a description line is refused.
+            only the top-level task carries or a list, the title holds
+            a line break, or a description line is refused.
+        ListError
+            `list_name` names no discovered list.
         """
-        return self.document.text
+        document = self.document
+        if self.moved:
+            document.drop(self.rewritten.block)
+        return document.text
 
     @property
     def document(self) -> TodoDocument:
@@ -571,12 +591,19 @@ class Update:
     @property
     def rewritten(self) -> TaskNode:
         """The task as the rewritten list reads it."""
-        raise NotImplementedError
+        index = self.node.raw_index
+        rewritten = TodoDocument(self.document.text)
+        return next(
+            task
+            for task in rewritten.tasks
+                if task.raw_index == index
+        )  # fmt: skip
 
     @property
     def block(self) -> list[str]:
         """Every line the rewritten task owns, in file order."""
-        raise NotImplementedError
+        lines = self.document.lines
+        return [lines[index] for index in sorted(self.rewritten.block)]
 
     @property
     def joined(self) -> TodoDocument:
@@ -587,7 +614,11 @@ class Update:
         ListError
             `list_name` names no discovered list.
         """
-        raise NotImplementedError
+        doc = TodoDocument(self.path.read_text())
+        index = doc.open_end
+        for offset, line in enumerate(self.block):
+            doc.insert(index + offset, line)
+        return doc
 
     @property
     def written(self) -> dict[str, str]:
@@ -604,12 +635,17 @@ class Update:
         Raises
         ------
         ValueError
-            The task is a checklist item, or a subtask is given a field
-            only the top-level task carries.
+            The task is a checklist item, or a subtask is given a list
+            or a field only the top-level task carries.
         """
         node = self.task.node
         node.refuse_checklist_item()
         if self.nested:
+            if self.list_name is not None:
+                raise ValueError(
+                    f'{node.title!r} is a subtask: --list moves a '
+                    'top-level task, and its subtasks with it'
+                )
             self.supplied.refuse_root_fields()
         return node
 
@@ -643,12 +679,19 @@ class Update:
         Raises
         ------
         ValueError
-            No field, title or description is named, or a supplied value
-            does not read.
+            No field, title or description is named and no list moves
+            the task, or a supplied value does not read. The list is
+            read only when nothing else is named.
         """
-        if not self.fields and self.title is None and self.description is None:
+        named = (self.title, self.description)
+        if (
+            not self.fields
+            and all(value is None for value in named)
+            and not (self.list_name is not None and self.moved)
+        ):
             raise ValueError(
-                'nothing to update: name a field, a title or a description'
+                'nothing to update: name a field, a title, a description '
+                'or a list'
             )
         return self.supplied.checked
 
@@ -718,6 +761,8 @@ class Update:
                 self.node.description,
                 new_description.checked,
             ]
+        if self.moved:
+            delta['list'] = [self.task.path.stem, self.path.stem]
         return delta
 
     @property

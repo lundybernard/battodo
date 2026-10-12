@@ -213,6 +213,7 @@ class UpdateItemTests(TestCase):
         options = data.draw(supplied_options(UPDATE_OPTIONS))
         title = data.draw(st.one_of(st.none(), supplied_titles()))
         description = data.draw(supplied_descriptions())
+        list_name = data.draw(st.one_of(st.none(), list_names()))
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
         given = data.draw(supplied_attributes())
@@ -226,6 +227,7 @@ class UpdateItemTests(TestCase):
             options,
             description,
             given,
+            list_name,
         )
 
         with written(before) as directory:
@@ -238,6 +240,43 @@ class UpdateItemTests(TestCase):
                 **named,
                 attrs=given.text,
                 note=given.note,
+                list_name=list_name,
+            )
+
+        t.assertEqual(ret, expected)
+
+    @given(grammar.documents, st.data())
+    def test_move(
+        t,
+        drawn: tuple[str, list[Node]],
+        data: st.DataObject,
+    ) -> None:
+        text, _ = drawn
+        ancestries = descend(TodoDocument(text).tasks, [])
+        selector = data.draw(item_selectors(ancestries))
+        before = Source(source_lists(text), None, [])
+        found = outcome(text, ancestries, selector)
+        list_name = Path(OTHER_FILE).stem
+        unnamed = Attributes(None, None)
+        expected = foreseen(
+            updated,
+            before,
+            found,
+            None,
+            {},
+            None,
+            unnamed,
+            list_name,
+        )
+
+        with written(before) as directory:
+            conf = configuration(directory)
+            ret = observed(
+                update_item,
+                conf,
+                directory,
+                selector=selector,
+                list_name=list_name,
             )
 
         t.assertEqual(ret, expected)
@@ -759,29 +798,43 @@ def updated(
     options: dict[str, str],
     description: str | None,
     given: 'Attributes',
+    list_name: str | None,
 ) -> 'Outcome':
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
     one clears them. A task with no id is given one. The event carries
-    the attributes.
+    the attributes. A top-level task bound for another list takes its
+    whole block there, last in the open section.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
     if not fields and title is None and description is None:
-        raise ValueError(
-            'nothing to update: name a field, a title or a description'
-        )
+        # The list counts only where it moves the task.
+        file = None if list_name is None else list_file(before, list_name)
+        if file is not None:
+            reached(found)
+        if file in (None, LIST_FILE):
+            raise ValueError(
+                'nothing to update: name a field, a title, a description '
+                'or a list'
+            )
     values = checked(fields)
     text, ancestry = reached(found)
     node = ancestry[-1]
     refuse_checklist_item(node)
     nested = len(ancestry) > 1
+    if nested and list_name is not None:
+        raise ValueError(
+            f'{node.title!r} is a subtask: --list moves a top-level task, '
+            'and its subtasks with it'
+        )
     if nested:
         refuse_root_fields(fields)
     if title is not None:
         refuse_line_break(title)
     lines = None if description is None else description_lines(description)
+    name = LIST_FILE if list_name is None else list_file(before, list_name)
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -795,6 +848,9 @@ def updated(
         indent = ' ' * node.indent
         describe(doc, node.raw_index, indent, lines)
     entry = doc.lines[node.raw_index]
+    lists = {**before.lists, LIST_FILE: doc.text}
+    if name != LIST_FILE:
+        lists.update(moved(doc, node.raw_index, before.lists[name], name))
     delta = {
         field: [node.fields.get(field), value]
         for field, value in written_fields.items()
@@ -804,6 +860,8 @@ def updated(
     if lines is not None:
         before_text = '\n'.join(node.description_lines) or None
         delta['description'] = [before_text, '\n'.join(lines) or None]
+    if name != LIST_FILE:
+        delta['list'] = [Path(LIST_FILE).stem, Path(name).stem]
     payload: dict[str, Any] = {
         'delta': delta,
         'snapshot': snapshot(node, LIST_FILE),
@@ -812,10 +870,35 @@ def updated(
         payload['ancestry'] = path_of(ancestry)
     if attrs:
         payload['attrs'] = attrs
-    event = Appended('TaskUpdated', f'task/{task_id}', payload, LIST_FILE)
-    lists = {**before.lists, LIST_FILE: doc.text}
+    event = Appended('TaskUpdated', f'task/{task_id}', payload, name)
     after = Source(lists, before.log, journal([event]))
-    return Outcome(f'{entry}\n{SOURCE}/{LIST_FILE}', after)
+    return Outcome(f'{entry}\n{SOURCE}/{name}', after)
+
+
+def moved(
+    doc: TodoDocument,
+    index: int,
+    target: str,
+    name: str,
+) -> dict[str, str]:
+    """The list the task at `index` leaves, and the list `name` it joins.
+
+    Each line of its block goes in the order of the file, last in the
+    open section of `target`.
+    """
+    (task,) = [
+        each
+        for each in TodoDocument(doc.text).tasks
+            if each.raw_index == index
+    ]  # fmt: skip
+    block = [doc.lines[line] for line in sorted(task.block)]
+    left = TodoDocument(doc.text)
+    left.drop(task.block)
+    joined = TodoDocument(target)
+    end = joined.open_end
+    for offset, line in enumerate(block):
+        joined.insert(end + offset, line)
+    return {LIST_FILE: left.text, name: joined.text}
 
 
 def logs() -> st.SearchStrategy[str | None]:

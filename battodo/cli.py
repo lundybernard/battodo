@@ -255,6 +255,11 @@ def argparser():
         '--note',
         help=MESSAGES['update.note.help'],
     )
+    update.add_argument(
+        '--list',
+        dest='list_name',
+        help=MESSAGES['update.list.help'],
+    )
 
     done = commands.add_parser(
         'done',
@@ -420,6 +425,7 @@ class Commands:
                 description=args.description,
                 attrs=args.attrs,
                 note=args.note,
+                list_name=args.list_name,
             )
         )
 
