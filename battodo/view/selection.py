@@ -366,7 +366,7 @@ class SelectionJsonView:
             {"date": "2026-08-05",
              "active": ["career", "events", "study", "work"],
              "categories": [{"name": "work", "hidden": 2, "tasks": [
-                 {"id": null, "title": "...", "rank": 6.0,
+                 {"list": "work", "id": null, "title": "...", "rank": 6.0,
                   "priority": 2.0, "loe": null, "due": null,
                   "added": "2026-05-10", "repeat": null,
                   "tags": [], "subtasks": 0}]}]}
@@ -434,6 +434,7 @@ class RowJsonView:
         """
         task = self.row.task
         return {
+            'list': self.list_name,
             'id': task.task_id,
             'title': task.title,
             'rank': round(self.row.rank, RANK_PLACES),

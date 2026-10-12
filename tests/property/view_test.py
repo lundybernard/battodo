@@ -51,6 +51,7 @@ RULE = '─'
 HELD_BACK = '  …'
 # The fields of one published task, in the order they are listed.
 TASK_FIELDS = [
+    'list',
     'id',
     'title',
     'rank',
@@ -63,7 +64,16 @@ TASK_FIELDS = [
     'subtasks',
 ]
 # The fields a published task carries verbatim from its line.
-STORED_FIELDS = ['id', 'title', 'loe', 'due', 'added', 'repeat', 'tags']
+STORED_FIELDS = [
+    'list',
+    'id',
+    'title',
+    'loe',
+    'due',
+    'added',
+    'repeat',
+    'tags',
+]
 # Where a task with no due date sorts among the due dates of its ties.
 NO_DUE = 'zzzz'
 # A list file that holds this marker anywhere is never shown.
@@ -155,6 +165,7 @@ class WrittenList:
         """The fields each shown task carries verbatim from its line."""
         return [
             {
+                'list': CATEGORY,
                 'id': task.task_id,
                 'title': task.title,
                 'loe': task.loe,
