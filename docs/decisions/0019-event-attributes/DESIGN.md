@@ -207,9 +207,10 @@ carries attributes. Each entry shows its kind, its day, and each
 attribute as `key=value`, in recorded order. The kind is the event
 type; the checklist marker labels the completion of a checklist item.
 A completion's day is `completed_on`; any other entry's day is the
-local day of `occurred_at`. Entries run newest first by day; journal
-order ([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md))
-breaks ties. A stream with no entries gives the header and an empty
+local day of `occurred_at`. Entries run newest first by day. On one
+day, the later event in journal order
+([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md))
+comes first. A stream with no entries gives the header and an empty
 list.
 
 **JSON output.** `--format json` serializes the document that the text
