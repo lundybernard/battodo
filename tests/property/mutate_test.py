@@ -102,7 +102,7 @@ REFUSED_LINES = (
 )
 # An attribute key, and the comma-then-key that ends a segment.
 ATTRIBUTE_KEY = r'[a-z][a-z0-9_]*'
-SEPARATOR_RE = re.compile(rf',\s*{ATTRIBUTE_KEY}=')
+SEPARATOR_RE = re.compile(rf',[ \t]*{ATTRIBUTE_KEY}=')
 
 
 class AddItemTests(TestCase):
@@ -450,10 +450,14 @@ def odd_first_segments() -> st.SearchStrategy[str]:
 
 
 def odd_values() -> st.SearchStrategy[str]:
-    """A value that does not read: empty, or broken across lines."""
+    """A value that does not read: empty, or broken across lines.
+
+    Some breaks follow a comma and lead a key, which does not split.
+    """
+    breaks = ['\n', '\r', '\r\n', ',\ncost=', ',\r\nnote=']
     broken = st.tuples(
         attribute_values(),
-        st.sampled_from(['\n', '\r', '\r\n']),
+        st.sampled_from(breaks),
         attribute_values(),
     ).map(''.join)
     return st.one_of(st.just(''), broken.filter(separated))

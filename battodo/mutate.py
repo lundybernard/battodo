@@ -66,8 +66,9 @@ SUBTASK_INDENT = 2
 ROOT_ONLY_FIELDS = ('P', 'REPEAT')
 # An attribute key: a letter, then letters, digits or underscores.
 ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
-# The one place `--attrs` splits: a comma, then the next `key=`.
-ATTRIBUTE_SEPARATOR = re.compile(rf',\s*(?={ATTRIBUTE_KEY.pattern}=)')
+# The one place `--attrs` splits: a comma, spaces or tabs, then the next
+# `key=`. A line break does not split, so the value refuses it.
+ATTRIBUTE_SEPARATOR = re.compile(rf',[ \t]*(?={ATTRIBUTE_KEY.pattern}=)')
 # The key the text of `--note` enters the attributes under.
 NOTE_KEY = 'note'
 
