@@ -98,6 +98,7 @@ unit-py311 = { depends-on = [{ task = "_unit", environment = "test-py311" }] }
 unit-py312 = { depends-on = [{ task = "_unit", environment = "test-py312" }] }
 unit-py313 = { depends-on = [{ task = "_unit", environment = "test-py313" }] }
 unit-py314 = { depends-on = [{ task = "_unit", environment = "test-py314" }] }
+unit-py315 = { depends-on = [{ task = "_unit", environment = "test-py315" }] }
 typecheck = { depends-on = [
     { task = "_typecheck", environment = "typecheck" },
 ] }
@@ -183,10 +184,13 @@ python = "3.13.*"
 [tool.pixi.feature.py314.dependencies]
 python = "3.14.*"
 
+[tool.pixi.feature.py315.dependencies]
+python = "3.15.*"
+
 [tool.pixi.environments]
-# Spelled out to pin the dev interpreter at the newest supported
-# version; a solve group resolves as one package set, so test,
-# typecheck and dev inherit that same interpreter build.
+# Spelled out to pin the dev interpreter at 3.14; a solve group
+# resolves as one package set, so test, typecheck and dev inherit that
+# same interpreter build.
 default = { features = ["py314"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 # ruff is a standalone binary: no interpreter, no project install.
@@ -205,12 +209,13 @@ dev = { features = [
     "mutation",
 ], solve-group = "default" }
 # The version matrix: what turns requires-python from a claim into a
-# tested range. Each older interpreter needs its own solve group, since
-# one group means one shared package set.
+# tested range. Each interpreter other than 3.14 needs its own solve
+# group, since one group means one shared package set.
 test-py311 = { features = ["py311", "test"] }
 test-py312 = { features = ["py312", "test"] }
 test-py313 = { features = ["py313", "test"] }
 test-py314 = { features = ["py314", "test"], solve-group = "default" }
+test-py315 = { features = ["py315", "test"] }
 
 [tool.coverage.run]
 data_file = ".cache/coverage"
