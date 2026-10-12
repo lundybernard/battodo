@@ -24,6 +24,7 @@ from .completed import (
     DigestView,
 )
 from .conf import TZ
+from .history import HistoryJsonView, HistoryView, TaskHistory
 from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
 from .mutate import (
@@ -216,7 +217,10 @@ def get_history(conf: Configuration, now: datetime, *, selector: str) -> str:
         The selector does not name exactly one task in the journal, or
         the configured format is not one of FORMATS.
     """
-    raise NotImplementedError
+    history = TaskHistory.from_config(conf, now, selector=selector)
+    if _is_json(conf):
+        return HistoryJsonView(history).json
+    return HistoryView(history).text
 
 
 def add_item(

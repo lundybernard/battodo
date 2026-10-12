@@ -66,6 +66,15 @@ MESSAGES = {
     'show.selector.metavar': 'selector',
     'show.selector.help': "the task's [ID:] value, or part of its title",
     'show.format.help': 'output format: text for a terminal, json for agents',
+    # history
+    'history.description': "list one task's completions and its other"
+    ' events that carry attributes, newest first, from the journal',
+    'history.help': 'for details use history --help',
+    'history.selector.metavar': 'selector',
+    'history.selector.help': "the task's [ID:] value, or part of its"
+    ' current title; a finished task stays reachable',
+    'history.format.help': 'output format: text for a terminal, json for'
+    ' agents',
     # update
     'update.description': 'change the fields or the title of one task',
     'update.help': 'for details use update --help',
