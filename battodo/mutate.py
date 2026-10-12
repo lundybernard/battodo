@@ -122,8 +122,9 @@ class Addition:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -276,8 +277,9 @@ class SubtaskAddition:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -492,8 +494,9 @@ class Update:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -708,8 +711,9 @@ class Completion:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -947,8 +951,9 @@ class Scratch:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -1087,8 +1092,9 @@ class Annotation:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,
@@ -1281,34 +1287,36 @@ class CompletedLog:
 
 
 class Changeset:
-    """What one write changes in a source: a list, the log, the journal.
+    """What one write changes in a source: lists, the log, the journal.
 
-    A write object passes its values in the order the constructor takes
-    them, so the text is read first and its refusals come first.
+    `lists` holds the text of each list the write changes, by its path.
+    Each event names `path` as its source file. A write object reads its
+    list texts first, so their refusals come first.
     """
 
     def __init__(
         self,
-        text: str,
+        lists: dict[Path, str],
         entries: list[str],
         events: list['Event'],
         path: Path,
         source: Path,
     ) -> None:
-        self.text = text
+        self.lists = lists
         self.entries = entries
         self.events = events
         self.path = path
         self.source = source
 
     def write(self) -> None:
-        """Write the list, then the log records, then the events.
+        """Write each list, then the log records, then the events.
 
-        A list that holds the text already is not written, so file sync
+        A list that holds its text already is not written, so file sync
         sees no change.
         """
-        if self.path.read_text() != self.text:
-            self.path.write_text(self.text)
+        for path, text in self.lists.items():
+            if path.read_text() != text:
+                path.write_text(text)
         CompletedLog(self.source).append(self.entries)
         journal = Journal(self.source)
         for event in self.events:
@@ -1786,8 +1794,9 @@ class ListBackfill:
         Every value is read before the first write, so a refused write
         writes nothing.
         """
+        text = self.text
         changes = Changeset(
-            self.text,
+            {self.path: text},
             self.entries,
             self.events,
             self.path,

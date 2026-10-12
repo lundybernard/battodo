@@ -1330,7 +1330,10 @@ class ChangesetTests(TestCase):
         t.source = a_source(t)
         t.path = t.source / 'a-list.md'
         t.cs = Changeset(
-            'the list as written\n',
+            {
+                t.path: 'the list as written\n',
+                t.source / 'another-list.md': 'the other list as written\n',
+            },
             ['a record'],
             [Event('TaskAdded', 'task/zz01ab', {'delta': {}})],
             t.path,
@@ -1342,9 +1345,14 @@ class ChangesetTests(TestCase):
             t.cs.write()
 
             written = t.path.read_text(encoding='utf-8')
+            other = t.source / 'another-list.md'
             logged = (t.source / 'completed.md').read_text(encoding='utf-8')
             (event,) = Journal(t.source).events
             t.assertEqual(written, 'the list as written\n')
+            t.assertEqual(
+                other.read_text(encoding='utf-8'),
+                'the other list as written\n',
+            )
             t.assertEqual(logged, 'a record\n')
             t.assertEqual(
                 (event['type'], event['stream_id'], event['payload']),
@@ -1361,7 +1369,7 @@ class ChangesetTests(TestCase):
             # A known mtime, so a rewrite shows without a wait.
             utime(path, ns=(0, 0))
             unchanged = Changeset(
-                A_LIST,
+                {path: A_LIST},
                 ['a record'],
                 [Event('TaskAdded', 'task/zz01ab', {'delta': {}})],
                 path,

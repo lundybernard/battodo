@@ -88,7 +88,7 @@ class AdditionTests(TestCase):
             t.ad.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -336,7 +336,7 @@ class SubtaskAdditionTests(TestCase):
             t.sa.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -715,7 +715,7 @@ class UpdateTests(TestCase):
             t.up.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -1107,7 +1107,7 @@ class CompletionTests(TestCase):
             t.co.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -1647,7 +1647,7 @@ class ScratchTests(TestCase):
             t.sc.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -1945,7 +1945,7 @@ class AnnotationTests(TestCase):
             t.an.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {LIST_PATH: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 LIST_PATH,
@@ -2296,12 +2296,17 @@ class ChangesetTests(TestCase):
         t.path = MagicMock(spec=Path)
         t.path.name = 'a-list.md'
         t.path.read_text.return_value = 'the list as read'
+        t.other = MagicMock(spec=Path)
+        t.other.read_text.return_value = 'the other list as read'
         t.events = [
             Event('TaskUpdated', 'task/pp02cd', sentinel.stamp),
             Event('TaskAdded', 'task/cc03ef', sentinel.added),
         ]
         t.cs = Changeset(
-            'the list as written',
+            {
+                t.path: 'the list as written',
+                t.other: 'the other list as written',
+            },
             ['a record'],
             t.events,
             t.path,
@@ -2313,6 +2318,7 @@ class ChangesetTests(TestCase):
     def test_write(t, completed_log: MagicMock, journal: MagicMock) -> None:
         steps: list[str] = []
         t.path.write_text.side_effect = lambda text: steps.append('list')
+        t.other.write_text.side_effect = lambda text: steps.append('other')
         log = completed_log.return_value
         log.append.side_effect = lambda entries: steps.append('log')
         appended = journal.return_value.append
@@ -2320,12 +2326,15 @@ class ChangesetTests(TestCase):
 
         t.cs.write()
 
-        with t.subTest('the list, then the log, then each event'):
-            t.assertEqual(steps, ['list', 'log', 'event', 'event'])
+        with t.subTest('each list, then the log, then each event'):
+            t.assertEqual(steps, ['list', 'other', 'log', 'event', 'event'])
 
-        with t.subTest('the text goes to the list file'):
+        with t.subTest('each text goes to its list file'):
             t.path.read_text.assert_called_once_with()
             t.path.write_text.assert_called_once_with('the list as written')
+            t.other.write_text.assert_called_once_with(
+                'the other list as written'
+            )
 
         with t.subTest('the log of the source takes the records'):
             completed_log.assert_called_once_with(SOURCE)
@@ -2360,7 +2369,7 @@ class ChangesetTests(TestCase):
 
             t.cs.write()
 
-            t.assertEqual(steps, ['log', 'event', 'event'])
+            t.assertEqual(steps, ['other', 'log', 'event', 'event'])
 
 
 class NamedListTests(TestCase):
@@ -3026,7 +3035,7 @@ class ListBackfillTests(TestCase):
             t.lb.write()
 
             changeset.assert_called_once_with(
-                sentinel.text,
+                {t.path: sentinel.text},
                 sentinel.entries,
                 sentinel.events,
                 t.path,
