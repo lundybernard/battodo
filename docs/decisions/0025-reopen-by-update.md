@@ -100,3 +100,11 @@ snapshot gains them.
   and completed again logs a second record on the same id.
 - `history` lists a reopen as an entry of its own.
 - `reopen` and `reschedule` stay open as names over `update`.
+
+## Amendment — 2026-10-12
+
+The first Consequences bullet is withdrawn. A snapshot without `list` is
+outside the schema. The owner's journal was migrated in place by a
+one-off local script that is not part of the project, so every snapshot
+in it names its list. The reader does not fall back to `source_file`,
+and it does not refuse a record without a list.

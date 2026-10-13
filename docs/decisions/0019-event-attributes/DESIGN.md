@@ -278,22 +278,21 @@ closed subtask below the task too; a checklist item stays closed.
 stream. Its delta carries `done: [true, false]`, and `ID: [null, id]`
 for a task that takes a new id. The event of the task the update names
 also carries the field, title and description deltas, and
-`list: [old, new]` when the list changes; `old` is null for a record
-with no list. Its payload carries the attributes. The snapshot is the
-task as restored, checked off, with the list it closed in.
+`list: [old, new]` when the list changes. Its payload carries the
+attributes. The snapshot is the task as restored, checked off, with the
+list it closed in.
 `update --list` on an open top-level task moves its whole block, last in
 the open section of that list, in one write of both lists, and its
 `TaskUpdated` carries the `list` delta.
 
 **Refusals.** Before anything is written, a reopen refuses: a subtask
-given `--list` or a field only the top-level task carries, a record
-with no list when `--list` is left off, a list that is not there, and a
-subtask whose line no list and no record holds; that refusal names the
-parent by id where its add recorded one. An open task refuses
-`--with-subtasks`. An update with no change on an open task still
-refuses with "nothing to update", and `--list` that names the list of
-the task is no change: an unchanged result writes nothing. On a closed
-task, an update with no change reopens the task unchanged.
+given `--list` or a field only the top-level task carries, a list that
+is not there, and a subtask whose line no list and no record holds;
+that refusal names the parent by id where its add recorded one. An open
+task refuses `--with-subtasks`. An update with no change on an open task
+still refuses with "nothing to update", and `--list` that names the list
+of the task is no change: an unchanged result writes nothing. On a
+closed task, an update with no change reopens the task unchanged.
 
 **History.** A `TaskUpdated` whose delta turns `done` to false is an
 entry of `history`, with its day and its attributes.

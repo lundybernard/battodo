@@ -136,9 +136,8 @@ off; `--with-subtasks` opens them. A closed subtask opens with each
 closed task above it, and its siblings stay as they are. A checklist
 item opens only with its task.
 
-A task closed before btodo recorded its list in the journal needs
-`--list`. The completed log keeps the record of each closing, and a
-later `done` adds a new one under the same id.
+The completed log keeps the record of each closing, and a later `done`
+adds a new one under the same id.
 
 `update --list <list>` also moves an open top-level task to another
 list, its description and subtasks with it. The journal records the
