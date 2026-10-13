@@ -75,7 +75,7 @@ DESCRIBED_RECURRENCE = (
 RESCHEDULED_RECURRENCE = (
     '## Open\n'
     '- [ ] A described recurring task [DUE:2026-08-15] [REPEAT:7d] '
-    '[ID:dr01ab]\n'
+    '[ID:dr01ab] [ADDED:2026-08-08]\n'
     '      A description line.\n'
 )
 # The children of A task, as its snapshot records them.
@@ -1358,9 +1358,25 @@ class CompletionTests(TestCase):
 
             ret = completed.text
 
-            # The recurrence keeps its line, gains its next due date, and
-            # loses its children.
-            rescheduled = A_LIST.replace('2026-08-05', '2026-08-15')
+            # The recurrence keeps its line and its id, gains its next due
+            # date and the completion day as its `[ADDED:]`, and loses its
+            # children.
+            rescheduled = A_LIST.replace(
+                '[DUE:2026-08-05] [REPEAT:7d] [ID:rr01ab]',
+                '[DUE:2026-08-15] [REPEAT:7d] [ID:rr01ab] [ADDED:2026-08-08]',
+            )
+            t.assertEqual(ret, without(rescheduled, 10))
+
+        with t.subTest('a recurrence completed on a given day is added then'):
+            task = Task(a_source(t), 'A subtask that does not', GIVEN_DAY)
+            completed = Completion(task)
+
+            ret = completed.text
+
+            rescheduled = A_LIST.replace(
+                '[DUE:2026-08-05] [REPEAT:7d] [ID:rr01ab]',
+                '[DUE:2026-08-08] [REPEAT:7d] [ID:rr01ab] [ADDED:2026-08-01]',
+            )
             t.assertEqual(ret, without(rescheduled, 10))
 
         with t.subTest('a recurrence that does not read is refused'):
@@ -1467,6 +1483,7 @@ class CompletionTests(TestCase):
                         'delta': {
                             'done': [False, True],
                             'DUE': ['2026-08-05', '2026-08-15'],
+                            'ADDED': [None, '2026-08-08'],
                         },
                         'snapshot': {
                             'list': 'a-list',
