@@ -54,6 +54,10 @@ block removal only when fully done, REPEAT recompute
 (interval-from-completion vs fixed-calendar-schedule), scratch logged
 only for items accepted in a prior session.
 
+> `scratch` amended by
+> [ADR 0027](../0027-scratch-through-done.md): a scratch is
+> `done --scratch`, a close of the task without its completion.
+
 ### R6 — Composable list sources
 Views and operations merge multiple list sources: the personal
 home-directory list, explicitly configured lists in shared/synced
