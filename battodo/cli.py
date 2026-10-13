@@ -235,6 +235,10 @@ def argparser():
         help=MESSAGES['update.due.help'],
     )
     update.add_argument(
+        '--repeat',
+        help=MESSAGES['update.repeat.help'],
+    )
+    update.add_argument(
         '--tags',
         help=MESSAGES['update.tags.help'],
     )
@@ -410,6 +414,7 @@ class Commands:
                 title=args.title,
                 priority=args.priority,
                 due=args.due,
+                repeat=args.repeat,
                 tags=args.tags,
                 description=args.description,
                 attrs=args.attrs,

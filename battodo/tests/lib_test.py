@@ -382,6 +382,7 @@ class UpdateItemTests(TestCase):
             'selector': 'a selector',
             'priority': '4',
             'due': '2026-09-01',
+            'repeat': '14d',
             'title': 'A task title',
             'description': 'A description',
             'list_name': 'another-list',
@@ -394,7 +395,7 @@ class UpdateItemTests(TestCase):
         t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
         t.Update.assert_called_once_with(
             t.Task.return_value,
-            {'P': '4', 'DUE': '2026-09-01'},
+            {'P': '4', 'DUE': '2026-09-01', 'REPEAT': '14d'},
             title='A task title',
             description='A description',
             attrs=t.SuppliedAttributes.return_value.checked,
@@ -453,7 +454,7 @@ class UpdateItemTests(TestCase):
         reopen.assert_called_once_with(
             t.Task.return_value,
             t.now.tzinfo,
-            {'P': '4', 'DUE': '2026-09-01'},
+            {'P': '4', 'DUE': '2026-09-01', 'REPEAT': '14d'},
             title='A task title',
             description='A description',
             attrs=t.SuppliedAttributes.return_value.checked,

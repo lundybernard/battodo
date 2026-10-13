@@ -82,8 +82,8 @@ btodo add <list> <title> [-p N] [--loe N] [--due YYYY-MM-DD]
                          [--repeat R] [--tags a,b] [--description TEXT]
                          [--attrs ATTRS] [--note TEXT]
 btodo add <list> <title> --parent <selector>
-btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
-                        [--title TITLE] [--description TEXT]
+btodo update <selector> [-p N] [--due YYYY-MM-DD] [--repeat R]
+                        [--tags a,b] [--title TITLE] [--description TEXT]
                         [--list <list>] [--with-subtasks]
                         [--attrs ATTRS] [--note TEXT]
 btodo done <selector> [--date YYYY-MM-DD] [--scratch]
@@ -95,11 +95,18 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
 - `-p` is the priority multiplier, 0 and up. `--loe` is the level of
   effort: 1, 2, 3, 5 or 8. `--repeat` is `Nd`, `Nw`, `weekly:DAY` or
   `monthly:N`. `--tags` is a comma-separated list.
+- `update --repeat R` sets or changes the repeat of a top-level task.
+  `update --repeat None` removes it; btodo refuses an empty `--repeat`.
+  `DUE` stays as it is: the new rule applies at the next completion,
+  and with no repeat the next `done` completes the task. A repeat the
+  task already carries, or `None` on a task with none, is no change:
+  with no other option, `update` exits 1 with "nothing to update".
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
 - `--description` sets the description of a task: each line of `TEXT`
-  becomes one description line under the task. `update --description ''`
-  clears it. A subtask takes a description too. btodo refuses a line
+  becomes one description line under the task.
+  `update --description None` clears it, as `update --description ''`
+  does. A subtask takes a description too. btodo refuses a line
   that is blank, reads as a task, a heading or a comment, or holds a
   carriage return. `show` prints the description.
 - Before `add`, look for a finished task with the same meaning:

@@ -776,10 +776,29 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, without(A_LIST, 5))
 
+        with t.subTest('a description of None clears them too'):
+            cleared = described_update(t.source, '9o71lx', 'None')
+            ret = cleared.text
+            t.assertEqual(ret, without(A_LIST, 5))
+
         with t.subTest('a task with none takes them before its children'):
             described = described_update(t.source, 'rr01ab', DESCRIPTION)
             ret = described.text
             t.assertEqual(ret, with_lines(A_LIST, 10, DESCRIPTION_LINES))
+
+        with t.subTest('a new repeat replaces the one the task carries'):
+            changed = Update(
+                Task(t.source, 'rr01ab', TODAY), {'REPEAT': '14d'}
+            )
+            ret = changed.text
+            t.assertEqual(ret, A_LIST.replace('[REPEAT:7d]', '[REPEAT:14d]'))
+
+        with t.subTest('a repeat of None clears it, the due date kept'):
+            cleared = Update(
+                Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}
+            )
+            ret = cleared.text
+            t.assertEqual(ret, A_LIST.replace(' [REPEAT:7d]', ''))
 
         refused = {
             'an update that names nothing': (
@@ -791,6 +810,29 @@ class UpdateTests(TestCase):
                 Update(Task(t.source, '9o71lx', TODAY), {'DUE': 'x'}),
                 ValueError,
                 "DUE must be an ISO date, not 'x'",
+            ),
+            'an empty repeat, which is no clear': (
+                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': ''}),
+                RepeatError,
+                "unrecognised REPEAT value: ''",
+            ),
+            'the repeat the task carries, and no other change': (
+                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': '7d'}),
+                ValueError,
+                'nothing to update',
+            ),
+            'a clear of a task with no repeat, and no other change': (
+                Update(Task(t.source, '9o71lx', TODAY), {'REPEAT': 'None'}),
+                ValueError,
+                'nothing to update',
+            ),
+            'a repeat on a subtask, a clear too': (
+                Update(
+                    Task(t.source, 'A subtask that does not', TODAY),
+                    {'REPEAT': 'None'},
+                ),
+                ValueError,
+                'REPEAT belongs to the top-level task, not to a subtask',
             ),
             'a field only the top-level task carries': (
                 Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
@@ -962,6 +1004,32 @@ class UpdateTests(TestCase):
                 {'description': ['A note that stays put.', None]},
             )
 
+        with t.subTest('a cleared repeat, against null'):
+            cleared = Update(
+                Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}
+            )
+
+            (event,) = cleared.events
+
+            t.assertEqual(event.stream, 'task/rr01ab')
+            t.assertEqual(event.payload['delta'], {'REPEAT': ['7d', None]})
+
+        with t.subTest('a repeat that is no change stays out of the delta'):
+            kept = Update(
+                Task(t.source, 'rr01ab', TODAY),
+                {'P': '5', 'REPEAT': '7d'},
+            )
+            absent = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {'P': '5', 'REPEAT': 'None'},
+            )
+
+            (kept_event,) = kept.events
+            (absent_event,) = absent.events
+
+            t.assertEqual(kept_event.payload['delta'], {'P': ['3', '5']})
+            t.assertEqual(absent_event.payload['delta'], {'P': ['4', '5']})
+
         with t.subTest('a subtask records where it sits, and its new id'):
             child = Update(
                 Task(t.source, 'A subtask of it', TODAY),
@@ -1058,6 +1126,16 @@ class ReopenTests(TestCase):
                         '      A new note.',
                         *FINISHED_BLOCK[2:],
                     ],
+                ),
+            ),
+            'a repeat of None, on a task with none, writes none': (
+                reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'}),
+                'a-list.md',
+                with_lines(
+                    A_LIST,
+                    RESTORED_INDEX,
+                    [FINISHED_BLOCK[0].replace('[x]', '[ ]')]
+                    + FINISHED_BLOCK[1:],
                 ),
             ),
             'a scratched task, to the list a reopen names': (
@@ -1241,6 +1319,11 @@ class ReopenTests(TestCase):
                 below.payload['ancestry'],
                 'A finished task > Its subtask',
             )
+
+        with t.subTest('a clear of a repeat it does not carry: no change'):
+            cleared = reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'})
+            (event,) = cleared.events
+            t.assertEqual(event.payload['delta'], {'done': [True, False]})
 
         with t.subTest('a subtask in a record opens its top-level task'):
             child = reopen_of(t.source, 'fs02cd')

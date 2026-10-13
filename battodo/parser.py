@@ -8,6 +8,7 @@ fields would reorder the fields of every line it touched.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
@@ -313,7 +314,7 @@ class TodoDocument:
         """The list as it stands; the source until a method writes."""
         return '\n'.join(self.lines)
 
-    def set_fields(self, index: int, fields: dict[str, str]) -> str:
+    def set_fields(self, index: int, fields: Mapping[str, str | None]) -> str:
         """Set each of `fields` on the line at `index`, in order.
 
         Returns
@@ -325,14 +326,15 @@ class TodoDocument:
             self.set_field(index, name, value)
         return self.lines[index]
 
-    def set_field(self, index: int, name: str, value: str) -> str:
+    def set_field(self, index: int, name: str, value: str | None) -> str:
         """Set `name` to `value` on the line at `index`.
 
         An existing field is replaced where it stands; a new one is
         appended after the last field. Either way every other field
         keeps its position, which is what the round-trip guarantee
         rests on -- field order varies line to line in hand-edited
-        files.
+        files. A None value removes each copy of the field and the space
+        before it.
 
         Returns
         -------
@@ -340,12 +342,16 @@ class TodoDocument:
             The edited line.
         """
         raw = self.lines[index]
-        written = f'[{name}:{value}]'
-        found = re.search(rf'\[{name}:[^\]]*\]', raw)
-        if found:
-            edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
+        field = rf'\[{name}:[^\]]*\]'
+        if value is None:
+            edited = re.sub(f' ?{field}', '', raw)
         else:
-            edited = f'{raw.rstrip()} {written}'
+            written = f'[{name}:{value}]'
+            found = re.search(field, raw)
+            if found:
+                edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
+            else:
+                edited = f'{raw.rstrip()} {written}'
         self.lines[index] = edited
         return edited
 

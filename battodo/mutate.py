@@ -78,6 +78,8 @@ SUBTASK_INDENT = 2
 # its own, and only the root task is rescheduled, so a `[REPEAT:]` on a
 # child never fires.
 ROOT_ONLY_FIELDS = ('P', 'REPEAT')
+# The value an update names to clear what an option writes (ADR 0028).
+CLEAR_VALUE = 'None'
 # An attribute key: a letter, then letters, digits or underscores.
 ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
 # The one place `--attrs` splits: a comma, spaces or tabs, then the next
@@ -630,7 +632,7 @@ class Update:
         return doc
 
     @property
-    def written(self) -> dict[str, str]:
+    def written(self) -> dict[str, str | None]:
         """The fields written: the named ones, then an id if none."""
         checked = self.checked
         if self.node.task_id:
@@ -675,23 +677,26 @@ class Update:
     def new_description(self) -> 'SuppliedDescription | None':
         """The description the update writes, or None where it names none.
 
-        An empty description clears the description lines.
+        An empty description, or one of `None`, clears the description
+        lines.
         """
         if self.description is None:
             return None
+        if self.description == CLEAR_VALUE:
+            return SuppliedDescription('')
         return SuppliedDescription(self.description)
 
     @property
-    def checked(self) -> dict[str, str]:
-        """The named fields, read.
+    def checked(self) -> dict[str, str | None]:
+        """The named fields that change the task, read, a cleared one None.
 
         Raises
         ------
         ValueError
-            The update asks for the subtasks of a reopen, no field,
-            title or description is named and no list moves the task,
-            or a supplied value does not read. The list is read only
-            when nothing else is named.
+            The update asks for the subtasks of a reopen, no field
+            changes, no title or description is named and no list moves
+            the task, or a supplied value does not read. The list is read
+            only when nothing else is named.
         """
         if self.with_subtasks:
             raise ValueError(
@@ -700,7 +705,7 @@ class Update:
             )
         named = (self.title, self.description)
         if (
-            not self.fields
+            not self.changes
             and all(value is None for value in named)
             and not (self.list_name is not None and self.moved)
         ):
@@ -708,7 +713,29 @@ class Update:
                 'nothing to update: name a field, a title, a description '
                 'or a list'
             )
-        return self.supplied.checked
+        changes = self.changes
+        return {
+            name: value
+            for name, value in self.supplied.changed.items()
+                if name in changes
+        }  # fmt: skip
+
+    @property
+    def changes(self) -> dict[str, str]:
+        """The named fields, less a `REPEAT` that is no change.
+
+        The task is read only where the update names a `REPEAT`. The
+        repeat the task carries is no change, and a clear of a task
+        with none is no change either.
+        """
+        changes = dict(self.fields)
+        repeat = changes.get('REPEAT')
+        if repeat is None:
+            return changes
+        written = None if repeat == CLEAR_VALUE else repeat
+        if written == (self.node.repeat or None):
+            del changes['REPEAT']
+        return changes
 
     @property
     def supplied(self) -> 'SuppliedFields':
@@ -884,15 +911,22 @@ class Reopen:
         return doc
 
     @property
-    def checked(self) -> dict[str, str]:
-        """The named fields, read.
+    def checked(self) -> dict[str, str | None]:
+        """The named fields, read, a cleared one None.
+
+        A clear of a field the task does not carry is no change. The task
+        is read only where the reopen names a clear.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
-        return self.supplied.checked
+        return {
+            name: value
+            for name, value in self.supplied.changed.items()
+                if value is not None or self.node.fields.get(name)
+        }  # fmt: skip
 
     @property
     def supplied(self) -> 'SuppliedFields':
@@ -1158,9 +1192,14 @@ class Reopen:
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
-        """The description the reopen writes, or None where it names none."""
+        """The description the reopen writes, or None where it names none.
+
+        A description of `None` clears, as an empty one does.
+        """
         if self.description is None:
             return None
+        if self.description == CLEAR_VALUE:
+            return SuppliedDescription('')
         return SuppliedDescription(self.description)
 
     @property
@@ -1916,6 +1955,21 @@ class SuppliedFields:
             # an unreadable one must fail before a task carries it.
             next_due(repeat, self.today)
         return checked
+
+    @property
+    def changed(self) -> dict[str, str | None]:
+        """The fields as an update writes them: read, a cleared one None.
+
+        A `REPEAT` of `None` clears the field and is not read.
+        """
+        if self.fields.get('REPEAT') != CLEAR_VALUE:
+            return dict(self.checked)
+        kept = {
+            name: value
+            for name, value in self.fields.items()
+                if name != 'REPEAT'
+        }  # fmt: skip
+        return {**SuppliedFields(kept, self.today).checked, 'REPEAT': None}
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.

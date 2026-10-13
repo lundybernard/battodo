@@ -537,6 +537,23 @@ class TodoDocumentTests(TestCase):
             ret = tagged.set_field(1, 'TAGS', r'\1\n')
             t.assertEqual(ret, r'- [ ] X [TAGS:\1\n]')
 
+        with t.subTest('None removes a field, and the space before it'):
+            t.td.lines[BETA_INDEX] = BETA
+
+            ret = t.td.set_field(BETA_INDEX, 'REPEAT', None)
+
+            t.assertEqual(ret, '- [x] Beta [P:3] [DUE:2026-01-01]')
+            t.assertEqual(t.td.lines[BETA_INDEX], ret)
+
+        with t.subTest('None leaves a line with no such field as it is'):
+            ret = t.td.set_field(BETA_INDEX, 'REPEAT', None)
+            t.assertEqual(ret, '- [x] Beta [P:3] [DUE:2026-01-01]')
+
+        with t.subTest('None removes each copy, so none is left to read'):
+            twice = TodoDocument('## Open\n- [ ] X [REPEAT:7d] [REPEAT:14d]\n')
+            ret = twice.set_field(1, 'REPEAT', None)
+            t.assertEqual(ret, '- [ ] X')
+
     def test_set_fields(t) -> None:
         with t.subTest('each field in turn, and the edited line returned'):
             stamped = f'{BETA.replace("[P:3]", "[P:2]")} [ID:zz01ab]'
