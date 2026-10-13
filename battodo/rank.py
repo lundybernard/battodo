@@ -93,6 +93,27 @@ def due_score(task: TaskNode, today: date) -> float:
     return (DUE_HORIZON_DAYS - days) / DUE_HORIZON_DAYS
 
 
+def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
+    """How the due date scales the rank, read off `curve`.
+
+    Parameters
+    ----------
+    task : TaskNode
+        Any task; `DUE` may be absent or unreadable.
+    today : date
+        The day the rank is for.
+    curve : Curve
+        The decoded due-date curve, earliest day first.
+
+    Returns
+    -------
+    float
+        1.0 for a task with no readable due date. Otherwise the curve's
+        factor at today minus the due date.
+    """
+    raise NotImplementedError
+
+
 def rank(task: TaskNode, today: date) -> float:
     """The task's computed rank. Higher sorts first."""
     urgency = BASE_URGENCY + age_score(task, today) + due_score(task, today)

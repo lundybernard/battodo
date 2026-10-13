@@ -5,6 +5,7 @@ from ..rank import (
     DEFAULT_DUE_CURVE,
     TaskNode,
     age_score,
+    due_factor,
     due_score,
     multiplier,
     parse_curve,
@@ -12,6 +13,8 @@ from ..rank import (
 )
 
 TODAY = date(2026, 8, 8)
+# The default due-date curve, decoded: days past due, then the factor.
+CURVE = [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)]
 
 
 def ranked_task() -> TaskNode:
@@ -125,6 +128,48 @@ class DueScoreTests(TestCase):
                 t.tk.fields = {} if value is None else {'DUE': value}
                 ret = due_score(t.tk, TODAY)
                 t.assertAlmostEqual(ret, expected)
+
+
+class DueFactorTests(TestCase):
+    """Unit tests for battodo.rank.due_factor."""
+
+    def setUp(t) -> None:
+        t.tk = ranked_task()
+
+    def test_scale(t) -> None:
+        cases = {
+            # No DUE, or one that does not read: the factor is neutral.
+            None: 1.0,
+            'YYYY-MM-DD': 1.0,
+            # A month or more ahead: the floor.
+            '2026-09-08': 0.5,
+            '2026-09-07': 0.5,
+            # Rising over the month before the due date.
+            '2026-09-06': 0.5 + 0.5 / 23,
+            '2026-08-16': 0.5 + 0.5 * 22 / 23,
+            '2026-08-15': 1.0,
+            # Rising faster over the week before it.
+            '2026-08-14': 1.0 + 1 / 7,
+            '2026-08-08': 2.0,
+            # Late: still rising, up to the cap two weeks on.
+            '2026-08-07': 2.0 + 1 / 7,
+            '2026-07-26': 2.0 + 13 / 7,
+            '2026-07-25': 4.0,
+            '2026-07-24': 4.0,
+        }
+
+        for value, expected in cases.items():
+            with t.subTest(f'DUE:{value}'):
+                t.tk.fields = {} if value is None else {'DUE': value}
+                ret = due_factor(t.tk, TODAY, CURVE)
+                t.assertAlmostEqual(ret, expected)
+
+    def test_one_point(t) -> None:
+        for value in ('2026-09-08', '2026-08-08', '2026-07-24'):
+            with t.subTest(f'DUE:{value}'):
+                t.tk.fields = {'DUE': value}
+                ret = due_factor(t.tk, TODAY, [(0, 1.5)])
+                t.assertAlmostEqual(ret, 1.5)
 
 
 class RankTests(TestCase):
