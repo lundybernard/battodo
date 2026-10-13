@@ -38,7 +38,7 @@ btodo update permit --list errands  # move it, its subtasks with it
 btodo note permit 'Called the office'  # a note; the task does not change
 btodo done permit       # complete the task and log it to completed.md
 btodo done permit --date 2026-10-01  # log it under the day it finished
-btodo scratch permit    # drop the task and log it as SCRATCHED
+btodo done permit --scratch --note 'Moved'  # log it as SCRATCHED
 btodo update 3usdig --due 2026-11-01  # reopen a closed task by its id
 btodo history permit    # completions, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
@@ -60,7 +60,7 @@ it stays out of `--all` too — opting out is not a time window.
 
 ### Attributes on a write
 
-`add`, `update`, `done` and `scratch` take `--attrs` and `--note`. The
+`add`, `update` and `done` take `--attrs` and `--note`. The
 journal event of the task the command names records them in
 `payload.attrs`
 ([ADR 0020](docs/decisions/0019-event-attributes/0020-event-attribute-map.md)).
@@ -76,8 +76,8 @@ btodo done permit --note 'Renewed online'
 [SKILL.md](SKILL.md#attributes-and-notes) states the grammar and the
 inputs that btodo refuses before it writes anything.
 
-`done` and `scratch` also write the attributes on the record they add
-to `completed.md`, as one JSON block after the fields:
+`done` also writes the attributes on the record it adds to
+`completed.md`, as one JSON block after the fields:
 
 ```text
 2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
@@ -85,8 +85,8 @@ to `completed.md`, as one JSON block after the fields:
 
 `btodo completed` shows them after the title as `key=value` pairs.
 
-`done` and `scratch` also write the attributes on the record they add
-to `completed.md`, as one JSON block after the fields:
+`done` also writes the attributes on the record it adds to
+`completed.md`, as one JSON block after the fields:
 
 ```text
 2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
@@ -116,7 +116,7 @@ refuses.
 
 ### Reopen a task
 
-`done` and `scratch` close a task; `update` on its `[ID:]` reopens it
+`done` closes a task; `update` on its `[ID:]` reopens it
 ([ADR 0025](docs/decisions/0025-reopen-by-update.md)). The task keeps
 its id, so `history` reads its whole life as one task.
 

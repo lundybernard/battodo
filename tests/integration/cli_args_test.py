@@ -236,12 +236,15 @@ class CommandInputTests(TestCase):
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
 
-    def test_scratch(t):
-        with t.subTest('--attrs and --note reach the event'):
+        with t.subTest('--scratch, --attrs and --note reach the event'):
+            # The subtests above closed both tasks.
+            (t.source / 'yard.md').write_text(YARD, encoding='utf-8')
+
             t.run_command(
                 [
-                    'scratch',
+                    'done',
                     'rk01lv',
+                    '--scratch',
                     '--attrs',
                     'cost=0',
                     '--note',
@@ -252,8 +255,8 @@ class CommandInputTests(TestCase):
 
             event = Journal(t.source).events[-1]
             t.assertEqual(
-                event['payload']['attrs'],
-                {'cost': '0', 'note': 'Too wet'},
+                (event['type'], event['payload']['attrs']),
+                ('TaskScratched', {'cost': '0', 'note': 'Too wet'}),
             )
 
     def test_note(t):

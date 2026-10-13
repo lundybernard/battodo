@@ -185,7 +185,7 @@ class SubtaskCommandTests(TestCase):
     def test_scratch_reaches_a_subtask(t) -> None:
         child = t.add_subtask()
 
-        logged = t.run_ok('scratch', child)
+        logged = t.run_ok('done', child, '--scratch')
 
         with t.subTest('the log entry names the child under its parent'):
             t.assertIn('Legacy priority task > Sand the rails', logged)

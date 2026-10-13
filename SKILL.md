@@ -81,8 +81,8 @@ btodo update <selector> [-p N] [--due YYYY-MM-DD] [--tags a,b]
                         [--title TITLE] [--description TEXT]
                         [--list <list>] [--with-subtasks]
                         [--attrs ATTRS] [--note TEXT]
-btodo done <selector> [--date YYYY-MM-DD] [--attrs ATTRS] [--note TEXT]
-btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
+btodo done <selector> [--date YYYY-MM-DD] [--scratch]
+                      [--attrs ATTRS] [--note TEXT]
 btodo note <selector> [TEXT] [--attrs ATTRS]
 ```
 
@@ -111,19 +111,22 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   echo to confirm the write. A task with no `-p` gets a neutral
   priority and still ranks by its dates; an explicit `-p 0` parks the
   task out of every view.
-- `done` completes the task and logs it. `scratch` drops the task and
-  logs it as abandoned. `completed` counts only the first, so pick the
-  one that states what happened. Both echo the record they log. A
-  record with attributes ends with one `[attrs:{...}]` block: the
-  attributes as a JSON object in ASCII.
-- `done --date` logs the completion under the day the work finished,
-  rather than the day it is marked off. A repeating task is rescheduled
-  from that day too.
+- `done` completes the task and logs it. `done --scratch` drops the
+  task and logs it as SCRATCHED: give the reason with `--note`.
+  `completed` counts only completions, so pick the form that states
+  what happened. Both echo the record they log. A record with
+  attributes ends with one `[attrs:{...}]` block: the attributes as a
+  JSON object in ASCII.
+- `done --scratch` drops the whole block of the task, subtasks
+  included. It completes no parent and reschedules no repeating task.
+- `done --date` logs the record under the day the task closed, rather
+  than the day it is marked off. A repeating task is rescheduled from
+  that day too.
 - Checking off the last open child completes its parent.
 
 ## Reopen and move
 
-`done` and `scratch` close a task. `update <id>` on a closed task
+`done` and `done --scratch` close a task. `update <id>` on a closed task
 reopens it under the same id.
 
 - `update` reaches an open task first. When no open task answers, it
@@ -200,7 +203,7 @@ journal when no open task matches.
 
 - `add --parent <selector>` files the new task under its parent, in the
   same list.
-- `update`, `done`, `scratch` and `show` reach a task at any depth.
+- `update`, `done` and `show` reach a task at any depth.
 - `-p` and `--repeat` are refused on a child. Only a top-level task
   carries a rank, and only the root task is rescheduled.
 - A checklist item is a child line with no fields. It cannot be a

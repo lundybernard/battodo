@@ -16,10 +16,10 @@ parent by id.
 `Completion` follows SCHEMA.md's completion rules: it logs the
 ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task instead of removing
-it. `Scratch` abandons a task: the block goes, the log records it as
-SCRATCHED, and nothing cascades or reschedules. `Update` sets the
-fields and the title it is given and leaves the rest of the list, or
-moves a top-level task and its block to another list.
+it. A scratched `Completion` abandons a task: the block goes, the log
+records it as SCRATCHED, and nothing cascades or reschedules. `Update`
+sets the fields and the title it is given and leaves the rest of the
+list, or moves a top-level task and its block to another list.
 `Reopen` brings a closed task back open, named by its stream in the
 journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
@@ -36,7 +36,7 @@ from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
 from pathlib import Path
-from typing import Any, NamedTuple, Protocol
+from typing import Any, NamedTuple
 
 from .history import StreamSelection, TaskStream
 from .journal import (
@@ -1231,22 +1231,25 @@ class Reopen:
 
 
 class Completion:
-    """The completion of a task and every ancestor it finishes (SCHEMA.md).
+    """The close of a task: its completion, or its scratch (SCHEMA.md).
 
     A task is complete when all its children are, so checking the last
     open child completes the parent, and that may complete its own
     parent in turn. Once the top-level task is done its whole block
     goes, unless it repeats: then it stays with a recomputed `DUE`, and
-    only its children go.
+    only its children go. A scratch drops the block of the task without
+    completing it: nothing cascades, and nothing is rescheduled.
     """
 
     def __init__(
         self,
         task: Task,
         attrs: dict[str, str] | None = None,
+        scratched: bool = False,
     ) -> None:
         self.task = task
         self.attrs = attrs
+        self.scratched = scratched
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -1309,9 +1312,12 @@ class Completion:
         """
         recurrence = self.recurrence
         if recurrence is None:
+            dropped = self.dropped
             return {
-                index: {'ID': task_id} for index, task_id in self.ids.items()
-            }
+                index: {'ID': task_id}
+                for index, task_id in self.ids.items()
+                    if index not in dropped
+            }  # fmt: skip
         rescheduled = self.rescheduled
         if rescheduled is None:
             return {}
@@ -1322,7 +1328,7 @@ class Completion:
     @property
     def checked_off(self) -> list[int]:
         """The lines whose box is checked: none once the block goes."""
-        if self.root_done:
+        if self.root_done or self.scratched:
             return []
         return [ancestry.node.raw_index for ancestry in self.ancestries]
 
@@ -1332,8 +1338,11 @@ class Completion:
 
         The recurrence is the same task rescheduled, so it keeps its id,
         its notes and its `[ADDED:]`, which ADR 0005 writes once and
-        never updates. Its children do not carry over.
+        never updates. Its children do not carry over. A scratch drops
+        the block of the named task.
         """
+        if self.scratched:
+            return self.task.node.block
         if not self.root_done:
             return set()
         if self.rescheduled is None:
@@ -1378,9 +1387,10 @@ class Completion:
     def recurrence(self) -> TaskNode | None:
         """The task the completion reschedules if it repeats, or None.
 
-        The top-level task, once the completion finishes it.
+        The top-level task, once the completion finishes it. A scratch
+        reschedules nothing.
         """
-        return self.root if self.root_done else None
+        return self.root if self.root_done and not self.scratched else None
 
     @property
     def root(self) -> TaskNode:
@@ -1396,10 +1406,13 @@ class Completion:
     def ancestries(self) -> list[Ancestry]:
         """The ancestry of the task and of each ancestor it finishes.
 
-        Deepest first, which is the order the completions are logged.
+        Deepest first, which is the order the completions are logged. A
+        scratch finishes no ancestor.
         """
         ancestry = self.task.ancestry
         found = [Ancestry(ancestry)]
+        if self.scratched:
+            return found
         for depth in reversed(range(len(ancestry) - 1)):
             parent, child = ancestry[depth], ancestry[depth + 1]
             if not all(c.done or c is child for c in parent.children):
@@ -1423,17 +1436,20 @@ class Completion:
     def events(self) -> list['Event']:
         """One `TaskCompleted` per completion, deepest first.
 
+        A scratch records one `TaskScratched` instead.
+
         Raises
         ------
         ValueError
             The named task is a checklist item and attributes are given.
         """
         self.task.node.refuse_attributes(self.attrs)
+        kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
         events = []
         for completion in self.completions:
             stream = self.ids[completion.ancestry.stream.raw_index]
             payload = completion.payload
-            events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
+            events.append(Event(kind, f'task/{stream}', payload))
         return [*self.assignments, *events]
 
     @property
@@ -1450,7 +1466,9 @@ class Completion:
         for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
             attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(ancestry, due, day, list_name, attrs)
+            completion = TaskCompletion(
+                ancestry, due, day, list_name, attrs, self.scratched
+            )
             completions.append(completion)
         return completions
 
@@ -1470,153 +1488,6 @@ class Completion:
             for index, fields in self.stamps.items()
                 if not streams[index].task_id
         ]  # fmt: skip
-
-
-class Scratch:
-    """The scratch of a task: its block dropped without completing it.
-
-    The whole block goes -- the task, its notes, its children -- and
-    nothing cascades: abandoning a child says nothing about its parent.
-    btodo cannot tell a task accepted in an earlier session from one
-    proposed in this one, so every scratch is logged (SCHEMA.md).
-    """
-
-    def __init__(
-        self,
-        task: Task,
-        attrs: dict[str, str] | None = None,
-    ) -> None:
-        self.task = task
-        self.attrs = attrs
-
-    def write(self) -> None:
-        """Write the list, its log records and its events.
-
-        Every value is read before the first write, so a refused write
-        writes nothing.
-        """
-        text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
-
-    @property
-    def source(self) -> Path:
-        """The source directory of the task."""
-        return self.task.source
-
-    @property
-    def path(self) -> Path:
-        """The list file that holds the task."""
-        return self.task.path
-
-    @property
-    def text(self) -> str:
-        """The list without the task's block.
-
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
-        """
-        return self.document.text
-
-    @property
-    def document(self) -> TodoDocument:
-        """The task's list: its stream stamped, its block dropped.
-
-        A checklist item cannot hold an id, so its event belongs to the
-        stream of an ancestor, and that ancestor's line carries the id.
-        """
-        doc = TodoDocument(self.task.doc.text)
-        if self.stream is not self.node:
-            doc.set_field(self.stream.raw_index, 'ID', self.stream_id)
-        doc.drop(self.node.block)
-        return doc
-
-    @property
-    def stream(self) -> TaskNode:
-        """The task whose stream records the scratch."""
-        return self.ancestry.stream
-
-    @property
-    def ancestry(self) -> Ancestry:
-        """The task and every task above it."""
-        return Ancestry(self.task.ancestry)
-
-    @property
-    def node(self) -> TaskNode:
-        """The task as the parser reads it."""
-        return self.task.node
-
-    @cached_property
-    def stream_id(self) -> str:
-        """The stream task's id, or a new one.
-
-        Cached: a new id is drawn at random, so every read names one.
-        """
-        return self.stream.task_id or new_task_id()
-
-    @property
-    def entries(self) -> list[str]:
-        """The one completed-log record, or none for a checklist item."""
-        if self.node.is_checklist_item:
-            return []
-        return [LogEntry(self.path, self).text]
-
-    @property
-    def day(self) -> date:
-        """The day the scratch is logged under."""
-        return self.task.today
-
-    @property
-    def status(self) -> str:
-        """The status the log records a scratch under."""
-        return SCRATCHED_STATUS
-
-    @property
-    def events(self) -> list['Event']:
-        """One `TaskScratched`, on the stream task's stream.
-
-        The stream of a checklist item is an ancestor's, so its payload
-        marks it as a checklist item. The payload carries the
-        attributes.
-
-        Raises
-        ------
-        ValueError
-            The task is a checklist item and attributes are given.
-        """
-        self.node.refuse_attributes(self.attrs)
-        payload: dict[str, Any] = {
-            'delta': {'removed': [False, True]},
-            'snapshot': self.node.listed_snapshot(self.path.stem),
-            'ancestry': self.ancestry.path,
-        }
-        if self.node.is_checklist_item:
-            payload['checklist_item'] = True
-        if self.attrs:
-            payload['attrs'] = self.attrs
-        event = Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)
-        return [self.stamp, event] if self.stamped else [event]
-
-    @property
-    def stamp(self) -> 'Event':
-        """The `TaskUpdated` that records the stream task's new id."""
-        return IdAssignment(self.stream, self.stream_id, self.path.stem).event
-
-    @property
-    def stamped(self) -> bool:
-        """Whether the stream task of a checklist item is given an id.
-
-        A task that is its own stream loses its line, so no id stays.
-        """
-        return self.stream is not self.node and not self.stream.task_id
 
 
 class Annotation:
@@ -2206,6 +2077,7 @@ class TaskCompletion:
     the task. `attrs` holds the attributes of the named task, and None
     for every other task. The event of a checklist item lands on the
     stream of an ancestor, so its payload marks it as a checklist item.
+    `scratched` marks the close of a task that is not completed.
     """
 
     def __init__(
@@ -2215,22 +2087,25 @@ class TaskCompletion:
         day: date,
         list_name: str,
         attrs: dict[str, str] | None = None,
+        scratched: bool = False,
     ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
         self.day = day
         self.list_name = list_name
         self.attrs = attrs
+        self.scratched = scratched
 
     @property
     def payload(self) -> dict[str, Any]:
         """The done, a new due date beside it, the task, its path, its day.
 
         A checklist item also carries its mark, and the named task its
-        attributes.
+        attributes. A scratch records the removal instead of the done.
         """
         node = self.ancestry.node
-        delta: dict[str, list[Any]] = {'done': [False, True]}
+        change = 'removed' if self.scratched else 'done'
+        delta: dict[str, list[Any]] = {change: [False, True]}
         if self.rescheduled is not None:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
         payload: dict[str, Any] = {
@@ -2247,8 +2122,8 @@ class TaskCompletion:
 
     @property
     def status(self) -> str:
-        """The status the log records a completion under."""
-        return DONE_STATUS
+        """The status the log records the close under."""
+        return SCRATCHED_STATUS if self.scratched else DONE_STATUS
 
 
 class RecordedTask:
@@ -2369,7 +2244,7 @@ class LogEntry:
     write, so the log renders what the journal records.
     """
 
-    def __init__(self, path: Path, logged: 'LogSource') -> None:
+    def __init__(self, path: Path, logged: TaskCompletion) -> None:
         self.path = path
         self.logged = logged
 
@@ -2421,22 +2296,6 @@ class LogEntry:
         if not attrs:
             return ''
         return f'{ATTRIBUTES_MARK}{dumps(attrs)}]'
-
-
-class LogSource(Protocol):
-    """A write to one task, as its completed-log record reads it."""
-
-    @property
-    def ancestry(self) -> Ancestry: ...
-
-    @property
-    def day(self) -> date: ...
-
-    @property
-    def status(self) -> str: ...
-
-    @property
-    def attrs(self) -> dict[str, str] | None: ...
 
 
 class ListBackfill:

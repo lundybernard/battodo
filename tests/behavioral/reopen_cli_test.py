@@ -4,8 +4,8 @@ The fixture lists are copied to a temporary directory first: the
 narratives write, and the committed fixtures are read-only inputs to
 the `view` and `show` goldens.
 
-Each narrative closes a task with `done` or `scratch`, then names it by
-its `[ID:]` to `update`, and reads it back. A top-level task comes back
+Each narrative closes a task with `done`, then names it by its `[ID:]`
+to `update`, and reads it back. A top-level task comes back
 to its list with its subtasks closed (rule 2). A closed subtask opens,
 and so does each closed task above it (rule 1). `--with-subtasks` opens
 the task and each subtask below it (rule 3).
@@ -129,7 +129,7 @@ class ReopenCommandTests(TestCase):
 
     def test_reopen_scratched_to_another_list(t) -> None:
         task_id = t.added('chores', 'Fix the gate', '-p', '2')
-        t.run_ok('scratch', 'Fix the gate')
+        t.run_ok('done', 'Fix the gate', '--scratch')
 
         echoed = t.run_ok('update', task_id, '--list', 'work')
 

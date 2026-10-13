@@ -217,7 +217,6 @@ class ArgparserTests(TestCase):
             (['show', 'brush pile'], Commands.show),
             (['update', 'brush pile', '-p', '3'], Commands.update),
             (['done', 'brush pile'], Commands.done),
-            (['scratch', 'brush pile'], Commands.scratch),
             (['note', 'brush pile', 'Too wet'], Commands.note),
             (['history', 'brush pile'], Commands.history),
             (['backfill'], Commands.backfill),
@@ -248,7 +247,7 @@ class ArgparserTests(TestCase):
                 t.assertEqual(args.priority, '4')
 
     def test_selector(t):
-        commands = ('show', 'update', 'done', 'scratch', 'note', 'history')
+        commands = ('show', 'update', 'done', 'note', 'history')
         for command in commands:
             with t.subTest(command):
                 args = t.parser.parse_args([command, 'brush pile'])
@@ -301,10 +300,18 @@ class ArgparserTests(TestCase):
             )
             t.assertEqual(args.date, '2026-08-15')
 
+    def test_done_scratch(t):
+        with t.subTest('off when not given'):
+            args = t.parser.parse_args(['done', 'brush pile'])
+            t.assertFalse(args.scratch)
+
+        with t.subTest('on when given'):
+            args = t.parser.parse_args(['done', 'brush pile', '--scratch'])
+            t.assertTrue(args.scratch)
+
     def test_attributes(t):
         for argv in [
             ['done', 'brush pile'],
-            ['scratch', 'brush pile'],
             ['update', 'brush pile'],
             ['add', 'chores', 'Water it'],
         ]:
@@ -773,6 +780,7 @@ class CommandsDoneTests(TestCase):
         t.args = Namespace(
             selector='a selector',
             date='a date',
+            scratch=True,
             attrs='some attrs',
             note='a note',
         )
@@ -786,6 +794,7 @@ class CommandsDoneTests(TestCase):
                 t.datetime.now.return_value,
                 selector='a selector',
                 date='a date',
+                scratch=True,
                 attrs='some attrs',
                 note='a note',
             )
@@ -795,44 +804,6 @@ class CommandsDoneTests(TestCase):
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.complete_item.return_value)
-
-
-class CommandsScratchTests(TestCase):
-    """Unit tests for battodo.cli.Commands.scratch."""
-
-    def setUp(t):
-        t.datetime = clock(t)
-        patcher = patch(f'{SRC}.scratch_item', autospec=True)
-        t.scratch_item = patcher.start()
-        t.addCleanup(patcher.stop)
-        patcher = patch('builtins.print', autospec=True)
-        t.print = patcher.start()
-        t.addCleanup(patcher.stop)
-
-        t.conf = Mock(spec=['view'])
-        t.args = Namespace(
-            selector='a selector',
-            attrs='some attrs',
-            note='a note',
-        )
-
-    def test_scratch(t):
-        Commands.scratch(t.conf, t.args)
-
-        with t.subTest('the inputs reach the library beside the config'):
-            t.scratch_item.assert_called_once_with(
-                t.conf,
-                t.datetime.now.return_value,
-                selector='a selector',
-                attrs='some attrs',
-                note='a note',
-            )
-
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
-
-        with t.subTest('and the command prints what comes back'):
-            t.print.assert_called_once_with(t.scratch_item.return_value)
 
 
 class CommandsNoteTests(TestCase):

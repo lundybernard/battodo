@@ -301,9 +301,9 @@ class HistoryEntry:
     def day(self) -> date:
         """The day the event is for.
 
-        A completion's `completed_on`. The local day of `occurred_at`
-        for any other event, and for a completion that predates
-        `completed_on`.
+        The `completed_on` of a completion or a scratch. The local day
+        of `occurred_at` for any other event, and for a close that
+        predates `completed_on`.
         """
         completed_on = self.event['payload'].get('completed_on')
         if completed_on is not None:
