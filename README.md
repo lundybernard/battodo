@@ -64,7 +64,8 @@ and [ADR 0026](docs/decisions/0026-due-date-factor.md).
 
 A view shows every open item. A recurring task shows from the day it is
 rescheduled: it ranks low while its due date is far off and climbs as
-the date comes near.
+the date comes near. `done` moves its `[ADDED:]` to the completion day,
+so its wait starts again; its `[ID:]` and its history stay.
 
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it, and

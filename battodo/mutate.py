@@ -1347,7 +1347,8 @@ class Completion:
         """The fields each line gains, by its index.
 
         A task still in the list gains the id of its stream. A recurring
-        top-level task gains its next due date.
+        top-level task gains its next due date, and the completion day as
+        its `[ADDED:]`, so its age counts from the last completion.
         """
         recurrence = self.recurrence
         if recurrence is None:
@@ -1361,8 +1362,8 @@ class Completion:
         if rescheduled is None:
             return {}
         index = recurrence.raw_index
-        due = rescheduled.isoformat()
-        return {index: {'DUE': due, 'ID': self.ids[index]}}
+        due, added = rescheduled.isoformat(), self.completed_on.isoformat()
+        return {index: {'DUE': due, 'ADDED': added, 'ID': self.ids[index]}}
 
     @property
     def checked_off(self) -> list[int]:
@@ -1375,9 +1376,8 @@ class Completion:
     def dropped(self) -> set[int]:
         """The lines that go: the finished block, a recurrence kept.
 
-        The recurrence is the same task rescheduled, so it keeps its id,
-        its notes and its `[ADDED:]`, which ADR 0005 writes once and
-        never updates. Its children do not carry over. A scratch drops
+        The recurrence is the same task rescheduled, so it keeps its id
+        and its notes. Its children do not carry over. A scratch drops
         the block of the named task.
         """
         if self.scratched:
@@ -2154,7 +2154,8 @@ class TaskCompletion:
     def payload(self) -> dict[str, Any]:
         """The done, a new due date beside it, the task, its path, its day.
 
-        A checklist item also carries its mark, and the named task its
+        A rescheduled task also records its new `[ADDED:]`, the day. A
+        checklist item also carries its mark, and the named task its
         attributes. A scratch records the removal instead of the done.
         """
         node = self.ancestry.node
@@ -2162,6 +2163,7 @@ class TaskCompletion:
         delta: dict[str, list[Any]] = {change: [False, True]}
         if self.rescheduled is not None:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
+            delta['ADDED'] = [node.added, self.day.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
             'snapshot': node.listed_snapshot(self.list_name),

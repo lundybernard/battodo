@@ -2267,6 +2267,7 @@ class CompletionTests(TestCase):
         )
         t.assertIs(ret, doc)
 
+    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'dropped', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
@@ -2275,9 +2276,11 @@ class CompletionTests(TestCase):
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
         dropped: PropertyMock,
+        completed_on: PropertyMock,
     ) -> None:
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
         dropped.return_value = set()
+        completed_on.return_value = GIVEN_DAY
 
         with t.subTest('a block that stays: each stream gains its id'):
             recurrence.return_value = None
@@ -2297,20 +2300,38 @@ class CompletionTests(TestCase):
 
             t.assertEqual(ret, {})
 
-        with t.subTest('a recurrence: its next due date, and its id'):
+        with t.subTest('a recurrence: its next due date, its day, its id'):
             recurrence.return_value = t.parent
             rescheduled.return_value = date(2026, 8, 15)
 
             ret = t.co.stamps
 
-            t.assertEqual(ret, {1: {'DUE': '2026-08-15', 'ID': '9o71lx'}})
+            t.assertEqual(
+                ret,
+                {
+                    1: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-01',
+                        'ID': '9o71lx',
+                    }
+                },
+            )
 
         with t.subTest('the line of the recurrence, whichever task it is'):
             recurrence.return_value = t.child
 
             ret = t.co.stamps
 
-            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
+            t.assertEqual(
+                ret,
+                {
+                    3: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-01',
+                        'ID': 'zz01ab',
+                    }
+                },
+            )
 
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     @patch.object(Completion, 'root_done', new_callable=PropertyMock)
@@ -3776,15 +3797,20 @@ class TaskCompletionTests(TestCase):
                 },
             )
 
-        with t.subTest('a recurrence records its new due date too'):
+        with t.subTest('a recurrence records its new due and added dates'):
             t.node.fields['DUE'] = '2026-08-05'
+            t.node.fields['ADDED'] = '2026-07-06'
             t.tc.rescheduled = date(2026, 8, 15)
 
             ret = t.tc.payload
 
             t.assertEqual(
                 ret['delta'],
-                {'done': [False, True], 'DUE': ['2026-08-05', '2026-08-15']},
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': ['2026-07-06', '2026-08-01'],
+                },
             )
 
         with t.subTest('a checklist item is marked as one'):

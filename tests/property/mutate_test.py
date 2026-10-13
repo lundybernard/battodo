@@ -1182,7 +1182,8 @@ def completed(
 
     Completing the last open child completes its parent. A finished
     top-level task loses its block, unless it repeats: then it stays
-    with a new due date, and only its children go. The attributes go
+    with a new due date and the completion day as its `[ADDED:]`, and
+    only its children go. The attributes go
     on the event of the named task, which is not a checklist item. Each
     stream task that keeps its line and gains an id is stamped first,
     on an event of its own.
@@ -1204,6 +1205,7 @@ def completed(
     doc = TodoDocument(text)
     if rescheduled is not None:
         doc.set_field(root.raw_index, 'DUE', rescheduled.isoformat())
+        doc.set_field(root.raw_index, 'ADDED', TODAY.isoformat())
         doc.set_field(root.raw_index, 'ID', ids[root.raw_index])
         stamped.append(root.raw_index)
     if root_done:
@@ -1230,6 +1232,7 @@ def completed(
         delta: dict[str, Any] = {'done': [False, True]}
         if node is root and rescheduled is not None:
             delta['DUE'] = [root.due, rescheduled.isoformat()]
+            delta['ADDED'] = [root.added, TODAY.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
             'snapshot': snapshot(node, LIST_FILE),

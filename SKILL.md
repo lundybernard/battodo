@@ -133,7 +133,8 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   included. It completes no parent and reschedules no repeating task.
 - `done --date` logs the record under the day the task closed, rather
   than the day it is marked off. A repeating task is rescheduled from
-  that day too.
+  that day too. The rescheduled task keeps its `[ID:]` and takes that
+  day as its `[ADDED:]`, so its age counts from the last completion.
 - Checking off the last open child completes its parent.
 
 ## Reopen and move

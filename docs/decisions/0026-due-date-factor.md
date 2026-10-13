@@ -122,3 +122,12 @@ curve is a string that the rank module decodes.
 - R3 is amended: the view shows every open task.
 - The live SCHEMA.md describes the old rank and the suppression. Its
   owner updates it; this project does not edit it.
+
+## Amendment — 2026-10-13
+
+A reschedule rewrites `[ADDED:]` to the completion day, so `age_score`
+counts from the last completion and not from the first addition. This
+replaces, for a rescheduled recurring task, the ADR 0005 rule that
+writes `[ADDED:]` once and never updates it. The task keeps its `[ID:]`,
+so its journal stream holds every completion
+([#116](https://github.com/lundybernard/battodo/issues/116)).
