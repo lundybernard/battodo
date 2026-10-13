@@ -128,7 +128,12 @@ class TaskNode:
 
         In file order. A `[REPEAT:]` with nothing in it is no repeat.
         """
-        raise NotImplementedError
+        found = []
+        for child in self.children:
+            if child.repeat and not child.done:
+                found.append(child)
+            found.extend(child.repeating_subtasks)
+        return found
 
     @property
     def description(self) -> str | None:

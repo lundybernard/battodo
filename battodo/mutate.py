@@ -1326,10 +1326,13 @@ class Completion:
         ------
         SelectionError
             The selector does not name exactly one open task.
+        ValueError
+            An open subtask below the task repeats.
         RepeatError
             A completed recurring task carries a `[REPEAT:]` btodo cannot
             read.
         """
+        self.refuse_repeating_subtask()
         return self.document.text
 
     def refuse_repeating_subtask(self) -> None:
@@ -1342,7 +1345,18 @@ class Completion:
             message names the first and the update that clears its
             repeat. A scratch completes nothing, so none is refused.
         """
-        raise NotImplementedError
+        repeating = self.task.node.repeating_subtasks
+        if self.scratched or not repeating:
+            return
+        subtask = repeating[0]
+        named, selector = repr(subtask.title), repr(subtask.title)
+        if subtask.task_id:
+            named = f'{named} [ID:{subtask.task_id}]'
+            selector = subtask.task_id
+        raise ValueError(
+            f'{self.task.node.title!r} has a repeating subtask, {named}: '
+            f'remove its repeat first with update {selector} --repeat None'
+        )
 
     @property
     def document(self) -> TodoDocument:

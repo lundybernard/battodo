@@ -1184,12 +1184,14 @@ def completed(
     finished, where it repeats, stays with a new due date, and only its
     children go; a top-level one also takes the completion day as its
     `[ADDED:]`. A finished top-level task that does not repeat loses its
-    block. The attributes go on the event of the named task, which is
-    not a checklist item. Each stream task that keeps its line and gains
-    an id is stamped first, on an event of its own.
+    block. A task with an open repeating subtask is refused. The
+    attributes go on the event of the named task, which is not a
+    checklist item. Each stream task that keeps its line and gains an id
+    is stamped first, on an event of its own.
     """
     attrs = attributes(given)
     text, ancestry = reached(found)
+    refuse_repeating_subtask(ancestry[-1])
     ancestries = cascade(ancestry)
     root = ancestry[0]
     root_done = len(ancestries[-1]) == 1
@@ -1487,6 +1489,40 @@ def refuse_checklist_attributes(task: TaskNode) -> None:
     """
     if is_checklist_item(task):
         raise ValueError('a checklist item takes no attributes')
+
+
+def refuse_repeating_subtask(task: TaskNode) -> None:
+    """Refuse the completion of a task with an open repeating subtask.
+
+    Raises
+    ------
+    ValueError
+        An open subtask below `task` repeats. The message names the
+        first in file order, by its id where it has one.
+    """
+    below = repeating_below(task)
+    if not below:
+        return
+    first = below[0]
+    if first.fields.get('ID'):
+        named = f'{first.title!r} [ID:{first.fields["ID"]}]'
+        selector = first.fields['ID']
+    else:
+        named = selector = repr(first.title)
+    raise ValueError(
+        f'{task.title!r} has a repeating subtask, {named}: remove its '
+        f'repeat first with update {selector} --repeat None'
+    )
+
+
+def repeating_below(task: TaskNode) -> list[TaskNode]:
+    """The open tasks below `task` with a non-empty repeat, in file order."""
+    found = []
+    for child in task.children:
+        if child.fields.get('REPEAT') and not child.done:
+            found.append(child)
+        found.extend(repeating_below(child))
+    return found
 
 
 class Outcome(NamedTuple):
