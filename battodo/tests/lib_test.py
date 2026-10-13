@@ -12,7 +12,6 @@ from ..lib import (
     get_history,
     get_item,
     get_view,
-    scratch_item,
     update_item,
 )
 
@@ -606,83 +605,6 @@ class CompleteItemTests(TestCase):
                 t.conf, t.now, selector='a selector', scratch=True
             )
             t.assertEqual(logged, 'dropped')
-
-
-class ScratchItemTests(TestCase):
-    """Unit tests for battodo.lib.scratch_item."""
-
-    def setUp(t):
-        patches = ['Scratch', 'Task', 'SuppliedAttributes']
-        for target in patches:
-            patcher = patch(f'{SRC}.{target}', autospec=True)
-            setattr(t, target, patcher.start())
-            t.addCleanup(patcher.stop)
-        t.scratch = t.Scratch.return_value
-        t.scratch.entries = []
-
-        t.now = Mock(spec=datetime)
-        t.today = t.now.date.return_value
-        t.conf = Mock(spec=['view'])
-        t.conf.view = Mock(spec=['source_dir'])
-        t.conf.view.source_dir = '~/a-source-dir'
-
-    def test_result(t):
-        t.scratch.entries = [
-            '2026-08-08 | a-list | SCRATCHED | A parent > A child',
-        ]
-
-        logged = scratch_item(t.conf, t.now, selector='a selector')
-
-        t.assertEqual(
-            logged,
-            '2026-08-08 | a-list | SCRATCHED | A parent > A child',
-        )
-
-    def test_forwarded(t):
-        scratch_item(t.conf, t.now, selector='a selector')
-
-        t.Task.assert_called_once_with(SOURCE, 'a selector', t.today)
-        t.Scratch.assert_called_once_with(
-            t.Task.return_value,
-            attrs=t.SuppliedAttributes.return_value.checked,
-        )
-
-    def test_attributes(t):
-        with t.subTest('the attribute inputs are read'):
-            scratch_item(
-                t.conf,
-                t.now,
-                selector='a selector',
-                attrs='cost=45.00',
-                note='a note',
-            )
-            t.SuppliedAttributes.assert_called_once_with(
-                'cost=45.00', 'a note'
-            )
-
-        with t.subTest('left off, both are None'):
-            t.SuppliedAttributes.reset_mock()
-
-            scratch_item(t.conf, t.now, selector='a selector')
-
-            t.SuppliedAttributes.assert_called_once_with(None, None)
-
-        with t.subTest('a refusal comes before the task is built'):
-            t.Task.reset_mock()
-            t.SuppliedAttributes.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                scratch_item(t.conf, t.now, selector='a selector')
-
-            t.Task.assert_not_called()
-
-    def test_written(t):
-        scratch_item(t.conf, t.now, selector='a selector')
-        t.scratch.write.assert_called_once_with()
-
-    def test_nothing_logged(t):
-        logged = scratch_item(t.conf, t.now, selector='a selector')
-        t.assertEqual(logged, 'dropped')
 
 
 class AnnotateItemTests(TestCase):

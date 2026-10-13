@@ -34,7 +34,6 @@ from battodo.lib import (
     annotate_item,
     backfill_items,
     complete_item,
-    scratch_item,
     update_item,
 )
 from battodo.mutate import ListError, SuppliedAttributes
@@ -369,40 +368,6 @@ class CompleteItemTests(TestCase):
                 directory,
                 selector=selector,
                 scratch=scratch,
-                attrs=given.text,
-                note=given.note,
-            )
-
-        t.assertEqual(ret, expected)
-
-
-class ScratchItemTests(TestCase):
-    """Property tests for battodo.lib.scratch_item."""
-
-    maxDiff = None
-
-    @given(grammar.documents, st.data())
-    def test_outcome(
-        t,
-        drawn: tuple[str, list[Node]],
-        data: st.DataObject,
-    ) -> None:
-        text, _ = drawn
-        ancestries = descend(TodoDocument(text).tasks, [])
-        selector = data.draw(item_selectors(ancestries))
-        log = data.draw(logs())
-        given = data.draw(supplied_attributes())
-        before = Source(source_lists(text), log, [])
-        found = outcome(text, ancestries, selector)
-        expected = foreseen(scratched, before, found, given)
-
-        with written(before) as directory:
-            conf = configuration(directory)
-            ret = observed(
-                scratch_item,
-                conf,
-                directory,
-                selector=selector,
                 attrs=given.text,
                 note=given.note,
             )

@@ -33,7 +33,6 @@ from .mutate import (
     Backfill,
     Completion,
     Reopen,
-    Scratch,
     SubtaskAddition,
     SuppliedAttributes,
     Update,
@@ -55,7 +54,6 @@ __all__ = [
     'get_item',
     'get_view',
     'item_count',
-    'scratch_item',
     'update_item',
 ]
 
@@ -474,51 +472,6 @@ def complete_item(
     if entries:
         return '\n'.join(entries)
     return 'dropped' if scratch else 'checked off'
-
-
-def scratch_item(
-    conf: Configuration,
-    now: datetime,
-    *,
-    selector: str,
-    attrs: str | None = None,
-    note: str | None = None,
-) -> str:
-    """Drop the task `selector` names.
-
-    Parameters
-    ----------
-    conf : Configuration
-        The resolved configuration. Only the source directory is read.
-    now : datetime
-        The clock, whose local day stamps the log.
-    selector : str
-        Names the task.
-    attrs : str or None
-        The attributes of the scratch, as `key=value` segments.
-    note : str or None
-        A note, which enters the attributes under the key `note`.
-
-    Returns
-    -------
-    str
-        The logged entries, one per line. A checklist item is dropped
-        without a log entry, and says so instead.
-
-    Raises
-    ------
-    SelectionError
-        The selector does not name exactly one open task.
-    ValueError
-        The attributes do not read, or a checklist item is given
-        attributes. Raised before anything is written.
-    """
-    checked = SuppliedAttributes(attrs, note).checked
-    task = Task(_source(conf), selector, now.date())
-    scratch = Scratch(task, attrs=checked)
-    scratch.write()
-    entries = scratch.entries
-    return '\n'.join(entries) if entries else 'dropped'
 
 
 def annotate_item(
