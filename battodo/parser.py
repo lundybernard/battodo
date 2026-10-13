@@ -75,7 +75,7 @@ class TaskNode:
 
     @property
     def added(self) -> str | None:
-        """When the task entered the list, per ADR 0005.
+        """The task's entry day, rewritten on a reschedule (ADR 0026).
 
         Absent on every hand-written task and on everything predating
         the field, so readers must tolerate None.

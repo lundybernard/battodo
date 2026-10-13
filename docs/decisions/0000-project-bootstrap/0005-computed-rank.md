@@ -6,7 +6,8 @@ Date: 2026-08-08
 > **Superseded in part** by
 > [ADR 0026 — A due-date factor on the priority](../0026-due-date-factor.md).
 > The additive `due_score` below is replaced by a due-date factor that
-> multiplies the priority. Everything else here stands.
+> multiplies the priority, and the 0026 amendment of 2026-10-13 rewrites
+> `[ADDED:]` on a reschedule. Everything else here stands.
 
 ## Context
 
