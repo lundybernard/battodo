@@ -48,7 +48,8 @@ btodo completed [today|week|month] [--format text|json]
 
 `show --format json` carries `description` on the item and on each
 entry of `subtasks`: the description lines joined by `\n`, or `null`
-when the task has none.
+when the task has none. It carries `repeat` on both too: the
+`[REPEAT:]` value, or `null` when the task does not repeat.
 
 `history` lists each completion and each reopen of one task, and every
 other event of that task that carries attributes, newest first. Its

@@ -134,6 +134,7 @@ def child_record(task: TaskNode) -> dict[str, Any]:
         'done': task.done,
         'loe': task.loe,
         'due': task.due,
+        'repeat': task.repeat,
         'tags': task.tags,
         'description': '\n'.join(task.description_lines) or None,
         'subtasks': [child_record(child) for child in task.children],

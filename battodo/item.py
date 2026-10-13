@@ -260,8 +260,9 @@ class ItemJsonView:
              "added": "2026-07-06", "repeat": null, "tags": ["yard"],
              "description": "...",
              "subtasks": [{"id": null, "title": "...", "done": false,
-                           "loe": 2, "due": null, "tags": [],
-                           "description": null, "subtasks": []}]}
+                           "loe": 2, "due": null, "repeat": null,
+                           "tags": [], "description": null,
+                           "subtasks": []}]}
 
         Every key is always present; an absent field is null, and so is
         the description of a task with no description lines. `subtasks`
@@ -311,6 +312,7 @@ class SubtaskJsonView:
             'done': self.node.done,
             'loe': self.node.loe,
             'due': self.node.due,
+            'repeat': self.node.repeat,
             'tags': self.node.tags,
             'description': self.node.description,
             'subtasks': [subtask.data for subtask in self.subtasks],
