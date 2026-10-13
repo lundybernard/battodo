@@ -8,6 +8,7 @@ fields would reorder the fields of every line it touched.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
@@ -313,7 +314,7 @@ class TodoDocument:
         """The list as it stands; the source until a method writes."""
         return '\n'.join(self.lines)
 
-    def set_fields(self, index: int, fields: dict[str, str]) -> str:
+    def set_fields(self, index: int, fields: Mapping[str, str | None]) -> str:
         """Set each of `fields` on the line at `index`, in order.
 
         Returns
@@ -325,7 +326,7 @@ class TodoDocument:
             self.set_field(index, name, value)
         return self.lines[index]
 
-    def set_field(self, index: int, name: str, value: str) -> str:
+    def set_field(self, index: int, name: str, value: str | None) -> str:
         """Set `name` to `value` on the line at `index`.
 
         An existing field is replaced where it stands; a new one is

@@ -324,6 +324,7 @@ def update_item(
     title: str | None = None,
     priority: str | None = None,
     due: str | None = None,
+    repeat: str | None = None,
     tags: str | None = None,
     description: str | None = None,
     attrs: str | None = None,

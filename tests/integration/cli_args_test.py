@@ -22,6 +22,7 @@ from batconf.types import SourceInterfaceP
 
 from battodo.cli import TZ, argparser, get_config
 from battodo.journal import Journal
+from battodo.repeat import RepeatError
 from battodo.view import TOP_N
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
@@ -319,3 +320,35 @@ class CommandInputTests(TestCase):
                 ret,
                 f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
             )
+
+        with t.subTest('--repeat sets a repeat on a task with none'):
+            ret = t.run_command(['update', 'rk01lv', '--repeat', '7d'], {})
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:5] [ID:rk01lv] [REPEAT:7d]\n{listed}\n',
+            )
+
+        with t.subTest('and changes it'):
+            ret = t.run_command(['update', 'rk01lv', '--repeat', '14d'], {})
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:5] [ID:rk01lv] [REPEAT:14d]\n{listed}\n',
+            )
+
+        with t.subTest('--repeat None clears it'):
+            ret = t.run_command(['update', 'rk01lv', '--repeat', 'None'], {})
+            t.assertEqual(
+                ret,
+                f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
+            )
+
+        with t.subTest('an empty repeat is refused, and nothing written'):
+            before = listed.read_text(encoding='utf-8')
+
+            with t.assertRaises(RepeatError) as caught:
+                t.run_command(['update', 'rk01lv', '--repeat', ''], {})
+
+            t.assertEqual(
+                str(caught.exception), "unrecognised REPEAT value: ''"
+            )
+            t.assertEqual(listed.read_text(encoding='utf-8'), before)

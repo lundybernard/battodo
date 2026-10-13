@@ -278,6 +278,17 @@ class ArgparserTests(TestCase):
             )
             t.assertEqual(args.list_name, 'chores')
 
+    def test_update_repeat(t):
+        with t.subTest('None when not given'):
+            args = t.parser.parse_args(['update', 'brush pile'])
+            t.assertIsNone(args.repeat)
+
+        with t.subTest('--repeat holds its text, None as a word'):
+            args = t.parser.parse_args(
+                ['update', 'brush pile', '--repeat', 'None'],
+            )
+            t.assertEqual(args.repeat, 'None')
+
     def test_update_with_subtasks(t):
         with t.subTest('off when not given'):
             args = t.parser.parse_args(['update', 'brush pile'])
@@ -730,6 +741,7 @@ class CommandsUpdateTests(TestCase):
             title='a title',
             priority='a priority',
             due='a due date',
+            repeat='a repeat',
             tags='some tags',
             description='a description',
             attrs='some attrs',
@@ -749,6 +761,7 @@ class CommandsUpdateTests(TestCase):
                 title='a title',
                 priority='a priority',
                 due='a due date',
+                repeat='a repeat',
                 tags='some tags',
                 description='a description',
                 attrs='some attrs',

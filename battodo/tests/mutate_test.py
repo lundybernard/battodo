@@ -1048,31 +1048,61 @@ class UpdateTests(TestCase):
             supplied_description.assert_called_once_with('A description')
             t.assertIs(ret, supplied_description.return_value)
 
+    @patch.object(Update, 'changes', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
-    def test_checked(t, supplied: PropertyMock, moved: PropertyMock) -> None:
-        supplied.return_value = MagicMock(spec=['checked'])
-        supplied.return_value.checked = sentinel.checked
+    def test_checked(
+        t,
+        supplied: PropertyMock,
+        moved: PropertyMock,
+        changes: PropertyMock,
+    ) -> None:
+        supplied.return_value = MagicMock(spec=['changed'])
+        supplied.return_value.changed = {'P': '5'}
         moved.return_value = True
+        changes.return_value = {'P': '5'}
 
-        with t.subTest('the named fields, read'):
+        with t.subTest('the named fields, as an update writes them'):
             ret = t.up.checked
-            t.assertIs(ret, sentinel.checked)
+            t.assertEqual(ret, {'P': '5'})
+
+        with t.subTest('a repeat that is no change is not written'):
+            supplied.return_value.changed = {'P': '5', 'REPEAT': None}
+            ret = t.up.checked
+            t.assertEqual(ret, {'P': '5'})
 
         with t.subTest('a title alone names no field'):
-            t.up.fields = {}
+            changes.return_value = {}
+            supplied.return_value.changed = {}
+
             ret = t.up.checked
-            t.assertIs(ret, sentinel.checked)
+
+            t.assertEqual(ret, {})
 
         with t.subTest('nor does a description alone, an empty one too'):
             t.up = Update(t.task, {}, description='')
             ret = t.up.checked
-            t.assertIs(ret, sentinel.checked)
+            t.assertEqual(ret, {})
 
         with t.subTest('nor does a list alone'):
             t.up = Update(t.task, {}, list_name='another-list')
             ret = t.up.checked
-            t.assertIs(ret, sentinel.checked)
+            t.assertEqual(ret, {})
+
+        with t.subTest('a repeat that is no change, and nothing else'):
+            supplied.reset_mock()
+            changes.return_value = {}
+            t.up = Update(t.task, {'REPEAT': '7d'})
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.up.checked
+
+            t.assertEqual(
+                str(caught.exception),
+                'nothing to update: name a field, a title, a description '
+                'or a list',
+            )
+            supplied.assert_not_called()
 
         with t.subTest('an open task takes no --with-subtasks'):
             supplied.reset_mock()
@@ -1116,6 +1146,48 @@ class UpdateTests(TestCase):
                 'or a list',
             )
             supplied.assert_not_called()
+
+    @patch.object(Update, 'node', new_callable=PropertyMock)
+    def test_changes(t, node: PropertyMock) -> None:
+        node.return_value = t.parent
+        t.parent.fields['REPEAT'] = '7d'
+
+        with t.subTest('no repeat named: the fields, the task not read'):
+            ret = t.up.changes
+            t.assertEqual(ret, {'P': '5'})
+            node.assert_not_called()
+
+        cases = {
+            'a new repeat is a change': (
+                {'P': '5', 'REPEAT': '14d'},
+                {'P': '5', 'REPEAT': '14d'},
+            ),
+            'the repeat the task carries is no change': (
+                {'P': '5', 'REPEAT': '7d'},
+                {'P': '5'},
+            ),
+            'a clear of its repeat is a change': (
+                {'REPEAT': 'None'},
+                {'REPEAT': 'None'},
+            ),
+            'an empty repeat is a change, which the read refuses': (
+                {'REPEAT': ''},
+                {'REPEAT': ''},
+            ),
+        }
+        for name, (fields, expected) in cases.items():
+            with t.subTest(name):
+                t.up.fields = fields
+                ret = t.up.changes
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a clear of a task with no repeat is no change'):
+            del t.parent.fields['REPEAT']
+            t.up.fields = {'REPEAT': 'None'}
+
+            ret = t.up.changes
+
+            t.assertEqual(ret, {})
 
     @patch(f'{SRC}.SuppliedFields', autospec=True)
     def test_supplied(t, supplied_fields: MagicMock) -> None:
@@ -1413,19 +1485,39 @@ class ReopenTests(TestCase):
                 ],
             )
 
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
     @patch.object(Reopen, 'supplied', new_callable=PropertyMock)
-    def test_checked(t, supplied: PropertyMock) -> None:
-        supplied.return_value = MagicMock(spec=['checked'])
-        supplied.return_value.checked = sentinel.checked
+    def test_checked(t, supplied: PropertyMock, node: PropertyMock) -> None:
+        supplied.return_value = MagicMock(spec=['changed'])
+        supplied.return_value.changed = {'P': '5'}
+        node.return_value = parent_node()
 
-        with t.subTest('the named fields, read'):
+        with t.subTest('the named fields, as an update writes them'):
             ret = t.ro.checked
-            t.assertIs(ret, sentinel.checked)
+
+            t.assertEqual(ret, {'P': '5'})
+            node.assert_not_called()
+
+        with t.subTest('a clear of a field the task carries'):
+            node.return_value.fields['REPEAT'] = '7d'
+            supplied.return_value.changed = {'P': '5', 'REPEAT': None}
+
+            ret = t.ro.checked
+
+            t.assertEqual(ret, {'P': '5', 'REPEAT': None})
+
+        with t.subTest('a clear of a field the task does not carry: none'):
+            del node.return_value.fields['REPEAT']
+            ret = t.ro.checked
+            t.assertEqual(ret, {'P': '5'})
 
         with t.subTest('a reopen that names nothing is no refusal'):
             t.ro = Reopen(t.task, sentinel.zone, {})
+            supplied.return_value.changed = {}
+
             ret = t.ro.checked
-            t.assertIs(ret, sentinel.checked)
+
+            t.assertEqual(ret, {})
 
     @patch(f'{SRC}.SuppliedFields', autospec=True)
     def test_supplied(t, supplied_fields: MagicMock) -> None:
@@ -3356,6 +3448,40 @@ class SuppliedFieldsTests(TestCase):
                     _ = t.sf.checked
 
                 t.assertEqual(str(caught.exception), message)
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_changed(t, next_due: MagicMock) -> None:
+        with t.subTest('no clear: the fields, each value read'):
+            ret = t.sf.changed
+            t.assertEqual(ret, {'TAGS': 'a-tag', 'P': '3'})
+
+        with t.subTest('a repeat is read as add reads it'):
+            t.sf.fields = {'REPEAT': '14d'}
+
+            ret = t.sf.changed
+
+            next_due.assert_called_once_with('14d', TODAY)
+            t.assertEqual(ret, {'REPEAT': '14d'})
+
+        with t.subTest('a repeat of None clears the field, unread'):
+            next_due.reset_mock()
+            t.sf.fields = {'P': '3', 'REPEAT': 'None'}
+
+            ret = t.sf.changed
+
+            next_due.assert_not_called()
+            t.assertEqual(ret, {'P': '3', 'REPEAT': None})
+
+        with t.subTest('an empty repeat is no clear: the read refuses it'):
+            t.sf.fields = {'REPEAT': ''}
+            next_due.side_effect = ValueError("unrecognised REPEAT value: ''")
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sf.changed
+
+            t.assertEqual(
+                str(caught.exception), "unrecognised REPEAT value: ''"
+            )
 
     def test_refuse_root_fields(t) -> None:
         with t.subTest('the fields a subtask carries'):

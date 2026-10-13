@@ -711,6 +711,14 @@ class Update:
         return self.supplied.checked
 
     @property
+    def changes(self) -> dict[str, str]:
+        """The named fields, less a `REPEAT` that is no change.
+
+        The task is read only where the update names a `REPEAT`.
+        """
+        raise NotImplementedError
+
+    @property
     def supplied(self) -> 'SuppliedFields':
         """The named fields, read against the day of the task."""
         return SuppliedFields(self.fields, self.task.today)
@@ -1916,6 +1924,11 @@ class SuppliedFields:
             # an unreadable one must fail before a task carries it.
             next_due(repeat, self.today)
         return checked
+
+    @property
+    def changed(self) -> dict[str, str | None]:
+        """The fields as an update writes them: read, a cleared one None."""
+        raise NotImplementedError
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
