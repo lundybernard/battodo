@@ -16,6 +16,7 @@ contributes nothing and never raises.
 """
 
 from datetime import date
+from itertools import pairwise
 from math import isfinite
 
 from .parser import TaskNode, parse_date
@@ -34,6 +35,8 @@ AGE_CAP = 2.0
 DUE_HORIZON_DAYS = 14
 OVERDUE_SCALE_DAYS = 7
 DUE_CAP = 3.0
+# A task with no readable due date keeps its rank unscaled.
+UNDATED_FACTOR = 1.0
 # The due-date factor curve: `days:factor` points, where `days` is
 # today minus the due date. A negative day is before the due date.
 DEFAULT_DUE_CURVE = '-30:0.5, -7:1.0, 0:2.0, 14:4.0'
@@ -111,7 +114,18 @@ def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
         1.0 for a task with no readable due date. Otherwise the curve's
         factor at today minus the due date.
     """
-    raise NotImplementedError
+    due = parse_date(task.due)
+    if due is None:
+        return UNDATED_FACTOR
+    days = (today - due).days
+    first_days, first_factor = curve[0]
+    if days <= first_days:
+        return first_factor
+    for (low_days, low_factor), (high_days, high_factor) in pairwise(curve):
+        if days < high_days:
+            share = (days - low_days) / (high_days - low_days)
+            return low_factor + share * (high_factor - low_factor)
+    return curve[-1][1]
 
 
 def rank(task: TaskNode, today: date) -> float:
