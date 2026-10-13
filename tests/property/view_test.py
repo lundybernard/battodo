@@ -83,7 +83,7 @@ PARKED = 'battodo:parked'
 # One list file covering the cases the hand-written suites name: an
 # open task, a finished one, a recurrence ahead of today, a one-off
 # ahead of today, a late recurrence, one due today, and a date the
-# parser cannot read.
+# parser cannot read. A view shows every open one.
 KNOWN_LINES = [
     '- [ ] An open task [P:2]',
     '- [x] A finished task [P:2]',
@@ -217,8 +217,8 @@ class WrittenList:
 
     @cached_property
     def held(self) -> list[TaskNode]:
-        """The visible tasks, or none where the list file is parked."""
-        return [] if PARKED in self.text else self.visible
+        """The open tasks, or none where the list file is parked."""
+        return [] if PARKED in self.text else self.open_tasks
 
     @cached_property
     def text(self) -> str:
@@ -226,13 +226,9 @@ class WrittenList:
         return document(self.lines)
 
     @cached_property
-    def visible(self) -> list[TaskNode]:
-        """The open top-level tasks, less each recurrence due later."""
-        return [
-            task
-            for task in self.tasks
-            if not task.done and not recurs_later(task)
-        ]
+    def open_tasks(self) -> list[TaskNode]:
+        """The open top-level tasks, whatever their due date."""
+        return [task for task in self.tasks if not task.done]
 
     @cached_property
     def tasks(self) -> list[TaskNode]:
@@ -259,12 +255,6 @@ def due_label(task: TaskNode) -> str:
     if due == TODAY:
         return 'TODAY'
     return task.due or ''
-
-
-def recurs_later(task: TaskNode) -> bool:
-    """Whether `task` recurs and falls due after the day of NOW."""
-    due = parse_date(task.due)
-    return bool(task.repeat) and due is not None and due > TODAY
 
 
 class RenderedTable:
@@ -428,8 +418,8 @@ class SelectionJsonViewTests(TestCase):
 
         hidden = sum(category['hidden'] for category in ret['categories'])
 
-        # A recurrence due after today drops out. A one-off due then
-        # stays, and so does a task whose due date does not read.
+        # Every open task is shown or counted, a recurrence due after
+        # today included.
         t.assertEqual(len(shown_tasks(ret)) + hidden, len(written.held))
 
 

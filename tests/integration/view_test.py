@@ -268,6 +268,23 @@ class SelectionJsonViewTests(TestCase):
                 task = tripled['categories'][0]['tasks'][0]
                 t.assertEqual(task['rank'], 6.0)
 
+        # Twenty days ahead, a recurrence is shown at a reduced rank:
+        # 5 x (0.5 + 0.5 x 10 / 23).
+        with empty_source() as source:
+            write(
+                source,
+                'career',
+                '- [ ] A refill [P:5] [DUE:2026-08-25] [REPEAT:90d]',
+            )
+            selection = Selection(source, NOW, show_all=False)
+            document = loads(SelectionJsonView(selection).json)
+
+            with t.subTest('a recurrence due later is shown, ranked lower'):
+                t.assertEqual(
+                    document['categories'][0]['tasks'][0]['rank'],
+                    3.59,
+                )
+
         with empty_source() as source:
             write(source, 'career', '- [ ] A single task [P:2]')
             selection = Selection(source, NOW, show_all=False)

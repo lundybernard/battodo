@@ -18,12 +18,6 @@ from ..selection import (
 
 SRC = 'battodo.view.selection'
 TODAY = date(2026, 8, 5)
-# What the parser reads back from each stored due date the cases use.
-PARSED_DUE = {
-    'a-later-date': date(2026, 8, 20),
-    'an-earlier-date': date(2026, 8, 4),
-    'an-unreadable-date': None,
-}
 # A Monday, so a weekday number added to it names that day.
 WEEK_START = date(2026, 8, 3)
 # The windows the clock opens, as a table: the category, the weekday
@@ -321,46 +315,23 @@ class TodoListTests(TestCase):
         t.assertEqual(ret, parsed.return_value)
         parsed.assert_called_once_with('a list file')
 
-    @patch(f'{SRC}.parse_date', autospec=True)
-    def test_visible(t, parse_date: MagicMock) -> None:
-        parse_date.side_effect = lambda value: PARSED_DUE.get(value)
+    def test_visible(t) -> None:
         t.tl.document = Mock(spec=['tasks'])
         t.tl.document.tasks = [
             stored('An open task'),
             stored('A finished task', done=True),
-            stored(
-                'A later recurrence',
-                due='a-later-date',
-                repeat='7d',
-            ),
-            stored('A later one-off', due='a-later-date'),
-            stored(
-                'A late recurrence',
-                due='an-earlier-date',
-                repeat='7d',
-            ),
-            stored(
-                'A placeholder due date',
-                due='an-unreadable-date',
-                repeat='7d',
-            ),
+            stored('A later recurrence', due='2026-08-20', repeat='7d'),
         ]
 
         ret = t.tl.visible
 
-        # Only a recurrence still ahead of today is suppressed. A
-        # one-off keeps its place however far off it is, and a date the
-        # parser cannot read is no reason to drop an item.
+        # Every open task is shown, a recurrence due later included:
+        # its due date lowers its rank instead of hiding it.
         t.assertEqual(
             [row.task.title for row in ret],
-            [
-                'An open task',
-                'A later one-off',
-                'A late recurrence',
-                'A placeholder due date',
-            ],
+            ['An open task', 'A later recurrence'],
         )
-        t.assertEqual([row.curve for row in ret], [sentinel.curve] * 4)
+        t.assertEqual([row.curve for row in ret], [sentinel.curve] * 2)
 
     def test_parked(t) -> None:
         with t.subTest('a list with no marker is not parked'):

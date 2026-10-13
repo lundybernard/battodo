@@ -7,6 +7,7 @@ Wednesday 2026-08-05 10:30 — active: career, events, study, work
    4.8  4.8    2  Legacy priority task (+2)
    3.0  3.0    5  A very long task title that the task column has t…  2026-08-12
    3.0  3.0       Placeholder due date task                           YYYY-MM-DD
+   2.5  5.0    1  Future recurring task                               2999-01-01
    1.0  1.0       Lowest ranked task
 
 ── Chores ──────────────────────────────────────────────────────────────────────

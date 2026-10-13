@@ -3,7 +3,7 @@ Wednesday 2026-08-05 10:30 — active: career, events, study, work
 ── Work ──────────────────────────────────────────
   RANK    P  LOE  TASK                  DUE
   10.3  4.0    2  Overdue task          OVERDUE
-  … and 5 more
+  … and 6 more
 
 ── Side quests ───────────────────────────────────
   RANK    P  LOE  TASK                  DUE
