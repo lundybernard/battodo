@@ -21,3 +21,4 @@ stands for; its component ADRs take the following numbers.
 | [0024](0024-cli-inputs-config-and-command.md) | Command inputs beside the configuration | Proposed |
 | [0025](0025-reopen-by-update.md) | A closed task reopens through update | Proposed |
 | [0027](0027-scratch-through-done.md) | A scratch closes a task through done | Proposed |
+| [0028](0028-update-repeat.md) | update sets, changes and clears a repeat | Proposed |
