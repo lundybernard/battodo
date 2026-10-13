@@ -219,7 +219,7 @@ class TodoList:
         return TodoDocument(self.text)
 
     @cached_property
-    def visible(self) -> list['Row']:
+    def open_rows(self) -> list['Row']:
         """A row per open top-level task."""
         return [
             Row(task, self.today, self.curve)
@@ -234,7 +234,7 @@ class TodoList:
     @cached_property
     def rows(self) -> list['Row']:
         """A row per open task, in the order a view shows them."""
-        return sorted(self.visible, key=lambda row: row.key)
+        return sorted(self.open_rows, key=lambda row: row.key)
 
     @property
     def order(self) -> tuple[int, str]:

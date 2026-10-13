@@ -315,7 +315,7 @@ class TodoListTests(TestCase):
         t.assertEqual(ret, parsed.return_value)
         parsed.assert_called_once_with('a list file')
 
-    def test_visible(t) -> None:
+    def test_open_rows(t) -> None:
         t.tl.document = Mock(spec=['tasks'])
         t.tl.document.tasks = [
             stored('An open task'),
@@ -323,7 +323,7 @@ class TodoListTests(TestCase):
             stored('A later recurrence', due='2026-08-20', repeat='7d'),
         ]
 
-        ret = t.tl.visible
+        ret = t.tl.open_rows
 
         # Every open task is shown, a recurrence due later included:
         # its due date lowers its rank instead of hiding it.
@@ -351,7 +351,7 @@ class TodoListTests(TestCase):
             low, high = Mock(spec=['key']), Mock(spec=['key'])
             low.key = (-1.0, 'zzzz', 'Low')
             high.key = (-5.0, 'zzzz', 'High')
-            t.tl.visible = [low, high]
+            t.tl.open_rows = [low, high]
 
             ret = t.tl.rows
 
@@ -359,7 +359,7 @@ class TodoListTests(TestCase):
 
         with t.subTest('a list with nothing open comes back empty'):
             t.tl.__dict__.pop('rows')
-            t.tl.visible = []
+            t.tl.open_rows = []
 
             ret = t.tl.rows
 
