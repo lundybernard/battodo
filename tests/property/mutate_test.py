@@ -600,9 +600,9 @@ def supplied_options(
 def supplied_descriptions() -> st.SearchStrategy[str | None]:
     """A description a caller supplies, or None for none supplied.
 
-    Half the draws supply none. The rest are empty, or one to three
-    lines; one draw in four of those holds a line the parser reads back
-    as something else.
+    Half the draws supply none. The rest are empty or `None`, which an
+    update reads as a clear, or one to three lines; one draw in four of
+    those holds a line the parser reads back as something else.
     """
     lines = st.lists(description_texts(), min_size=1, max_size=3)
     refused = st.tuples(lines, st.sampled_from(REFUSED_LINES), st.data())
@@ -610,7 +610,7 @@ def supplied_descriptions() -> st.SearchStrategy[str | None]:
         either(lines, lines),
         refused.map(with_refused_line),
     ).map('\n'.join)
-    return either(st.none(), either(st.just(''), given))
+    return either(st.none(), either(st.sampled_from(['', 'None']), given))
 
 
 def description_texts() -> st.SearchStrategy[str]:
@@ -897,7 +897,7 @@ def updated(
     nested = len(ancestry) > 1
     if title is not None:
         refuse_line_break(title)
-    lines = None if description is None else description_lines(description)
+    lines = updated_lines(description)
     name = LIST_FILE if list_name is None else list_file(before, list_name)
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
@@ -1057,7 +1057,7 @@ def reopened(
     file = list_file(before, list_name or left)
     if title is not None:
         refuse_line_break(title)
-    lines = None if description is None else description_lines(description)
+    lines = updated_lines(description)
     doc = TodoDocument(before.lists[file])
     index = doc.open_end
     block = recorded_lines(closed_snapshot(task), 0)
@@ -1588,6 +1588,16 @@ def refuse_line_break(title: str) -> None:
     """
     if '\n' in title or '\r' in title:
         raise ValueError(f'title must hold no line break, not {title!r}')
+
+
+def updated_lines(description: str | None) -> list[str] | None:
+    """The description lines an update writes, or None for no change.
+
+    A description of `None` clears, as an empty one does.
+    """
+    if description is None:
+        return None
+    return description_lines('' if description == 'None' else description)
 
 
 def description_lines(description: str) -> list[str]:

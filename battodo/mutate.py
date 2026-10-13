@@ -677,10 +677,13 @@ class Update:
     def new_description(self) -> 'SuppliedDescription | None':
         """The description the update writes, or None where it names none.
 
-        An empty description clears the description lines.
+        An empty description, or one of `None`, clears the description
+        lines.
         """
         if self.description is None:
             return None
+        if self.description == CLEAR_VALUE:
+            return SuppliedDescription('')
         return SuppliedDescription(self.description)
 
     @property
@@ -1189,9 +1192,14 @@ class Reopen:
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
-        """The description the reopen writes, or None where it names none."""
+        """The description the reopen writes, or None where it names none.
+
+        A description of `None` clears, as an empty one does.
+        """
         if self.description is None:
             return None
+        if self.description == CLEAR_VALUE:
+            return SuppliedDescription('')
         return SuppliedDescription(self.description)
 
     @property
