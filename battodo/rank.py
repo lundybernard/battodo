@@ -16,6 +16,7 @@ contributes nothing and never raises.
 """
 
 from datetime import date
+from math import isfinite
 
 from .parser import TaskNode, parse_date
 
@@ -37,6 +38,7 @@ DUE_CAP = 3.0
 # today minus the due date. A negative day is before the due date.
 DEFAULT_DUE_CURVE = '-30:0.5, -7:1.0, 0:2.0, 14:4.0'
 CURVE_ERROR = 'a rank due curve point must read days:factor'
+CURVE_DAY_ERROR = 'a rank due curve names a day twice'
 
 # A decoded curve: its points, earliest day first.
 Curve = list[tuple[int, float]]
@@ -113,6 +115,33 @@ def parse_curve(value: str) -> Curve:
     Raises
     ------
     ValueError
-        A segment is not a whole number of days and a finite factor.
+        A segment is not a whole number of days and a finite factor of
+        0 or more, or two segments name the same day.
     """
-    raise NotImplementedError
+    points: dict[int, float] = {}
+    for segment in value.split(','):
+        days, factor = parse_point(segment)
+        if days in points:
+            raise ValueError(f'{CURVE_DAY_ERROR}: {segment.strip()!r}')
+        points[days] = factor
+    return sorted(points.items())
+
+
+def parse_point(segment: str) -> tuple[int, float]:
+    """Decode one `days:factor` point of a due-date curve.
+
+    Raises
+    ------
+    ValueError
+        The segment is not a whole number of days and a finite factor
+        of 0 or more.
+    """
+    text = segment.strip()
+    days_text, _, factor_text = text.partition(':')
+    try:
+        days, factor = int(days_text), float(factor_text)
+    except ValueError:
+        raise ValueError(f'{CURVE_ERROR}: {text!r}') from None
+    if not isfinite(factor) or factor < 0:
+        raise ValueError(f'{CURVE_ERROR}: {text!r}')
+    return days, factor
