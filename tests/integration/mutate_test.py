@@ -115,6 +115,27 @@ OWNER_SNAPSHOT = {
 }
 
 
+# A list of chores with repeating steps. The titles name the role each
+# line plays.
+STEPPED_LIST = (
+    '## Open\n'
+    '- [ ] A chore [P:2] [ID:ch01ab]\n'
+    '  - [ ] A repeating step [DUE:2026-08-05] [REPEAT:7d] [ID:rs01ab]\n'
+    '  - [ ] A plain step [LOE:1] [ID:ps01ab]\n'
+    '  - [ ] A repeating step with a step [DUE:2026-08-05] [REPEAT:1w] '
+    '[ID:rw01ab]\n'
+    '    - [ ] A step below it [LOE:2] [ID:sb01ab]\n'
+    '- [ ] A chore with one open step [P:1] [ID:co01ab]\n'
+    '  - [ ] Its only open step [DUE:2026-08-05] [REPEAT:monthly:5] '
+    '[ID:os01ab]\n'
+    '  - [x] A finished step [LOE:1]\n'
+    '- [ ] A chore with a deep step [P:1] [ID:cd01ab]\n'
+    '  - [ ] A plain step above [LOE:1] [ID:pa01ab]\n'
+    '    - [ ] A repeating step below [DUE:2026-08-05] [REPEAT:3d] '
+    '[ID:rb01ab]\n'
+)
+
+
 # A list whose top-level task keeps a closed subtask, and a closed
 # subtask below that. The titles name the role each line plays.
 HELD_LIST = (
@@ -1484,6 +1505,83 @@ class CompletionTests(TestCase):
 
             t.assertEqual(ret, RESCHEDULED_RECURRENCE)
 
+        with t.subTest('a repeating subtask is rescheduled, its parent open'):
+            completed = completion_of(a_stepped_source(t), 'rs01ab')
+
+            ret = completed.text
+
+            # The subtask stays open with its next due date, and takes no
+            # `[ADDED:]`.
+            t.assertEqual(
+                ret,
+                STEPPED_LIST.replace(
+                    '[DUE:2026-08-05] [REPEAT:7d]',
+                    '[DUE:2026-08-15] [REPEAT:7d]',
+                ),
+            )
+
+        with t.subTest('from the given day'):
+            task = Task(a_stepped_source(t), 'rs01ab', GIVEN_DAY)
+            completed = Completion(task)
+
+            ret = completed.text
+
+            t.assertEqual(
+                ret,
+                STEPPED_LIST.replace(
+                    '[DUE:2026-08-05] [REPEAT:7d]',
+                    '[DUE:2026-08-08] [REPEAT:7d]',
+                ),
+            )
+
+        with t.subTest('the last open subtask, rescheduled, ends no parent'):
+            completed = completion_of(a_stepped_source(t), 'os01ab')
+
+            ret = completed.text
+
+            t.assertEqual(
+                ret,
+                STEPPED_LIST.replace(
+                    '[DUE:2026-08-05] [REPEAT:monthly:5]',
+                    '[DUE:2026-09-05] [REPEAT:monthly:5]',
+                ),
+            )
+
+        with t.subTest('the last plain subtask beside a repeating one'):
+            completed = completion_of(a_stepped_source(t), 'ps01ab')
+
+            ret = completed.text
+
+            t.assertEqual(
+                ret,
+                STEPPED_LIST.replace(
+                    '  - [ ] A plain step [LOE:1]',
+                    '  - [x] A plain step [LOE:1]',
+                ),
+            )
+
+        with t.subTest('a rescheduled subtask loses its children'):
+            completed = completion_of(a_stepped_source(t), 'rw01ab')
+
+            ret = completed.text
+
+            rescheduled = STEPPED_LIST.replace(
+                '[DUE:2026-08-05] [REPEAT:1w]',
+                '[DUE:2026-08-15] [REPEAT:1w]',
+            )
+            t.assertEqual(ret, without(rescheduled, 5))
+
+        with t.subTest('and its last open child reschedules it'):
+            completed = completion_of(a_stepped_source(t), 'sb01ab')
+
+            ret = completed.text
+
+            rescheduled = STEPPED_LIST.replace(
+                '[DUE:2026-08-05] [REPEAT:1w]',
+                '[DUE:2026-08-15] [REPEAT:1w]',
+            )
+            t.assertEqual(ret, without(rescheduled, 5))
+
         with t.subTest('a scratch drops the task, its note and its children'):
             scratched = scratch_of(a_source(t), '9o71lx')
             ret = scratched.text
@@ -1526,6 +1624,20 @@ class CompletionTests(TestCase):
             completed = completion_of(t.source, 'A checklist item')
             ret = completed.entries
             t.assertEqual(ret, [])
+
+        with t.subTest('a rescheduled subtask: one record, no ancestor'):
+            completed = completion_of(a_stepped_source(t), 'os01ab')
+            ret = completed.entries
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        '2026-08-08 | a-stepped-list | DONE | A chore with '
+                        'one open step > Its only open step '
+                        '[DUE:2026-08-05] [REPEAT:monthly:5]'
+                    )
+                ],
+            )
 
         with t.subTest('a scratch: one SCRATCHED record, and no ancestor'):
             scratched = scratch_of(t.source, 'A subtask that does not')
@@ -1590,6 +1702,40 @@ class CompletionTests(TestCase):
                         'completed_on': '2026-08-08',
                     },
                 ),
+            )
+
+        with t.subTest('a rescheduled subtask: its new due date, no ADDED'):
+            completed = completion_of(a_stepped_source(t), 'os01ab')
+            events = completed.events
+            t.assertEqual(
+                events,
+                [
+                    (
+                        'TaskCompleted',
+                        'task/os01ab',
+                        {
+                            'delta': {
+                                'done': [False, True],
+                                'DUE': ['2026-08-05', '2026-09-05'],
+                            },
+                            'snapshot': {
+                                'list': 'a-stepped-list',
+                                'title': 'Its only open step',
+                                'done': False,
+                                'fields': {
+                                    'DUE': '2026-08-05',
+                                    'REPEAT': 'monthly:5',
+                                    'ID': 'os01ab',
+                                },
+                            },
+                            'ancestry': (
+                                'A chore with one open step > '
+                                'Its only open step'
+                            ),
+                            'completed_on': '2026-08-08',
+                        },
+                    )
+                ],
             )
 
         with t.subTest('a checklist item lands on its owner stream'):
@@ -2055,6 +2201,14 @@ def an_owner_source(t: TestCase) -> Path:
     source = a_source(t)
     owner = source / 'an-owner-list.md'
     owner.write_text(OWNER_LIST, encoding='utf-8')
+    return source
+
+
+def a_stepped_source(t: TestCase) -> Path:
+    """A source directory holding both lists and the stepped list."""
+    source = a_source(t)
+    stepped = source / 'a-stepped-list.md'
+    stepped.write_text(STEPPED_LIST, encoding='utf-8')
     return source
 
 

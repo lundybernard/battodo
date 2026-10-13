@@ -39,6 +39,13 @@ YARD = (
     '- [ ] Rake leaves [P:3] [ID:rk01lv]\n'
     '- [ ] Sweep deck [P:2]\n'
 )
+# A chore whose one open step repeats.
+STEPPED_YARD = (
+    '## Open\n'
+    '- [ ] Clear the yard [P:3] [ID:cy01ab]\n'
+    '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:7d] [ID:ml01ab]\n'
+    '  - [x] Buy a mower [LOE:1]\n'
+)
 
 
 class NullFileSource:
@@ -236,6 +243,22 @@ class CommandInputTests(TestCase):
             )
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+        with t.subTest('--date reschedules a repeating subtask from that day'):
+            listed = t.source / 'yard.md'
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            ret = t.run_command(['done', 'ml01ab', '--date', '2026-08-03'], {})
+
+            t.assertEqual(
+                ret,
+                '2026-08-03 | yard | DONE | Clear the yard > Mow the lawn '
+                '[DUE:2026-08-01] [REPEAT:7d]\n',
+            )
+            t.assertEqual(
+                listed.read_text(encoding='utf-8'),
+                STEPPED_YARD.replace('2026-08-01', '2026-08-10'),
+            )
 
         with t.subTest('--scratch, --attrs and --note reach the event'):
             # The subtests above closed both tasks.
