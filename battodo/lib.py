@@ -424,6 +424,7 @@ def complete_item(
     *,
     selector: str,
     date: str | None = None,
+    scratch: bool = False,
     attrs: str | None = None,
     note: str | None = None,
 ) -> str:
@@ -462,6 +463,8 @@ def complete_item(
         attributes, or `date` is not an ISO date. Raised before
         anything is written.
     """
+    if scratch:
+        raise NotImplementedError
     checked = SuppliedAttributes(attrs, note).checked
     task = Task.from_config(conf, now, selector=selector, date=date)
     completion = Completion(task, attrs=checked)

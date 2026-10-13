@@ -537,6 +537,7 @@ class CompleteItemTests(TestCase):
             t.Completion.assert_called_once_with(
                 t.task,
                 attrs=t.SuppliedAttributes.return_value.checked,
+                scratched=False,
             )
 
         with t.subTest('a date left off is None'):
@@ -549,6 +550,17 @@ class CompleteItemTests(TestCase):
                 t.now,
                 selector='a selector',
                 date=None,
+            )
+
+        with t.subTest('a scratch closes the task without completing it'):
+            t.Completion.reset_mock()
+
+            complete_item(t.conf, t.now, selector='a selector', scratch=True)
+
+            t.Completion.assert_called_once_with(
+                t.task,
+                attrs=t.SuppliedAttributes.return_value.checked,
+                scratched=True,
             )
 
     def test_attributes(t):
@@ -585,8 +597,15 @@ class CompleteItemTests(TestCase):
         t.completion.write.assert_called_once_with()
 
     def test_nothing_logged(t):
-        logged = complete_item(t.conf, t.now, selector='a selector')
-        t.assertEqual(logged, 'checked off')
+        with t.subTest('a checklist item is checked off'):
+            logged = complete_item(t.conf, t.now, selector='a selector')
+            t.assertEqual(logged, 'checked off')
+
+        with t.subTest('and a scratched one is dropped'):
+            logged = complete_item(
+                t.conf, t.now, selector='a selector', scratch=True
+            )
+            t.assertEqual(logged, 'dropped')
 
 
 class ScratchItemTests(TestCase):

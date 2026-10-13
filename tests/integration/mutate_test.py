@@ -1309,6 +1309,31 @@ class CompletionTests(TestCase):
                 [('TaskUpdated', stream), ('TaskCompleted', stream)],
             )
 
+        with t.subTest('a scratch: the list, the log and the journal'):
+            source = a_source(t)
+            scratched = scratch_of(source, '9o71lx')
+
+            scratched.write()
+
+            written = (source / 'a-list.md').read_text(encoding='utf-8')
+            logged = (source / 'completed.md').read_text(encoding='utf-8')
+            t.assertEqual(written, scratched.text)
+            t.assertEqual(logged, '\n'.join(scratched.entries) + '\n')
+            t.assertEqual(journaled(source), as_journaled(scratched.events))
+
+        with t.subTest('a scratched checklist item journals its owner stamp'):
+            scratched = scratch_of(
+                an_owner_source(t), 'A checklist item to write'
+            )
+
+            scratched.write()
+
+            stream = f'task/{scratched.ids[2]}'
+            t.assertEqual(
+                journaled(scratched.source),
+                [('TaskUpdated', stream), ('TaskScratched', stream)],
+            )
+
     def test_text(t) -> None:
         with t.subTest('a finished top-level task loses its line'):
             completed = completion_of(t.source, 'A task with no id')
@@ -1361,6 +1386,26 @@ class CompletionTests(TestCase):
 
             t.assertEqual(ret, RESCHEDULED_RECURRENCE)
 
+        with t.subTest('a scratch drops the task, its note and its children'):
+            scratched = scratch_of(a_source(t), '9o71lx')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 4, 5, 6, 7))
+
+        with t.subTest('a scratched subtask goes, and its parent stays'):
+            scratched = scratch_of(a_source(t), 'A subtask of')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 6))
+
+        with t.subTest('a scratch of the last open child ends no parent'):
+            scratched = scratch_of(a_source(t), 'A subtask that does not')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 10))
+
+        with t.subTest('a scratched recurring task goes, not rescheduled'):
+            scratched = scratch_of(a_source(t), 'rr01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 9, 10))
+
     def test_entries(t) -> None:
         with t.subTest('the task and each ancestor it ends, deepest first'):
             completed = completion_of(t.source, 'A subtask that does not')
@@ -1382,6 +1427,24 @@ class CompletionTests(TestCase):
         with t.subTest('a checklist item is not logged'):
             completed = completion_of(t.source, 'A checklist item')
             ret = completed.entries
+            t.assertEqual(ret, [])
+
+        with t.subTest('a scratch: one SCRATCHED record, and no ancestor'):
+            scratched = scratch_of(t.source, 'A subtask that does not')
+            ret = scratched.entries
+            t.assertEqual(
+                ret,
+                [
+                    (
+                        '2026-08-08 | a-list | SCRATCHED | A recurring task > '
+                        'A subtask that does not recur [LOE:1]'
+                    )
+                ],
+            )
+
+        with t.subTest('a scratched checklist item is not logged'):
+            scratched = scratch_of(t.source, 'A checklist item')
+            ret = scratched.entries
             t.assertEqual(ret, [])
 
     def test_events(t) -> None:
@@ -1481,6 +1544,75 @@ class CompletionTests(TestCase):
 
             with t.assertRaises(ValueError) as caught:
                 _ = completed.events
+
+            t.assertEqual(
+                str(caught.exception),
+                'a checklist item takes no attributes',
+            )
+
+        with t.subTest('a scratch: one TaskScratched, on its stream'):
+            scratched = scratch_of(t.source, '9o71lx', attrs={'cost': '0'})
+            events = scratched.events
+            t.assertEqual(
+                events,
+                [
+                    (
+                        'TaskScratched',
+                        'task/9o71lx',
+                        {
+                            'delta': {'removed': [False, True]},
+                            'snapshot': {
+                                'list': 'a-list',
+                                'title': 'A task',
+                                'done': False,
+                                'fields': {
+                                    'P': '4',
+                                    'LOE': '8',
+                                    'ADDED': '2026-07-06',
+                                    'ID': '9o71lx',
+                                },
+                                'description': 'A note that stays put.',
+                                'children': A_TASK_CHILDREN,
+                            },
+                            'ancestry': 'A task',
+                            'attrs': {'cost': '0'},
+                            'completed_on': '2026-08-08',
+                        },
+                    )
+                ],
+            )
+
+        with t.subTest('a scratched task with no id takes no stamp'):
+            # Its line goes, so no line keeps the new id.
+            scratched = scratch_of(t.source, 'A task with no id')
+
+            (ret,) = scratched.events
+
+            t.assertEqual(ret.stream, f'task/{scratched.ids[8]}')
+
+        with t.subTest('a scratched checklist item: its owner stamp first'):
+            scratched = scratch_of(
+                an_owner_source(t), 'A checklist item to write'
+            )
+
+            stamp, item = scratched.events
+
+            task_id = scratched.ids[2]
+            t.assertEqual(stamp.type, 'TaskUpdated')
+            t.assertEqual(
+                (item.type, item.stream, item.payload['checklist_item']),
+                ('TaskScratched', f'task/{task_id}', True),
+            )
+
+        with t.subTest('a scratched checklist item takes no attributes'):
+            scratched = scratch_of(
+                t.source,
+                'A checklist item',
+                attrs={'note': 'a note'},
+            )
+
+            with t.assertRaises(ValueError) as caught:
+                _ = scratched.events
 
             t.assertEqual(
                 str(caught.exception),
@@ -2039,6 +2171,16 @@ def completion_of(
 ) -> Completion:
     """The completion of the task `selector` names."""
     return Completion(Task(source, selector, TODAY), attrs=attrs)
+
+
+def scratch_of(
+    source: Path,
+    selector: str,
+    attrs: dict[str, str] | None = None,
+) -> Completion:
+    """The scratch of the task `selector` names."""
+    task = Task(source, selector, TODAY)
+    return Completion(task, attrs=attrs, scratched=True)
 
 
 def annotation_of(source: Path, selector: str) -> Annotation:

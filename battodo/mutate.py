@@ -1244,9 +1244,11 @@ class Completion:
         self,
         task: Task,
         attrs: dict[str, str] | None = None,
+        scratched: bool = False,
     ) -> None:
         self.task = task
         self.attrs = attrs
+        self.scratched = scratched
 
     def write(self) -> None:
         """Write the list, its log records and its events.
@@ -2215,12 +2217,14 @@ class TaskCompletion:
         day: date,
         list_name: str,
         attrs: dict[str, str] | None = None,
+        scratched: bool = False,
     ) -> None:
         self.ancestry = ancestry
         self.rescheduled = rescheduled
         self.day = day
         self.list_name = list_name
         self.attrs = attrs
+        self.scratched = scratched
 
     @property
     def payload(self) -> dict[str, Any]:

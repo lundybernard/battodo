@@ -1,5 +1,7 @@
 """Round-trip test for `done`, with and without a completion date.
 
+`done --scratch` closes a task without completing it.
+
 The fixture lists are copied to a temporary directory first: `done`
 writes, and the committed fixtures are read-only inputs to the `view`
 and `show` goldens.
@@ -132,6 +134,39 @@ class DoneCommandTests(TestCase):
 
         with t.subTest('and the log records them on its line'):
             t.assertIn(f'{entry}\n', t.read('completed.md'))
+
+    def test_done_scratch(t) -> None:
+        entry = (
+            f'{BACKDATE} | work | SCRATCHED | Overdue task [P:4] [LOE:2] '
+            '[DUE:2026-08-01] [attrs:{"note": "Not needed"}]'
+        )
+
+        logged = t.run_ok(
+            'done',
+            'Overdue task',
+            '--scratch',
+            '--date',
+            BACKDATE,
+            '--note',
+            'Not needed',
+        )
+
+        with t.subTest('the entry logs the task as SCRATCHED'):
+            t.assertIn(entry, logged)
+
+        with t.subTest('and the log records it'):
+            t.assertIn(f'{entry}\n', t.read('completed.md'))
+
+        with t.subTest('and the journal records its reason and its day'):
+            event = Journal(t.source).events[-1]
+            payload = event['payload']
+            t.assertEqual(
+                (event['type'], payload['attrs'], payload['completed_on']),
+                ('TaskScratched', {'note': 'Not needed'}, BACKDATE),
+            )
+
+        with t.subTest('and the task leaves its list'):
+            t.assertNotIn('Overdue task', t.read('work.md'))
 
     def test_done_with_refused_attributes(t) -> None:
         """A refused attribute reports on stderr and writes nothing."""

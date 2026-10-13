@@ -301,6 +301,15 @@ class ArgparserTests(TestCase):
             )
             t.assertEqual(args.date, '2026-08-15')
 
+    def test_done_scratch(t):
+        with t.subTest('off when not given'):
+            args = t.parser.parse_args(['done', 'brush pile'])
+            t.assertFalse(args.scratch)
+
+        with t.subTest('on when given'):
+            args = t.parser.parse_args(['done', 'brush pile', '--scratch'])
+            t.assertTrue(args.scratch)
+
     def test_attributes(t):
         for argv in [
             ['done', 'brush pile'],
@@ -773,6 +782,7 @@ class CommandsDoneTests(TestCase):
         t.args = Namespace(
             selector='a selector',
             date='a date',
+            scratch=True,
             attrs='some attrs',
             note='a note',
         )
@@ -786,6 +796,7 @@ class CommandsDoneTests(TestCase):
                 t.datetime.now.return_value,
                 selector='a selector',
                 date='a date',
+                scratch=True,
                 attrs='some attrs',
                 note='a note',
             )

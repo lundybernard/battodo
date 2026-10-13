@@ -2158,19 +2158,27 @@ class CompletionTests(TestCase):
         )
         t.assertIs(ret, doc)
 
+    @patch.object(Completion, 'dropped', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     def test_stamps(
         t,
         recurrence: PropertyMock,
         rescheduled: PropertyMock,
+        dropped: PropertyMock,
     ) -> None:
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        dropped.return_value = set()
 
         with t.subTest('a block that stays: each stream gains its id'):
             recurrence.return_value = None
             ret = t.co.stamps
             t.assertEqual(ret, {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}})
+
+        with t.subTest('a stream whose line goes: no id'):
+            dropped.return_value = {3}
+            ret = t.co.stamps
+            t.assertEqual(ret, {1: {'ID': '9o71lx'}})
 
         with t.subTest('a finished block that goes: nothing'):
             recurrence.return_value = t.parent
@@ -2217,6 +2225,14 @@ class CompletionTests(TestCase):
             ret = t.co.checked_off
             t.assertEqual(ret, [])
 
+        with t.subTest('a scratch: none, as its block goes'):
+            root_done.return_value = False
+            t.co.scratched = True
+
+            ret = t.co.checked_off
+
+            t.assertEqual(ret, [])
+
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
     @patch.object(Completion, 'root_done', new_callable=PropertyMock)
     def test_dropped(
@@ -2243,6 +2259,14 @@ class CompletionTests(TestCase):
             ret = t.co.dropped
 
             t.assertEqual(ret, {3, 4})
+
+        with t.subTest('a scratch: the block of the named task'):
+            root_done.return_value = False
+            t.co.scratched = True
+
+            ret = t.co.dropped
+
+            t.assertEqual(ret, {3})
 
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     def test_root_done(t, ancestries: PropertyMock) -> None:
@@ -2339,6 +2363,14 @@ class CompletionTests(TestCase):
             ret = t.co.recurrence
             t.assertIsNone(ret)
 
+        with t.subTest('none for a scratch, which reschedules nothing'):
+            root_done.return_value = True
+            t.co.scratched = True
+
+            ret = t.co.recurrence
+
+            t.assertIsNone(ret)
+
     def test_root(t) -> None:
         ret = t.co.root
         t.assertIs(ret, t.parent)
@@ -2373,6 +2405,11 @@ class CompletionTests(TestCase):
                 ret,
                 [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
             )
+
+        with t.subTest('a scratch: the named task alone, nothing cascades'):
+            t.co.scratched = True
+            ret = t.co.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
 
     @patch(f'{SRC}.LogEntry', autospec=True)
     @patch.object(Completion, 'completions', new_callable=PropertyMock)
@@ -2435,8 +2472,10 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, GIVEN_DAY, 'a-list', sentinel.attrs),
-                    call(top, None, GIVEN_DAY, 'a-list', None),
+                    call(
+                        below, None, GIVEN_DAY, 'a-list', sentinel.attrs, False
+                    ),
+                    call(top, None, GIVEN_DAY, 'a-list', None, False),
                 ],
             )
             t.assertEqual(ret, [task_completion.return_value] * 2)
@@ -2450,8 +2489,17 @@ class CompletionTests(TestCase):
             t.assertEqual(
                 task_completion.call_args_list,
                 [
-                    call(below, None, GIVEN_DAY, 'a-list', sentinel.attrs),
-                    call(top, date(2026, 8, 15), GIVEN_DAY, 'a-list', None),
+                    call(
+                        below, None, GIVEN_DAY, 'a-list', sentinel.attrs, False
+                    ),
+                    call(
+                        top,
+                        date(2026, 8, 15),
+                        GIVEN_DAY,
+                        'a-list',
+                        None,
+                        False,
+                    ),
                 ],
             )
 
@@ -2470,9 +2518,22 @@ class CompletionTests(TestCase):
                         GIVEN_DAY,
                         'a-list',
                         sentinel.attrs,
+                        False,
                     ),
-                    call(top, None, GIVEN_DAY, 'a-list', None),
+                    call(top, None, GIVEN_DAY, 'a-list', None, False),
                 ],
+            )
+
+        with t.subTest('a scratch marks each one scratched'):
+            task_completion.reset_mock()
+            recurrence.return_value = None
+            ancestries.return_value = [below]
+            t.co.scratched = True
+
+            _ = t.co.completions
+
+            task_completion.assert_called_once_with(
+                below, None, GIVEN_DAY, 'a-list', sentinel.attrs, True
             )
 
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
@@ -2521,6 +2582,18 @@ class CompletionTests(TestCase):
                     Event('TaskCompleted', 'task/zz01ab', sentinel.below),
                     Event('TaskCompleted', 'task/9o71lx', sentinel.top),
                 ],
+            )
+
+        with t.subTest('a scratch: one TaskScratched each'):
+            assignments.return_value = []
+            completions.return_value = [below]
+            t.co.scratched = True
+
+            ret = t.co.events
+
+            t.assertEqual(
+                ret,
+                [Event('TaskScratched', 'task/zz01ab', sentinel.below)],
             )
 
     @patch(f'{SRC}.IdAssignment', autospec=True)
@@ -3910,9 +3983,31 @@ class TaskCompletionTests(TestCase):
                 },
             )
 
+        with t.subTest('a scratch records the removal instead'):
+            t.tc.scratched = True
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {'removed': [False, True]},
+                    'snapshot': sentinel.snapshot,
+                    'ancestry': 'a path',
+                    'attrs': {'cost': '45.00'},
+                    'completed_on': '2026-08-01',
+                },
+            )
+
     def test_status(t) -> None:
-        ret = t.tc.status
-        t.assertEqual(ret, 'DONE')
+        with t.subTest('a completion: DONE'):
+            ret = t.tc.status
+            t.assertEqual(ret, 'DONE')
+
+        with t.subTest('a scratch: SCRATCHED'):
+            t.tc.scratched = True
+            ret = t.tc.status
+            t.assertEqual(ret, 'SCRATCHED')
 
 
 class RecordedTaskTests(TestCase):
