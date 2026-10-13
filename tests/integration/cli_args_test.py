@@ -182,6 +182,25 @@ class CommandInputTests(TestCase):
                 f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
             )
 
+        with t.subTest('--repeat reaches a subtask'):
+            ret = t.run_command(
+                [
+                    'add',
+                    'yard',
+                    'Water the beds',
+                    '--parent',
+                    'rk01lv',
+                    '--repeat',
+                    '7d',
+                ],
+                {},
+            )
+
+            t.assertEqual(
+                ret,
+                f'  - [ ] Water the beds [REPEAT:7d] [ID:nw01id]\n{listed}\n',
+            )
+
         with t.subTest('--attrs and --note reach the event'):
             t.run_command(
                 ['add', 'yard', 'Trim hedge', '--attrs', 'cost=12.50'],
@@ -401,3 +420,25 @@ class CommandInputTests(TestCase):
 
             ret = listed.read_text(encoding='utf-8')
             t.assertEqual(ret, YARD.replace('[P:3]', '[P:5]'))
+
+        with t.subTest('--repeat reaches a subtask'):
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            ret = t.run_command(['update', 'ml01ab', '--repeat', '14d'], {})
+
+            t.assertEqual(
+                ret,
+                '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:14d] '
+                f'[ID:ml01ab]\n{listed}\n',
+            )
+
+        with t.subTest('and with its repeat cleared, the parent closes'):
+            # The clear is the step the refusal of the done names.
+            t.run_command(['update', 'ml01ab', '--repeat', 'None'], {})
+
+            ret = t.run_command(['done', 'cy01ab'], {})
+
+            t.assertEqual(
+                ret, '2026-08-05 | yard | DONE | Clear the yard [P:3]\n'
+            )
+            t.assertEqual(listed.read_text(encoding='utf-8'), '## Open\n')

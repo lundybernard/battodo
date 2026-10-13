@@ -3620,9 +3620,14 @@ class SuppliedFieldsTests(TestCase):
             )
 
     def test_refuse_root_fields(t) -> None:
-        with t.subTest('the fields a subtask carries'):
+        with t.subTest('the fields a subtask carries, a repeat among them'):
             # Nothing to refuse: the call returns.
-            t.sf.fields = {'LOE': '2', 'DUE': '2026-09-01', 'TAGS': 'a-tag'}
+            t.sf.fields = {
+                'LOE': '2',
+                'DUE': '2026-09-01',
+                'REPEAT': '7d',
+                'TAGS': 'a-tag',
+            }
             t.sf.refuse_root_fields()
 
         refused = {
@@ -3630,11 +3635,7 @@ class SuppliedFieldsTests(TestCase):
                 {'P': '3'},
                 'P belongs to the top-level task, not to a subtask',
             ),
-            'a recurrence, which the top-level task owns': (
-                {'REPEAT': '7d'},
-                'REPEAT belongs to the top-level task, not to a subtask',
-            ),
-            'both: the priority first': (
+            'a priority beside a repeat': (
                 {'REPEAT': '7d', 'P': '3'},
                 'P belongs to the top-level task, not to a subtask',
             ),

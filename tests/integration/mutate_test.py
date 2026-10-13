@@ -575,6 +575,14 @@ class SubtaskAdditionTests(TestCase):
             ]
             t.assertEqual(ret, with_lines(A_LIST, 8, lines))
 
+        with t.subTest('a subtask takes a repeat of its own'):
+            repeating = subtask(t.source, '9o71lx', fields={'REPEAT': '7d'})
+            ret = repeating.entry
+            t.assertRegex(
+                ret,
+                r'^  - \[ \] A new subtask \[REPEAT:7d\] \[ID:[0-9a-z]{6}\]$',
+            )
+
         with t.subTest('a subtask nests one level under a subtask'):
             deeper = subtask(t.source, 'A subtask of it')
             ret = deeper.entry
@@ -821,6 +829,25 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, A_LIST.replace(' [REPEAT:7d]', ''))
 
+        with t.subTest('a repeat on a subtask, the due date kept'):
+            changed = Update(
+                Task(a_stepped_source(t), 'ps01ab', TODAY), {'REPEAT': '1w'}
+            )
+            ret = changed.text
+            t.assertEqual(
+                ret,
+                STEPPED_LIST.replace(
+                    '[LOE:1] [ID:ps01ab]', '[LOE:1] [ID:ps01ab] [REPEAT:1w]'
+                ),
+            )
+
+        with t.subTest('and None clears the repeat of a subtask'):
+            cleared = Update(
+                Task(a_stepped_source(t), 'rs01ab', TODAY), {'REPEAT': 'None'}
+            )
+            ret = cleared.text
+            t.assertEqual(ret, STEPPED_LIST.replace(' [REPEAT:7d]', ''))
+
         refused = {
             'an update that names nothing': (
                 Update(Task(t.source, '9o71lx', TODAY), {}),
@@ -847,13 +874,13 @@ class UpdateTests(TestCase):
                 ValueError,
                 'nothing to update',
             ),
-            'a repeat on a subtask, a clear too': (
+            'a clear of a subtask with no repeat, and no other change': (
                 Update(
                     Task(t.source, 'A subtask that does not', TODAY),
                     {'REPEAT': 'None'},
                 ),
                 ValueError,
-                'REPEAT belongs to the top-level task, not to a subtask',
+                'nothing to update',
             ),
             'a field only the top-level task carries': (
                 Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
