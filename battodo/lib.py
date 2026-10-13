@@ -337,10 +337,8 @@ def update_item(
     The selector names an open task, or else a closed task in the
     journal, which the update reopens (ADR 0025). A reopen with no
     other input reopens the task unchanged. Only the inputs that are not
-    None are written. An update writes
-    no `LOE` and no `REPEAT`: R3 names neither, and a changed `REPEAT`
-    reschedules the task on its next completion, which is a decision
-    of its own.
+    None are written. A `REPEAT` leaves `DUE` as it is, and takes effect
+    at the next completion (ADR 0028).
 
     Parameters
     ----------
@@ -353,8 +351,9 @@ def update_item(
         Names the task.
     title : str or None
         The new title.
-    priority, due, tags : str or None
-        The new values of the `P`, `DUE` and `TAGS` fields.
+    priority, due, repeat, tags : str or None
+        The new values of the `P`, `DUE`, `REPEAT` and `TAGS` fields. A
+        `repeat` of `None`, the word, removes the `REPEAT` field.
     description : str or None
         The new description, one description line per line. An empty
         one clears the description.
@@ -390,7 +389,9 @@ def update_item(
     """
     checked = SuppliedAttributes(attrs, note).checked
     task = Task(_source(conf), selector, now.date())
-    fields = _supplied({'P': priority, 'DUE': due, 'TAGS': tags})
+    fields = _supplied(
+        {'P': priority, 'DUE': due, 'REPEAT': repeat, 'TAGS': tags}
+    )
     update: Update | Reopen
     if task.selection.records:
         update = Update(

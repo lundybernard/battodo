@@ -333,7 +333,8 @@ class TodoDocument:
         appended after the last field. Either way every other field
         keeps its position, which is what the round-trip guarantee
         rests on -- field order varies line to line in hand-edited
-        files.
+        files. A None value removes each copy of the field and the space
+        before it.
 
         Returns
         -------
@@ -341,12 +342,16 @@ class TodoDocument:
             The edited line.
         """
         raw = self.lines[index]
-        written = f'[{name}:{value}]'
-        found = re.search(rf'\[{name}:[^\]]*\]', raw)
-        if found:
-            edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
+        field = rf'\[{name}:[^\]]*\]'
+        if value is None:
+            edited = re.sub(f' ?{field}', '', raw)
         else:
-            edited = f'{raw.rstrip()} {written}'
+            written = f'[{name}:{value}]'
+            found = re.search(field, raw)
+            if found:
+                edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
+            else:
+                edited = f'{raw.rstrip()} {written}'
         self.lines[index] = edited
         return edited
 

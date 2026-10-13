@@ -83,7 +83,12 @@ ADD_OPTIONS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
-UPDATE_OPTIONS = {'P': 'priority', 'DUE': 'due', 'TAGS': 'tags'}
+UPDATE_OPTIONS = {
+    'P': 'priority',
+    'DUE': 'due',
+    'REPEAT': 'repeat',
+    'TAGS': 'tags',
+}
 SUBTASK_OPTIONS = {'LOE': 'loe', 'DUE': 'due', 'TAGS': 'tags'}
 # SCHEMA.md's field order, which an add and a log entry write in.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
@@ -223,6 +228,12 @@ class UpdateItemTests(TestCase):
         given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
         found = outcome(text, ancestries, selector)
+        if 'repeat' in options and data.draw(st.booleans()):
+            # Half the repeats name the one the task carries, or a clear
+            # of a task with none: no change.
+            options = {**options, 'repeat': carried_repeat(found)}
+            titled = options if title is None else {**options, 'title': title}
+            named = described(titled, description)
         expected = foreseen(
             updated,
             before,
@@ -839,24 +850,33 @@ def updated(
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A task with no id is given one. The event carries
-    the attributes. A top-level task bound for another list takes its
-    whole block there, last in the open section. An open task refuses
-    the subtasks of a reopen.
+    one clears them. A repeat of None clears the repeat, and a repeat
+    that leaves the task as it was is no change. A task with no id is
+    given one. The event carries the attributes. A top-level task bound
+    for another list takes its whole block there, last in the open
+    section. An open task refuses the subtasks of a reopen.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
     if isinstance(found, str) and found.startswith(NO_OPEN_TASK):
         # No open task answers, so the update reopens a closed one, and
         # the journal of the case holds none.
-        checked(fields)
+        changed(fields)
         raise SelectionError(found)
     if with_subtasks:
         raise ValueError(
             f'{selector!r} names an open task: --with-subtasks reopens a '
             'closed task and its subtasks'
         )
-    if not fields and title is None and description is None:
+    changes = dict(fields)
+    if 'REPEAT' in fields:
+        # The task is read to tell whether the repeat changes it.
+        _, ancestry = reached_task(found, list_name, fields)
+        stored = ancestry[-1].fields.get('REPEAT') or None
+        repeat = None if fields['REPEAT'] == 'None' else fields['REPEAT']
+        if repeat == stored:
+            del changes['REPEAT']
+    if not changes and title is None and description is None:
         # The list counts only where it moves the task.
         file = None if list_name is None else list_file(before, list_name)
         if file is not None:
@@ -866,18 +886,15 @@ def updated(
                 'nothing to update: name a field, a title, a description '
                 'or a list'
             )
-    values = checked(fields)
-    text, ancestry = reached(found)
+    # A field that is no change is not written.
+    values = {
+        field: value
+        for field, value in changed(fields).items()
+            if field in changes
+    }  # fmt: skip
+    text, ancestry = reached_task(found, list_name, fields)
     node = ancestry[-1]
-    refuse_checklist_item(node)
     nested = len(ancestry) > 1
-    if nested and list_name is not None:
-        raise ValueError(
-            f'{node.title!r} is a subtask: --list moves a top-level task, '
-            'and its subtasks with it'
-        )
-    if nested:
-        refuse_root_fields(fields)
     if title is not None:
         refuse_line_break(title)
     lines = None if description is None else description_lines(description)
@@ -920,6 +937,45 @@ def updated(
     event = Appended('TaskUpdated', f'task/{task_id}', payload, name)
     after = Source(lists, before.log, journal([event]))
     return Outcome(f'{entry}\n{SOURCE}/{name}', after)
+
+
+def carried_repeat(found: Answer) -> str:
+    """The repeat of the task a selector reached, or `None` if it has none.
+
+    A selector that reached no task carries none.
+    """
+    if isinstance(found, str):
+        return 'None'
+    _, _, ancestry = found
+    return ancestry[-1].repeat or 'None'
+
+
+def reached_task(
+    found: Answer,
+    list_name: str | None,
+    fields: dict[str, str],
+) -> tuple[str, list[TaskNode]]:
+    """The list text and the ancestry of the task an update may write.
+
+    Raises
+    ------
+    SelectionError
+        The selector reached no open task, or several.
+    ValueError
+        The task is a checklist item, or a subtask is given a list or a
+        field only the top-level task carries.
+    """
+    text, ancestry = reached(found)
+    node = ancestry[-1]
+    refuse_checklist_item(node)
+    if len(ancestry) > 1:
+        if list_name is not None:
+            raise ValueError(
+                f'{node.title!r} is a subtask: --list moves a top-level '
+                'task, and its subtasks with it'
+            )
+        refuse_root_fields(fields)
+    return text, ancestry
 
 
 def moved(
@@ -996,7 +1052,7 @@ def reopened(
     its own; a subtask with no id takes a new one.
     """
     attrs = attributes(given)
-    values = checked(supplied(options, UPDATE_OPTIONS))
+    values = changed(supplied(options, UPDATE_OPTIONS))
     left = Path(LIST_FILE).stem
     file = list_file(before, list_name or left)
     if title is not None:
@@ -1023,6 +1079,12 @@ def reopened(
         doc.lines[at] = doc.lines[at].replace('- [x]', '- [ ]', 1)
         if not chain[-1].task_id:
             doc.set_field(at, 'ID', stamped[at])
+    # A clear of a field the task does not carry is no change.
+    values = {
+        field: value
+        for field, value in values.items()
+            if value is not None or root.fields.get(field)
+    }  # fmt: skip
     doc.set_fields(index, values)
     if title is not None:
         doc.set_title(index, title)
@@ -1332,7 +1394,8 @@ def option_values(field: str) -> st.SearchStrategy[str]:
     """A value given for `field`.
 
     Three draws in four read as the field; the rest are any field value
-    of the grammar.
+    of the grammar. Half the readable `REPEAT` draws are `None`, which
+    an update reads as a clear and an add refuses.
     """
     readable = {
         'P': st.integers(min_value=0, max_value=130).map(str),
@@ -1341,7 +1404,7 @@ def option_values(field: str) -> st.SearchStrategy[str]:
             min_value=TODAY - NEARBY,
             max_value=TODAY + NEARBY,
         ).map(str),
-        'REPEAT': grammar.repeats,
+        'REPEAT': either(grammar.repeats, st.just('None')),
         'TAGS': grammar.field_values,
     }
     reads = readable[field]
@@ -1481,6 +1544,29 @@ def checked(fields: dict[str, str]) -> dict[str, str]:
     if day is None:
         raise ValueError(f'DUE must be an ISO date, not {due!r}')
     return {**fields, 'DUE': day.isoformat()}
+
+
+def changed(fields: dict[str, str]) -> dict[str, str | None]:
+    """The fields as an update writes them: a repeat of None is None.
+
+    Raises
+    ------
+    ValueError
+        A `P`, `LOE`, `DUE` or `REPEAT` does not read, checked in that
+        order. A repeat of None is not read.
+    """
+    if fields.get('REPEAT') == 'None':
+        kept = {
+            name: value
+            for name, value in fields.items()
+                if name != 'REPEAT'
+        }  # fmt: skip
+        return {**checked(kept), 'REPEAT': None}
+    values: dict[str, str | None] = {**checked(fields)}
+    repeat = values.get('REPEAT')
+    if repeat is not None:
+        next_due(repeat, TODAY)
+    return values
 
 
 def supplied(options: dict[str, str], table: dict[str, str]) -> dict[str, str]:
