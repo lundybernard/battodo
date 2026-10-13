@@ -6,9 +6,8 @@ here as `SelectionJsonView`, which reads a selection through its
 attributes. A row carries the table's cells, and the published form
 reads the same row, so the two never derive a task apart.
 
-A view holds open items only, and suppresses future-dated *recurring*
-items. SCHEMA.md's prose is stricter -- it would also hide future-dated
-non-recurring items -- and R3 governs here.
+A view holds every open top-level item. A due date far ahead lowers an
+item's rank instead of hiding it (ADR 0026).
 
 Items sort by the rank computed in `rank.py` (ADR 0005) rather than by
 stored priority, which is what lets the table show a rank at all: the
@@ -221,17 +220,12 @@ class TodoList:
 
     @cached_property
     def visible(self) -> list['Row']:
-        """A row per open top-level task, future recurrences aside."""
-        rows = []
-        for task in self.document.tasks:
-            if task.done:
-                continue
-            row = Row(task, self.today, self.curve)
-            due = row.parsed_due
-            if due and task.repeat and due > self.today:
-                continue
-            rows.append(row)
-        return rows
+        """A row per open top-level task."""
+        return [
+            Row(task, self.today, self.curve)
+            for task in self.document.tasks
+                if not task.done
+        ]  # fmt: skip
 
     @cached_property
     def parked(self) -> bool:
