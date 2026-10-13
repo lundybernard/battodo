@@ -1231,13 +1231,14 @@ class Reopen:
 
 
 class Completion:
-    """The completion of a task and every ancestor it finishes (SCHEMA.md).
+    """The close of a task: its completion, or its scratch (SCHEMA.md).
 
     A task is complete when all its children are, so checking the last
     open child completes the parent, and that may complete its own
     parent in turn. Once the top-level task is done its whole block
     goes, unless it repeats: then it stays with a recomputed `DUE`, and
-    only its children go.
+    only its children go. A scratch drops the block of the task without
+    completing it: nothing cascades, and nothing is rescheduled.
     """
 
     def __init__(
@@ -1311,9 +1312,12 @@ class Completion:
         """
         recurrence = self.recurrence
         if recurrence is None:
+            dropped = self.dropped
             return {
-                index: {'ID': task_id} for index, task_id in self.ids.items()
-            }
+                index: {'ID': task_id}
+                for index, task_id in self.ids.items()
+                    if index not in dropped
+            }  # fmt: skip
         rescheduled = self.rescheduled
         if rescheduled is None:
             return {}
@@ -1324,7 +1328,7 @@ class Completion:
     @property
     def checked_off(self) -> list[int]:
         """The lines whose box is checked: none once the block goes."""
-        if self.root_done:
+        if self.root_done or self.scratched:
             return []
         return [ancestry.node.raw_index for ancestry in self.ancestries]
 
@@ -1334,8 +1338,11 @@ class Completion:
 
         The recurrence is the same task rescheduled, so it keeps its id,
         its notes and its `[ADDED:]`, which ADR 0005 writes once and
-        never updates. Its children do not carry over.
+        never updates. Its children do not carry over. A scratch drops
+        the block of the named task.
         """
+        if self.scratched:
+            return self.task.node.block
         if not self.root_done:
             return set()
         if self.rescheduled is None:
@@ -1380,9 +1387,10 @@ class Completion:
     def recurrence(self) -> TaskNode | None:
         """The task the completion reschedules if it repeats, or None.
 
-        The top-level task, once the completion finishes it.
+        The top-level task, once the completion finishes it. A scratch
+        reschedules nothing.
         """
-        return self.root if self.root_done else None
+        return self.root if self.root_done and not self.scratched else None
 
     @property
     def root(self) -> TaskNode:
@@ -1398,10 +1406,13 @@ class Completion:
     def ancestries(self) -> list[Ancestry]:
         """The ancestry of the task and of each ancestor it finishes.
 
-        Deepest first, which is the order the completions are logged.
+        Deepest first, which is the order the completions are logged. A
+        scratch finishes no ancestor.
         """
         ancestry = self.task.ancestry
         found = [Ancestry(ancestry)]
+        if self.scratched:
+            return found
         for depth in reversed(range(len(ancestry) - 1)):
             parent, child = ancestry[depth], ancestry[depth + 1]
             if not all(c.done or c is child for c in parent.children):
@@ -1425,17 +1436,20 @@ class Completion:
     def events(self) -> list['Event']:
         """One `TaskCompleted` per completion, deepest first.
 
+        A scratch records one `TaskScratched` instead.
+
         Raises
         ------
         ValueError
             The named task is a checklist item and attributes are given.
         """
         self.task.node.refuse_attributes(self.attrs)
+        kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
         events = []
         for completion in self.completions:
             stream = self.ids[completion.ancestry.stream.raw_index]
             payload = completion.payload
-            events.append(Event(COMPLETED_EVENT, f'task/{stream}', payload))
+            events.append(Event(kind, f'task/{stream}', payload))
         return [*self.assignments, *events]
 
     @property
@@ -1452,7 +1466,9 @@ class Completion:
         for ancestry in ancestries:
             due = rescheduled if ancestry.node is recurrence else None
             attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(ancestry, due, day, list_name, attrs)
+            completion = TaskCompletion(
+                ancestry, due, day, list_name, attrs, self.scratched
+            )
             completions.append(completion)
         return completions
 
@@ -2208,6 +2224,7 @@ class TaskCompletion:
     the task. `attrs` holds the attributes of the named task, and None
     for every other task. The event of a checklist item lands on the
     stream of an ancestor, so its payload marks it as a checklist item.
+    `scratched` marks the close of a task that is not completed.
     """
 
     def __init__(
@@ -2231,10 +2248,11 @@ class TaskCompletion:
         """The done, a new due date beside it, the task, its path, its day.
 
         A checklist item also carries its mark, and the named task its
-        attributes.
+        attributes. A scratch records the removal instead of the done.
         """
         node = self.ancestry.node
-        delta: dict[str, list[Any]] = {'done': [False, True]}
+        change = 'removed' if self.scratched else 'done'
+        delta: dict[str, list[Any]] = {change: [False, True]}
         if self.rescheduled is not None:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
         payload: dict[str, Any] = {
@@ -2251,8 +2269,8 @@ class TaskCompletion:
 
     @property
     def status(self) -> str:
-        """The status the log records a completion under."""
-        return DONE_STATUS
+        """The status the log records the close under."""
+        return SCRATCHED_STATUS if self.scratched else DONE_STATUS
 
 
 class RecordedTask:

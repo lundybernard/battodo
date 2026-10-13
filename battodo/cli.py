@@ -282,6 +282,11 @@ def argparser():
         help=MESSAGES['done.date.help'],
     )
     done.add_argument(
+        '--scratch',
+        action='store_true',
+        help=MESSAGES['done.scratch.help'],
+    )
+    done.add_argument(
         '--attrs',
         help=MESSAGES['done.attrs.help'],
     )
@@ -443,6 +448,7 @@ class Commands:
                 datetime.now(TZ),
                 selector=args.selector,
                 date=args.date,
+                scratch=args.scratch,
                 attrs=args.attrs,
                 note=args.note,
             )

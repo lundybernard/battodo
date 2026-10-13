@@ -95,15 +95,18 @@ MESSAGES = {
     'update.with_subtasks.help': 'reopen a closed task and each closed'
     ' subtask below it; without it, its subtasks stay closed',
     # done
-    'done.description': 'complete a task and log it to completed.md',
+    'done.description': 'close a task and log it to completed.md: complete'
+    ' it, or scratch it',
     'done.help': 'for details use done --help',
     'done.selector.metavar': 'selector',
     'done.selector.help': "the task's [ID:] value, or part of its title",
-    'done.date.help': 'the day the task was completed, YYYY-MM-DD;'
-    ' default today',
-    'done.attrs.help': 'attributes of the completion: key=value, ...;'
+    'done.date.help': 'the day the task was closed, YYYY-MM-DD; default today',
+    'done.scratch.help': 'close the task without completing it; the log'
+    ' records it as SCRATCHED',
+    'done.attrs.help': 'attributes of the close: key=value, ...;'
     ' a key is a lowercase identifier, a value may hold commas and =',
-    'done.note.help': 'a note on the completion; the attribute note',
+    'done.note.help': 'a note on the close, such as why it was scratched;'
+    ' the attribute note',
     # scratch
     'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
     'scratch.help': 'for details use scratch --help',

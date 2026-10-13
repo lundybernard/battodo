@@ -428,7 +428,7 @@ def complete_item(
     attrs: str | None = None,
     note: str | None = None,
 ) -> str:
-    """Complete the task `selector` names.
+    """Complete the task `selector` names, or scratch it.
 
     Parameters
     ----------
@@ -439,9 +439,12 @@ def complete_item(
     selector : str
         Names the task.
     date : str or None
-        The ISO day the task was completed.
+        The ISO day the task was closed.
+    scratch : bool
+        Close the task without completing it: the log records it as
+        SCRATCHED.
     attrs : str or None
-        The attributes of the completion, as `key=value` segments.
+        The attributes of the close, as `key=value` segments.
     note : str or None
         A note, which enters the attributes under the key `note`.
 
@@ -449,7 +452,7 @@ def complete_item(
     -------
     str
         The logged entries, one per line. A checklist item is checked
-        off without a log entry, and says so instead.
+        off or dropped without a log entry, and says so instead.
 
     Raises
     ------
@@ -463,14 +466,14 @@ def complete_item(
         attributes, or `date` is not an ISO date. Raised before
         anything is written.
     """
-    if scratch:
-        raise NotImplementedError
     checked = SuppliedAttributes(attrs, note).checked
     task = Task.from_config(conf, now, selector=selector, date=date)
-    completion = Completion(task, attrs=checked)
+    completion = Completion(task, attrs=checked, scratched=scratch)
     completion.write()
     entries = completion.entries
-    return '\n'.join(entries) if entries else 'checked off'
+    if entries:
+        return '\n'.join(entries)
+    return 'dropped' if scratch else 'checked off'
 
 
 def scratch_item(
