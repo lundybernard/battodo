@@ -259,26 +259,6 @@ class CommandInputTests(TestCase):
                 ('TaskScratched', {'cost': '0', 'note': 'Too wet'}),
             )
 
-    def test_scratch(t):
-        with t.subTest('--attrs and --note reach the event'):
-            t.run_command(
-                [
-                    'scratch',
-                    'rk01lv',
-                    '--attrs',
-                    'cost=0',
-                    '--note',
-                    'Too wet',
-                ],
-                {},
-            )
-
-            event = Journal(t.source).events[-1]
-            t.assertEqual(
-                event['payload']['attrs'],
-                {'cost': '0', 'note': 'Too wet'},
-            )
-
     def test_note(t):
         with t.subTest('TEXT and --attrs reach the event'):
             t.run_command(

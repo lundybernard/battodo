@@ -19,7 +19,6 @@ from battodo.lib import (
     get_item,
     get_view,
     item_count,
-    scratch_item,
     update_item,
 )
 from battodo.logconf import logging_config
@@ -295,26 +294,6 @@ def argparser():
         help=MESSAGES['done.note.help'],
     )
 
-    drop = commands.add_parser(
-        'scratch',
-        description=MESSAGES['scratch.description'],
-        help=MESSAGES['scratch.help'],
-    )
-    drop.set_defaults(func=Commands.scratch)
-    drop.add_argument(
-        'selector',
-        metavar=MESSAGES['scratch.selector.metavar'],
-        help=MESSAGES['scratch.selector.help'],
-    )
-    drop.add_argument(
-        '--attrs',
-        help=MESSAGES['scratch.attrs.help'],
-    )
-    drop.add_argument(
-        '--note',
-        help=MESSAGES['scratch.note.help'],
-    )
-
     note = commands.add_parser(
         'note',
         description=MESSAGES['note.description'],
@@ -449,18 +428,6 @@ class Commands:
                 selector=args.selector,
                 date=args.date,
                 scratch=args.scratch,
-                attrs=args.attrs,
-                note=args.note,
-            )
-        )
-
-    @staticmethod
-    def scratch(conf, args):
-        print(
-            scratch_item(
-                conf,
-                datetime.now(TZ),
-                selector=args.selector,
                 attrs=args.attrs,
                 note=args.note,
             )

@@ -107,14 +107,6 @@ MESSAGES = {
     ' a key is a lowercase identifier, a value may hold commas and =',
     'done.note.help': 'a note on the close, such as why it was scratched;'
     ' the attribute note',
-    # scratch
-    'scratch.description': 'abandon a task: remove it and log it as SCRATCHED',
-    'scratch.help': 'for details use scratch --help',
-    'scratch.selector.metavar': 'selector',
-    'scratch.selector.help': "the task's [ID:] value, or part of its title",
-    'scratch.attrs.help': 'attributes of the scratch: key=value, ...;'
-    ' a key is a lowercase identifier, a value may hold commas and =',
-    'scratch.note.help': 'a note on the scratch; the attribute note',
     # note
     'note.description': 'record a note on an open task; the task does not'
     ' change',
