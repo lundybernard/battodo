@@ -9,7 +9,7 @@
   "categories": [
     {
       "name": "work",
-      "hidden": 1,
+      "hidden": 2,
       "tasks": [
         {
           "list": "work",
@@ -54,7 +54,7 @@
           "list": "work",
           "id": null,
           "title": "A very long task title that the task column has to clip to fit",
-          "rank": 4.5,
+          "rank": 3.0,
           "priority": 3.0,
           "loe": 5,
           "due": "2026-08-12",
@@ -86,7 +86,7 @@
           "list": "side-quests",
           "id": null,
           "title": "Future due date task",
-          "rank": 2.0,
+          "rank": 1.65,
           "priority": 2.0,
           "loe": 4,
           "due": "2026-08-20",

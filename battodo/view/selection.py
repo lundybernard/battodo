@@ -6,9 +6,8 @@ here as `SelectionJsonView`, which reads a selection through its
 attributes. A row carries the table's cells, and the published form
 reads the same row, so the two never derive a task apart.
 
-A view holds open items only, and suppresses future-dated *recurring*
-items. SCHEMA.md's prose is stricter -- it would also hide future-dated
-non-recurring items -- and R3 governs here.
+A view holds every open top-level item. A due date far ahead lowers an
+item's rank instead of hiding it (ADR 0026).
 
 Items sort by the rank computed in `rank.py` (ADR 0005) rather than by
 stored priority, which is what lets the table show a rank at all: the
@@ -24,7 +23,7 @@ from batconf import Configuration
 
 from ..lists import CATEGORY_ORDER, category_order, discover_lists, item_count
 from ..parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
-from ..rank import multiplier, rank
+from ..rank import DEFAULT_DUE_CURVE, Curve, multiplier, parse_curve, rank
 
 
 class SourceError(Exception):
@@ -57,11 +56,13 @@ class Selection:
         *,
         show_all: bool,
         top_n: int = TOP_N,
+        rank_due_curve: str = DEFAULT_DUE_CURVE,
     ) -> None:
         self.directory = directory
         self.now = now
         self.show_all = show_all
         self.top_n = top_n
+        self.rank_due_curve = rank_due_curve
 
     @classmethod
     def from_config(
@@ -74,7 +75,7 @@ class Selection:
         """Build a selection from a resolved configuration.
 
         Every configuration value is a string, so the item count is
-        decoded here.
+        decoded here. The due-date curve is decoded once, by `curve`.
 
         Raises
         ------
@@ -86,6 +87,7 @@ class Selection:
             now,
             show_all=show_all,
             top_n=item_count(conf.view.top),
+            rank_due_curve=conf.view.rank_due_curve,
         )
 
     @cached_property
@@ -153,8 +155,19 @@ class Selection:
                 f'no todo lists (no file with a "{OPEN_HEADING}" heading) '
                 f'in: {self.source}'
             )
-        found = [TodoList(path, self.today) for path in paths]
+        found = [TodoList(path, self.today, self.curve) for path in paths]
         return sorted(found, key=lambda todo: todo.order)
+
+    @cached_property
+    def curve(self) -> Curve:
+        """The due-date curve every task of the view is ranked on.
+
+        Raises
+        ------
+        ValueError
+            The configured curve does not decode.
+        """
+        return parse_curve(self.rank_due_curve)
 
     def shows(self, todo: 'TodoList') -> bool:
         """Whether `todo` has any place in this view.
@@ -186,9 +199,10 @@ class Selection:
 class TodoList:
     """One discovered list file: where it sorts, and what is open in it."""
 
-    def __init__(self, path: Path, today: date) -> None:
+    def __init__(self, path: Path, today: date, curve: Curve) -> None:
         self.path = path
         self.today = today
+        self.curve = curve
 
     @cached_property
     def category(self) -> str:
@@ -205,18 +219,13 @@ class TodoList:
         return TodoDocument(self.text)
 
     @cached_property
-    def visible(self) -> list['Row']:
-        """A row per open top-level task, future recurrences aside."""
-        rows = []
-        for task in self.document.tasks:
-            if task.done:
-                continue
-            row = Row(task, self.today)
-            due = row.parsed_due
-            if due and task.repeat and due > self.today:
-                continue
-            rows.append(row)
-        return rows
+    def open_rows(self) -> list['Row']:
+        """A row per open top-level task."""
+        return [
+            Row(task, self.today, self.curve)
+            for task in self.document.tasks
+                if not task.done
+        ]  # fmt: skip
 
     @cached_property
     def parked(self) -> bool:
@@ -225,7 +234,7 @@ class TodoList:
     @cached_property
     def rows(self) -> list['Row']:
         """A row per open task, in the order a view shows them."""
-        return sorted(self.visible, key=lambda row: row.key)
+        return sorted(self.open_rows, key=lambda row: row.key)
 
     @property
     def order(self) -> tuple[int, str]:
@@ -266,9 +275,10 @@ class Row:
     open children.
     """
 
-    def __init__(self, task: TaskNode, today: date) -> None:
+    def __init__(self, task: TaskNode, today: date, curve: Curve) -> None:
         self.task = task
         self.today = today
+        self.curve = curve
 
     @cached_property
     def key(self) -> tuple[float, str, str]:
@@ -281,8 +291,8 @@ class Row:
 
     @cached_property
     def rank(self) -> float:
-        """The task's rank on the day the view was asked for."""
-        return rank(self.task, self.today)
+        """The task's rank on the day and the curve of the view."""
+        return rank(self.task, self.today, self.curve)
 
     @cached_property
     def priority(self) -> float:

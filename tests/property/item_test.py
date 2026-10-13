@@ -18,7 +18,7 @@ from hypothesis import strategies as st
 
 from battodo.item import Item, ItemJsonView, ItemView
 from battodo.parser import TaskNode, TodoDocument
-from battodo.rank import multiplier, rank
+from battodo.rank import DEFAULT_DUE_CURVE, multiplier, parse_curve, rank
 from battodo.selector import SelectionError
 from battodo.task import Task
 from battodo.view import RANK_PLACES
@@ -28,6 +28,8 @@ from .task_test import Answer, descend, outcome, selectors, source
 
 # The indent the text form lays each level out with.
 INDENT = '  '
+# The curve an item ranks on when the configuration names none.
+CURVE = parse_curve(DEFAULT_DUE_CURVE)
 
 
 class ItemJsonViewTests(TestCase):
@@ -112,7 +114,7 @@ def record(name: str, task: TaskNode) -> dict[str, Any]:
         'id': task.task_id,
         'title': task.title,
         'done': task.done,
-        'rank': round(rank(task, TODAY), RANK_PLACES),
+        'rank': round(rank(task, TODAY, CURVE), RANK_PLACES),
         'priority': multiplier(task),
         'loe': task.loe,
         'due': task.due,
@@ -183,7 +185,7 @@ def labelled(name: str, task: TaskNode) -> list[tuple[str, str]]:
     rows = [
         ('list', name),
         ('id', task.task_id or '-'),
-        ('rank', f'{rank(task, TODAY):.1f}'),
+        ('rank', f'{rank(task, TODAY, CURVE):.1f}'),
         ('P', f'{multiplier(task):.1f}'),
     ]
     stored = (('LOE', task.loe), ('DUE', task.due), ('REPEAT', task.repeat))

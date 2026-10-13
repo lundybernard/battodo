@@ -2,14 +2,18 @@ from datetime import date
 from unittest import TestCase
 
 from ..rank import (
+    DEFAULT_DUE_CURVE,
     TaskNode,
     age_score,
-    due_score,
+    due_factor,
     multiplier,
+    parse_curve,
     rank,
 )
 
 TODAY = date(2026, 8, 8)
+# The default due-date curve, decoded: days past due, then the factor.
+CURVE = [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)]
 
 
 def ranked_task() -> TaskNode:
@@ -96,33 +100,46 @@ class AgeScoreTests(TestCase):
                 t.assertAlmostEqual(ret, expected)
 
 
-class DueScoreTests(TestCase):
-    """Unit tests for battodo.rank.due_score."""
+class DueFactorTests(TestCase):
+    """Unit tests for battodo.rank.due_factor."""
 
     def setUp(t) -> None:
         t.tk = ranked_task()
 
     def test_scale(t) -> None:
         cases = {
-            None: 0.0,
-            # Beyond the fortnight horizon: no contribution yet.
-            '2026-09-01': 0.0,
-            '2026-08-22': 0.0,
-            # Ramping up over the fortnight before it comes due.
-            '2026-08-15': 0.5,
-            '2026-08-08': 1.0,
-            # Late: another multiplier's worth per week, capped.
-            '2026-08-01': 2.0,
-            '2026-07-25': 3.0,
-            '2026-01-01': 3.0,
-            'YYYY-MM-DD': 0.0,
+            # No DUE, or one that does not read: the factor is neutral.
+            None: 1.0,
+            'YYYY-MM-DD': 1.0,
+            # A month or more ahead: the floor.
+            '2026-09-08': 0.5,
+            '2026-09-07': 0.5,
+            # Rising over the month before the due date.
+            '2026-09-06': 0.5 + 0.5 / 23,
+            '2026-08-16': 0.5 + 0.5 * 22 / 23,
+            '2026-08-15': 1.0,
+            # Rising faster over the week before it.
+            '2026-08-14': 1.0 + 1 / 7,
+            '2026-08-08': 2.0,
+            # Late: still rising, up to the cap two weeks on.
+            '2026-08-07': 2.0 + 1 / 7,
+            '2026-07-26': 2.0 + 13 / 7,
+            '2026-07-25': 4.0,
+            '2026-07-24': 4.0,
         }
 
         for value, expected in cases.items():
             with t.subTest(f'DUE:{value}'):
                 t.tk.fields = {} if value is None else {'DUE': value}
-                ret = due_score(t.tk, TODAY)
+                ret = due_factor(t.tk, TODAY, CURVE)
                 t.assertAlmostEqual(ret, expected)
+
+    def test_one_point(t) -> None:
+        for value in ('2026-09-08', '2026-08-08', '2026-07-24'):
+            with t.subTest(f'DUE:{value}'):
+                t.tk.fields = {'DUE': value}
+                ret = due_factor(t.tk, TODAY, [(0, 1.5)])
+                t.assertAlmostEqual(ret, 1.5)
 
 
 class RankTests(TestCase):
@@ -134,7 +151,7 @@ class RankTests(TestCase):
     def test_multiplier(t) -> None:
         # A fresh undated item ranks at its multiplier.
         t.tk.fields = {'P': '3'}
-        ret = rank(t.tk, TODAY)
+        ret = rank(t.tk, TODAY, CURVE)
         t.assertAlmostEqual(ret, 3.0)
 
     def test_age(t) -> None:
@@ -143,28 +160,103 @@ class RankTests(TestCase):
         for added, expected in ages.items():
             with t.subTest(f'ADDED:{added}'):
                 t.tk.fields = {'P': '3', 'ADDED': added}
-                ret = rank(t.tk, TODAY)
+                ret = rank(t.tk, TODAY, CURVE)
                 t.assertAlmostEqual(ret, expected)
+
+    def test_due(t) -> None:
+        # The due-date factor multiplies the priority.
+        dues = {
+            '2026-09-08': 1.0,
+            '2026-08-15': 2.0,
+            '2026-08-08': 4.0,
+            '2026-07-25': 8.0,
+        }
+
+        for due, expected in dues.items():
+            with t.subTest(f'DUE:{due}'):
+                t.tk.fields = {'P': '2', 'DUE': due}
+                ret = rank(t.tk, TODAY, CURVE)
+                t.assertAlmostEqual(ret, expected)
+
+    def test_curve(t) -> None:
+        # The curve the caller gives decides the factor.
+        t.tk.fields = {'P': '2', 'DUE': '2026-09-08'}
+        ret = rank(t.tk, TODAY, [(0, 3.0)])
+        t.assertAlmostEqual(ret, 6.0)
 
     def test_compound(t) -> None:
         # Age and lateness compound.
         t.tk.fields = {'P': '2', 'ADDED': '2026-07-09', 'DUE': '2026-08-01'}
-        ret = rank(t.tk, TODAY)
-        t.assertAlmostEqual(ret, 8.0)
+        ret = rank(t.tk, TODAY, CURVE)
+        t.assertAlmostEqual(ret, 12.0)
 
     def test_parked(t) -> None:
         t.tk.fields = {'P': '0', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
-        ret = rank(t.tk, TODAY)
+        ret = rank(t.tk, TODAY, CURVE)
         t.assertAlmostEqual(ret, 0.0)
 
     def test_bounded(t) -> None:
         t.tk.fields = {'P': '1', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
-        worst = rank(t.tk, TODAY)
+        worst = rank(t.tk, TODAY, CURVE)
 
-        with t.subTest('urgency alone cannot reach past its cap'):
-            t.assertAlmostEqual(worst, 6.0)
+        with t.subTest('age and lateness stop at their caps'):
+            t.assertAlmostEqual(worst, 12.0)
 
         with t.subTest('so the multiplier still rules'):
             t.tk.fields = {'P': '5', 'ADDED': '2026-05-10'}
-            ret = rank(t.tk, TODAY)
+            ret = rank(t.tk, TODAY, CURVE)
             t.assertLess(worst, ret)
+
+
+class ParseCurveTests(TestCase):
+    """Unit tests for battodo.rank.parse_curve."""
+
+    def test_default(t) -> None:
+        ret = parse_curve(DEFAULT_DUE_CURVE)
+        t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+
+    def test_order(t) -> None:
+        # Points sort by day, whatever order the value writes them in.
+        ret = parse_curve('14:4.0,-30:0.5, 0:2.0 ,-7:1')
+        t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+
+    def test_one_point(t) -> None:
+        ret = parse_curve('0:1.5')
+        t.assertEqual(ret, [(0, 1.5)])
+
+    def test_zero_factor(t) -> None:
+        # A factor of 0 is a factor: it parks a task near its point.
+        ret = parse_curve('-30:0, 0:2')
+        t.assertEqual(ret, [(-30, 0.0), (0, 2.0)])
+
+    def test_refusal(t) -> None:
+        cases = {
+            'an empty value': ('', "''"),
+            'an empty segment': ('-30:0.5,,0:2.0', "''"),
+            'a trailing comma': ('-30:0.5, 0:2.0,', "''"),
+            'no factor': ('-30:0.5, -7', "'-7'"),
+            'a factor that is not a number': ('0:two', "'0:two'"),
+            'a day that is not whole': ('-7.5:1.0', "'-7.5:1.0'"),
+            'a second colon': ('0:1:2', "'0:1:2'"),
+            'a factor that is not a number at all': ('0:nan', "'0:nan'"),
+            'a factor without a bound': ('14:inf', "'14:inf'"),
+            'a factor below zero': ('0:-1.0', "'0:-1.0'"),
+        }
+
+        for name, (value, segment) in cases.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    parse_curve(value)
+                t.assertEqual(
+                    str(caught.exception),
+                    f'a rank due curve point must read days:factor: {segment}',
+                )
+
+        # A day named twice has no one factor, so the value is refused.
+        with t.subTest('a day named twice'):
+            with t.assertRaises(ValueError) as caught:
+                parse_curve('-7:1.0, 0:2.0, 0:3.0')
+            t.assertEqual(
+                str(caught.exception),
+                "a rank due curve names a day twice: '0:3.0'",
+            )

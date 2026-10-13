@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-08-08
 
+> **Superseded in part** by
+> [ADR 0026 — A due-date factor on the priority](../0026-due-date-factor.md).
+> The additive `due_score` below is replaced by a due-date factor that
+> multiplies the priority. Everything else here stands.
+
 ## Context
 
 Ordering is driven by a stored `P` that a once-daily pass mutates: every

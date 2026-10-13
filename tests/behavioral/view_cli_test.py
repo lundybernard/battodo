@@ -24,6 +24,7 @@ The fixture lists:
 """
 
 from datetime import datetime
+from json import loads
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
@@ -45,6 +46,7 @@ WIDTH = '80'
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
 FORMAT_VAR = 'BATTODO_FORMAT'
+CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
 
 
 def golden(name: str) -> str:
@@ -158,6 +160,30 @@ class ViewCommandTests(TestCase):
         with t.subTest('a configured format btodo cannot write is reported'):
             t.assertEqual(
                 err, "unknown format 'xml'; choose one of text, json\n"
+            )
+
+        with t.subTest('which exits non-zero and writes no view'):
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_due_curve_is_configured(t) -> None:
+        out = t.render('--format', 'json', env={CURVE_VAR: '0:1.0'})
+
+        ranks = {
+            task['title']: task['rank']
+            for category in loads(out)['categories']
+            for task in category['tasks']
+        }
+
+        with t.subTest('a flat curve leaves a dated task at its priority'):
+            t.assertEqual(ranks['Overdue task'], 4.0)
+
+        out, err, code = t.cli(env={CURVE_VAR: '-30:0.5, soon:1.0'})
+
+        with t.subTest('a configured curve btodo cannot read is reported'):
+            t.assertEqual(
+                err,
+                "a rank due curve point must read days:factor: 'soon:1.0'\n",
             )
 
         with t.subTest('which exits non-zero and writes no view'):

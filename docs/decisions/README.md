@@ -20,4 +20,5 @@ stands for; its component ADRs take the following numbers.
 | [0019](0019-event-attributes/) | Event attributes (components 0020–0023) | Active |
 | [0024](0024-cli-inputs-config-and-command.md) | Command inputs beside the configuration | Proposed |
 | [0025](0025-reopen-by-update.md) | A closed task reopens through update | Proposed |
+| [0026](0026-due-date-factor.md) | A due-date factor on the priority | Proposed |
 | [0027](0027-scratch-through-done.md) | A scratch closes a task through done | Proposed |

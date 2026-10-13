@@ -26,7 +26,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument, parse_date
-from battodo.rank import multiplier, rank
+from battodo.rank import DEFAULT_DUE_CURVE, multiplier, parse_curve, rank
 from battodo.view import RANK_PLACES, TOP_N, Selection, SelectionJsonView, View
 
 from .strategies import document, grammar
@@ -38,6 +38,8 @@ TODAY = NOW.date()
 # The one list a generated source holds. A named category no hour shuts
 # keeps a case independent of the clock.
 CATEGORY = 'career'
+# The curve a view ranks on when the configuration names none.
+CURVE = parse_curve(DEFAULT_DUE_CURVE)
 # The width the layout probes, through the variable the terminal size
 # reads first. Wide enough that the task column never reaches its
 # floor, so no line has to overrun the width.
@@ -81,7 +83,7 @@ PARKED = 'battodo:parked'
 # One list file covering the cases the hand-written suites name: an
 # open task, a finished one, a recurrence ahead of today, a one-off
 # ahead of today, a late recurrence, one due today, and a date the
-# parser cannot read.
+# parser cannot read. A view shows every open one.
 KNOWN_LINES = [
     '- [ ] An open task [P:2]',
     '- [x] A finished task [P:2]',
@@ -187,7 +189,7 @@ class WrittenList:
         """The five values a table shows for each task, padding aside."""
         return [
             (
-                f'{rank(task, TODAY):.1f}',
+                f'{rank(task, TODAY, CURVE):.1f}',
                 f'{multiplier(task):.1f}',
                 '' if task.loe is None else str(task.loe),
                 f'{task.title}{badge(task)}',
@@ -207,7 +209,7 @@ class WrittenList:
         return sorted(
             self.held,
             key=lambda task: (
-                -rank(task, TODAY),
+                -rank(task, TODAY, CURVE),
                 task.due or NO_DUE,
                 task.title,
             ),
@@ -215,8 +217,8 @@ class WrittenList:
 
     @cached_property
     def held(self) -> list[TaskNode]:
-        """The visible tasks, or none where the list file is parked."""
-        return [] if PARKED in self.text else self.visible
+        """The open tasks, or none where the list file is parked."""
+        return [] if PARKED in self.text else self.open_tasks
 
     @cached_property
     def text(self) -> str:
@@ -224,13 +226,9 @@ class WrittenList:
         return document(self.lines)
 
     @cached_property
-    def visible(self) -> list[TaskNode]:
-        """The open top-level tasks, less each recurrence due later."""
-        return [
-            task
-            for task in self.tasks
-            if not task.done and not recurs_later(task)
-        ]
+    def open_tasks(self) -> list[TaskNode]:
+        """The open top-level tasks, whatever their due date."""
+        return [task for task in self.tasks if not task.done]
 
     @cached_property
     def tasks(self) -> list[TaskNode]:
@@ -257,12 +255,6 @@ def due_label(task: TaskNode) -> str:
     if due == TODAY:
         return 'TODAY'
     return task.due or ''
-
-
-def recurs_later(task: TaskNode) -> bool:
-    """Whether `task` recurs and falls due after the day of NOW."""
-    due = parse_date(task.due)
-    return bool(task.repeat) and due is not None and due > TODAY
 
 
 class RenderedTable:
@@ -426,8 +418,8 @@ class SelectionJsonViewTests(TestCase):
 
         hidden = sum(category['hidden'] for category in ret['categories'])
 
-        # A recurrence due after today drops out. A one-off due then
-        # stays, and so does a task whose due date does not read.
+        # Every open task is shown or counted, a recurrence due after
+        # today included.
         t.assertEqual(len(shown_tasks(ret)) + hidden, len(written.held))
 
 

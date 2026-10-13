@@ -50,9 +50,14 @@ btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 for an agent.
 
 Items are ordered by a rank computed from the file and the clock —
-priority as a multiplier, times how long the item has waited and how
-pressing its due date is. Nothing is written to keep that current; see
-[ADR 0005](docs/decisions/0000-project-bootstrap/0005-computed-rank.md).
+priority as a multiplier, scaled by how near its due date is and by how
+long the item has waited. Nothing is written to keep that current; see
+[ADR 0005](docs/decisions/0000-project-bootstrap/0005-computed-rank.md)
+and [ADR 0026](docs/decisions/0026-due-date-factor.md).
+
+A view shows every open item. A recurring task shows from the day it is
+rescheduled: it ranks low while its due date is far off and climbs as
+the date comes near.
 
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it, and
@@ -199,7 +204,7 @@ JSON document, so an agent never has to scrape the table:
           "list": "work",
           "id": "k3x9",
           "title": "File the quarterly report",
-          "rank": 6.0,
+          "rank": 10.29,
           "priority": 2.0,
           "loe": 3,
           "due": "2026-08-07",
@@ -246,6 +251,19 @@ configuration: it comes from the command line only
   `--verbose` or `--debug` on the command line overrides it.
 - `format` — the form `view`, `show` and `completed` write: `text` or
   `json`. `text`, and `--format` on the command line overrides it.
+- `view.rank_due_curve` — the curve the due date scales a rank by.
+  `-30:0.5, -7:1.0, 0:2.0, 14:4.0`.
+
+`view.rank_due_curve` is a comma-separated list of `days:factor` points.
+`days` counts like a launch countdown: a negative day is before the due
+date, `0` is the due date, and a positive day is past it. Between two
+points the factor runs in a straight line. Before the first point it
+holds the first factor, and after the last point it holds the last
+factor. Each point names a day of its own, and a factor is a number of
+0 or more. A task with no due date takes a factor of 1. The default ranks
+a task a month or more ahead at half, a week ahead at 1, due today at 2,
+and two weeks late at 4. A value that does not decode stops the command
+with exit 1 and names the bad point.
 
 An environment variable is the config path in caps:
 

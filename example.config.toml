@@ -9,6 +9,8 @@ default_env = "default"
 # Every value is addressed by its config path, under the environment.
 [default.battodo.view]
 source_dir = "~/todo"
+# The due-date curve, as `days:factor` points (ADR 0026).
+# rank_due_curve = "-30:0.5, -7:1.0, 0:2.0, 14:4.0"
 
 # A second environment: `btodo --env sandbox view` reads this one.
 [sandbox.battodo.view]

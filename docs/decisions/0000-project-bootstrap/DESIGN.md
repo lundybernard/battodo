@@ -291,19 +291,22 @@ added, needing no `schema_version` bump.
 ## Rank
 
 The formula and the legacy-`P` fold table are in
-[ADR 0005](0005-computed-rank.md); they are the decision. What follows
-is the behaviour around them.
+[ADR 0005](0005-computed-rank.md); they are the decision. The due-date
+factor is in [ADR 0026](../0026-due-date-factor.md). What follows is the
+behaviour around them.
 
 ### The formula in words
 
-An item starts at its multiplier, gains a full multiplier's worth for
-every month it waits (up to two months), ramps up over the fortnight
-before it comes due, and gains another multiplier's worth for every week
-it is late (up to two weeks late).
+An item starts at its multiplier and gains a full multiplier's worth for
+every month it waits (up to two months). Its due date then scales the
+whole: by half while the date is a month or more away, by one a week
+before it, by two on the day, and by up to four when it is two weeks
+late.
 
 ### Unparseable dates
 
-A missing or unparseable `ADDED` / `DUE` contributes 0 to its term. This
+A missing or unparseable `ADDED` contributes 0 to its term. A missing or
+unparseable `DUE` gives a due-date factor of 1. This
 is a hard robustness rule, not a convenience: `van-trip-prep-template.md`
 carries literal `[DUE:YYYY-MM-DD]` placeholder text, and placeholder text
 must never change an outcome, let alone raise.

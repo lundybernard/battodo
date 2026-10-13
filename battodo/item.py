@@ -15,6 +15,7 @@ shows.
 """
 
 from datetime import datetime
+from functools import cached_property
 from json import dumps
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from typing import Any
 from batconf import Configuration
 
 from .parser import TaskNode
-from .rank import multiplier, rank
+from .rank import DEFAULT_DUE_CURVE, Curve, multiplier, parse_curve, rank
 from .task import Task
 from .view import RANK_PLACES
 
@@ -40,8 +41,13 @@ class Item:
     task carries.
     """
 
-    def __init__(self, task: Task) -> None:
+    def __init__(
+        self,
+        task: Task,
+        rank_due_curve: str = DEFAULT_DUE_CURVE,
+    ) -> None:
         self.task = task
+        self.rank_due_curve = rank_due_curve
 
     @classmethod
     def from_config(
@@ -60,7 +66,7 @@ class Item:
             selector,
             now.date(),
         )
-        return cls(task)
+        return cls(task, conf.view.rank_due_curve)
 
     @property
     def category(self) -> str:
@@ -75,7 +81,18 @@ class Item:
     @property
     def rank(self) -> float:
         """The task's rank on the day the task carries."""
-        return rank(self.node, self.task.today)
+        return rank(self.node, self.task.today, self.curve)
+
+    @cached_property
+    def curve(self) -> Curve:
+        """The due-date curve the task is ranked on.
+
+        Raises
+        ------
+        ValueError
+            The configured curve does not decode.
+        """
+        return parse_curve(self.rank_due_curve)
 
     @property
     def priority(self) -> float:

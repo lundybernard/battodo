@@ -121,7 +121,8 @@ def get_view(
         The source directory is missing, or holds no todo lists.
     ValueError
         The configured item count is not a whole number of one or more,
-        or the configured format is not one of FORMATS.
+        the configured format is not one of FORMATS, or the configured
+        due-date curve does not decode.
     """
     selection = Selection.from_config(conf, now, show_all=show_all)
     if _is_json(conf):
@@ -184,7 +185,8 @@ def get_item(conf: Configuration, now: datetime, *, selector: str) -> str:
     SelectionError
         The selector does not name exactly one open task.
     ValueError
-        The configured format is not one of FORMATS.
+        The configured format is not one of FORMATS, or the configured
+        due-date curve does not decode.
     """
     item = Item.from_config(conf, now, selector=selector)
     if _is_json(conf):
