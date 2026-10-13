@@ -231,10 +231,9 @@ class TaskStream:
         return own[-1]['payload']['snapshot'] if own else None
 
     @property
-    def list_name(self) -> str | None:
-        """The list the snapshot names, or None where it names none."""
-        snapshot = self.snapshot
-        return snapshot.get('list') if snapshot else None
+    def list_name(self) -> str:
+        """The list the snapshot of the last event of its own names."""
+        return self.own[-1]['payload']['snapshot']['list']
 
     @property
     def nested(self) -> bool:

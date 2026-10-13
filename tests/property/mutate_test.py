@@ -301,7 +301,6 @@ class UpdateItemTests(TestCase):
         tasks = TodoDocument(text).tasks
         assume(tasks)
         closed = data.draw(st.sampled_from(tasks))
-        recorded = data.draw(either(st.just(True), st.booleans()))
         options = data.draw(supplied_options(UPDATE_OPTIONS))
         title = data.draw(st.one_of(st.none(), supplied_titles()))
         description = data.draw(supplied_descriptions())
@@ -310,12 +309,11 @@ class UpdateItemTests(TestCase):
         titled = options if title is None else {**options, 'title': title}
         named = described(titled, description)
         given = data.draw(supplied_attributes())
-        before = closed_source(text, closed, recorded)
+        before = closed_source(text, closed)
         expected = foreseen(
             reopened,
             before,
             closed,
-            recorded,
             title,
             options,
             description,
@@ -982,7 +980,7 @@ def moved(
     return {LIST_FILE: left.text, name: joined.text}
 
 
-def closed_source(text: str, task: TaskNode, recorded: bool) -> Source:
+def closed_source(text: str, task: TaskNode) -> Source:
     """The drawn list without the block of `task`, which its journal closed.
 
     The journal holds the scratch of the task, on the stream CLOSED_ID.
@@ -990,35 +988,28 @@ def closed_source(text: str, task: TaskNode, recorded: bool) -> Source:
     doc = TodoDocument(text)
     doc.drop(task.block)
     lists = {LIST_FILE: doc.text, OTHER_FILE: OTHER}
-    return Source(lists, None, journal([closing(task, recorded)]))
+    return Source(lists, None, journal([closing(task)]))
 
 
-def closing(task: TaskNode, recorded: bool) -> 'Appended':
-    """The scratch of `task` on the stream CLOSED_ID.
-
-    Its snapshot names the list where `recorded`, as a write from before
-    the list in the snapshot does not.
-    """
+def closing(task: TaskNode) -> 'Appended':
+    """The scratch of `task` on the stream CLOSED_ID."""
     payload = {
         'delta': {'removed': [False, True]},
-        'snapshot': closed_snapshot(task, recorded),
+        'snapshot': closed_snapshot(task),
         'ancestry': task.title,
     }
     return Appended('TaskScratched', f'task/{CLOSED_ID}', payload, LIST_FILE)
 
 
-def closed_snapshot(task: TaskNode, recorded: bool) -> dict[str, Any]:
+def closed_snapshot(task: TaskNode) -> dict[str, Any]:
     """The task as its scratch records it, its id CLOSED_ID."""
-    found = {**state(task), 'fields': {**task.fields, 'ID': CLOSED_ID}}
-    if recorded:
-        found['list'] = Path(LIST_FILE).stem
-    return found
+    fields = {**task.fields, 'ID': CLOSED_ID}
+    return {**state(task), 'fields': fields, 'list': Path(LIST_FILE).stem}
 
 
 def reopened(
     before: Source,
     task: TaskNode,
-    recorded: bool,
     title: str | None,
     options: dict[str, str],
     description: str | None,
@@ -1038,20 +1029,14 @@ def reopened(
     """
     attrs = attributes(given)
     values = checked(supplied(options, UPDATE_OPTIONS))
-    left = Path(LIST_FILE).stem if recorded else None
-    name = list_name or left
-    if name is None:
-        raise ValueError(
-            f'{task.title!r} was closed before btodo recorded its list: '
-            'name the list with --list'
-        )
-    file = list_file(before, name)
+    left = Path(LIST_FILE).stem
+    file = list_file(before, list_name or left)
     if title is not None:
         refuse_line_break(title)
     lines = None if description is None else description_lines(description)
     doc = TodoDocument(before.lists[file])
     index = doc.open_end
-    block = recorded_lines(closed_snapshot(task, recorded), 0)
+    block = recorded_lines(closed_snapshot(task), 0)
     for offset, line in enumerate(block):
         doc.insert(index + offset, line)
     (root,) = [
@@ -1110,7 +1095,7 @@ def reopened(
         }
         sub_stream = f'task/{stamped[subtask.raw_index]}'
         opened.append(Appended('TaskUpdated', sub_stream, sub_payload, file))
-    events = journal([closing(task, recorded), *opened])
+    events = journal([closing(task), *opened])
     lists = {**before.lists, file: doc.text}
     return Outcome(f'{entry}\n{SOURCE}/{file}', Source(lists, None, events))
 

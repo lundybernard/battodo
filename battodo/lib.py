@@ -386,9 +386,8 @@ def update_item(
         task cannot carry a field, a supplied value is unreadable, the
         title holds a line break, or a description line is refused.
         A reopen also refuses several closed tasks, a checklist item,
-        a subtask line that no list and no record holds, and a record
-        that names no list when the update names none. Raised before
-        anything is written.
+        and a subtask line that no list and no record holds. Raised
+        before anything is written.
     """
     checked = SuppliedAttributes(attrs, note).checked
     task = Task(_source(conf), selector, now.date())

@@ -228,51 +228,23 @@ class ReopenCommandTests(TestCase):
         """A rejected reopen reports on stderr and writes nothing."""
         t.run_ok('done', 'Open checklist item')
         owner_id = Journal(t.source).events[0]['stream_id'][len('task/') :]
-        Journal(t.source).append(
-            'TaskScratched',
-            'task/ol01ab',
-            {
-                'delta': {'removed': [False, True]},
-                'snapshot': {
-                    'title': 'A task closed before the list',
-                    'done': False,
-                    'fields': {'ID': 'ol01ab'},
-                },
-                'ancestry': 'A task closed before the list',
-            },
-            actor='agent',
-            source_file='chores.md',
-        )
         for _ in range(2):
             t.added('chores', 'Rx refill')
             t.run_ok('done', 'Rx refill')
-        cases = {
-            'a checklist item opens with its task': (
-                ['update', 'Open checklist item'],
-                (
-                    "'Open checklist item' names a checklist item of "
-                    f'[ID:{owner_id}]: a checklist item opens with its '
-                    'task, not on its own\n'
-                ),
-            ),
-            'a record from before the list names no list': (
-                ['update', 'ol01ab'],
-                (
-                    "'A task closed before the list' was closed before "
-                    'btodo recorded its list: name the list with --list\n'
-                ),
-            ),
-        }
-        for name, (args, message) in cases.items():
-            with t.subTest(name):
-                before = t.chores()
+        with t.subTest('a checklist item opens with its task'):
+            before = t.chores()
 
-                out, err, code = run_cli(args, t.env)
+            out, err, code = run_cli(['update', 'Open checklist item'], t.env)
 
-                t.assertEqual(code, 1)
-                t.assertEqual(out, '')
-                t.assertEqual(err, message)
-                t.assertEqual(t.chores(), before)
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+            t.assertEqual(
+                err,
+                "'Open checklist item' names a checklist item of "
+                f'[ID:{owner_id}]: a checklist item opens with its '
+                'task, not on its own\n',
+            )
+            t.assertEqual(t.chores(), before)
 
         with t.subTest('an open task takes no --with-subtasks'):
             out, err, code = run_cli(

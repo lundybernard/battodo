@@ -196,11 +196,12 @@ CLOSED_EVENTS = (
         {
             'delta': {'removed': [False, True]},
             'snapshot': {
-                'title': 'A task scratched before the list',
+                'title': 'A scratched task',
                 'done': False,
                 'fields': {'P': '1', 'ID': 'sc01ab'},
+                'list': 'a-list',
             },
-            'ancestry': 'A task scratched before the list',
+            'ancestry': 'A scratched task',
         },
     ),
     (
@@ -1063,8 +1064,7 @@ class ReopenTests(TestCase):
             'a scratched task, to the list a reopen names': (
                 reopen_of(t.source, 'sc01ab', list_name='another-list'),
                 'another-list.md',
-                ANOTHER_LIST + '- [ ] A task scratched before the list [P:1] '
-                '[ID:sc01ab]\n',
+                ANOTHER_LIST + '- [ ] A scratched task [P:1] [ID:sc01ab]\n',
             ),
             'a subtask whose line a list holds, each closed task above': (
                 reopen_of(t.source, 'db03ef'),
@@ -1135,14 +1135,6 @@ class ReopenTests(TestCase):
                 reopen_of(t.source, 'Its checklist item'),
                 ValueError,
                 r'names a checklist item of \[ID:ft01ab\]',
-            ),
-            'a record from before the list, with no list named': (
-                reopen_of(t.source, 'sc01ab'),
-                ValueError,
-                (
-                    "'A task scratched before the list' was closed before "
-                    'btodo recorded its list: name the list with --list'
-                ),
             ),
             'a list that is not there': (
                 reopen_of(t.source, 'ft01ab', list_name='wrk'),
@@ -1216,17 +1208,6 @@ class ReopenTests(TestCase):
                     ),
                 ],
             )
-
-        with t.subTest('a record from before the list, against null'):
-            scratched = reopen_of(t.source, 'sc01ab', list_name='a-list')
-
-            (event,) = scratched.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {'done': [True, False], 'list': [None, 'a-list']},
-            )
-            t.assertIsNone(event.payload['snapshot']['list'])
 
         with t.subTest(
             'each closed task above a subtask opens, outermost first'

@@ -437,13 +437,8 @@ class TaskStreamTests(TestCase):
         t.assertEqual(ret, {'title': 'Paint a fence', 'list': 'chores'})
 
     def test_list_name(t) -> None:
-        with t.subTest('the list the last snapshot names'):
-            ret = t.fence.list_name
-            t.assertEqual(ret, 'chores')
-
-        with t.subTest('none from a snapshot that names none'):
-            ret = t.permit.list_name
-            t.assertIsNone(ret)
+        ret = t.fence.list_name
+        t.assertEqual(ret, 'chores')
 
     def test_nested(t) -> None:
         with t.subTest('a subtask'):

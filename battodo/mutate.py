@@ -849,9 +849,8 @@ class Reopen:
             A supplied value does not read, the selector names several
             closed tasks or a checklist item, a subtask is given a list
             or a field only the top-level task carries, no list or record
-            holds the line of a subtask, no list is named for a record
-            that names none, the title holds a line break, or a
-            description line is refused.
+            holds the line of a subtask, the title holds a line break, or
+            a description line is refused.
         SelectionError
             The selector names no open task and no closed task.
         ListError
@@ -989,21 +988,13 @@ class Reopen:
 
         Raises
         ------
-        ValueError
-            Neither names a list.
         ListError
             The name is not a discovered list.
         """
         held = self.held
         if held is not None:
             return held
-        record = self.record
-        name = self.list_name or record.list_name
-        if name is None:
-            raise ValueError(
-                f'{record.title!r} was closed before btodo recorded its '
-                'list: name the list with --list'
-            )
+        name = self.list_name or self.record.list_name
         return NamedList(self.source, name).path
 
     @property
@@ -1231,11 +1222,8 @@ class Reopen:
         return delta
 
     @property
-    def list_left(self) -> str | None:
-        """The list the task was in before the reopen, by its name.
-
-        None where its record names none.
-        """
+    def list_left(self) -> str:
+        """The list the task was in before the reopen, by its name."""
         held = self.held
         if held is not None:
             return held.stem
@@ -2329,16 +2317,15 @@ class OpenedTask:
 
     `task_id` names its stream. A task with no `[ID:]` takes it on the
     same event. `list_name` is the list the task was in before the
-    reopen, and None where no record names one. `delta` and `attrs`
-    hold the changes and the attributes of the task the reopen names,
-    and None for every other task.
+    reopen. `delta` and `attrs` hold the changes and the attributes of
+    the task the reopen names, and None for every other task.
     """
 
     def __init__(
         self,
         ancestry: Ancestry,
         task_id: str,
-        list_name: str | None,
+        list_name: str,
         delta: dict[str, list[Any]] | None = None,
         attrs: dict[str, str] | None = None,
     ) -> None:
