@@ -191,3 +191,16 @@ cached_property state-machine pattern:
   over the sources, docstrings on every descriptor, annotations in the
   example project. Until then the cleaner in-repo exemplars are
   battodo's own `Digest` and `ConfigFile`.
+
+Found during the snapshot-list migration cycle (2026-10-12):
+
+- **An empty config file fails with `KeyError: 'batconf'`.** batconf
+  0.4.0 (pixi.lock) parses an empty TOML file to `{}`, not to its empty
+  sentinel. battodo builds the `TomlSource` in `ConfigFile.source`
+  (`battodo/conf.py:122`), and the first read is `conf.loglevel` in
+  `Commands.set_log_level` (`battodo/cli.py:489`). With no `--env`,
+  `TomlSource._config_env` reads `['batconf']['default_env']` and raises
+  `KeyError`. `_data` catches it to raise its "Config Environment not
+  found" `ValueError`, but that message reads `_config_env` again, so
+  the second `KeyError` escapes instead. Upstream issue candidate: name
+  the missing `[batconf] default_env` table in a clear error.

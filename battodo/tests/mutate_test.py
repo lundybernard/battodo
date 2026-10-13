@@ -1580,9 +1580,7 @@ class ReopenTests(TestCase):
         record: PropertyMock,
         named_list: MagicMock,
     ) -> None:
-        record.return_value = Mock(spec=['list_name', 'title'])
-        record.return_value.list_name = 'a-list'
-        record.return_value.title = 'A task'
+        record.return_value = Mock(spec=['list_name'], list_name='a-list')
 
         with t.subTest('the list that holds the line of a subtask'):
             held.return_value = LIST_PATH
@@ -1604,19 +1602,6 @@ class ReopenTests(TestCase):
 
                 named_list.assert_called_once_with(SOURCE, expected)
                 t.assertIs(ret, named_list.return_value.path)
-
-        with t.subTest('a record from before the list: refused'):
-            t.ro.__dict__.pop('path', None)
-            record.return_value.list_name = None
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.ro.path
-
-            t.assertEqual(
-                str(caught.exception),
-                "'A task' was closed before btodo recorded its list: "
-                'name the list with --list',
-            )
 
     @patch.object(Reopen, 'stream', new_callable=PropertyMock)
     def test_held(t, stream: PropertyMock) -> None:
@@ -2053,11 +2038,6 @@ class ReopenTests(TestCase):
             path.return_value = ANOTHER_PATH
             ret = t.ro.delta
             t.assertEqual(ret['list'], ['a-list', 'another-list'])
-
-        with t.subTest('a record from before the list: against null'):
-            list_left.return_value = None
-            ret = t.ro.delta
-            t.assertEqual(ret['list'], [None, 'another-list'])
 
     @patch.object(Reopen, 'record', new_callable=PropertyMock)
     @patch.object(Reopen, 'held', new_callable=PropertyMock)

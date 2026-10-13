@@ -137,8 +137,7 @@ reopens it under the same id.
   them too. A closed subtask reopens with each closed task above it;
   its siblings keep their state. A checklist item reopens only with
   its task: naming one exits 1 and names the `[ID:]` of its task.
-- `--list <list>` reopens a top-level task into that list. A task
-  closed before btodo recorded lists exits 1 until `--list` names one.
+- `--list <list>` reopens a top-level task into that list.
 - `--list <list>` on an open top-level task moves it, its description
   and subtasks with it, to the end of that list. A subtask refuses
   `--list`: it moves with its top-level task. `--list` that names the

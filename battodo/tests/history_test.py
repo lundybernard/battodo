@@ -315,18 +315,16 @@ class TaskStreamTests(TestCase):
             ret = t.ts.snapshot
             t.assertIsNone(ret)
 
-    @patch.object(TaskStream, 'snapshot', new_callable=PropertyMock)
-    def test_list_name(t, snapshot: PropertyMock) -> None:
-        cases = {
-            'the list the snapshot names': ({'list': 'chores'}, 'chores'),
-            'none where it names none': ({'title': 'A task'}, None),
-            'none without a snapshot': (None, None),
-        }
-        for name, (found, expected) in cases.items():
-            with t.subTest(name):
-                snapshot.return_value = found
-                ret = t.ts.list_name
-                t.assertEqual(ret, expected)
+    @patch.object(TaskStream, 'own', new_callable=PropertyMock)
+    def test_list_name(t, own: PropertyMock) -> None:
+        own.return_value = [
+            {'payload': {'snapshot': {'list': 'a-list'}}},
+            {'payload': {'snapshot': {'list': 'chores'}}},
+        ]
+
+        ret = t.ts.list_name
+
+        t.assertEqual(ret, 'chores')
 
     @patch.object(TaskStream, 'own', new_callable=PropertyMock)
     def test_nested(t, own: PropertyMock) -> None:
