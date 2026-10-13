@@ -12,7 +12,13 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 
 from battodo.parser import TaskNode
-from battodo.rank import DEFAULT_DUE_CURVE, Curve, due_factor, parse_curve
+from battodo.rank import (
+    DEFAULT_DUE_CURVE,
+    Curve,
+    due_factor,
+    parse_curve,
+    rank,
+)
 
 from .strategies import NEARBY, TODAY, grammar
 
@@ -63,6 +69,40 @@ class DueFactorTests(TestCase):
         # The later a task runs against its due date, the higher it
         # stands on a curve whose factors do not fall.
         t.assertLessEqual(*ret)
+
+
+class RankTests(TestCase):
+    """Property tests for battodo.rank.rank."""
+
+    @given(
+        st.lists(
+            st.integers(min_value=1, max_value=5), min_size=2, max_size=2
+        ),
+        grammar.field_values,
+        grammar.field_values,
+    )
+    @example(priorities=[1, 5], due='2999-01-01', added='2000-01-01')
+    @example(priorities=[2, 3], due='YYYY-MM-DD', added='')
+    def test_priority(t, priorities: list[int], due: str, added: str) -> None:
+        low, high = sorted(priorities)
+        lesser = prioritized_task(low, due, added)
+        greater = prioritized_task(high, due, added)
+
+        ret = rank(lesser, TODAY, CURVE), rank(greater, TODAY, CURVE)
+
+        # Every other field held, a higher P never ranks lower.
+        t.assertLessEqual(*ret)
+
+
+def prioritized_task(priority: int, due: str, added: str) -> TaskNode:
+    """One open top-level task with a `P`, a `DUE` and an `ADDED`."""
+    return TaskNode(
+        raw_index=0,
+        indent=0,
+        done=False,
+        title='A ranked task',
+        fields={'P': str(priority), 'DUE': due, 'ADDED': added},
+    )
 
 
 def dated_task(due: str) -> TaskNode:

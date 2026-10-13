@@ -16,7 +16,7 @@ from battodo.item import Item, ItemJsonView, ItemView
 from battodo.task import Task
 
 # Chosen so the rank comes out whole: the task is one month old and one
-# week from due, so urgency is 1 + 1.0 + 0.5 and the rank is 4 x 2.5.
+# week from due, so the rank is 4 x 1.0 for the due date x 2.0 for age.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
 
 WORK = """# Work
@@ -31,7 +31,7 @@ WORK = """# Work
   - [ ] Sweep
   - [x] Buy the lumber [LOE:1]
 - [ ] Undated task [P:2]
-- [ ] Soon task [P:1] [DUE:2026-08-08] [ADDED:2026-07-31]
+- [ ] Soon task [P:1] [DUE:2026-08-09] [ADDED:2026-07-25]
 
 ## Done
 """
@@ -39,7 +39,7 @@ WORK = """# Work
 DECK_TEXT = """Deck rebuild
   list         work
   id           9o71lx
-  rank         10.0
+  rank         8.0
   P            4.0
   LOE          8
   DUE          2026-08-12
@@ -65,8 +65,8 @@ SOON_TEXT = """Soon task
   id     -
   rank   2.0
   P      1.0
-  DUE    2026-08-08
-  ADDED  2026-07-31"""
+  DUE    2026-08-09
+  ADDED  2026-07-25"""
 
 
 class ItemJsonViewTests(TestCase):
@@ -87,7 +87,7 @@ class ItemJsonViewTests(TestCase):
                     'id': '9o71lx',
                     'title': 'Deck rebuild',
                     'done': False,
-                    'rank': 10.0,
+                    'rank': 8.0,
                     'priority': 4.0,
                     'loe': 8,
                     'due': '2026-08-12',

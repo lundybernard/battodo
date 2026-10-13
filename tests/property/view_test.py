@@ -26,7 +26,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from battodo.parser import TaskNode, TodoDocument, parse_date
-from battodo.rank import multiplier, rank
+from battodo.rank import DEFAULT_DUE_CURVE, multiplier, parse_curve, rank
 from battodo.view import RANK_PLACES, TOP_N, Selection, SelectionJsonView, View
 
 from .strategies import document, grammar
@@ -38,6 +38,8 @@ TODAY = NOW.date()
 # The one list a generated source holds. A named category no hour shuts
 # keeps a case independent of the clock.
 CATEGORY = 'career'
+# The curve a view ranks on when the configuration names none.
+CURVE = parse_curve(DEFAULT_DUE_CURVE)
 # The width the layout probes, through the variable the terminal size
 # reads first. Wide enough that the task column never reaches its
 # floor, so no line has to overrun the width.
@@ -187,7 +189,7 @@ class WrittenList:
         """The five values a table shows for each task, padding aside."""
         return [
             (
-                f'{rank(task, TODAY):.1f}',
+                f'{rank(task, TODAY, CURVE):.1f}',
                 f'{multiplier(task):.1f}',
                 '' if task.loe is None else str(task.loe),
                 f'{task.title}{badge(task)}',
@@ -207,7 +209,7 @@ class WrittenList:
         return sorted(
             self.held,
             key=lambda task: (
-                -rank(task, TODAY),
+                -rank(task, TODAY, CURVE),
                 task.due or NO_DUE,
                 task.title,
             ),

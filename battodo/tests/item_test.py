@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..item import (
     Item,
@@ -41,8 +41,9 @@ class ItemTests(TestCase):
     @patch(f'{SRC}.Task', autospec=True)
     def test_from_config(t, task: MagicMock) -> None:
         conf = Mock(spec=['view'])
-        conf.view = Mock(spec=['source_dir'])
+        conf.view = Mock(spec=['source_dir', 'rank_due_curve'])
         conf.view.source_dir = '~/a-source-dir'
+        conf.view.rank_due_curve = 'a-curve'
 
         ret = Item.from_config(
             conf,
@@ -57,6 +58,7 @@ class ItemTests(TestCase):
             TODAY,
         )
         t.assertIs(ret.task, task.return_value)
+        t.assertEqual(ret.rank_due_curve, 'a-curve')
 
     def test_category(t) -> None:
         ret = t.it.category
@@ -66,11 +68,22 @@ class ItemTests(TestCase):
         ret = t.it.node
         t.assertIs(ret, t.node)
 
+    @patch(f'{SRC}.parse_curve', autospec=True)
+    def test_curve(t, parse_curve: MagicMock) -> None:
+        ret = t.it.curve
+
+        # Decoded from the default, since the fixture names no curve.
+        t.assertIs(ret, parse_curve.return_value)
+        parse_curve.assert_called_once_with('-30:0.5, -7:1.0, 0:2.0, 14:4.0')
+
     def test_rank(t) -> None:
+        t.it.curve = sentinel.curve
+
         ret = t.it.rank
-        # Asked for against the day the task carries.
+
+        # Asked for against the day the task carries, on the item's curve.
         t.assertEqual(ret, 10.006)
-        t.rank.assert_called_once_with(t.node, TODAY)
+        t.rank.assert_called_once_with(t.node, TODAY, sentinel.curve)
 
     def test_priority(t) -> None:
         ret = t.it.priority

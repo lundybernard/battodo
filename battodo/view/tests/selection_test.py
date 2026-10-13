@@ -135,6 +135,14 @@ class SelectionTests(TestCase):
         ret = t.s.hour
         t.assertEqual(ret, 10)
 
+    @patch(f'{SRC}.parse_curve', autospec=True)
+    def test_curve(t, parse_curve: MagicMock) -> None:
+        ret = t.s.curve
+
+        # Decoded from the default, since the fixture names no curve.
+        t.assertIs(ret, parse_curve.return_value)
+        parse_curve.assert_called_once_with('-30:0.5, -7:1.0, 0:2.0, 14:4.0')
+
     @patch(f'{SRC}.TodoList', autospec=True)
     def test_lists(t, todo_list: MagicMock) -> None:
         with t.subTest('a source holding no lists at all is an error'):
@@ -154,11 +162,20 @@ class SelectionTests(TestCase):
             later, earlier = t.todo('study'), t.todo('work')
             later.order, earlier.order = (2, 'study'), (0, 'work')
             todo_list.side_effect = [later, earlier]
+            t.s.curve = sentinel.curve
 
             ret = t.s.lists
 
             t.assertEqual(ret, [earlier, later])
             t.discover_lists.assert_called_with(t.resolved)
+            # Each list ranks its tasks on the selection's day and curve.
+            t.assertEqual(
+                todo_list.call_args_list,
+                [
+                    call(Path('later.md'), TODAY, sentinel.curve),
+                    call(Path('earlier.md'), TODAY, sentinel.curve),
+                ],
+            )
 
     def test_shows(t) -> None:
         t.s.active = {'work', 'study'}
@@ -243,9 +260,10 @@ class SelectionFromConfigTests(TestCase):
     def setUp(t) -> None:
         t.now = at('2026-08-05T10:30')
         t.conf = Mock(spec=['view'])
-        t.conf.view = Mock(spec=['source_dir', 'top'])
+        t.conf.view = Mock(spec=['source_dir', 'top', 'rank_due_curve'])
         t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
+        t.conf.view.rank_due_curve = 'a-curve'
 
     def test_from_config(t) -> None:
         selection = Selection.from_config(t.conf, t.now, show_all=True)
@@ -259,8 +277,11 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('the count is read as a number'):
             t.assertEqual(selection.top_n, 2)
 
-        with t.subTest('and the flag is the one given'):
+        with t.subTest('the flag is the one given'):
             t.assertTrue(selection.show_all)
+
+        with t.subTest('and the curve is carried as written'):
+            t.assertEqual(selection.rank_due_curve, 'a-curve')
 
         with t.subTest('a count below one is refused'):
             t.conf.view.top = '0'
@@ -275,7 +296,7 @@ class TodoListTests(TestCase):
         t.path = Mock(spec=Path)
         t.path.stem = 'work'
         t.path.read_text.return_value = '## Open\n\n- [ ] A task [P:3]\n'
-        t.tl = TodoList(t.path, TODAY)
+        t.tl = TodoList(t.path, TODAY, sentinel.curve)
 
     def test_category(t) -> None:
         ret = t.tl.category
@@ -339,6 +360,7 @@ class TodoListTests(TestCase):
                 'A placeholder due date',
             ],
         )
+        t.assertEqual([row.curve for row in ret], [sentinel.curve] * 4)
 
     def test_parked(t) -> None:
         with t.subTest('a list with no marker is not parked'):
@@ -457,7 +479,7 @@ class RowTests(TestCase):
         t.task.due = None
         t.task.children = []
 
-        t.r = Row(t.task, TODAY)
+        t.r = Row(t.task, TODAY, sentinel.curve)
 
     def test_key(t) -> None:
         with t.subTest('an undated task sorts behind every dated one'):
@@ -476,7 +498,7 @@ class RowTests(TestCase):
         ret = t.r.rank
 
         t.assertEqual(ret, 4.25)
-        t.rank.assert_called_once_with(t.task, TODAY)
+        t.rank.assert_called_once_with(t.task, TODAY, sentinel.curve)
 
     def test_priority(t) -> None:
         ret = t.r.priority

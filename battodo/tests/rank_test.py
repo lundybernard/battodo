@@ -181,7 +181,7 @@ class RankTests(TestCase):
     def test_multiplier(t) -> None:
         # A fresh undated item ranks at its multiplier.
         t.tk.fields = {'P': '3'}
-        ret = rank(t.tk, TODAY)
+        ret = rank(t.tk, TODAY, CURVE)
         t.assertAlmostEqual(ret, 3.0)
 
     def test_age(t) -> None:
@@ -190,30 +190,51 @@ class RankTests(TestCase):
         for added, expected in ages.items():
             with t.subTest(f'ADDED:{added}'):
                 t.tk.fields = {'P': '3', 'ADDED': added}
-                ret = rank(t.tk, TODAY)
+                ret = rank(t.tk, TODAY, CURVE)
                 t.assertAlmostEqual(ret, expected)
+
+    def test_due(t) -> None:
+        # The due-date factor multiplies the priority.
+        dues = {
+            '2026-09-08': 1.0,
+            '2026-08-15': 2.0,
+            '2026-08-08': 4.0,
+            '2026-07-25': 8.0,
+        }
+
+        for due, expected in dues.items():
+            with t.subTest(f'DUE:{due}'):
+                t.tk.fields = {'P': '2', 'DUE': due}
+                ret = rank(t.tk, TODAY, CURVE)
+                t.assertAlmostEqual(ret, expected)
+
+    def test_curve(t) -> None:
+        # The curve the caller gives decides the factor.
+        t.tk.fields = {'P': '2', 'DUE': '2026-09-08'}
+        ret = rank(t.tk, TODAY, [(0, 3.0)])
+        t.assertAlmostEqual(ret, 6.0)
 
     def test_compound(t) -> None:
         # Age and lateness compound.
         t.tk.fields = {'P': '2', 'ADDED': '2026-07-09', 'DUE': '2026-08-01'}
-        ret = rank(t.tk, TODAY)
-        t.assertAlmostEqual(ret, 8.0)
+        ret = rank(t.tk, TODAY, CURVE)
+        t.assertAlmostEqual(ret, 12.0)
 
     def test_parked(t) -> None:
         t.tk.fields = {'P': '0', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
-        ret = rank(t.tk, TODAY)
+        ret = rank(t.tk, TODAY, CURVE)
         t.assertAlmostEqual(ret, 0.0)
 
     def test_bounded(t) -> None:
         t.tk.fields = {'P': '1', 'ADDED': '2020-01-01', 'DUE': '2020-01-01'}
-        worst = rank(t.tk, TODAY)
+        worst = rank(t.tk, TODAY, CURVE)
 
-        with t.subTest('urgency alone cannot reach past its cap'):
-            t.assertAlmostEqual(worst, 6.0)
+        with t.subTest('age and lateness stop at their caps'):
+            t.assertAlmostEqual(worst, 12.0)
 
         with t.subTest('so the multiplier still rules'):
             t.tk.fields = {'P': '5', 'ADDED': '2026-05-10'}
-            ret = rank(t.tk, TODAY)
+            ret = rank(t.tk, TODAY, CURVE)
             t.assertLess(worst, ret)
 
 
