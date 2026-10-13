@@ -89,12 +89,17 @@ UPDATE_OPTIONS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
-SUBTASK_OPTIONS = {'LOE': 'loe', 'DUE': 'due', 'TAGS': 'tags'}
+SUBTASK_OPTIONS = {
+    'LOE': 'loe',
+    'DUE': 'due',
+    'REPEAT': 'repeat',
+    'TAGS': 'tags',
+}
 # SCHEMA.md's field order, which an add and a log entry write in.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 LOE_VALUES = ('1', '2', '3', '5', '8')
 # The fields only a top-level task carries.
-ROOT_FIELDS = ('P', 'REPEAT')
+ROOT_FIELDS = ('P',)
 # The indent each level of the schema adds.
 INDENT = '  '
 # How far a description line indents past its task line.
@@ -797,6 +802,8 @@ def added_below(
     fields = supplied(options, ADD_OPTIONS)
     refuse_root_fields(fields)
     values = checked(fields)
+    if 'REPEAT' in values:
+        next_due(values['REPEAT'], TODAY)
     text, ancestry = reached(found)
     if name != LIST_FILE:
         raise ValueError(f'{parent!r} names a task in {LIST_FILE}, not {name}')

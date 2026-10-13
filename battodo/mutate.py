@@ -76,9 +76,8 @@ LOE_VALUES = ('1', '2', '3', '5', '8')
 # SCHEMA.md indents every level by two spaces.
 SUBTASK_INDENT = 2
 # The fields a top-level task owns. SCHEMA.md gives a subtask no `P` of
-# its own, and only the root task is rescheduled, so a `[REPEAT:]` on a
-# child never fires.
-ROOT_ONLY_FIELDS = ('P', 'REPEAT')
+# its own, because only a top-level task is ranked.
+ROOT_ONLY_FIELDS = ('P',)
 # The value an update names to clear what an option writes (ADR 0028).
 CLEAR_VALUE = 'None'
 # An attribute key: a letter, then letters, digits or underscores.
