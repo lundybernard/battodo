@@ -33,6 +33,13 @@ AGE_CAP = 2.0
 DUE_HORIZON_DAYS = 14
 OVERDUE_SCALE_DAYS = 7
 DUE_CAP = 3.0
+# The due-date factor curve: `days:factor` points, where `days` is
+# today minus the due date. A negative day is before the due date.
+DEFAULT_DUE_CURVE = '-30:0.5, -7:1.0, 0:2.0, 14:4.0'
+CURVE_ERROR = 'a rank due curve point must read days:factor'
+
+# A decoded curve: its points, earliest day first.
+Curve = list[tuple[int, float]]
 
 
 def multiplier(task: TaskNode) -> float:
@@ -88,3 +95,24 @@ def rank(task: TaskNode, today: date) -> float:
     """The task's computed rank. Higher sorts first."""
     urgency = BASE_URGENCY + age_score(task, today) + due_score(task, today)
     return multiplier(task) * urgency
+
+
+def parse_curve(value: str) -> Curve:
+    """Decode a due-date curve from whichever source configured it.
+
+    Parameters
+    ----------
+    value : str
+        Comma-separated `days:factor` points, in any order.
+
+    Returns
+    -------
+    Curve
+        The points, earliest day first.
+
+    Raises
+    ------
+    ValueError
+        A segment is not a whole number of days and a finite factor.
+    """
+    raise NotImplementedError

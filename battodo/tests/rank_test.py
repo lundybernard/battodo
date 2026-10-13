@@ -2,10 +2,12 @@ from datetime import date
 from unittest import TestCase
 
 from ..rank import (
+    DEFAULT_DUE_CURVE,
     TaskNode,
     age_score,
     due_score,
     multiplier,
+    parse_curve,
     rank,
 )
 
@@ -168,3 +170,57 @@ class RankTests(TestCase):
             t.tk.fields = {'P': '5', 'ADDED': '2026-05-10'}
             ret = rank(t.tk, TODAY)
             t.assertLess(worst, ret)
+
+
+class ParseCurveTests(TestCase):
+    """Unit tests for battodo.rank.parse_curve."""
+
+    def test_default(t) -> None:
+        ret = parse_curve(DEFAULT_DUE_CURVE)
+        t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+
+    def test_order(t) -> None:
+        # Points sort by day, whatever order the value writes them in.
+        ret = parse_curve('14:4.0,-30:0.5, 0:2.0 ,-7:1')
+        t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+
+    def test_one_point(t) -> None:
+        ret = parse_curve('0:1.5')
+        t.assertEqual(ret, [(0, 1.5)])
+
+    def test_zero_factor(t) -> None:
+        # A factor of 0 is a factor: it parks a task near its point.
+        ret = parse_curve('-30:0, 0:2')
+        t.assertEqual(ret, [(-30, 0.0), (0, 2.0)])
+
+    def test_refusal(t) -> None:
+        cases = {
+            'an empty value': ('', "''"),
+            'an empty segment': ('-30:0.5,,0:2.0', "''"),
+            'a trailing comma': ('-30:0.5, 0:2.0,', "''"),
+            'no factor': ('-30:0.5, -7', "'-7'"),
+            'a factor that is not a number': ('0:two', "'0:two'"),
+            'a day that is not whole': ('-7.5:1.0', "'-7.5:1.0'"),
+            'a second colon': ('0:1:2', "'0:1:2'"),
+            'a factor that is not a number at all': ('0:nan', "'0:nan'"),
+            'a factor without a bound': ('14:inf', "'14:inf'"),
+            'a factor below zero': ('0:-1.0', "'0:-1.0'"),
+        }
+
+        for name, (value, segment) in cases.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    parse_curve(value)
+                t.assertEqual(
+                    str(caught.exception),
+                    f'a rank due curve point must read days:factor: {segment}',
+                )
+
+        # A day named twice has no one factor, so the value is refused.
+        with t.subTest('a day named twice'):
+            with t.assertRaises(ValueError) as caught:
+                parse_curve('-7:1.0, 0:2.0, 0:3.0')
+            t.assertEqual(
+                str(caught.exception),
+                "a rank due curve names a day twice: '0:3.0'",
+            )
