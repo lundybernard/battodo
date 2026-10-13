@@ -18,6 +18,7 @@
       "done": false,
       "loe": null,
       "due": null,
+      "repeat": null,
       "tags": [],
       "description": null,
       "subtasks": []
@@ -28,6 +29,7 @@
       "done": false,
       "loe": 1,
       "due": null,
+      "repeat": null,
       "tags": [],
       "description": null,
       "subtasks": []
@@ -38,6 +40,7 @@
       "done": true,
       "loe": null,
       "due": null,
+      "repeat": null,
       "tags": [],
       "description": null,
       "subtasks": []
