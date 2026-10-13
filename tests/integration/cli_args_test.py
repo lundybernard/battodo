@@ -352,3 +352,14 @@ class CommandInputTests(TestCase):
                 str(caught.exception), "unrecognised REPEAT value: ''"
             )
             t.assertEqual(listed.read_text(encoding='utf-8'), before)
+
+        with t.subTest('--description None clears the description'):
+            t.run_command(
+                ['update', 'rk01lv', '--description', 'Bag the piles.'],
+                {},
+            )
+
+            t.run_command(['update', 'rk01lv', '--description', 'None'], {})
+
+            ret = listed.read_text(encoding='utf-8')
+            t.assertEqual(ret, YARD.replace('[P:3]', '[P:5]'))

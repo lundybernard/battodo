@@ -1048,6 +1048,15 @@ class UpdateTests(TestCase):
             supplied_description.assert_called_once_with('A description')
             t.assertIs(ret, supplied_description.return_value)
 
+        with t.subTest('a description of None clears, as an empty one'):
+            supplied_description.reset_mock()
+            t.up.description = 'None'
+
+            ret = t.up.new_description
+
+            supplied_description.assert_called_once_with('')
+            t.assertIs(ret, supplied_description.return_value)
+
     @patch.object(Update, 'changes', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
@@ -2013,6 +2022,15 @@ class ReopenTests(TestCase):
             ret = t.ro.new_description
 
             supplied_description.assert_called_once_with('A description')
+            t.assertIs(ret, supplied_description.return_value)
+
+        with t.subTest('a description of None clears, as an empty one'):
+            supplied_description.reset_mock()
+            t.ro.description = 'None'
+
+            ret = t.ro.new_description
+
+            supplied_description.assert_called_once_with('')
             t.assertIs(ret, supplied_description.return_value)
 
     @patch.object(Reopen, 'node', new_callable=PropertyMock)

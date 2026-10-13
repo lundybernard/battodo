@@ -776,6 +776,11 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, without(A_LIST, 5))
 
+        with t.subTest('a description of None clears them too'):
+            cleared = described_update(t.source, '9o71lx', 'None')
+            ret = cleared.text
+            t.assertEqual(ret, without(A_LIST, 5))
+
         with t.subTest('a task with none takes them before its children'):
             described = described_update(t.source, 'rr01ab', DESCRIPTION)
             ret = described.text
