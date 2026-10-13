@@ -1,14 +1,15 @@
-"""Compute an item's rank from its dates and priority (ADR 0005).
+"""Compute an item's rank from its dates and priority (ADRs 0005, 0026).
 
-Rank is a pure function of the file and the clock, so nothing is
-written to keep it current.
+Rank is a pure function of the file, the clock and the due-date curve,
+so nothing is written to keep it current.
 
-    rank = multiplier x (1 + age_score + due_score)
+    rank = multiplier x due_factor x (1 + age_score)
 
-An item starts at its multiplier, gains a full multiplier's worth for
-every month it waits, ramps up over the fortnight before it comes due,
-and gains another for every week it is late. Every term is *bounded*,
-so no item outgrows its priority.
+An item starts at its multiplier and gains a full multiplier's worth for
+every month it waits. The due-date curve then scales it. The default
+curve is below 1 far ahead of the due date, rises through the due date,
+and caps when the item is long overdue. Every term is *bounded*, so no
+item outgrows its priority.
 
 Every field is read tolerantly. These files are typed into by hand and
 carry placeholders such as `[DUE:YYYY-MM-DD]`; an unreadable field
@@ -29,12 +30,8 @@ MAX_MULTIPLIER = 5.0
 # scale order-preservingly, so no existing ordering is lost.
 LEGACY_P_DIVISOR = 25
 
-BASE_URGENCY = 1.0
 AGE_SCALE_DAYS = 30
 AGE_CAP = 2.0
-DUE_HORIZON_DAYS = 14
-OVERDUE_SCALE_DAYS = 7
-DUE_CAP = 3.0
 # A task with no readable due date keeps its rank unscaled.
 UNDATED_FACTOR = 1.0
 # The due-date factor curve: `days:factor` points, where `days` is
@@ -83,19 +80,6 @@ def age_score(task: TaskNode, today: date) -> float:
     return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
-def due_score(task: TaskNode, today: date) -> float:
-    """How pressing the due date is: ramps to +1, then +1 per week late."""
-    due = parse_date(task.due)
-    if due is None:
-        return 0.0
-    days = (due - today).days
-    if days < 0:
-        return min(DUE_CAP, 1 - days / OVERDUE_SCALE_DAYS)
-    if days >= DUE_HORIZON_DAYS:
-        return 0.0
-    return (DUE_HORIZON_DAYS - days) / DUE_HORIZON_DAYS
-
-
 def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
     """How the due date scales the rank, read off `curve`.
 
@@ -128,10 +112,10 @@ def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
     return curve[-1][1]
 
 
-def rank(task: TaskNode, today: date) -> float:
-    """The task's computed rank. Higher sorts first."""
-    urgency = BASE_URGENCY + age_score(task, today) + due_score(task, today)
-    return multiplier(task) * urgency
+def rank(task: TaskNode, today: date, curve: Curve) -> float:
+    """The task's computed rank on `curve`. Higher sorts first."""
+    scale = multiplier(task) * due_factor(task, today, curve)
+    return scale * (1 + age_score(task, today))
 
 
 def parse_curve(value: str) -> Curve:

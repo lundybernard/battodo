@@ -6,7 +6,6 @@ from ..rank import (
     TaskNode,
     age_score,
     due_factor,
-    due_score,
     multiplier,
     parse_curve,
     rank,
@@ -98,35 +97,6 @@ class AgeScoreTests(TestCase):
             with t.subTest(f'ADDED:{value}'):
                 t.tk.fields = {} if value is None else {'ADDED': value}
                 ret = age_score(t.tk, TODAY)
-                t.assertAlmostEqual(ret, expected)
-
-
-class DueScoreTests(TestCase):
-    """Unit tests for battodo.rank.due_score."""
-
-    def setUp(t) -> None:
-        t.tk = ranked_task()
-
-    def test_scale(t) -> None:
-        cases = {
-            None: 0.0,
-            # Beyond the fortnight horizon: no contribution yet.
-            '2026-09-01': 0.0,
-            '2026-08-22': 0.0,
-            # Ramping up over the fortnight before it comes due.
-            '2026-08-15': 0.5,
-            '2026-08-08': 1.0,
-            # Late: another multiplier's worth per week, capped.
-            '2026-08-01': 2.0,
-            '2026-07-25': 3.0,
-            '2026-01-01': 3.0,
-            'YYYY-MM-DD': 0.0,
-        }
-
-        for value, expected in cases.items():
-            with t.subTest(f'DUE:{value}'):
-                t.tk.fields = {} if value is None else {'DUE': value}
-                ret = due_score(t.tk, TODAY)
                 t.assertAlmostEqual(ret, expected)
 
 
