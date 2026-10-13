@@ -89,12 +89,17 @@ UPDATE_OPTIONS = {
     'REPEAT': 'repeat',
     'TAGS': 'tags',
 }
-SUBTASK_OPTIONS = {'LOE': 'loe', 'DUE': 'due', 'TAGS': 'tags'}
+SUBTASK_OPTIONS = {
+    'LOE': 'loe',
+    'DUE': 'due',
+    'REPEAT': 'repeat',
+    'TAGS': 'tags',
+}
 # SCHEMA.md's field order, which an add and a log entry write in.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 LOE_VALUES = ('1', '2', '3', '5', '8')
 # The fields only a top-level task carries.
-ROOT_FIELDS = ('P', 'REPEAT')
+ROOT_FIELDS = ('P',)
 # The indent each level of the schema adds.
 INDENT = '  '
 # How far a description line indents past its task line.
@@ -797,6 +802,8 @@ def added_below(
     fields = supplied(options, ADD_OPTIONS)
     refuse_root_fields(fields)
     values = checked(fields)
+    if 'REPEAT' in values:
+        next_due(values['REPEAT'], TODAY)
     text, ancestry = reached(found)
     if name != LIST_FILE:
         raise ValueError(f'{parent!r} names a task in {LIST_FILE}, not {name}')
@@ -1180,21 +1187,24 @@ def completed(
 ) -> 'Outcome':
     """The task checked off, logged and journaled, per SCHEMA.md.
 
-    Completing the last open child completes its parent. A finished
-    top-level task loses its block, unless it repeats: then it stays
-    with a new due date and the completion day as its `[ADDED:]`, and
-    only its children go. The attributes go
-    on the event of the named task, which is not a checklist item. Each
-    stream task that keeps its line and gains an id is stamped first,
-    on an event of its own.
+    Completing the last open child completes its parent. The last task
+    finished, where it repeats, stays with a new due date, and only its
+    children go; a top-level one also takes the completion day as its
+    `[ADDED:]`. A finished top-level task that does not repeat loses its
+    block. A task with an open repeating subtask is refused. The
+    attributes go on the event of the named task, which is not a
+    checklist item. Each stream task that keeps its line and gains an id
+    is stamped first, on an event of its own.
     """
     attrs = attributes(given)
     text, ancestry = reached(found)
+    refuse_repeating_subtask(ancestry[-1])
     ancestries = cascade(ancestry)
     root = ancestry[0]
     root_done = len(ancestries[-1]) == 1
-    repeats = root_done and bool(root.repeat)
-    rescheduled = next_due(root.repeat or '', TODAY) if repeats else None
+    last = ancestries[-1][-1]
+    recurrence = last if last.repeat else None
+    rescheduled = next_due(last.repeat or '', TODAY) if recurrence else None
     if attrs:
         refuse_checklist_attributes(ancestry[-1])
     ids = stream_ids(ancestries)
@@ -1203,14 +1213,16 @@ def completed(
     }
     stamped: list[int] = []
     doc = TodoDocument(text)
-    if rescheduled is not None:
-        doc.set_field(root.raw_index, 'DUE', rescheduled.isoformat())
-        doc.set_field(root.raw_index, 'ADDED', TODAY.isoformat())
-        doc.set_field(root.raw_index, 'ID', ids[root.raw_index])
-        stamped.append(root.raw_index)
-    if root_done:
-        kept = {root.raw_index, *root.note_indices} if repeats else set()
-        doc.drop(root.block - kept)
+    if recurrence is not None and rescheduled is not None:
+        index = recurrence.raw_index
+        doc.set_field(index, 'DUE', rescheduled.isoformat())
+        if recurrence is root:
+            doc.set_field(index, 'ADDED', TODAY.isoformat())
+        doc.set_field(index, 'ID', ids[index])
+        stamped.append(index)
+        doc.drop(recurrence.block - {index, *recurrence.note_indices})
+    elif root_done:
+        doc.drop(root.block)
     else:
         for index, task_id in ids.items():
             doc.set_field(index, 'ID', task_id)
@@ -1230,9 +1242,10 @@ def completed(
     for each in ancestries:
         node = each[-1]
         delta: dict[str, Any] = {'done': [False, True]}
-        if node is root and rescheduled is not None:
-            delta['DUE'] = [root.due, rescheduled.isoformat()]
-            delta['ADDED'] = [root.added, TODAY.isoformat()]
+        if node is recurrence and rescheduled is not None:
+            delta['DUE'] = [node.due, rescheduled.isoformat()]
+            if node is root:
+                delta['ADDED'] = [node.added, TODAY.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
             'snapshot': snapshot(node, LIST_FILE),
@@ -1483,6 +1496,40 @@ def refuse_checklist_attributes(task: TaskNode) -> None:
     """
     if is_checklist_item(task):
         raise ValueError('a checklist item takes no attributes')
+
+
+def refuse_repeating_subtask(task: TaskNode) -> None:
+    """Refuse the completion of a task with an open repeating subtask.
+
+    Raises
+    ------
+    ValueError
+        An open subtask below `task` repeats. The message names the
+        first in file order, by its id where it has one.
+    """
+    below = repeating_below(task)
+    if not below:
+        return
+    first = below[0]
+    if first.fields.get('ID'):
+        named = f'{first.title!r} [ID:{first.fields["ID"]}]'
+        selector = first.fields['ID']
+    else:
+        named = selector = repr(first.title)
+    raise ValueError(
+        f'{task.title!r} has a repeating subtask, {named}: remove its '
+        f'repeat first with update {selector} --repeat None'
+    )
+
+
+def repeating_below(task: TaskNode) -> list[TaskNode]:
+    """The open tasks below `task` with a non-empty repeat, in file order."""
+    found = []
+    for child in task.children:
+        if child.fields.get('REPEAT') and not child.done:
+            found.append(child)
+        found.extend(repeating_below(child))
+    return found
 
 
 class Outcome(NamedTuple):
@@ -1818,11 +1865,14 @@ def path_of(ancestry: list[TaskNode]) -> str:
 def cascade(ancestry: list[TaskNode]) -> list[list[TaskNode]]:
     """The target's ancestry, then each one its completion finishes.
 
-    A parent finishes when no other child of it is open. Deepest first.
+    A parent finishes when no other child of it is open. A repeating
+    child stays open, so it finishes no parent. Deepest first.
     """
     found = [ancestry]
     for depth in range(len(ancestry) - 2, -1, -1):
         parent, child = ancestry[depth], ancestry[depth + 1]
+        if child.repeat:
+            break
         open_siblings = [
             sibling
             for sibling in parent.children

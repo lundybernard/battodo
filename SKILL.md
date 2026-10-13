@@ -48,7 +48,8 @@ btodo completed [today|week|month] [--format text|json]
 
 `show --format json` carries `description` on the item and on each
 entry of `subtasks`: the description lines joined by `\n`, or `null`
-when the task has none.
+when the task has none. It carries `repeat` on both too: the
+`[REPEAT:]` value, or `null` when the task does not repeat.
 
 `history` lists each completion and each reopen of one task, and every
 other event of that task that carries attributes, newest first. Its
@@ -95,7 +96,8 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
 - `-p` is the priority multiplier, 0 and up. `--loe` is the level of
   effort: 1, 2, 3, 5 or 8. `--repeat` is `Nd`, `Nw`, `weekly:DAY` or
   `monthly:N`. `--tags` is a comma-separated list.
-- `update --repeat R` sets or changes the repeat of a top-level task.
+- `update --repeat R` sets or changes the repeat of a task at any
+  depth.
   `update --repeat None` removes it; btodo refuses an empty `--repeat`.
   `DUE` stays as it is: the new rule applies at the next completion,
   and with no repeat the next `done` completes the task. A repeat the
@@ -131,11 +133,21 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   JSON object in ASCII.
 - `done --scratch` drops the whole block of the task, subtasks
   included. It completes no parent and reschedules no repeating task.
+- `done` on a repeating task logs it and keeps it open: its `DUE`
+  moves to the next date of its repeat, and its subtasks go. The task
+  keeps its `[ID:]`.
 - `done --date` logs the record under the day the task closed, rather
   than the day it is marked off. A repeating task is rescheduled from
-  that day too. The rescheduled task keeps its `[ID:]` and takes that
-  day as its `[ADDED:]`, so its age counts from the last completion.
-- Checking off the last open child completes its parent.
+  that day too. A repeating top-level task takes that day as its
+  `[ADDED:]`, so its age counts from the last completion.
+- Checking off the last open child completes its parent. A repeating
+  child never completes, so its parent stays open.
+- `done` refuses a task with an open repeating subtask at any depth:
+  it exits 1 and writes nothing. The message names the first one,
+  `'<task>' has a repeating subtask, '<subtask>' [ID:<id>]: remove its
+  repeat first with update <id> --repeat None`. Run that `update`, then
+  `done` the task again. A subtask with no `[ID:]` is named by its
+  title instead.
 
 ## Reopen and move
 
@@ -217,8 +229,8 @@ journal when no open task matches.
 - `add --parent <selector>` files the new task under its parent, in the
   same list.
 - `update`, `done` and `show` reach a task at any depth.
-- `-p` and `--repeat` are refused on a child. Only a top-level task
-  carries a rank, and only the root task is rescheduled.
+- `-p` is refused on a child: only a top-level task carries a rank.
+  `--repeat` works on a child as on a top-level task.
 - A checklist item is a child line with no fields. It cannot be a
   parent and it cannot be updated: writing a field to it would promote
   it to a subtask.

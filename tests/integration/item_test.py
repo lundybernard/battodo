@@ -36,6 +36,13 @@ WORK = """# Work
 ## Done
 """
 
+# A list whose one subtask repeats.
+REPEATING_CHORES = (
+    '## Open\n'
+    '- [ ] A chore [P:2] [ID:ch01ab]\n'
+    '  - [ ] A repeating step [DUE:2026-08-12] [REPEAT:7d] [ID:rs01ab]\n'
+)
+
 DECK_TEXT = """Deck rebuild
   list         work
   id           9o71lx
@@ -102,6 +109,7 @@ class ItemJsonViewTests(TestCase):
                             'done': False,
                             'loe': 2,
                             'due': None,
+                            'repeat': None,
                             'tags': [],
                             'description': None,
                             'subtasks': [],
@@ -112,6 +120,7 @@ class ItemJsonViewTests(TestCase):
                             'done': False,
                             'loe': None,
                             'due': None,
+                            'repeat': None,
                             'tags': [],
                             'description': None,
                             'subtasks': [],
@@ -122,6 +131,7 @@ class ItemJsonViewTests(TestCase):
                             'done': True,
                             'loe': 1,
                             'due': None,
+                            'repeat': None,
                             'tags': [],
                             'description': None,
                             'subtasks': [],
@@ -150,6 +160,15 @@ class ItemJsonViewTests(TestCase):
                     'subtasks': [],
                 },
             )
+
+        with t.subTest('a repeating subtask carries its repeat'):
+            listed = t.source / 'chores.md'
+            listed.write_text(REPEATING_CHORES, encoding='utf-8')
+
+            ret = ItemJsonView(read(t.source, 'ch01ab')).json
+
+            (subtask,) = loads(ret)['subtasks']
+            t.assertEqual(subtask['repeat'], '7d')
 
 
 class ItemViewTests(TestCase):

@@ -439,11 +439,17 @@ class SubtaskJsonViewTests(TestCase):
                     'done': False,
                     'loe': 2,
                     'due': '2026-09-01',
+                    'repeat': None,
                     'tags': ['yard', 'summer'],
                     'description': None,
                     'subtasks': [{'title': 'Buy the lumber'}],
                 },
             )
+
+        with t.subTest('a repeating subtask carries its repeat'):
+            t.node.fields['REPEAT'] = '7d'
+            ret = t.sjv.data
+            t.assertEqual(ret['repeat'], '7d')
 
         with t.subTest('a checklist item carries no field at all'):
             t.sjv.node = TaskNode(
@@ -465,6 +471,7 @@ class SubtaskJsonViewTests(TestCase):
                     'done': True,
                     'loe': None,
                     'due': None,
+                    'repeat': None,
                     'tags': [],
                     'description': None,
                     'subtasks': [],

@@ -32,6 +32,7 @@ btodo view --format json  # the same view as JSON, for agents
 btodo show permit       # one task: its fields, description and subtasks
 btodo add chores 'Renew the parking permit' --due 2026-10-01
 btodo add chores 'Find the old sticker' --parent permit  # a subtask
+btodo add chores 'Check the mail' --parent permit --repeat 7d  # it repeats
 btodo update permit -p 2 --due 2026-10-15  # new field values
 btodo update permit --description 'Bring the old permit.'
 btodo update permit --list errands  # move it, its subtasks with it
@@ -51,6 +52,11 @@ btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 repeat and `--description None` the description
 ([ADR 0028](docs/decisions/0028-update-repeat.md)). A new repeat leaves
 the due date alone and applies from the next completion.
+
+A subtask can repeat as well. Its `done` moves its due date on and
+leaves it open, so its parent stays open too. `done` on the parent
+exits 1 and names the repeating subtask until its repeat is cleared
+([ADR 0029](docs/decisions/0029-subtask-repeat.md)).
 
 `btodo <command> --help` lists the options of each command.
 [SKILL.md](SKILL.md) states the rules and the refusals of each command

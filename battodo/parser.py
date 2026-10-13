@@ -123,6 +123,19 @@ class TaskNode:
         return owned
 
     @property
+    def repeating_subtasks(self) -> list['TaskNode']:
+        """The open tasks below this one that repeat, at any depth.
+
+        In file order. A `[REPEAT:]` with nothing in it is no repeat.
+        """
+        found = []
+        for child in self.children:
+            if child.repeat and not child.done:
+                found.append(child)
+            found.extend(child.repeating_subtasks)
+        return found
+
+    @property
     def description(self) -> str | None:
         """The description lines joined by newlines, or None if none."""
         return '\n'.join(self.description_lines) or None

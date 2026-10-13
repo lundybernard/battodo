@@ -39,6 +39,13 @@ YARD = (
     '- [ ] Rake leaves [P:3] [ID:rk01lv]\n'
     '- [ ] Sweep deck [P:2]\n'
 )
+# A chore whose one open step repeats.
+STEPPED_YARD = (
+    '## Open\n'
+    '- [ ] Clear the yard [P:3] [ID:cy01ab]\n'
+    '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:7d] [ID:ml01ab]\n'
+    '  - [x] Buy a mower [LOE:1]\n'
+)
 
 
 class NullFileSource:
@@ -175,6 +182,25 @@ class CommandInputTests(TestCase):
                 f'- [ ] Mow lawn [ADDED:2026-08-05] [ID:nw01id]\n{listed}\n',
             )
 
+        with t.subTest('--repeat reaches a subtask'):
+            ret = t.run_command(
+                [
+                    'add',
+                    'yard',
+                    'Water the beds',
+                    '--parent',
+                    'rk01lv',
+                    '--repeat',
+                    '7d',
+                ],
+                {},
+            )
+
+            t.assertEqual(
+                ret,
+                f'  - [ ] Water the beds [REPEAT:7d] [ID:nw01id]\n{listed}\n',
+            )
+
         with t.subTest('--attrs and --note reach the event'):
             t.run_command(
                 ['add', 'yard', 'Trim hedge', '--attrs', 'cost=12.50'],
@@ -236,6 +262,37 @@ class CommandInputTests(TestCase):
             )
 
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
+
+        with t.subTest('--date reschedules a repeating subtask from that day'):
+            listed = t.source / 'yard.md'
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            ret = t.run_command(['done', 'ml01ab', '--date', '2026-08-03'], {})
+
+            t.assertEqual(
+                ret,
+                '2026-08-03 | yard | DONE | Clear the yard > Mow the lawn '
+                '[DUE:2026-08-01] [REPEAT:7d]\n',
+            )
+            t.assertEqual(
+                listed.read_text(encoding='utf-8'),
+                STEPPED_YARD.replace('2026-08-01', '2026-08-10'),
+            )
+
+        with t.subTest('a task that a repeating subtask holds open'):
+            listed = t.source / 'yard.md'
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            with t.assertRaises(ValueError) as caught:
+                t.run_command(['done', 'cy01ab'], {})
+
+            t.assertEqual(
+                str(caught.exception),
+                "'Clear the yard' has a repeating subtask, 'Mow the lawn' "
+                '[ID:ml01ab]: remove its repeat first with update ml01ab '
+                '--repeat None',
+            )
+            t.assertEqual(listed.read_text(encoding='utf-8'), STEPPED_YARD)
 
         with t.subTest('--scratch, --attrs and --note reach the event'):
             # The subtests above closed both tasks.
@@ -363,3 +420,25 @@ class CommandInputTests(TestCase):
 
             ret = listed.read_text(encoding='utf-8')
             t.assertEqual(ret, YARD.replace('[P:3]', '[P:5]'))
+
+        with t.subTest('--repeat reaches a subtask'):
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            ret = t.run_command(['update', 'ml01ab', '--repeat', '14d'], {})
+
+            t.assertEqual(
+                ret,
+                '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:14d] '
+                f'[ID:ml01ab]\n{listed}\n',
+            )
+
+        with t.subTest('and with its repeat cleared, the parent closes'):
+            # The clear is the step the refusal of the done names.
+            t.run_command(['update', 'ml01ab', '--repeat', 'None'], {})
+
+            ret = t.run_command(['done', 'cy01ab'], {})
+
+            t.assertEqual(
+                ret, '2026-08-05 | yard | DONE | Clear the yard [P:3]\n'
+            )
+            t.assertEqual(listed.read_text(encoding='utf-8'), '## Open\n')

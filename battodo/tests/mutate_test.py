@@ -2229,11 +2229,73 @@ class CompletionTests(TestCase):
         ret = t.co.path
         t.assertIs(ret, t.task.path)
 
+    @patch.object(Completion, 'refuse_repeating_subtask', autospec=True)
     @patch.object(Completion, 'document', new_callable=PropertyMock)
-    def test_text(t, document: PropertyMock) -> None:
+    def test_text(
+        t,
+        document: PropertyMock,
+        refuse_repeating_subtask: MagicMock,
+    ) -> None:
         document.return_value = MagicMock(spec=['text'])
-        ret = t.co.text
-        t.assertIs(ret, document.return_value.text)
+
+        with t.subTest('the text of the document, once nothing refuses it'):
+            ret = t.co.text
+
+            refuse_repeating_subtask.assert_called_once_with(t.co)
+            t.assertIs(ret, document.return_value.text)
+
+        with t.subTest('a refused completion reads no document'):
+            document.reset_mock()
+            refuse_repeating_subtask.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                _ = t.co.text
+
+            document.assert_not_called()
+
+    @patch.object(TaskNode, 'repeating_subtasks', new_callable=PropertyMock)
+    def test_refuse_repeating_subtask(
+        t,
+        repeating_subtasks: PropertyMock,
+    ) -> None:
+        t.task.node = t.parent
+
+        with t.subTest('a task with no repeating subtask'):
+            # Nothing to refuse: the call returns.
+            repeating_subtasks.return_value = []
+            t.co.refuse_repeating_subtask()
+
+        with t.subTest('the first repeating subtask, by its title and id'):
+            t.child.fields = {'REPEAT': '7d', 'ID': 'zz01ab'}
+            repeating_subtasks.return_value = [t.child, grandchild_node()]
+
+            with t.assertRaises(ValueError) as caught:
+                t.co.refuse_repeating_subtask()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' has a repeating subtask, 'A subtask of it' "
+                '[ID:zz01ab]: remove its repeat first with update zz01ab '
+                '--repeat None',
+            )
+
+        with t.subTest('one with no id, by its title alone'):
+            t.child.fields = {'REPEAT': '7d'}
+
+            with t.assertRaises(ValueError) as caught:
+                t.co.refuse_repeating_subtask()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' has a repeating subtask, 'A subtask of it': "
+                "remove its repeat first with update 'A subtask of it' "
+                '--repeat None',
+            )
+
+        with t.subTest('a scratch, which completes nothing'):
+            # Nothing to refuse: the call returns.
+            t.co.scratched = True
+            t.co.refuse_repeating_subtask()
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
     @patch.object(Completion, 'dropped', new_callable=PropertyMock)
@@ -2293,11 +2355,8 @@ class CompletionTests(TestCase):
             t.assertEqual(ret, {1: {'ID': '9o71lx'}})
 
         with t.subTest('a finished block that goes: nothing'):
-            recurrence.return_value = t.parent
-            rescheduled.return_value = None
-
+            dropped.return_value = {1, 3}
             ret = t.co.stamps
-
             t.assertEqual(ret, {})
 
         with t.subTest('a recurrence: its next due date, its day, its id'):
@@ -2317,38 +2376,38 @@ class CompletionTests(TestCase):
                 },
             )
 
-        with t.subTest('the line of the recurrence, whichever task it is'):
+        with t.subTest('a repeating subtask: its next due date, its id'):
             recurrence.return_value = t.child
-
             ret = t.co.stamps
+            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
 
-            t.assertEqual(
-                ret,
-                {
-                    3: {
-                        'DUE': '2026-08-15',
-                        'ADDED': '2026-08-01',
-                        'ID': 'zz01ab',
-                    }
-                },
-            )
-
+    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     @patch.object(Completion, 'root_done', new_callable=PropertyMock)
     def test_checked_off(
         t,
         root_done: PropertyMock,
         ancestries: PropertyMock,
+        recurrence: PropertyMock,
     ) -> None:
         ancestries.return_value = [
             ancestry_of(t.parent, t.child),
             ancestry_of(t.parent),
         ]
+        recurrence.return_value = None
 
         with t.subTest('a block that stays: each completed task'):
             root_done.return_value = False
             ret = t.co.checked_off
             t.assertEqual(ret, [3, 1])
+
+        with t.subTest('a recurrence: none, as it stays open'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            recurrence.return_value = t.child
+
+            ret = t.co.checked_off
+
+            t.assertEqual(ret, [])
 
         with t.subTest('a finished block: none, as the block goes'):
             root_done.return_value = True
@@ -2357,19 +2416,22 @@ class CompletionTests(TestCase):
 
         with t.subTest('a scratch: none, as its block goes'):
             root_done.return_value = False
+            recurrence.return_value = None
             t.co.scratched = True
 
             ret = t.co.checked_off
 
             t.assertEqual(ret, [])
 
-    @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
+    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
     @patch.object(Completion, 'root_done', new_callable=PropertyMock)
     def test_dropped(
         t,
         root_done: PropertyMock,
-        rescheduled: PropertyMock,
+        recurrence: PropertyMock,
     ) -> None:
+        recurrence.return_value = None
+
         with t.subTest('a block that stays: nothing'):
             root_done.return_value = False
             ret = t.co.dropped
@@ -2377,21 +2439,26 @@ class CompletionTests(TestCase):
 
         with t.subTest('a finished block: every line of it'):
             root_done.return_value = True
-            rescheduled.return_value = None
-
             ret = t.co.dropped
-
             t.assertEqual(ret, {1, 2, 3, 4})
 
         with t.subTest('a recurrence: its children, not it or its notes'):
-            rescheduled.return_value = date(2026, 8, 15)
+            recurrence.return_value = t.parent
+            ret = t.co.dropped
+            t.assertEqual(ret, {3, 4})
+
+        with t.subTest('a repeating subtask: its children'):
+            root_done.return_value = False
+            step = child_node()
+            step.children = [grandchild_node()]
+            recurrence.return_value = step
 
             ret = t.co.dropped
 
-            t.assertEqual(ret, {3, 4})
+            t.assertEqual(ret, {5})
 
         with t.subTest('a scratch: the block of the named task'):
-            root_done.return_value = False
+            recurrence.return_value = None
             t.co.scratched = True
 
             ret = t.co.dropped
@@ -2481,20 +2548,34 @@ class CompletionTests(TestCase):
 
             t.assertIsNone(ret)
 
-    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
-    def test_recurrence(t, root_done: PropertyMock) -> None:
-        with t.subTest('the top-level task, once the completion finishes it'):
-            root_done.return_value = True
+    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
+    def test_recurrence(t, ancestries: PropertyMock) -> None:
+        with t.subTest('the last task finished, where it repeats'):
+            t.child.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+
             ret = t.co.recurrence
+
+            t.assertIs(ret, t.child)
+
+        with t.subTest('the top-level task, where the cascade reaches it'):
+            t.parent.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [
+                ancestry_of(t.parent, t.child),
+                ancestry_of(t.parent),
+            ]
+
+            ret = t.co.recurrence
+
             t.assertIs(ret, t.parent)
 
-        with t.subTest('none while the top-level task stays open'):
-            root_done.return_value = False
+        with t.subTest('none where the last task finished does not repeat'):
+            t.parent.fields = {'P': '4'}
             ret = t.co.recurrence
             t.assertIsNone(ret)
 
         with t.subTest('none for a scratch, which reschedules nothing'):
-            root_done.return_value = True
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
             t.co.scratched = True
 
             ret = t.co.recurrence
@@ -2540,6 +2621,22 @@ class CompletionTests(TestCase):
             t.co.scratched = True
             ret = t.co.ancestries
             t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('a repeating task finishes no parent'):
+            t.co.scratched = False
+            below.fields = {'REPEAT': '7d'}
+            ret = t.co.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('and a cascade ends at a repeating parent'):
+            below.fields = {'LOE': '1'}
+            t.child.fields = {'REPEAT': '7d'}
+
+            ret = t.co.ancestries
+
+            t.assertEqual(
+                ret, [(t.parent, t.child, below), (t.parent, t.child)]
+            )
 
     @patch(f'{SRC}.LogEntry', autospec=True)
     @patch.object(Completion, 'completions', new_callable=PropertyMock)
@@ -3523,9 +3620,14 @@ class SuppliedFieldsTests(TestCase):
             )
 
     def test_refuse_root_fields(t) -> None:
-        with t.subTest('the fields a subtask carries'):
+        with t.subTest('the fields a subtask carries, a repeat among them'):
             # Nothing to refuse: the call returns.
-            t.sf.fields = {'LOE': '2', 'DUE': '2026-09-01', 'TAGS': 'a-tag'}
+            t.sf.fields = {
+                'LOE': '2',
+                'DUE': '2026-09-01',
+                'REPEAT': '7d',
+                'TAGS': 'a-tag',
+            }
             t.sf.refuse_root_fields()
 
         refused = {
@@ -3533,11 +3635,7 @@ class SuppliedFieldsTests(TestCase):
                 {'P': '3'},
                 'P belongs to the top-level task, not to a subtask',
             ),
-            'a recurrence, which the top-level task owns': (
-                {'REPEAT': '7d'},
-                'REPEAT belongs to the top-level task, not to a subtask',
-            ),
-            'both: the priority first': (
+            'a priority beside a repeat': (
                 {'REPEAT': '7d', 'P': '3'},
                 'P belongs to the top-level task, not to a subtask',
             ),
@@ -3810,6 +3908,21 @@ class TaskCompletionTests(TestCase):
                     'done': [False, True],
                     'DUE': ['2026-08-05', '2026-08-15'],
                     'ADDED': ['2026-07-06', '2026-08-01'],
+                },
+            )
+
+        with t.subTest('a rescheduled subtask records its new due date'):
+            child = child_node()
+            child.fields['DUE'] = '2026-08-05'
+            t.tc.ancestry = ancestry_of(t.node, child, path='a path')
+
+            ret = t.tc.payload
+
+            t.assertEqual(
+                ret['delta'],
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
                 },
             )
 

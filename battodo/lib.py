@@ -465,8 +465,8 @@ def complete_item(
         read. Raised before anything is written.
     ValueError
         The attributes do not read, a checklist item is given
-        attributes, or `date` is not an ISO date. Raised before
-        anything is written.
+        attributes, `date` is not an ISO date, or an open subtask below
+        the task repeats. Raised before anything is written.
     """
     checked = SuppliedAttributes(attrs, note).checked
     task = Task.from_config(conf, now, selector=selector, date=date)
