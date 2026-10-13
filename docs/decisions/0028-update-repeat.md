@@ -108,3 +108,10 @@ in the ranking, and the next completion is where the rule applies.
 - A clear form for `--due` or `--tags` is a follow-up, and it takes
   `None`.
 - `--loe` stays out of `update`; it is a separate feature.
+
+## Amendment — 2026-10-13
+
+[ADR 0029](0029-subtask-repeat.md) closes the subtask question. A
+subtask takes `update --repeat` and `add --repeat`, and the rest of
+this decision applies to it unchanged. A repeating subtask keeps its
+parent open, and `done` refuses the parent until the repeat is removed.
