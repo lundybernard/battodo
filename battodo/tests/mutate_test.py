@@ -2229,11 +2229,73 @@ class CompletionTests(TestCase):
         ret = t.co.path
         t.assertIs(ret, t.task.path)
 
+    @patch.object(Completion, 'refuse_repeating_subtask', autospec=True)
     @patch.object(Completion, 'document', new_callable=PropertyMock)
-    def test_text(t, document: PropertyMock) -> None:
+    def test_text(
+        t,
+        document: PropertyMock,
+        refuse_repeating_subtask: MagicMock,
+    ) -> None:
         document.return_value = MagicMock(spec=['text'])
-        ret = t.co.text
-        t.assertIs(ret, document.return_value.text)
+
+        with t.subTest('the text of the document, once nothing refuses it'):
+            ret = t.co.text
+
+            refuse_repeating_subtask.assert_called_once_with(t.co)
+            t.assertIs(ret, document.return_value.text)
+
+        with t.subTest('a refused completion reads no document'):
+            document.reset_mock()
+            refuse_repeating_subtask.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                _ = t.co.text
+
+            document.assert_not_called()
+
+    @patch.object(TaskNode, 'repeating_subtasks', new_callable=PropertyMock)
+    def test_refuse_repeating_subtask(
+        t,
+        repeating_subtasks: PropertyMock,
+    ) -> None:
+        t.task.node = t.parent
+
+        with t.subTest('a task with no repeating subtask'):
+            # Nothing to refuse: the call returns.
+            repeating_subtasks.return_value = []
+            t.co.refuse_repeating_subtask()
+
+        with t.subTest('the first repeating subtask, by its title and id'):
+            t.child.fields = {'REPEAT': '7d', 'ID': 'zz01ab'}
+            repeating_subtasks.return_value = [t.child, grandchild_node()]
+
+            with t.assertRaises(ValueError) as caught:
+                t.co.refuse_repeating_subtask()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' has a repeating subtask, 'A subtask of it' "
+                '[ID:zz01ab]: remove its repeat first with update zz01ab '
+                '--repeat None',
+            )
+
+        with t.subTest('one with no id, by its title alone'):
+            t.child.fields = {'REPEAT': '7d'}
+
+            with t.assertRaises(ValueError) as caught:
+                t.co.refuse_repeating_subtask()
+
+            t.assertEqual(
+                str(caught.exception),
+                "'A task' has a repeating subtask, 'A subtask of it': "
+                "remove its repeat first with update 'A subtask of it' "
+                '--repeat None',
+            )
+
+        with t.subTest('a scratch, which completes nothing'):
+            # Nothing to refuse: the call returns.
+            t.co.scratched = True
+            t.co.refuse_repeating_subtask()
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
     @patch.object(Completion, 'dropped', new_callable=PropertyMock)

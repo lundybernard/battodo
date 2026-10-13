@@ -1582,6 +1582,69 @@ class CompletionTests(TestCase):
             )
             t.assertEqual(ret, without(rescheduled, 5))
 
+        with t.subTest('a task that a repeating subtask holds open'):
+            completed = completion_of(a_stepped_source(t), 'ch01ab')
+
+            with t.assertRaises(ValueError) as refused:
+                _ = completed.text
+
+            t.assertEqual(
+                str(refused.exception),
+                "'A chore' has a repeating subtask, 'A repeating step' "
+                '[ID:rs01ab]: remove its repeat first with update rs01ab '
+                '--repeat None',
+            )
+
+        with t.subTest('and one that a deeper repeating subtask holds'):
+            completed = completion_of(a_stepped_source(t), 'cd01ab')
+
+            with t.assertRaises(ValueError) as refused:
+                _ = completed.text
+
+            t.assertEqual(
+                str(refused.exception),
+                "'A chore with a deep step' has a repeating subtask, "
+                "'A repeating step below' [ID:rb01ab]: remove its repeat "
+                'first with update rb01ab --repeat None',
+            )
+
+        with t.subTest('a subtask that a repeating subtask holds open'):
+            completed = completion_of(a_stepped_source(t), 'pa01ab')
+
+            with t.assertRaises(ValueError) as refused:
+                _ = completed.text
+
+            t.assertEqual(
+                str(refused.exception),
+                "'A plain step above' has a repeating subtask, "
+                "'A repeating step below' [ID:rb01ab]: remove its repeat "
+                'first with update rb01ab --repeat None',
+            )
+
+        with t.subTest('a recurring task, and a subtask with no id'):
+            held = t.source / 'a-list.md'
+            held.write_text(
+                '## Open\n- [ ] A recurring chore [REPEAT:7d]\n'
+                '  - [ ] A hand-written repeating step [REPEAT:3d]\n',
+                encoding='utf-8',
+            )
+            completed = completion_of(t.source, 'A recurring chore')
+
+            with t.assertRaises(ValueError) as refused:
+                _ = completed.text
+
+            t.assertEqual(
+                str(refused.exception),
+                "'A recurring chore' has a repeating subtask, "
+                "'A hand-written repeating step': remove its repeat first "
+                "with update 'A hand-written repeating step' --repeat None",
+            )
+
+        with t.subTest('a scratch drops a block that a repeat holds open'):
+            scratched = scratch_of(a_stepped_source(t), 'ch01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(STEPPED_LIST, 1, 2, 3, 4, 5))
+
         with t.subTest('a scratch drops the task, its note and its children'):
             scratched = scratch_of(a_source(t), '9o71lx')
             ret = scratched.text

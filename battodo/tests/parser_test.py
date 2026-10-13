@@ -164,6 +164,47 @@ class TaskNodeTests(TestCase):
             ret = t.tk.is_checklist_item
             t.assertFalse(ret)
 
+    def test_repeating_subtasks(t) -> None:
+        step = TaskNode(
+            raw_index=3,
+            indent=2,
+            done=False,
+            title='A repeating step',
+            fields={'REPEAT': '7d'},
+        )
+        below = TaskNode(
+            raw_index=5,
+            indent=4,
+            done=False,
+            title='A repeating step below',
+            fields={'REPEAT': '3d'},
+        )
+        plain = TaskNode(
+            raw_index=4,
+            indent=2,
+            done=False,
+            title='A plain step',
+            fields={'LOE': '1'},
+            children=[below],
+        )
+
+        with t.subTest('a task with no subtask has none'):
+            ret = t.tk.repeating_subtasks
+            t.assertEqual(ret, [])
+
+        with t.subTest('each open one, at any depth, in file order'):
+            t.tk.children = [step, plain]
+            ret = t.tk.repeating_subtasks
+            t.assertEqual(ret, [step, below])
+
+        with t.subTest('a closed one, or an empty repeat, is none'):
+            step.done = True
+            below.fields = {'REPEAT': ''}
+
+            ret = t.tk.repeating_subtasks
+
+            t.assertEqual(ret, [])
+
     def test_block(t) -> None:
         with t.subTest('a task alone owns its own line'):
             ret = t.tk.block

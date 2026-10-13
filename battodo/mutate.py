@@ -1332,6 +1332,18 @@ class Completion:
         """
         return self.document.text
 
+    def refuse_repeating_subtask(self) -> None:
+        """Refuse a completion that a repeating subtask holds open.
+
+        Raises
+        ------
+        ValueError
+            An open subtask below the task, at any depth, repeats. The
+            message names the first and the update that clears its
+            repeat. A scratch completes nothing, so none is refused.
+        """
+        raise NotImplementedError
+
     @property
     def document(self) -> TodoDocument:
         """The task's list: lines stamped, checked off, or dropped."""

@@ -260,6 +260,21 @@ class CommandInputTests(TestCase):
                 STEPPED_YARD.replace('2026-08-01', '2026-08-10'),
             )
 
+        with t.subTest('a task that a repeating subtask holds open'):
+            listed = t.source / 'yard.md'
+            listed.write_text(STEPPED_YARD, encoding='utf-8')
+
+            with t.assertRaises(ValueError) as caught:
+                t.run_command(['done', 'cy01ab'], {})
+
+            t.assertEqual(
+                str(caught.exception),
+                "'Clear the yard' has a repeating subtask, 'Mow the lawn' "
+                '[ID:ml01ab]: remove its repeat first with update ml01ab '
+                '--repeat None',
+            )
+            t.assertEqual(listed.read_text(encoding='utf-8'), STEPPED_YARD)
+
         with t.subTest('--scratch, --attrs and --note reach the event'):
             # The subtests above closed both tasks.
             (t.source / 'yard.md').write_text(YARD, encoding='utf-8')
