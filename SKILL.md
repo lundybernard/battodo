@@ -23,7 +23,12 @@ directory to load it.
   else. Branch on the exit code.
 - Rank is computed at read time from priority, age and due date.
   Nothing is written to keep a rank current, and there is no `bump`
-  command.
+  command. A due date scales the priority: a task a month or more from
+  its due date ranks at half, and the factor rises through the due date
+  and past it.
+- A view shows every open task, a recurring task before its due date
+  included. To mark a task as wanted at once, give it today's date as
+  `--due`. `DUE` takes a date only.
 - Name a task to a human by its title. The `[ID:]` value is a random
   key for commands and for an agent's own notes; it means nothing to
   the reader. Shorten a long title; add the list name when it helps.
@@ -227,6 +232,11 @@ top = "3"
 
 The table sits under the environment the file names.
 [README.md](README.md#configuration) holds the full file skeleton.
+
+The due-date curve is `view.rank_due_curve`, or
+`BATTODO_VIEW_RANK_DUE_CURVE`: comma-separated `days:factor` points, a
+negative day before the due date. A curve that does not decode makes
+`view` and `show` exit 1 and name the bad point on stderr.
 
 An unquoted `top = 3` reaches the decoder as a TOML integer. `btodo
 view` then exits 1 and prints `'int' object has no attribute
