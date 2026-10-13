@@ -35,6 +35,8 @@ btodo add chores 'Find the old sticker' --parent permit  # a subtask
 btodo update permit -p 2 --due 2026-10-15  # new field values
 btodo update permit --description 'Bring the old permit.'
 btodo update permit --list errands  # move it, its subtasks with it
+btodo update permit --repeat 90d  # set or change its repeat
+btodo update permit --repeat None  # and clear it again
 btodo note permit 'Called the office'  # a note; the task does not change
 btodo done permit       # complete the task and log it to completed.md
 btodo done permit --date 2026-10-01  # log it under the day it finished
@@ -44,6 +46,11 @@ btodo history permit    # completions, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
+
+`None` is the clear token of `update`: `--repeat None` removes the
+repeat and `--description None` the description
+([ADR 0028](docs/decisions/0028-update-repeat.md)). A new repeat leaves
+the due date alone and applies from the next completion.
 
 `btodo <command> --help` lists the options of each command.
 [SKILL.md](SKILL.md) states the rules and the refusals of each command
