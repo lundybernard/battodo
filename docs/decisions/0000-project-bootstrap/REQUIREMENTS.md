@@ -35,6 +35,10 @@ Completed and future-recurring items are hidden.
 > Sort criteria amended by [ADR 0005](0005-computed-rank.md): computed
 > rank desc, then nearest DUE. Output parity with `view_todos.py` no
 > longer applies — the order is intentionally different.
+>
+> Amended 2026-10-13 by [ADR 0026](../0026-due-date-factor.md): the
+> view shows every open task. The due-date factor replaces the
+> suppression of future-recurring items.
 
 ### R4 — Daily bump
 Once per day, every open item with `DUE <= today` or no `DUE` gets
