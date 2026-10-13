@@ -16,10 +16,10 @@ parent by id.
 `Completion` follows SCHEMA.md's completion rules: it logs the
 ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task instead of removing
-it. `Scratch` abandons a task: the block goes, the log records it as
-SCRATCHED, and nothing cascades or reschedules. `Update` sets the
-fields and the title it is given and leaves the rest of the list, or
-moves a top-level task and its block to another list.
+it. A scratched `Completion` abandons a task: the block goes, the log
+records it as SCRATCHED, and nothing cascades or reschedules. `Update`
+sets the fields and the title it is given and leaves the rest of the
+list, or moves a top-level task and its block to another list.
 `Reopen` brings a closed task back open, named by its stream in the
 journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
@@ -36,7 +36,7 @@ from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
 from pathlib import Path
-from typing import Any, NamedTuple, Protocol
+from typing import Any, NamedTuple
 
 from .history import StreamSelection, TaskStream
 from .journal import (
@@ -1490,153 +1490,6 @@ class Completion:
         ]  # fmt: skip
 
 
-class Scratch:
-    """The scratch of a task: its block dropped without completing it.
-
-    The whole block goes -- the task, its notes, its children -- and
-    nothing cascades: abandoning a child says nothing about its parent.
-    btodo cannot tell a task accepted in an earlier session from one
-    proposed in this one, so every scratch is logged (SCHEMA.md).
-    """
-
-    def __init__(
-        self,
-        task: Task,
-        attrs: dict[str, str] | None = None,
-    ) -> None:
-        self.task = task
-        self.attrs = attrs
-
-    def write(self) -> None:
-        """Write the list, its log records and its events.
-
-        Every value is read before the first write, so a refused write
-        writes nothing.
-        """
-        text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
-
-    @property
-    def source(self) -> Path:
-        """The source directory of the task."""
-        return self.task.source
-
-    @property
-    def path(self) -> Path:
-        """The list file that holds the task."""
-        return self.task.path
-
-    @property
-    def text(self) -> str:
-        """The list without the task's block.
-
-        Raises
-        ------
-        SelectionError
-            The selector does not name exactly one open task.
-        """
-        return self.document.text
-
-    @property
-    def document(self) -> TodoDocument:
-        """The task's list: its stream stamped, its block dropped.
-
-        A checklist item cannot hold an id, so its event belongs to the
-        stream of an ancestor, and that ancestor's line carries the id.
-        """
-        doc = TodoDocument(self.task.doc.text)
-        if self.stream is not self.node:
-            doc.set_field(self.stream.raw_index, 'ID', self.stream_id)
-        doc.drop(self.node.block)
-        return doc
-
-    @property
-    def stream(self) -> TaskNode:
-        """The task whose stream records the scratch."""
-        return self.ancestry.stream
-
-    @property
-    def ancestry(self) -> Ancestry:
-        """The task and every task above it."""
-        return Ancestry(self.task.ancestry)
-
-    @property
-    def node(self) -> TaskNode:
-        """The task as the parser reads it."""
-        return self.task.node
-
-    @cached_property
-    def stream_id(self) -> str:
-        """The stream task's id, or a new one.
-
-        Cached: a new id is drawn at random, so every read names one.
-        """
-        return self.stream.task_id or new_task_id()
-
-    @property
-    def entries(self) -> list[str]:
-        """The one completed-log record, or none for a checklist item."""
-        if self.node.is_checklist_item:
-            return []
-        return [LogEntry(self.path, self).text]
-
-    @property
-    def day(self) -> date:
-        """The day the scratch is logged under."""
-        return self.task.today
-
-    @property
-    def status(self) -> str:
-        """The status the log records a scratch under."""
-        return SCRATCHED_STATUS
-
-    @property
-    def events(self) -> list['Event']:
-        """One `TaskScratched`, on the stream task's stream.
-
-        The stream of a checklist item is an ancestor's, so its payload
-        marks it as a checklist item. The payload carries the
-        attributes.
-
-        Raises
-        ------
-        ValueError
-            The task is a checklist item and attributes are given.
-        """
-        self.node.refuse_attributes(self.attrs)
-        payload: dict[str, Any] = {
-            'delta': {'removed': [False, True]},
-            'snapshot': self.node.listed_snapshot(self.path.stem),
-            'ancestry': self.ancestry.path,
-        }
-        if self.node.is_checklist_item:
-            payload['checklist_item'] = True
-        if self.attrs:
-            payload['attrs'] = self.attrs
-        event = Event(SCRATCHED_EVENT, f'task/{self.stream_id}', payload)
-        return [self.stamp, event] if self.stamped else [event]
-
-    @property
-    def stamp(self) -> 'Event':
-        """The `TaskUpdated` that records the stream task's new id."""
-        return IdAssignment(self.stream, self.stream_id, self.path.stem).event
-
-    @property
-    def stamped(self) -> bool:
-        """Whether the stream task of a checklist item is given an id.
-
-        A task that is its own stream loses its line, so no id stays.
-        """
-        return self.stream is not self.node and not self.stream.task_id
-
-
 class Annotation:
     """The note on an open task: its attributes on an event of its own.
 
@@ -2391,7 +2244,7 @@ class LogEntry:
     write, so the log renders what the journal records.
     """
 
-    def __init__(self, path: Path, logged: 'LogSource') -> None:
+    def __init__(self, path: Path, logged: TaskCompletion) -> None:
         self.path = path
         self.logged = logged
 
@@ -2443,22 +2296,6 @@ class LogEntry:
         if not attrs:
             return ''
         return f'{ATTRIBUTES_MARK}{dumps(attrs)}]'
-
-
-class LogSource(Protocol):
-    """A write to one task, as its completed-log record reads it."""
-
-    @property
-    def ancestry(self) -> Ancestry: ...
-
-    @property
-    def day(self) -> date: ...
-
-    @property
-    def status(self) -> str: ...
-
-    @property
-    def attrs(self) -> dict[str, str] | None: ...
 
 
 class ListBackfill:
