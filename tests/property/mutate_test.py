@@ -223,29 +223,20 @@ class UpdateItemTests(TestCase):
         text, _ = drawn
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
-        options = data.draw(supplied_options(UPDATE_OPTIONS))
-        title = data.draw(st.one_of(st.none(), supplied_titles()))
-        description = data.draw(supplied_descriptions())
+        found = outcome(text, ancestries, selector)
+        drawn_inputs = data.draw(update_inputs())
+        named = data.draw(with_held(drawn_inputs, held_inputs(found)))
         list_name = data.draw(st.one_of(st.none(), list_names()))
         with_subtasks = data.draw(either(st.just(False), st.booleans()))
-        titled = options if title is None else {**options, 'title': title}
-        named = described(titled, description)
         given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
-        found = outcome(text, ancestries, selector)
-        if 'repeat' in options and data.draw(st.booleans()):
-            # Half the repeats name the one the task carries, or a clear
-            # of a task with none: no change.
-            options = {**options, 'repeat': carried_repeat(found)}
-            titled = options if title is None else {**options, 'title': title}
-            named = described(titled, description)
         expected = foreseen(
             updated,
             before,
             found,
-            title,
-            options,
-            description,
+            named.get('title'),
+            options_of(named),
+            named.get('description'),
             given,
             list_name,
             selector,
@@ -316,22 +307,19 @@ class UpdateItemTests(TestCase):
         tasks = TodoDocument(text).tasks
         assume(tasks)
         closed = data.draw(st.sampled_from(tasks))
-        options = data.draw(supplied_options(UPDATE_OPTIONS))
-        title = data.draw(st.one_of(st.none(), supplied_titles()))
-        description = data.draw(supplied_descriptions())
+        drawn_inputs = data.draw(update_inputs())
+        named = data.draw(with_held(drawn_inputs, held_inputs(closed)))
         list_name = data.draw(st.one_of(st.none(), list_names()))
         with_subtasks = data.draw(st.booleans())
-        titled = options if title is None else {**options, 'title': title}
-        named = described(titled, description)
         given = data.draw(supplied_attributes())
         before = closed_source(text, closed)
         expected = foreseen(
             reopened,
             before,
             closed,
-            title,
-            options,
-            description,
+            named.get('title'),
+            options_of(named),
+            named.get('description'),
             given,
             list_name,
             with_subtasks,
@@ -600,6 +588,77 @@ def supplied_options(
         for field, option in table.items()
     }
     return st.fixed_dictionaries(drawn).map(given_options)
+
+
+def update_inputs() -> st.SearchStrategy[dict[str, str]]:
+    """The options, the title and the description an update names.
+
+    Each is left off or given a drawn value.
+    """
+    return st.builds(
+        described,
+        st.builds(
+            titled,
+            supplied_options(UPDATE_OPTIONS),
+            st.one_of(st.none(), supplied_titles()),
+        ),
+        supplied_descriptions(),
+    )
+
+
+def titled(options: dict[str, str], title: str | None) -> dict[str, str]:
+    """The options, and the title where one is supplied."""
+    if title is None:
+        return options
+    return {**options, 'title': title}
+
+
+def with_held(
+    named: dict[str, str],
+    held: dict[str, str],
+) -> st.SearchStrategy[dict[str, str]]:
+    """The named inputs, each the one the task holds in half the draws.
+
+    An input the task holds is no change.
+    """
+    drawn = {
+        name: either(st.just(value), st.just(held.get(name, value)))
+        for name, value in named.items()
+    }
+    return st.fixed_dictionaries(drawn)
+
+
+def held_inputs(found: Answer | TaskNode) -> dict[str, str]:
+    """The inputs an update names to leave the task as it is.
+
+    A field the task does not carry is held by no option, except the
+    repeat, which a clear leaves as it is. A task with no description
+    holds the empty one. A selector that reached no task holds only the
+    clear of a repeat.
+    """
+    if isinstance(found, str):
+        return {'repeat': 'None'}
+    task = found if isinstance(found, TaskNode) else found[2][-1]
+    held = {
+        option: task.fields[field]
+        for field, option in UPDATE_OPTIONS.items()
+            if field in task.fields
+    }  # fmt: skip
+    return {
+        **held,
+        'repeat': task.repeat or 'None',
+        'title': task.title,
+        'description': task.description or '',
+    }
+
+
+def options_of(named: dict[str, str]) -> dict[str, str]:
+    """The options among the named inputs, without title or description."""
+    return {
+        name: value
+        for name, value in named.items()
+            if name in UPDATE_OPTIONS.values()
+    }  # fmt: skip
 
 
 def supplied_descriptions() -> st.SearchStrategy[str | None]:
@@ -944,17 +1003,6 @@ def updated(
     event = Appended('TaskUpdated', f'task/{task_id}', payload, name)
     after = Source(lists, before.log, journal([event]))
     return Outcome(f'{entry}\n{SOURCE}/{name}', after)
-
-
-def carried_repeat(found: Answer) -> str:
-    """The repeat of the task a selector reached, or `None` if it has none.
-
-    A selector that reached no task carries none.
-    """
-    if isinstance(found, str):
-        return 'None'
-    _, _, ancestry = found
-    return ancestry[-1].repeat or 'None'
 
 
 def reached_task(
