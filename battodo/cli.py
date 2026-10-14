@@ -398,11 +398,13 @@ class Commands:
 
     @staticmethod
     def show(conf, args):
-        print(get_item(conf, datetime.now(TZ), selector=args.selector))
+        now = datetime.now(TZ)
+        print(get_item(conf, now, selector=args.selector))
 
     @staticmethod
     def history(conf, args):
-        print(get_history(conf, datetime.now(TZ), selector=args.selector))
+        now = datetime.now(TZ)
+        print(get_history(conf, now, selector=args.selector))
 
     @staticmethod
     def update(conf, args):
@@ -452,15 +454,18 @@ class Commands:
 
     @staticmethod
     def backfill(conf, args):
-        print(backfill_items(conf, datetime.now(TZ)))
+        now = datetime.now(TZ)
+        print(backfill_items(conf, now))
 
     @staticmethod
     def view(conf, args):
-        print(get_view(conf, datetime.now(TZ), show_all=args.show_all))
+        now = datetime.now(TZ)
+        print(get_view(conf, now, show_all=args.show_all))
 
     @staticmethod
     def completed(conf, args):
-        print(get_completed(conf, datetime.now(TZ), period=args.period))
+        now = datetime.now(TZ)
+        print(get_completed(conf, now, period=args.period))
 
     @staticmethod
     def set_log_level(conf):

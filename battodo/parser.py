@@ -93,7 +93,13 @@ class TaskNode:
     @property
     def tags(self) -> list[str]:
         raw = self.fields.get('TAGS')
-        return [tag for tag in raw.split(',') if tag] if raw else []
+        if not raw:
+            return []
+        return [
+            tag
+            for tag in raw.split(',')
+                if tag
+        ]  # fmt: skip
 
     @property
     def is_subtask(self) -> bool:
@@ -438,13 +444,14 @@ class TodoDocument:
             for index, line in enumerate(self.lines)
                 if line.strip() == OPEN_HEADING
         )  # fmt: skip
+        stop = len(self.lines)
         end = next(
             (
                 index
-                for index in range(start + 1, len(self.lines))
+                for index in range(start + 1, stop)
                     if self.lines[index].strip().startswith('## ')
             ),
-            len(self.lines),
+            stop,
         )  # fmt: skip
         # `start` is itself non-blank, so an empty section appends
         # directly under the heading rather than falling off the front

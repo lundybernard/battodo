@@ -966,7 +966,11 @@ class Reopen:
         SelectionError
             The selector names no closed task either.
         """
-        closed = [stream for stream in self.streams if stream.closed]
+        closed = [
+            stream
+            for stream in self.streams
+                if stream.closed
+        ]  # fmt: skip
         selection = StreamSelection(closed, self.task.selector)
         if not selection.candidates:
             self.refuse_checklist_item()
@@ -1160,7 +1164,11 @@ class Reopen:
 
         With `with_subtasks`, each closed subtask below the task follows.
         """
-        opened = [task for task in self.ancestry if task.done]
+        opened = [
+            task
+            for task in self.ancestry
+                if task.done
+        ]  # fmt: skip
         if self.with_subtasks:
             opened.extend(self.subtasks)
         return opened

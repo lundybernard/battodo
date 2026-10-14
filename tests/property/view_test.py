@@ -228,7 +228,11 @@ class WrittenList:
     @cached_property
     def open_tasks(self) -> list[TaskNode]:
         """The open top-level tasks, whatever their due date."""
-        return [task for task in self.tasks if not task.done]
+        return [
+            task
+            for task in self.tasks
+                if not task.done
+        ]  # fmt: skip
 
     @cached_property
     def tasks(self) -> list[TaskNode]:

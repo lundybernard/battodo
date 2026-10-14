@@ -192,8 +192,8 @@ class Selection:
         return [
             Category(todo.category, todo.rows, self.limit)
             for todo in self.lists
-            if self.shows(todo) and todo.rows
-        ]
+                if self.shows(todo) and todo.rows
+        ]  # fmt: skip
 
 
 class TodoList:
@@ -307,7 +307,11 @@ class Row:
     @cached_property
     def children(self) -> list[TaskNode]:
         """The task's incomplete children: subtasks and checklist items."""
-        return [child for child in self.task.children if not child.done]
+        return [
+            child
+            for child in self.task.children
+                if not child.done
+        ]  # fmt: skip
 
     @cached_property
     def cells(self) -> tuple[str, ...]:
