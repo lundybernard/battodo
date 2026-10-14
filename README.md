@@ -43,7 +43,7 @@ btodo done permit       # complete the task and log it to completed.md
 btodo done permit --date 2026-10-01  # log it under the day it finished
 btodo done permit --scratch --note 'Moved'  # log it as SCRATCHED
 btodo update 3usdig --due 2026-11-01  # reopen a closed task by its id
-btodo history permit    # completions, reopens and attributes, newest first
+btodo history permit    # closes, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
@@ -167,8 +167,8 @@ move as the list the task left and the list it joined.
 
 ### History of a task
 
-`history` lists the completions and reopens of one task, and every
-other event that carries attributes, from the journal
+`history` lists the completions, scratches and reopens of one task,
+and every other event that carries attributes, from the journal
 ([ADR 0022](docs/decisions/0019-event-attributes/0022-history-command.md)).
 
 ```bash
@@ -199,7 +199,8 @@ and on one day the later event in the journal comes first. A completion
 falls on the day it is for, and any other event on the local day it was
 recorded.
 Each attribute follows on a line of its own, in recorded order. The
-completion of a checklist item reads `TaskCompleted (checklist item)`.
+close of a checklist item reads `TaskCompleted (checklist item)` or
+`TaskScratched (checklist item)`.
 `--format json` gives the same document. A completion made by hand
 edit writes no event, so `history` does not list it.
 
