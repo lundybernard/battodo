@@ -916,11 +916,12 @@ def updated(
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A repeat of None clears the repeat, and a repeat
-    that leaves the task as it was is no change. A task with no id is
-    given one. The event carries the attributes. A top-level task bound
-    for another list takes its whole block there, last in the open
-    section. An open task refuses the subtasks of a reopen.
+    one clears them. A repeat of None clears the repeat. A field value,
+    a title or a description that the task holds is no change, and so is
+    a clear of a field it does not carry. A task with no id is given one.
+    The event carries the attributes. A top-level task bound for another
+    list takes its whole block there, last in the open section. An open
+    task refuses the subtasks of a reopen.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
@@ -934,37 +935,34 @@ def updated(
             f'{selector!r} names an open task: --with-subtasks reopens a '
             'closed task and its subtasks'
         )
-    changes = dict(fields)
-    if 'REPEAT' in fields:
-        # The task is read to tell whether the repeat changes it.
+    # Each named input is read, then the task, to tell whether the input
+    # changes it.
+    values = changed(fields)
+    if values:
         _, ancestry = reached_task(found, list_name, fields)
-        stored = ancestry[-1].fields.get('REPEAT') or None
-        repeat = None if fields['REPEAT'] == 'None' else fields['REPEAT']
-        if repeat == stored:
-            del changes['REPEAT']
-    if not changes and title is None and description is None:
-        # The list counts only where it moves the task.
-        file = None if list_name is None else list_file(before, list_name)
-        if file is not None:
-            reached(found)
-        if file in (None, LIST_FILE):
-            raise ValueError(
-                'nothing to update: name a field, a title, a description '
-                'or a list'
-            )
-    # A field that is no change is not written.
-    values = {
-        field: value
-        for field, value in changed(fields).items()
-            if field in changes
-    }  # fmt: skip
+        values = unheld(values, ancestry[-1])
+    if title is not None:
+        refuse_line_break(title)
+        _, ancestry = reached_task(found, list_name, fields)
+        title = None if title.strip() == ancestry[-1].title else title
+    lines = updated_lines(description)
+    if lines is not None:
+        _, ancestry = reached_task(found, list_name, fields)
+        held = ancestry[-1].description_lines
+        lines = None if lines == held else lines
+    # The list counts only where it moves the task.
+    file = None if list_name is None else list_file(before, list_name)
+    if file is not None:
+        reached(found)
+    moves = file not in (None, LIST_FILE)
+    if not values and title is None and lines is None and not moves:
+        raise ValueError(
+            'nothing to update: name a field, a title, a description or a list'
+        )
     text, ancestry = reached_task(found, list_name, fields)
     node = ancestry[-1]
     nested = len(ancestry) > 1
-    if title is not None:
-        refuse_line_break(title)
-    lines = updated_lines(description)
-    name = LIST_FILE if list_name is None else list_file(before, list_name)
+    name = LIST_FILE if file is None else file
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -1003,6 +1001,23 @@ def updated(
     event = Appended('TaskUpdated', f'task/{task_id}', payload, name)
     after = Source(lists, before.log, journal([event]))
     return Outcome(f'{entry}\n{SOURCE}/{name}', after)
+
+
+def unheld(
+    values: dict[str, str | None],
+    task: TaskNode,
+) -> dict[str, str | None]:
+    """The values that change `task`.
+
+    A value the task holds is no change, and so is a clear of a field it
+    does not carry or carries empty.
+    """
+    return {
+        field: value
+        for field, value in values.items()
+            if value != task.fields.get(field)
+            and (value is not None or task.fields.get(field))
+    }  # fmt: skip
 
 
 def reached_task(
@@ -1134,12 +1149,11 @@ def reopened(
         doc.lines[at] = doc.lines[at].replace('- [x]', '- [ ]', 1)
         if not chain[-1].task_id:
             doc.set_field(at, 'ID', stamped[at])
-    # A clear of a field the task does not carry is no change.
-    values = {
-        field: value
-        for field, value in values.items()
-            if value is not None or root.fields.get(field)
-    }  # fmt: skip
+    values = unheld(values, root)
+    if title is not None and title.strip() == root.title:
+        title = None
+    if lines == root.description_lines:
+        lines = None
     doc.set_fields(index, values)
     if title is not None:
         doc.set_title(index, title)
