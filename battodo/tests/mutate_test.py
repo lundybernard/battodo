@@ -21,6 +21,7 @@ from ..mutate import (
     Changeset,
     CompletedLog,
     Completion,
+    CompletionLines,
     Event,
     IdAssignment,
     ListBackfill,
@@ -3996,6 +3997,313 @@ class IdAssignmentTests(TestCase):
         )
 
 
+class CompletionLinesTests(TestCase):
+    """Unit tests for battodo.mutate.CompletionLines."""
+
+    def setUp(t) -> None:
+        t.child = child_node()
+        t.parent = parent_node()
+        t.parent.children = [t.child, done_child_node()]
+        t.cl = CompletionLines([t.parent, t.child], GIVEN_DAY)
+
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'dropped', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'rescheduled', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    def test_stamps(
+        t,
+        recurrence: PropertyMock,
+        rescheduled: PropertyMock,
+        dropped: PropertyMock,
+        root_done: PropertyMock,
+    ) -> None:
+        t.cl.ids = {3: 'zz01ab', 1: '9o71lx'}
+        dropped.return_value = set()
+
+        with t.subTest('a block that stays: each stream gains its id'):
+            recurrence.return_value = None
+            ret = t.cl.stamps
+            t.assertEqual(ret, {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}})
+
+        with t.subTest('a stream whose line goes: no id'):
+            dropped.return_value = {3}
+            ret = t.cl.stamps
+            t.assertEqual(ret, {1: {'ID': '9o71lx'}})
+
+        with t.subTest('a finished block that goes: nothing'):
+            dropped.return_value = {1, 3}
+            ret = t.cl.stamps
+            t.assertEqual(ret, {})
+
+        with t.subTest('a recurrence: its next due date, its day, its id'):
+            recurrence.return_value = t.parent
+            rescheduled.return_value = date(2026, 8, 15)
+            root_done.return_value = True
+
+            ret = t.cl.stamps
+
+            t.assertEqual(
+                ret,
+                {
+                    1: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-01',
+                        'ID': '9o71lx',
+                    }
+                },
+            )
+
+        with t.subTest('a repeating subtask: its next due date, its id'):
+            recurrence.return_value = t.child
+            root_done.return_value = False
+
+            ret = t.cl.stamps
+
+            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
+
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    def test_checked_off(
+        t,
+        root_done: PropertyMock,
+        ancestries: PropertyMock,
+        recurrence: PropertyMock,
+    ) -> None:
+        ancestries.return_value = [
+            ancestry_of(t.parent, t.child),
+            ancestry_of(t.parent),
+        ]
+        recurrence.return_value = None
+
+        with t.subTest('a block that stays: each completed task'):
+            root_done.return_value = False
+            ret = t.cl.checked_off
+            t.assertEqual(ret, [3, 1])
+
+        with t.subTest('a recurrence: none, as it stays open'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            recurrence.return_value = t.child
+
+            ret = t.cl.checked_off
+
+            t.assertEqual(ret, [])
+
+        with t.subTest('a finished block: none, as the block goes'):
+            root_done.return_value = True
+            ret = t.cl.checked_off
+            t.assertEqual(ret, [])
+
+        with t.subTest('a scratch: none, as its block goes'):
+            root_done.return_value = False
+            recurrence.return_value = None
+            t.cl.scratched = True
+
+            ret = t.cl.checked_off
+
+            t.assertEqual(ret, [])
+
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    def test_dropped(
+        t,
+        root_done: PropertyMock,
+        recurrence: PropertyMock,
+    ) -> None:
+        recurrence.return_value = None
+
+        with t.subTest('a block that stays: nothing'):
+            root_done.return_value = False
+            ret = t.cl.dropped
+            t.assertEqual(ret, set())
+
+        with t.subTest('a finished block: every line of it'):
+            root_done.return_value = True
+            ret = t.cl.dropped
+            t.assertEqual(ret, {1, 2, 3, 4})
+
+        with t.subTest('a recurrence: its children, not it or its notes'):
+            recurrence.return_value = t.parent
+            ret = t.cl.dropped
+            t.assertEqual(ret, {3, 4})
+
+        with t.subTest('a repeating subtask: its children'):
+            root_done.return_value = False
+            step = child_node()
+            step.children = [grandchild_node()]
+            recurrence.return_value = step
+
+            ret = t.cl.dropped
+
+            t.assertEqual(ret, {5})
+
+        with t.subTest('a scratch: the block of the named task'):
+            recurrence.return_value = None
+            t.cl.scratched = True
+
+            ret = t.cl.dropped
+
+            t.assertEqual(ret, {3})
+
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_root_done(t, ancestries: PropertyMock) -> None:
+        with t.subTest('a cascade that ends below the top level'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            ret = t.cl.root_done
+            t.assertFalse(ret)
+
+        with t.subTest('one that reaches it'):
+            ancestries.return_value = [
+                ancestry_of(t.parent, t.child),
+                ancestry_of(t.parent),
+            ]
+
+            ret = t.cl.root_done
+
+            t.assertTrue(ret)
+
+    @patch(f'{SRC}.new_task_id', autospec=True)
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_ids(t, ancestries: PropertyMock, new_task_id: MagicMock) -> None:
+        new_task_id.return_value = 'zz01ab'
+
+        with t.subTest('a stream keeps its id; one with none is given one'):
+            # A checklist item lands on its parent's stream.
+            ancestries.return_value = [
+                ancestry_of(t.parent, checklist_node(), stream=t.parent),
+                ancestry_of(t.parent, t.child),
+            ]
+
+            ret = t.cl.ids
+
+            t.assertEqual(ret, {1: '9o71lx', 3: 'zz01ab'})
+
+        with t.subTest('a new id is drawn once, however often it is read'):
+            # Two reads: an id drawn at random must name one task.
+            new_task_id.reset_mock()
+            t.cl = CompletionLines([t.parent, t.child], GIVEN_DAY)
+            bare = bare_node()
+            ancestries.return_value = [
+                ancestry_of(bare, checklist_node(), stream=bare),
+                ancestry_of(bare),
+            ]
+
+            ret = t.cl.ids
+            t.assertEqual(ret, {1: 'zz01ab'})
+
+            again = t.cl.ids
+            t.assertIs(again, ret)
+            new_task_id.assert_called_once_with()
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    def test_rescheduled(
+        t,
+        recurrence: PropertyMock,
+        next_due: MagicMock,
+    ) -> None:
+        t.parent.fields = {'P': '3', 'REPEAT': '7d', 'ID': '9o71lx'}
+
+        with t.subTest('a recurrence that repeats, against the day'):
+            recurrence.return_value = t.parent
+
+            ret = t.cl.rescheduled
+
+            next_due.assert_called_once_with('7d', GIVEN_DAY)
+            t.assertIs(ret, next_due.return_value)
+
+        with t.subTest('none where there is no recurrence'):
+            recurrence.return_value = None
+            ret = t.cl.rescheduled
+            t.assertIsNone(ret)
+
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_recurrence(t, ancestries: PropertyMock) -> None:
+        with t.subTest('the last task finished, where it repeats'):
+            t.child.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+
+            ret = t.cl.recurrence
+
+            t.assertIs(ret, t.child)
+
+        with t.subTest('the top-level task, where the cascade reaches it'):
+            t.parent.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [
+                ancestry_of(t.parent, t.child),
+                ancestry_of(t.parent),
+            ]
+
+            ret = t.cl.recurrence
+
+            t.assertIs(ret, t.parent)
+
+        with t.subTest('none where the last task finished does not repeat'):
+            t.parent.fields = {'P': '4'}
+            ret = t.cl.recurrence
+            t.assertIsNone(ret)
+
+        with t.subTest('none for a scratch, which reschedules nothing'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            t.cl.scratched = True
+
+            ret = t.cl.recurrence
+
+            t.assertIsNone(ret)
+
+    def test_root(t) -> None:
+        ret = t.cl.root
+        t.assertIs(ret, t.parent)
+
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    def test_ancestries(t, ancestry: MagicMock) -> None:
+        # Each ancestry stands in as the tuple of the tasks it holds.
+        ancestry.side_effect = tuple
+
+        with t.subTest('an open sibling stops the cascade'):
+            t.parent.children[1].done = False
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child)])
+
+        with t.subTest('the last open child completes its parent'):
+            t.parent.children[1].done = True
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child), (t.parent,)])
+
+        with t.subTest('and that may complete its own parent, deepest first'):
+            below = grandchild_node()
+            t.child.children = [below]
+            t.cl.ancestry = [t.parent, t.child, below]
+
+            ret = t.cl.ancestries
+
+            t.assertEqual(
+                ret,
+                [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
+            )
+
+        with t.subTest('a scratch: the named task alone, nothing cascades'):
+            t.cl.scratched = True
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('a repeating task finishes no parent'):
+            t.cl.scratched = False
+            below.fields = {'REPEAT': '7d'}
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('and a cascade ends at a repeating parent'):
+            below.fields = {'LOE': '1'}
+            t.child.fields = {'REPEAT': '7d'}
+
+            ret = t.cl.ancestries
+
+            t.assertEqual(
+                ret, [(t.parent, t.child, below), (t.parent, t.child)]
+            )
+
+
 class TaskCompletionTests(TestCase):
     """Unit tests for battodo.mutate.TaskCompletion."""
 
@@ -4111,6 +4419,48 @@ class TaskCompletionTests(TestCase):
                     'completed_on': '2026-08-01',
                 },
             )
+
+    def test_delta(t) -> None:
+        with t.subTest('the done'):
+            ret = t.tc.delta
+            t.assertEqual(ret, {'done': [False, True]})
+
+        with t.subTest('a recurrence records its new due and added dates'):
+            t.node.fields['DUE'] = '2026-08-05'
+            t.node.fields['ADDED'] = '2026-07-06'
+            t.tc.rescheduled = date(2026, 8, 15)
+
+            ret = t.tc.delta
+
+            t.assertEqual(
+                ret,
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': ['2026-07-06', '2026-08-01'],
+                },
+            )
+
+        with t.subTest('a rescheduled subtask records its new due date'):
+            child = child_node()
+            child.fields['DUE'] = '2026-08-05'
+            t.tc.ancestry = ancestry_of(t.node, child)
+
+            ret = t.tc.delta
+
+            t.assertEqual(
+                ret,
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                },
+            )
+
+        with t.subTest('a scratch records the removal instead'):
+            t.tc.rescheduled = None
+            t.tc.scratched = True
+            ret = t.tc.delta
+            t.assertEqual(ret, {'removed': [False, True]})
 
     def test_status(t) -> None:
         with t.subTest('a completion: DONE'):

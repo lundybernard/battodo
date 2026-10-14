@@ -22,14 +22,16 @@ from battodo.mutate import (
     Changeset,
     CompletedLog,
     Completion,
+    CompletionLines,
     Event,
     ListError,
     Reopen,
     SubtaskAddition,
     SuppliedEdit,
+    TaskCompletion,
     Update,
 )
-from battodo.parser import TodoDocument
+from battodo.parser import Ancestry, TodoDocument
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
 from battodo.task import Task
@@ -2498,6 +2500,255 @@ class SuppliedEditTests(TestCase):
             t.assertEqual(ret, {})
 
 
+class CompletionLinesTests(TestCase):
+    """Contract tests for battodo.mutate.CompletionLines."""
+
+    def setUp(t) -> None:
+        t.source = a_source(t)
+        t.stepped = a_stepped_source(t)
+
+    def test_stamps(t) -> None:
+        with t.subTest('a task that stays gains the id of its stream'):
+            lines = lines_of(t.source, 'A subtask of it')
+            ret = lines.stamps
+            t.assertEqual(ret, {6: {'ID': lines.ids[6]}})
+
+        cases = {
+            'a recurrence: its next due date, the day as its ADDED': (
+                lines_of(t.source, 'A subtask that does not'),
+                {
+                    9: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-08',
+                        'ID': 'rr01ab',
+                    }
+                },
+            ),
+            'a repeating subtask: its next due date, no ADDED': (
+                lines_of(t.stepped, 'rs01ab'),
+                {2: {'DUE': '2026-08-15', 'ID': 'rs01ab'}},
+            ),
+            'a finished block: nothing, as its lines go': (
+                lines_of(t.source, 'A task with no id'),
+                {},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.stamps
+                t.assertEqual(ret, expected)
+
+    def test_checked_off(t) -> None:
+        cases = {
+            'a task that stays': (lines_of(t.source, 'A subtask of it'), [6]),
+            'the last plain step beside a repeating one': (
+                lines_of(t.stepped, 'ps01ab'),
+                [3],
+            ),
+            'none where a recurrence stays open': (
+                lines_of(t.source, 'A subtask that does not'),
+                [],
+            ),
+            'none once the block goes': (
+                lines_of(t.source, 'A task with no id'),
+                [],
+            ),
+            'none for a scratch': (
+                lines_of(t.source, 'A subtask of it', scratched=True),
+                [],
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.checked_off
+                t.assertEqual(ret, expected)
+
+    def test_dropped(t) -> None:
+        cases = {
+            'nothing where the block stays': (
+                lines_of(t.source, 'A subtask of it'),
+                set(),
+            ),
+            'a finished block: every line of it': (
+                lines_of(t.source, 'A task with no id'),
+                {8},
+            ),
+            'a recurrence: its children, not it': (
+                lines_of(t.source, 'A subtask that does not'),
+                {10},
+            ),
+            'a repeating subtask: its children': (
+                lines_of(t.stepped, 'rw01ab'),
+                {5},
+            ),
+            'a scratch: the block of the task, its note and children': (
+                lines_of(t.source, '9o71lx', scratched=True),
+                {4, 5, 6, 7},
+            ),
+            'a scratched subtask: its line alone': (
+                lines_of(t.source, 'A subtask of it', scratched=True),
+                {6},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.dropped
+                t.assertEqual(ret, expected)
+
+    def test_root_done(t) -> None:
+        cases = {
+            'a top-level task with no open child': (
+                lines_of(t.source, 'A task with no id'),
+                True,
+            ),
+            'a subtask beside an open sibling': (
+                lines_of(t.source, 'A subtask of it'),
+                False,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.root_done
+                t.assertEqual(ret, expected)
+
+    def test_ids(t) -> None:
+        with t.subTest('a stream keeps its id'):
+            lines = lines_of(t.source, 'A subtask that does not')
+            ret = lines.ids
+            t.assertEqual(ret[9], 'rr01ab')
+
+        with t.subTest('an owner with no id takes one, drawn once'):
+            lines = lines_of(an_owner_source(t), 'A checklist item to write')
+
+            ret = lines.ids
+            again = lines.ids
+
+            t.assertEqual(list(ret), [2])
+            t.assertIs(again, ret)
+
+    def test_rescheduled(t) -> None:
+        cases = {
+            'the next due date of the recurrence': (
+                lines_of(t.source, 'A subtask that does not'),
+                date(2026, 8, 15),
+            ),
+            'from the given day': (
+                lines_of(t.source, 'A subtask that does not', GIVEN_DAY),
+                date(2026, 8, 8),
+            ),
+            'a monthly repeat of a subtask': (
+                lines_of(t.stepped, 'os01ab'),
+                date(2026, 9, 5),
+            ),
+            'none without a recurrence': (
+                lines_of(t.source, 'A subtask of it'),
+                None,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.rescheduled
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a repeat that does not read is refused'):
+            odd = t.source / 'a-list.md'
+            odd.write_text('## Open\n- [ ] An odd one [REPEAT:often]\n')
+            lines = lines_of(t.source, 'An odd one')
+
+            with t.assertRaisesRegex(RepeatError, "'often'"):
+                _ = lines.rescheduled
+
+    def test_recurrence(t) -> None:
+        cases = {
+            'the last task finished, where it repeats': (
+                lines_of(t.source, 'A subtask that does not'),
+                TodoDocument(A_LIST).tasks[2],
+            ),
+            'none where it does not repeat': (
+                lines_of(t.source, 'A subtask of it'),
+                None,
+            ),
+            'none for a scratch': (
+                lines_of(t.source, 'rr01ab', scratched=True),
+                None,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.recurrence
+                t.assertEqual(ret, expected)
+
+    def test_root(t) -> None:
+        lines = lines_of(t.source, 'A subtask of it')
+        ret = lines.root
+        t.assertEqual(ret.title, 'A task')
+
+    def test_ancestries(t) -> None:
+        cases = {
+            'an open sibling stops the cascade': (
+                lines_of(t.source, 'A subtask of it'),
+                ['A task > A subtask of it'],
+            ),
+            'the last open child completes its parent': (
+                lines_of(t.source, 'A subtask that does not'),
+                [
+                    'A recurring task > A subtask that does not recur',
+                    'A recurring task',
+                ],
+            ),
+            'a repeating subtask finishes no parent': (
+                lines_of(t.stepped, 'os01ab'),
+                ['A chore with one open step > Its only open step'],
+            ),
+            'a scratch finishes nothing above it': (
+                lines_of(t.source, 'A subtask that does not', scratched=True),
+                ['A recurring task > A subtask that does not recur'],
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = [ancestry.path for ancestry in lines.ancestries]
+                t.assertEqual(ret, expected)
+
+
+class TaskCompletionTests(TestCase):
+    """Contract tests for battodo.mutate.TaskCompletion."""
+
+    def setUp(t) -> None:
+        t.source = a_source(t)
+
+    def test_delta(t) -> None:
+        cases = {
+            'a completion: the done': (
+                record_of(t.source, '9o71lx'),
+                {'done': [False, True]},
+            ),
+            'a top-level recurrence: its new due date and ADDED': (
+                record_of(t.source, 'rr01ab', date(2026, 8, 15)),
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': [None, '2026-08-08'],
+                },
+            ),
+            'a rescheduled subtask: its new due date alone': (
+                record_of(a_stepped_source(t), 'os01ab', date(2026, 9, 5)),
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-09-05'],
+                },
+            ),
+            'a scratch: the removal': (
+                record_of(t.source, '9o71lx', scratched=True),
+                {'removed': [False, True]},
+            ),
+        }
+        for name, (record, expected) in cases.items():
+            with t.subTest(name):
+                ret = record.delta
+                t.assertEqual(ret, expected)
+
+
 def a_source(t: TestCase) -> Path:
     """A source directory holding both lists, removed at the end."""
     tmp = TemporaryDirectory()
@@ -2557,6 +2808,30 @@ def a_fielded_source(t: TestCase) -> Path:
     fielded = source / 'a-fielded-list.md'
     fielded.write_text(FIELDED_LIST, encoding='utf-8')
     return source
+
+
+def lines_of(
+    source: Path,
+    selector: str,
+    day: date = TODAY,
+    scratched: bool = False,
+) -> CompletionLines:
+    """The lines a close of the task `selector` names edits, on `day`."""
+    ancestry = Task(source, selector, day).ancestry
+    return CompletionLines(ancestry, day, scratched)
+
+
+def record_of(
+    source: Path,
+    selector: str,
+    rescheduled: date | None = None,
+    scratched: bool = False,
+) -> TaskCompletion:
+    """The record of a close of the task `selector` names, on TODAY."""
+    ancestry = Ancestry(Task(source, selector, TODAY).ancestry)
+    return TaskCompletion(
+        ancestry, rescheduled, TODAY, 'a-list', scratched=scratched
+    )
 
 
 def with_line(text: str, index: int, line: str) -> str:

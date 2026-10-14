@@ -2290,6 +2290,70 @@ class IdAssignment:
         return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
 
+class CompletionLines:
+    """The lines a close edits: stamped, checked off, or dropped.
+
+    `ancestry` holds the named task and every task above it, outermost
+    first. `day` is the day the close is for. `scratched` marks a close
+    that completes nothing.
+    """
+
+    def __init__(
+        self,
+        ancestry: list[TaskNode],
+        day: date,
+        scratched: bool = False,
+    ) -> None:
+        self.ancestry = ancestry
+        self.day = day
+        self.scratched = scratched
+
+    @property
+    def stamps(self) -> dict[int, dict[str, str]]:
+        """The fields each line gains, by its index."""
+        raise NotImplementedError
+
+    @property
+    def checked_off(self) -> list[int]:
+        """The lines whose box is checked."""
+        raise NotImplementedError
+
+    @property
+    def dropped(self) -> set[int]:
+        """The lines that go."""
+        raise NotImplementedError
+
+    @property
+    def root_done(self) -> bool:
+        """Whether the close finishes the top-level task."""
+        raise NotImplementedError
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each stream the closes land on, by its line."""
+        raise NotImplementedError
+
+    @property
+    def rescheduled(self) -> date | None:
+        """The next due date of the recurrence, or None without one."""
+        raise NotImplementedError
+
+    @property
+    def recurrence(self) -> TaskNode | None:
+        """The task the close reschedules, or None."""
+        raise NotImplementedError
+
+    @property
+    def root(self) -> TaskNode:
+        """The top-level task of the block."""
+        raise NotImplementedError
+
+    @property
+    def ancestries(self) -> list[Ancestry]:
+        """The ancestry of the task and of each ancestor it finishes."""
+        raise NotImplementedError
+
+
 class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
@@ -2345,6 +2409,11 @@ class TaskCompletion:
             payload['attrs'] = self.attrs
         payload['completed_on'] = self.day.isoformat()
         return payload
+
+    @property
+    def delta(self) -> dict[str, list[Any]]:
+        """The done or the removal, and a new due date beside it."""
+        raise NotImplementedError
 
     @property
     def status(self) -> str:
