@@ -28,7 +28,7 @@ MESSAGES = {
     'cli.config_env.help': 'specify the remote environment to use from the'
     ' config file',
     'cli.commands.title': 'commands',
-    'cli.commands.description': 'for additonal details on each command use: '
+    'cli.commands.description': 'for additional details on each command use: '
     '"btodo {command name} --help"',
     # view
     'view.description': 'show open items for the currently active categories',
