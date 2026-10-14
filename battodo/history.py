@@ -92,15 +92,17 @@ class TaskHistory:
 
     @property
     def entries(self) -> list['HistoryEntry']:
-        """Each completion and reopen, and each other event with attributes.
+        """Each close and reopen, and each other event with attributes.
 
-        Newest first: by day, then the later event in the journal first.
+        A completion and a scratch each close the task. Newest first: by
+        day, then the later event in the journal first.
         """
         read = [HistoryEntry(event, self.zone) for event in self.stream.events]
+        closes = (COMPLETED_EVENT, SCRATCHED_EVENT)
         listed = [
             entry
             for entry in read
-                if entry.kind == COMPLETED_EVENT or entry.reopen or entry.attrs
+                if entry.kind in closes or entry.reopen or entry.attrs
         ]  # fmt: skip
         newest = reversed(listed)
         return sorted(newest, key=attrgetter('day'), reverse=True)
