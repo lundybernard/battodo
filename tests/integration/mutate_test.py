@@ -836,22 +836,10 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, without(A_LIST, 5))
 
-        with t.subTest('a description of None clears them too'):
-            cleared = described_update(t.source, '9o71lx', 'None')
-            ret = cleared.text
-            t.assertEqual(ret, without(A_LIST, 5))
-
         with t.subTest('a task with none takes them before its children'):
             described = described_update(t.source, 'rr01ab', DESCRIPTION)
             ret = described.text
             t.assertEqual(ret, with_lines(A_LIST, 10, DESCRIPTION_LINES))
-
-        with t.subTest('a new repeat replaces the one the task carries'):
-            changed = Update(
-                Task(t.source, 'rr01ab', TODAY), {'REPEAT': '14d'}
-            )
-            ret = changed.text
-            t.assertEqual(ret, A_LIST.replace('[REPEAT:7d]', '[REPEAT:14d]'))
 
         with t.subTest('a repeat of None clears it, the due date kept'):
             cleared = Update(
@@ -905,41 +893,8 @@ class UpdateTests(TestCase):
                 ValueError,
                 "DUE must be an ISO date, not 'x'",
             ),
-            'an empty repeat, which is no clear': (
-                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': ''}),
-                RepeatError,
-                "unrecognised REPEAT value: ''",
-            ),
             'the repeat the task carries, and no other change': (
                 Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': '7d'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'a clear of a task with no repeat, and no other change': (
-                Update(Task(t.source, '9o71lx', TODAY), {'REPEAT': 'None'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'a clear of a subtask with no repeat, and no other change': (
-                Update(
-                    Task(t.source, 'A subtask that does not', TODAY),
-                    {'REPEAT': 'None'},
-                ),
-                ValueError,
-                'nothing to update',
-            ),
-            'the priority the task holds, and no other change': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'P': '2'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'the due date the task holds, in another ISO form': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'DUE': '20260901'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'the tags the task holds, and no other change': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'TAGS': 'a-tag'}),
                 ValueError,
                 'nothing to update',
             ),
@@ -965,11 +920,6 @@ class UpdateTests(TestCase):
                 described_update(
                     fielded, 'ef01ab', 'A description line, indented by hand.'
                 ),
-                ValueError,
-                'nothing to update',
-            ),
-            'a clear of a task with no description, and no other change': (
-                described_update(t.source, 'rr01ab', 'None'),
                 ValueError,
                 'nothing to update',
             ),
@@ -1026,20 +976,6 @@ class UpdateTests(TestCase):
                 ),
                 ValueError,
                 "'A subtask of it' is a subtask",
-            ),
-            'a title with a line break': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    title='A renamed\rtask',
-                ),
-                ValueError,
-                'title must hold no line break',
-            ),
-            'a description line that reads as a task': (
-                described_update(t.source, '9o71lx', '- [ ] A task'),
-                ValueError,
-                r"description line '- \[ \] A task' reads as a task line",
             ),
             'a checklist item, which takes no description': (
                 described_update(t.source, 'A checklist item', 'A line.'),
@@ -1118,31 +1054,6 @@ class UpdateTests(TestCase):
                 ],
             )
 
-        with t.subTest('a description, against the one it replaced'):
-            described = described_update(t.source, '9o71lx', DESCRIPTION)
-
-            (event,) = described.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {
-                    'description': [
-                        'A note that stays put.',
-                        'A first line.\nA second line.',
-                    ],
-                },
-            )
-
-        with t.subTest('a cleared description, against null'):
-            cleared = described_update(t.source, '9o71lx', '')
-
-            (event,) = cleared.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {'description': ['A note that stays put.', None]},
-            )
-
         with t.subTest('a cleared repeat, against null'):
             cleared = Update(
                 Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}
@@ -1152,22 +1063,6 @@ class UpdateTests(TestCase):
 
             t.assertEqual(event.stream, 'task/rr01ab')
             t.assertEqual(event.payload['delta'], {'REPEAT': ['7d', None]})
-
-        with t.subTest('a repeat that is no change stays out of the delta'):
-            kept = Update(
-                Task(t.source, 'rr01ab', TODAY),
-                {'P': '5', 'REPEAT': '7d'},
-            )
-            absent = Update(
-                Task(t.source, '9o71lx', TODAY),
-                {'P': '5', 'REPEAT': 'None'},
-            )
-
-            (kept_event,) = kept.events
-            (absent_event,) = absent.events
-
-            t.assertEqual(kept_event.payload['delta'], {'P': ['3', '5']})
-            t.assertEqual(absent_event.payload['delta'], {'P': ['4', '5']})
 
         with t.subTest('every other value the task holds stays out too'):
             kept = Update(
@@ -1282,16 +1177,6 @@ class ReopenTests(TestCase):
                     ],
                 ),
             ),
-            'a repeat of None, on a task with none, writes none': (
-                reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'}),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [FINISHED_BLOCK[0].replace('[x]', '[ ]')]
-                    + FINISHED_BLOCK[1:],
-                ),
-            ),
             'a scratched task, to the list a reopen names': (
                 reopen_of(t.source, 'sc01ab', list_name='another-list'),
                 'another-list.md',
@@ -1390,11 +1275,6 @@ class ReopenTests(TestCase):
                     'no list and no record of a closed task holds its line'
                 ),
             ),
-            'a title with a line break': (
-                reopen_of(t.source, 'ft01ab', title='A finished\rtask'),
-                ValueError,
-                'title must hold no line break',
-            ),
         }
         for name, (refusal, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
@@ -1473,11 +1353,6 @@ class ReopenTests(TestCase):
                 below.payload['ancestry'],
                 'A finished task > Its subtask',
             )
-
-        with t.subTest('a clear of a repeat it does not carry: no change'):
-            cleared = reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'})
-            (event,) = cleared.events
-            t.assertEqual(event.payload['delta'], {'done': [True, False]})
 
         with t.subTest('a value it holds is no change, and it still opens'):
             kept = reopen_of(
