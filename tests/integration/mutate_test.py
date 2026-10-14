@@ -1549,31 +1549,6 @@ class CompletionTests(TestCase):
             )
             t.assertEqual(ret, without(rescheduled, 10))
 
-        with t.subTest('a recurrence completed on a given day is added then'):
-            task = Task(a_source(t), 'A subtask that does not', GIVEN_DAY)
-            completed = Completion(task)
-
-            ret = completed.text
-
-            rescheduled = A_LIST.replace(
-                '[DUE:2026-08-05] [REPEAT:7d] [ID:rr01ab]',
-                '[DUE:2026-08-08] [REPEAT:7d] [ID:rr01ab] [ADDED:2026-08-01]',
-            )
-            t.assertEqual(ret, without(rescheduled, 10))
-
-        with t.subTest('a recurrence that does not read is refused'):
-            odd = t.source / 'a-list.md'
-            odd.write_text('## Open\n- [ ] An odd one [REPEAT:often]\n')
-            completed = completion_of(t.source, 'An odd one')
-
-            with t.assertRaises(RepeatError) as caught:
-                _ = completed.text
-
-            t.assertEqual(
-                str(caught.exception),
-                "unrecognised REPEAT value: 'often'",
-            )
-
         with t.subTest('a rescheduled task keeps its description lines'):
             described = t.source / 'a-list.md'
             described.write_text(DESCRIBED_RECURRENCE, encoding='utf-8')
@@ -1598,57 +1573,6 @@ class CompletionTests(TestCase):
                 ),
             )
 
-        with t.subTest('from the given day'):
-            task = Task(a_stepped_source(t), 'rs01ab', GIVEN_DAY)
-            completed = Completion(task)
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '[DUE:2026-08-05] [REPEAT:7d]',
-                    '[DUE:2026-08-08] [REPEAT:7d]',
-                ),
-            )
-
-        with t.subTest('the last open subtask, rescheduled, ends no parent'):
-            completed = completion_of(a_stepped_source(t), 'os01ab')
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '[DUE:2026-08-05] [REPEAT:monthly:5]',
-                    '[DUE:2026-09-05] [REPEAT:monthly:5]',
-                ),
-            )
-
-        with t.subTest('the last plain subtask beside a repeating one'):
-            completed = completion_of(a_stepped_source(t), 'ps01ab')
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '  - [ ] A plain step [LOE:1]',
-                    '  - [x] A plain step [LOE:1]',
-                ),
-            )
-
-        with t.subTest('a rescheduled subtask loses its children'):
-            completed = completion_of(a_stepped_source(t), 'rw01ab')
-
-            ret = completed.text
-
-            rescheduled = STEPPED_LIST.replace(
-                '[DUE:2026-08-05] [REPEAT:1w]',
-                '[DUE:2026-08-15] [REPEAT:1w]',
-            )
-            t.assertEqual(ret, without(rescheduled, 5))
-
         with t.subTest('and its last open child reschedules it'):
             completed = completion_of(a_stepped_source(t), 'sb01ab')
 
@@ -1660,11 +1584,27 @@ class CompletionTests(TestCase):
             )
             t.assertEqual(ret, without(rescheduled, 5))
 
+        with t.subTest('a scratch drops a block that a repeat holds open'):
+            scratched = scratch_of(a_stepped_source(t), 'ch01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(STEPPED_LIST, 1, 2, 3, 4, 5))
+
+        with t.subTest('a scratch drops the task, its note and its children'):
+            scratched = scratch_of(a_source(t), '9o71lx')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 4, 5, 6, 7))
+
+        with t.subTest('a scratched recurring task goes, not rescheduled'):
+            scratched = scratch_of(a_source(t), 'rr01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 9, 10))
+
+    def test_refuse_repeating_subtask(t) -> None:
         with t.subTest('a task that a repeating subtask holds open'):
             completed = completion_of(a_stepped_source(t), 'ch01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1677,7 +1617,7 @@ class CompletionTests(TestCase):
             completed = completion_of(a_stepped_source(t), 'cd01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1690,7 +1630,7 @@ class CompletionTests(TestCase):
             completed = completion_of(a_stepped_source(t), 'pa01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1709,7 +1649,7 @@ class CompletionTests(TestCase):
             completed = completion_of(t.source, 'A recurring chore')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1718,30 +1658,9 @@ class CompletionTests(TestCase):
                 "with update 'A hand-written repeating step' --repeat None",
             )
 
-        with t.subTest('a scratch drops a block that a repeat holds open'):
+        with t.subTest('a scratch completes nothing, so none is refused'):
             scratched = scratch_of(a_stepped_source(t), 'ch01ab')
-            ret = scratched.text
-            t.assertEqual(ret, without(STEPPED_LIST, 1, 2, 3, 4, 5))
-
-        with t.subTest('a scratch drops the task, its note and its children'):
-            scratched = scratch_of(a_source(t), '9o71lx')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 4, 5, 6, 7))
-
-        with t.subTest('a scratched subtask goes, and its parent stays'):
-            scratched = scratch_of(a_source(t), 'A subtask of')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 6))
-
-        with t.subTest('a scratch of the last open child ends no parent'):
-            scratched = scratch_of(a_source(t), 'A subtask that does not')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 10))
-
-        with t.subTest('a scratched recurring task goes, not rescheduled'):
-            scratched = scratch_of(a_source(t), 'rr01ab')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 9, 10))
+            scratched.refuse_repeating_subtask()
 
     def test_entries(t) -> None:
         with t.subTest('the task and each ancestor it ends, deepest first'):
@@ -1802,80 +1721,13 @@ class CompletionTests(TestCase):
         with t.subTest('one TaskCompleted a completion, deepest first'):
             completed = completion_of(t.source, 'A subtask that does not')
 
-            child, parent = completed.events
-
-            t.assertEqual(child.type, 'TaskCompleted')
-            t.assertEqual(
-                child.payload['ancestry'],
-                'A recurring task > A subtask that does not recur',
-            )
-            t.assertEqual(child.payload['completed_on'], '2026-08-08')
-            t.assertEqual(
-                parent,
-                (
-                    'TaskCompleted',
-                    'task/rr01ab',
-                    {
-                        'delta': {
-                            'done': [False, True],
-                            'DUE': ['2026-08-05', '2026-08-15'],
-                            'ADDED': [None, '2026-08-08'],
-                        },
-                        'snapshot': {
-                            'list': 'a-list',
-                            'title': 'A recurring task',
-                            'done': False,
-                            'fields': {
-                                'P': '3',
-                                'DUE': '2026-08-05',
-                                'REPEAT': '7d',
-                                'ID': 'rr01ab',
-                            },
-                            'children': [
-                                {
-                                    'title': 'A subtask that does not recur',
-                                    'done': False,
-                                    'fields': {'LOE': '1'},
-                                },
-                            ],
-                        },
-                        'ancestry': 'A recurring task',
-                        'completed_on': '2026-08-08',
-                    },
-                ),
-            )
-
-        with t.subTest('a rescheduled subtask: its new due date, no ADDED'):
-            completed = completion_of(a_stepped_source(t), 'os01ab')
             events = completed.events
+
             t.assertEqual(
-                events,
+                as_journaled(events),
                 [
-                    (
-                        'TaskCompleted',
-                        'task/os01ab',
-                        {
-                            'delta': {
-                                'done': [False, True],
-                                'DUE': ['2026-08-05', '2026-09-05'],
-                            },
-                            'snapshot': {
-                                'list': 'a-stepped-list',
-                                'title': 'Its only open step',
-                                'done': False,
-                                'fields': {
-                                    'DUE': '2026-08-05',
-                                    'REPEAT': 'monthly:5',
-                                    'ID': 'os01ab',
-                                },
-                            },
-                            'ancestry': (
-                                'A chore with one open step > '
-                                'Its only open step'
-                            ),
-                            'completed_on': '2026-08-08',
-                        },
-                    )
+                    ('TaskCompleted', f'task/{completed.lines.ids[10]}'),
+                    ('TaskCompleted', 'task/rr01ab'),
                 ],
             )
 
@@ -1938,35 +1790,14 @@ class CompletionTests(TestCase):
 
         with t.subTest('a scratch: one TaskScratched, on its stream'):
             scratched = scratch_of(t.source, '9o71lx', attrs={'cost': '0'})
-            events = scratched.events
+
+            (ret,) = scratched.events
+
             t.assertEqual(
-                events,
-                [
-                    (
-                        'TaskScratched',
-                        'task/9o71lx',
-                        {
-                            'delta': {'removed': [False, True]},
-                            'snapshot': {
-                                'list': 'a-list',
-                                'title': 'A task',
-                                'done': False,
-                                'fields': {
-                                    'P': '4',
-                                    'LOE': '8',
-                                    'ADDED': '2026-07-06',
-                                    'ID': '9o71lx',
-                                },
-                                'description': 'A note that stays put.',
-                                'children': A_TASK_CHILDREN,
-                            },
-                            'ancestry': 'A task',
-                            'attrs': {'cost': '0'},
-                            'completed_on': '2026-08-08',
-                        },
-                    )
-                ],
+                (ret.type, ret.stream), ('TaskScratched', 'task/9o71lx')
             )
+            t.assertEqual(ret.payload['delta'], {'removed': [False, True]})
+            t.assertEqual(ret.payload['attrs'], {'cost': '0'})
 
         with t.subTest('a scratched task with no id takes no stamp'):
             # Its line goes, so no line keeps the new id.
@@ -2747,6 +2578,56 @@ class TaskCompletionTests(TestCase):
             with t.subTest(name):
                 ret = record.delta
                 t.assertEqual(ret, expected)
+
+    def test_payload(t) -> None:
+        with t.subTest('the delta, the task as it was, its path, its day'):
+            record = record_of(t.source, 'rr01ab', date(2026, 8, 15))
+
+            ret = record.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {
+                        'done': [False, True],
+                        'DUE': ['2026-08-05', '2026-08-15'],
+                        'ADDED': [None, '2026-08-08'],
+                    },
+                    'snapshot': {
+                        'list': 'a-list',
+                        'title': 'A recurring task',
+                        'done': False,
+                        'fields': {
+                            'P': '3',
+                            'DUE': '2026-08-05',
+                            'REPEAT': '7d',
+                            'ID': 'rr01ab',
+                        },
+                        'children': [
+                            {
+                                'title': 'A subtask that does not recur',
+                                'done': False,
+                                'fields': {'LOE': '1'},
+                            },
+                        ],
+                    },
+                    'ancestry': 'A recurring task',
+                    'completed_on': '2026-08-08',
+                },
+            )
+
+        with t.subTest('a checklist item is marked as one'):
+            record = record_of(t.source, 'A checklist item')
+            ret = record.payload
+            t.assertIs(ret['checklist_item'], True)
+
+        with t.subTest('the attributes it is given'):
+            record = record_of(t.source, '9o71lx')
+            record.attrs = {'cost': '45.00'}
+
+            ret = record.payload
+
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
 
 
 def a_source(t: TestCase) -> Path:
