@@ -17,7 +17,10 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.conf import TZ
+from battodo.parser import TodoDocument
+from battodo.rank import DEFAULT_DUE_CURVE, parse_curve
 from battodo.view import Selection, SelectionJsonView, View
+from battodo.view.selection import Row
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
@@ -245,46 +248,6 @@ class SelectionJsonViewTests(TestCase):
             with t.subTest('which is not the raw computation'):
                 t.assertNotEqual(task['rank'], 1 + 7 / 30)
 
-        # Eight weeks out, the default curve holds a task at its floor.
-        with empty_source() as source:
-            write(
-                source, 'career', '- [ ] A dated task [P:2] [DUE:2026-09-30]'
-            )
-            default = Selection(source, NOW, show_all=False)
-            flat = Selection(
-                source,
-                NOW,
-                show_all=False,
-                rank_due_curve='0:3.0',
-            )
-            halved = loads(SelectionJsonView(default).json)
-            tripled = loads(SelectionJsonView(flat).json)
-
-            with t.subTest('the default curve halves a far due date'):
-                task = halved['categories'][0]['tasks'][0]
-                t.assertEqual(task['rank'], 1.0)
-
-            with t.subTest('and a curve given in its place decides instead'):
-                task = tripled['categories'][0]['tasks'][0]
-                t.assertEqual(task['rank'], 6.0)
-
-        # Twenty days ahead, a recurrence is shown at a reduced rank:
-        # 5 x (0.5 + 0.5 x 10 / 23).
-        with empty_source() as source:
-            write(
-                source,
-                'career',
-                '- [ ] A refill [P:5] [DUE:2026-08-25] [REPEAT:90d]',
-            )
-            selection = Selection(source, NOW, show_all=False)
-            document = loads(SelectionJsonView(selection).json)
-
-            with t.subTest('a recurrence due later is shown, ranked lower'):
-                t.assertEqual(
-                    document['categories'][0]['tasks'][0]['rank'],
-                    3.59,
-                )
-
         with empty_source() as source:
             write(source, 'career', '- [ ] A single task [P:2]')
             selection = Selection(source, NOW, show_all=False)
@@ -296,6 +259,61 @@ class SelectionJsonViewTests(TestCase):
             with t.subTest('and is indented two spaces to the level'):
                 t.assertTrue(lines[1].startswith('  "'))
                 t.assertFalse(lines[1].startswith('   '))
+
+
+class SelectionTests(TestCase):
+    """Contract tests for battodo.view.Selection."""
+
+    def setUp(t) -> None:
+        t.source = source_dir(t)
+
+    def test_curve(t) -> None:
+        with t.subTest('the default curve'):
+            selection = Selection(t.source, NOW, show_all=False)
+            ret = selection.curve
+            t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+
+        with t.subTest('a curve given in its place'):
+            selection = Selection(
+                t.source, NOW, show_all=False, rank_due_curve='0:3.0'
+            )
+            ret = selection.curve
+            t.assertEqual(ret, [(0, 3.0)])
+
+
+class RowTests(TestCase):
+    """Contract tests for battodo.view.selection.Row."""
+
+    def test_rank(t) -> None:
+        default = parse_curve(DEFAULT_DUE_CURVE)
+        cases = {
+            # Eight weeks out, the default curve holds a task at its floor.
+            'the default curve halves a far due date': (
+                '- [ ] A dated task [P:2] [DUE:2026-09-30]',
+                default,
+                1.0,
+            ),
+            'a curve given in its place decides instead': (
+                '- [ ] A dated task [P:2] [DUE:2026-09-30]',
+                [(0, 3.0)],
+                6.0,
+            ),
+            # Twenty days ahead, a recurrence ranks lower:
+            # 5 x (0.5 + 0.5 x 10 / 23).
+            'a recurrence due later is shown, ranked lower': (
+                '- [ ] A refill [P:5] [DUE:2026-08-25] [REPEAT:90d]',
+                default,
+                5 * (0.5 + 0.5 * 10 / 23),
+            ),
+        }
+        for name, (line, curve, expected) in cases.items():
+            with t.subTest(name):
+                task = TodoDocument(f'## Open\n{line}').tasks[0]
+                row = Row(task, NOW.date(), curve)
+
+                ret = row.rank
+
+                t.assertAlmostEqual(ret, expected)
 
 
 class TimezoneTests(TestCase):
