@@ -1086,52 +1086,58 @@ class UpdateTests(TestCase):
         new_title: PropertyMock,
         new_description: PropertyMock,
     ) -> None:
-        moved.return_value = True
-        changes.return_value = {'P': '5'}
-        new_title.return_value = None
-        new_description.return_value = None
-        refusal = (
-            'nothing to update: name a field, a title, a description or a list'
-        )
+        # Each case: the changes, the new title, the new description, a
+        # list named, and whether it moves the task.
+        cases = {
+            'the named fields that change the task': (
+                {'P': '5'},
+                None,
+                None,
+                None,
+                False,
+            ),
+            'a title alone names no field': ({}, 'A title', None, None, False),
+            'nor does a description alone': (
+                {},
+                None,
+                ['A line.'],
+                None,
+                False,
+            ),
+            'nor does a move alone': ({}, None, None, 'another-list', True),
+        }
+        for name, (fields, title, lines, list_name, moves) in cases.items():
+            with t.subTest(name):
+                changes.return_value = fields
+                new_title.return_value = title
+                new_description.return_value = lines
+                t.up = Update(t.task, {}, list_name=list_name)
+                moved.return_value = moves
 
-        with t.subTest('the named fields that change the task'):
-            ret = t.up.checked
-            t.assertEqual(ret, {'P': '5'})
+                ret = t.up.checked
 
-        with t.subTest('a title alone names no field'):
-            changes.return_value = {}
-            new_title.return_value = 'A new title'
-            ret = t.up.checked
-            t.assertEqual(ret, {})
+                t.assertEqual(ret, fields)
 
-        with t.subTest('nor does a description alone'):
-            new_title.return_value = None
-            new_description.return_value = ['A line.']
-            ret = t.up.checked
-            t.assertEqual(ret, {})
+        refused = {
+            'no change, and no list': None,
+            'the list the task is in, and no change': 'a-list',
+        }
+        for name, list_name in refused.items():
+            with t.subTest(name):
+                changes.return_value = {}
+                new_title.return_value = None
+                new_description.return_value = None
+                t.up = Update(t.task, {}, list_name=list_name)
+                moved.return_value = False
 
-        with t.subTest('nor does a list alone'):
-            new_description.return_value = None
-            t.up = Update(t.task, {}, list_name='another-list')
-            ret = t.up.checked
-            t.assertEqual(ret, {})
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.up.checked
 
-        with t.subTest('no change and no move: refused'):
-            t.up = Update(t.task, {'P': '4'}, title='A task')
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(str(caught.exception), refusal)
-
-        with t.subTest('the list the task is in names no change'):
-            moved.return_value = False
-            t.up = Update(t.task, {}, list_name='a-list')
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(str(caught.exception), refusal)
+                t.assertEqual(
+                    str(caught.exception),
+                    'nothing to update: name a field, a title, a description '
+                    'or a list',
+                )
 
         with t.subTest('an open task takes no --with-subtasks, first'):
             changes.reset_mock()
