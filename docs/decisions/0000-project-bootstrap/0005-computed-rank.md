@@ -59,7 +59,7 @@ a multiplier.** No daily mutation, no `BUMPED` field, no `bump` command.
 
 `battodo/rank.py`:
 
-```
+```text
 rank = multiplier × urgency
 
 urgency = 1 + age_score + due_score          # 1.0 … 6.0
@@ -111,25 +111,38 @@ Parked lists are a separate decision — see
 ## Options
 
 ### Option 1 — Computed rank: multiplier × bounded urgency (chosen)
-- [pro] Directly implements the author's direction: `P` is a multiplier, rank is computed from age, due proximity, and lateness
-- [pro] Bounded urgency terms mean the multiplier never stops mattering, which is precisely the failure of the stored-`P` scheme
-- [con] Rank is no longer visible in the file — you cannot read a list in an editor and know its order without running btodo
+
+- [pro] Directly implements the author's direction: `P` is a multiplier, rank is
+  computed from age, due proximity, and lateness
+- [pro] Bounded urgency terms mean the multiplier never stops mattering, which
+  is precisely the failure of the stored-`P` scheme
+- [con] Rank is no longer visible in the file — you cannot read a list in an
+  editor and know its order without running btodo
 
 ### Option 2 — Keep the stored-`P` daily bump
+
 - [pro] Order is legible directly in the markdown, with no tool
-- [con] Unbounded inflation, and it destroys the base priority it accumulates onto
+- [con] Unbounded inflation, and it destroys the base priority it accumulates
+  onto
 
 ### Option 3 — Compute rank, but leave `P` on its unbounded legacy scale
+
 - [pro] No fold table, no scale change, no migration question for `P`
-- [con] A newly hand-written `P:3` would be permanently invisible beneath a legacy `P:95` — the two scales cannot coexist
+- [con] A newly hand-written `P:3` would be permanently invisible beneath a
+  legacy `P:95` — the two scales cannot coexist
 
 ### Option 4 — Uncapped urgency terms
+
 - [pro] Simpler: two straight lines, no cap constants
-- [con] Measured on the live data, a 73-day-overdue item scored 57 against 4.8 for everything else — the multiplier stops mattering entirely, reproducing the inflation bug in a new coordinate
+- [con] Measured on the live data, a 73-day-overdue item scored 57 against 4.8
+  for everything else — the multiplier stops mattering entirely, reproducing the
+  inflation bug in a new coordinate
 
 ### Option 5 — Additive score (`rank = P + age + due`)
+
 - [pro] Easiest to compute by hand and explain
-- [con] Contradicts the author's direction; with addition, a low-priority item accumulates its way past a high-priority one, which is the status quo
+- [con] Contradicts the author's direction; with addition, a low-priority item
+  accumulates its way past a high-priority one, which is the status quo
 
 ### Backfilling `ADDED` — part of Option 1
 
@@ -138,14 +151,17 @@ backfill one is part of choosing it, not a decision of its own.
 
 Backfilling with the migration date:
 
-- [pro] Honest: the real add-date is not recoverable, and a task's file says nothing about when it appeared
+- [pro] Honest: the real add-date is not recoverable, and a task's file says
+  nothing about when it appeared
 - [pro] Age starts accruing immediately and correctly from a known anchor
 - [con] Day one shows no age signal at all across the whole corpus
 
 Backfilling from `DUE` where present, rejected:
 
 - [pro] Yields a real age signal immediately for the overdue items
-- [con] Double-counts — the same lateness would drive both `age_score` and `due_score` — and it is a guess presented as data, in a field defined as a record of fact
+- [con] Double-counts — the same lateness would drive both `age_score` and
+  `due_score` — and it is a guess presented as data, in a field defined as a
+  record of fact
 
 ## Rationale
 

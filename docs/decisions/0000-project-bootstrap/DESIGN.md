@@ -48,10 +48,10 @@ Syncthing conflict waiting to happen on a file a human also edits.
 The parser makes two different three-way distinctions, on two different
 signals. Reconciling them would be a bug:
 
-| Distinction | Signal |
+| Distinction | Signal present |
 | ----------- | ------ |
-| note / continuation line **vs** subtask | presence of a `- [ ]` / `- [x]` checkbox |
-| subtask **vs** checklist item (R2) | presence of at least one `[FIELD:…]` |
+| note / continuation line **vs** subtask | a `- [ ]` / `- [x]` checkbox |
+| subtask **vs** checklist item (R2) | at least one `[FIELD:…]` |
 
 Indent width is *not* the first discriminator, though it correlates:
 notes and continuation lines are indented 6 spaces and subtasks 2. A
