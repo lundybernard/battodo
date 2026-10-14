@@ -359,7 +359,7 @@ def update_item(
         `repeat` of `None`, the word, removes the `REPEAT` field.
     description : str or None
         The new description, one description line per line. An empty
-        one clears the description.
+        one, or `None`, the word, clears the description.
     attrs : str or None
         The attributes of the update, as `key=value` segments.
     note : str or None
