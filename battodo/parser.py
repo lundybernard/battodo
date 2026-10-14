@@ -528,6 +528,11 @@ def parse_date(value: str | None) -> date | None:
         return None
 
 
+def join_description(lines: list[str]) -> str | None:
+    """The description `lines` hold, joined by newlines, or None if none."""
+    raise NotImplementedError
+
+
 def _parse_fields(text: str) -> dict[str, str]:
     return {m.group(1): m.group(2) for m in FIELD_RE.finditer(text)}
 

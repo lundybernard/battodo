@@ -3,7 +3,13 @@ from typing import Any
 from unittest import TestCase
 from unittest.mock import Mock, PropertyMock, patch, sentinel
 
-from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
+from ..parser import (
+    Ancestry,
+    TaskNode,
+    TodoDocument,
+    join_description,
+    parse_date,
+)
 
 OPEN_DOC = """# Work
 
@@ -475,6 +481,18 @@ class ParseDateTests(TestCase):
             with t.subTest(str(value)):
                 ret = parse_date(value)
                 t.assertIsNone(ret)
+
+
+class JoinDescriptionTests(TestCase):
+    """Unit tests for battodo.parser.join_description."""
+
+    def test_lines(t) -> None:
+        ret = join_description(['A line.', 'Another line.'])
+        t.assertEqual(ret, 'A line.\nAnother line.')
+
+    def test_none(t) -> None:
+        ret = join_description([])
+        t.assertIsNone(ret)
 
 
 class TodoDocumentTests(TestCase):
