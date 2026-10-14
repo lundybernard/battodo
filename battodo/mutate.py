@@ -2310,48 +2310,121 @@ class CompletionLines:
 
     @property
     def stamps(self) -> dict[int, dict[str, str]]:
-        """The fields each line gains, by its index."""
-        raise NotImplementedError
+        """The fields each line gains, by its index.
+
+        A task still in the list gains the id of its stream. A recurring
+        task gains its next due date. A recurring top-level task also
+        gains the day as its `[ADDED:]`, so its age counts from the last
+        completion.
+        """
+        recurrence, rescheduled = self.recurrence, self.rescheduled
+        if recurrence is None or rescheduled is None:
+            dropped = self.dropped
+            return {
+                index: {'ID': task_id}
+                for index, task_id in self.ids.items()
+                    if index not in dropped
+            }  # fmt: skip
+        index = recurrence.raw_index
+        fields = {'DUE': rescheduled.isoformat()}
+        if self.root_done:
+            fields['ADDED'] = self.day.isoformat()
+        return {index: {**fields, 'ID': self.ids[index]}}
 
     @property
     def checked_off(self) -> list[int]:
-        """The lines whose box is checked."""
-        raise NotImplementedError
+        """The lines whose box is checked.
+
+        None once the block goes, and none where a recurrence stays open.
+        """
+        if self.root_done or self.scratched or self.recurrence is not None:
+            return []
+        return [ancestry.node.raw_index for ancestry in self.ancestries]
 
     @property
     def dropped(self) -> set[int]:
-        """The lines that go."""
-        raise NotImplementedError
+        """The lines that go: the finished block, a recurrence kept.
+
+        The recurrence is the same task rescheduled, so it keeps its id
+        and its notes. Its children do not carry over. A scratch drops
+        the block of the named task.
+        """
+        if self.scratched:
+            return self.ancestry[-1].block
+        recurrence = self.recurrence
+        if recurrence is not None:
+            return set().union(*(child.block for child in recurrence.children))
+        if self.root_done:
+            return self.root.block
+        return set()
 
     @property
     def root_done(self) -> bool:
         """Whether the close finishes the top-level task."""
-        raise NotImplementedError
+        return not self.ancestries[-1].nested
 
     @cached_property
     def ids(self) -> dict[int, str]:
-        """The id of each stream the closes land on, by its line."""
-        raise NotImplementedError
+        """The id of each stream the closes land on, by its line.
+
+        A stream task with no id takes a new one. Cached: a new id is
+        drawn at random, so every read names one.
+        """
+        ids: dict[int, str] = {}
+        for ancestry in self.ancestries:
+            stream = ancestry.stream
+            if stream.raw_index not in ids:
+                ids[stream.raw_index] = stream.task_id or new_task_id()
+        return ids
 
     @property
     def rescheduled(self) -> date | None:
-        """The next due date of the recurrence, or None without one."""
-        raise NotImplementedError
+        """The next due date of the recurrence, or None without one.
+
+        Raises
+        ------
+        RepeatError
+            Its `[REPEAT:]` does not read.
+        """
+        recurrence = self.recurrence
+        if recurrence is None:
+            return None
+        return next_due(recurrence.fields['REPEAT'], self.day)
 
     @property
     def recurrence(self) -> TaskNode | None:
-        """The task the close reschedules, or None."""
-        raise NotImplementedError
+        """The task the close reschedules, or None.
+
+        The last task the close finishes, where it repeats. A scratch
+        reschedules nothing.
+        """
+        last = self.ancestries[-1].node
+        return last if last.repeat and not self.scratched else None
 
     @property
     def root(self) -> TaskNode:
         """The top-level task of the block."""
-        raise NotImplementedError
+        return self.ancestry[0]
 
     @property
     def ancestries(self) -> list[Ancestry]:
-        """The ancestry of the task and of each ancestor it finishes."""
-        raise NotImplementedError
+        """The ancestry of the task and of each ancestor it finishes.
+
+        Deepest first, which is the order the closes are logged. A
+        scratch finishes no ancestor, and a repeating task stays open,
+        so it finishes no ancestor either.
+        """
+        ancestry = self.ancestry
+        found = [Ancestry(ancestry)]
+        if self.scratched:
+            return found
+        for depth in reversed(range(len(ancestry) - 1)):
+            parent, child = ancestry[depth], ancestry[depth + 1]
+            finished = all(c.done or c is child for c in parent.children)
+            if child.repeat or not finished:
+                break
+            found.append(Ancestry(ancestry[: depth + 1]))
+        return found
 
 
 class TaskCompletion:
@@ -2384,22 +2457,14 @@ class TaskCompletion:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """The done, a new due date beside it, the task, its path, its day.
+        """The delta, the task as it was, its path, its day.
 
-        A rescheduled top-level task also records its new `[ADDED:]`,
-        the day. A checklist item also carries its mark, and the named
-        task its attributes. A scratch records the removal instead of
-        the done.
+        A checklist item also carries its mark, and the named task its
+        attributes.
         """
         node = self.ancestry.node
-        change = 'removed' if self.scratched else 'done'
-        delta: dict[str, list[Any]] = {change: [False, True]}
-        if self.rescheduled is not None:
-            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-            if not self.ancestry.nested:
-                delta['ADDED'] = [node.added, self.day.isoformat()]
         payload: dict[str, Any] = {
-            'delta': delta,
+            'delta': self.delta,
             'snapshot': node.listed_snapshot(self.list_name),
             'ancestry': self.ancestry.path,
         }
@@ -2412,8 +2477,19 @@ class TaskCompletion:
 
     @property
     def delta(self) -> dict[str, list[Any]]:
-        """The done or the removal, and a new due date beside it."""
-        raise NotImplementedError
+        """The done or the removal, and a new due date beside it.
+
+        A rescheduled top-level task also records its new `[ADDED:]`,
+        the day.
+        """
+        node = self.ancestry.node
+        change = 'removed' if self.scratched else 'done'
+        delta: dict[str, list[Any]] = {change: [False, True]}
+        if self.rescheduled is not None:
+            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
+            if not self.ancestry.nested:
+                delta['ADDED'] = [node.added, self.day.isoformat()]
+        return delta
 
     @property
     def status(self) -> str:

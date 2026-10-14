@@ -4317,56 +4317,26 @@ class TaskCompletionTests(TestCase):
         )
 
     @patch.object(TaskNode, 'listed_snapshot', autospec=True)
-    def test_payload(t, snapshot: MagicMock) -> None:
+    @patch.object(TaskCompletion, 'delta', new_callable=PropertyMock)
+    def test_payload(t, delta: PropertyMock, snapshot: MagicMock) -> None:
+        delta.return_value = sentinel.delta
         snapshot.return_value = sentinel.snapshot
 
-        with t.subTest('the done, the task as it was, its path, its day'):
+        with t.subTest('the delta, the task as it was, its path, its day'):
             ret = t.tc.payload
 
             snapshot.assert_called_once_with(t.node, 'a-list')
             t.assertEqual(
                 ret,
                 {
-                    'delta': {'done': [False, True]},
+                    'delta': sentinel.delta,
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'completed_on': '2026-08-01',
                 },
             )
 
-        with t.subTest('a recurrence records its new due and added dates'):
-            t.node.fields['DUE'] = '2026-08-05'
-            t.node.fields['ADDED'] = '2026-07-06'
-            t.tc.rescheduled = date(2026, 8, 15)
-
-            ret = t.tc.payload
-
-            t.assertEqual(
-                ret['delta'],
-                {
-                    'done': [False, True],
-                    'DUE': ['2026-08-05', '2026-08-15'],
-                    'ADDED': ['2026-07-06', '2026-08-01'],
-                },
-            )
-
-        with t.subTest('a rescheduled subtask records its new due date'):
-            child = child_node()
-            child.fields['DUE'] = '2026-08-05'
-            t.tc.ancestry = ancestry_of(t.node, child, path='a path')
-
-            ret = t.tc.payload
-
-            t.assertEqual(
-                ret['delta'],
-                {
-                    'done': [False, True],
-                    'DUE': ['2026-08-05', '2026-08-15'],
-                },
-            )
-
         with t.subTest('a checklist item is marked as one'):
-            t.tc.rescheduled = None
             t.tc.ancestry = ancestry_of(
                 t.node,
                 checklist_node(),
@@ -4376,16 +4346,7 @@ class TaskCompletionTests(TestCase):
 
             ret = t.tc.payload
 
-            t.assertEqual(
-                ret,
-                {
-                    'delta': {'done': [False, True]},
-                    'snapshot': sentinel.snapshot,
-                    'ancestry': 'a path',
-                    'checklist_item': True,
-                    'completed_on': '2026-08-01',
-                },
-            )
+            t.assertIs(ret['checklist_item'], True)
 
         with t.subTest('the attributes of the named task'):
             t.tc.ancestry = ancestry_of(t.node, path='a path')
@@ -4396,23 +4357,7 @@ class TaskCompletionTests(TestCase):
             t.assertEqual(
                 ret,
                 {
-                    'delta': {'done': [False, True]},
-                    'snapshot': sentinel.snapshot,
-                    'ancestry': 'a path',
-                    'attrs': {'cost': '45.00'},
-                    'completed_on': '2026-08-01',
-                },
-            )
-
-        with t.subTest('a scratch records the removal instead'):
-            t.tc.scratched = True
-
-            ret = t.tc.payload
-
-            t.assertEqual(
-                ret,
-                {
-                    'delta': {'removed': [False, True]},
+                    'delta': sentinel.delta,
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'attrs': {'cost': '45.00'},
