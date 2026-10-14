@@ -1363,17 +1363,20 @@ class UpdateTests(TestCase):
 
     @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(Update, 'ancestry', new_callable=PropertyMock)
+    @patch.object(Update, 'nested', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'delta', new_callable=PropertyMock)
     def test_payload(
         t,
         delta: PropertyMock,
         node: PropertyMock,
+        nested: PropertyMock,
         ancestry: PropertyMock,
         snapshot: MagicMock,
     ) -> None:
         delta.return_value = sentinel.delta
         node.return_value = t.parent
+        nested.return_value = False
         ancestry.return_value = MagicMock(spec=['path'])
         ancestry.return_value.path = 'a path'
         snapshot.return_value = sentinel.snapshot
@@ -1388,12 +1391,12 @@ class UpdateTests(TestCase):
             )
 
         with t.subTest('a subtask records where it sits'):
-            t.task.ancestry = [t.parent, child_node()]
+            nested.return_value = True
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
         with t.subTest('the attributes, where any are given'):
-            t.task.ancestry = [t.parent]
+            nested.return_value = False
             t.up.attrs = {'cost': '45.00'}
 
             ret = t.up.payload
@@ -2472,6 +2475,7 @@ class CompletionTests(TestCase):
         )
         t.assertIs(ret, doc)
 
+    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
     @patch.object(Completion, 'dropped', new_callable=PropertyMock)
     @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
@@ -2482,6 +2486,7 @@ class CompletionTests(TestCase):
         rescheduled: PropertyMock,
         dropped: PropertyMock,
         completed_on: PropertyMock,
+        root_done: PropertyMock,
     ) -> None:
         t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
         dropped.return_value = set()
@@ -2505,6 +2510,7 @@ class CompletionTests(TestCase):
         with t.subTest('a recurrence: its next due date, its day, its id'):
             recurrence.return_value = t.parent
             rescheduled.return_value = date(2026, 8, 15)
+            root_done.return_value = True
 
             ret = t.co.stamps
 
@@ -2521,7 +2527,10 @@ class CompletionTests(TestCase):
 
         with t.subTest('a repeating subtask: its next due date, its id'):
             recurrence.return_value = t.child
+            root_done.return_value = False
+
             ret = t.co.stamps
+
             t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
 
     @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
@@ -4588,9 +4597,10 @@ def ancestry_of(
 
     Its events land on `stream`, the last task unless one is named.
     """
-    ancestry = MagicMock(spec=['tasks', 'node', 'path', 'stream'])
+    ancestry = MagicMock(spec=['tasks', 'node', 'nested', 'path', 'stream'])
     ancestry.tasks = list(tasks)
     ancestry.node = tasks[-1]
+    ancestry.nested = len(tasks) > 1
     ancestry.path = path
     ancestry.stream = tasks[-1] if stream is None else stream
     return ancestry

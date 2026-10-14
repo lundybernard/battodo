@@ -767,7 +767,7 @@ class Update:
     @property
     def nested(self) -> bool:
         """Whether the task is a subtask, at any depth."""
-        return len(self.task.ancestry) > 1
+        return self.ancestry.nested
 
     @property
     def entry(self) -> str:
@@ -1414,7 +1414,7 @@ class Completion:
             }  # fmt: skip
         index = recurrence.raw_index
         fields = {'DUE': rescheduled.isoformat()}
-        if recurrence is self.root:
+        if self.root_done:
             fields['ADDED'] = self.completed_on.isoformat()
         return {index: {**fields, 'ID': self.ids[index]}}
 
@@ -1448,7 +1448,7 @@ class Completion:
     @property
     def root_done(self) -> bool:
         """Whether the completion finishes the top-level task."""
-        return len(self.ancestries[-1].tasks) == 1
+        return not self.ancestries[-1].nested
 
     @cached_property
     def ids(self) -> dict[int, str]:
@@ -1731,7 +1731,7 @@ class Annotation:
     @property
     def nested(self) -> bool:
         """Whether the task is a subtask, at any depth."""
-        return len(self.task.ancestry) > 1
+        return self.ancestry.nested
 
     @property
     def ancestry(self) -> Ancestry:
@@ -2224,7 +2224,7 @@ class TaskCompletion:
         delta: dict[str, list[Any]] = {change: [False, True]}
         if self.rescheduled is not None:
             delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-            if len(self.ancestry.tasks) == 1:
+            if not self.ancestry.nested:
                 delta['ADDED'] = [node.added, self.day.isoformat()]
         payload: dict[str, Any] = {
             'delta': delta,
@@ -2348,7 +2348,7 @@ class OpenedTask:
             'delta': delta,
             'snapshot': node.listed_snapshot(self.list_name),
         }
-        if len(self.ancestry.tasks) > 1:
+        if self.ancestry.nested:
             payload['ancestry'] = self.ancestry.path
         if self.attrs:
             payload['attrs'] = self.attrs

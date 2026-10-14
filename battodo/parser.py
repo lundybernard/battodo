@@ -235,7 +235,7 @@ class Ancestry:
     @property
     def nested(self) -> bool:
         """Whether the task sits below another task, at any depth."""
-        raise NotImplementedError
+        return len(self.tasks) > 1
 
     @property
     def path(self) -> str:
