@@ -1372,137 +1372,32 @@ class Completion:
     @property
     def document(self) -> TodoDocument:
         """The task's list: lines stamped, checked off, or dropped."""
-        stamps = self.stamps
+        lines = self.lines
+        stamps = lines.stamps
         doc = TodoDocument(self.task.doc.text)
         for index, fields in stamps.items():
             doc.set_fields(index, fields)
-        for index in self.checked_off:
+        for index in lines.checked_off:
             doc.mark_done(index)
-        doc.drop(self.dropped)
+        doc.drop(lines.dropped)
         return doc
 
-    @property
-    def stamps(self) -> dict[int, dict[str, str]]:
-        """The fields each line gains, by its index.
-
-        A task still in the list gains the id of its stream. A recurring
-        task gains its next due date. A recurring top-level task also
-        gains the completion day as its `[ADDED:]`, so its age counts
-        from the last completion.
-        """
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        if recurrence is None or rescheduled is None:
-            dropped = self.dropped
-            return {
-                index: {'ID': task_id}
-                for index, task_id in self.ids.items()
-                    if index not in dropped
-            }  # fmt: skip
-        index = recurrence.raw_index
-        fields = {'DUE': rescheduled.isoformat()}
-        if self.root_done:
-            fields['ADDED'] = self.completed_on.isoformat()
-        return {index: {**fields, 'ID': self.ids[index]}}
-
-    @property
-    def checked_off(self) -> list[int]:
-        """The lines whose box is checked.
-
-        None once the block goes, and none where a recurrence stays open.
-        """
-        if self.root_done or self.scratched or self.recurrence is not None:
-            return []
-        return [ancestry.node.raw_index for ancestry in self.ancestries]
-
-    @property
-    def dropped(self) -> set[int]:
-        """The lines that go: the finished block, a recurrence kept.
-
-        The recurrence is the same task rescheduled, so it keeps its id
-        and its notes. Its children do not carry over. A scratch drops
-        the block of the named task.
-        """
-        if self.scratched:
-            return self.task.node.block
-        recurrence = self.recurrence
-        if recurrence is not None:
-            return set().union(*(child.block for child in recurrence.children))
-        if self.root_done:
-            return self.root.block
-        return set()
-
-    @property
-    def root_done(self) -> bool:
-        """Whether the completion finishes the top-level task."""
-        return not self.ancestries[-1].nested
-
     @cached_property
-    def ids(self) -> dict[int, str]:
-        """The id of each stream the completions land on, by its line.
+    def lines(self) -> 'CompletionLines':
+        """The lines the close stamps, checks off and drops.
 
-        A stream task with no id takes a new one. Cached: a new id is
-        drawn at random, so every read names one.
+        Cached: they draw new ids, and the events name the same ones.
         """
-        ids: dict[int, str] = {}
-        for ancestry in self.ancestries:
-            stream = ancestry.stream
-            if stream.raw_index not in ids:
-                ids[stream.raw_index] = stream.task_id or new_task_id()
-        return ids
-
-    @property
-    def rescheduled(self) -> date | None:
-        """The next due date of the recurrence, or None without one.
-
-        Raises
-        ------
-        RepeatError
-            Its `[REPEAT:]` does not read.
-        """
-        recurrence = self.recurrence
-        if recurrence is None:
-            return None
-        return next_due(recurrence.fields['REPEAT'], self.completed_on)
-
-    @property
-    def recurrence(self) -> TaskNode | None:
-        """The task the completion reschedules, or None.
-
-        The last task the completion finishes, where it repeats. A
-        scratch reschedules nothing.
-        """
-        last = self.ancestries[-1].node
-        return last if last.repeat and not self.scratched else None
-
-    @property
-    def root(self) -> TaskNode:
-        """The top-level task of the block."""
-        return self.task.ancestry[0]
+        return CompletionLines(
+            self.task.ancestry,
+            self.completed_on,
+            self.scratched,
+        )
 
     @property
     def completed_on(self) -> date:
         """The day the completion is for: the given day, or the clock's."""
         return self.task.today
-
-    @property
-    def ancestries(self) -> list[Ancestry]:
-        """The ancestry of the task and of each ancestor it finishes.
-
-        Deepest first, which is the order the completions are logged. A
-        scratch finishes no ancestor, and a repeating task stays open,
-        so it finishes no ancestor either.
-        """
-        ancestry = self.task.ancestry
-        found = [Ancestry(ancestry)]
-        if self.scratched:
-            return found
-        for depth in reversed(range(len(ancestry) - 1)):
-            parent, child = ancestry[depth], ancestry[depth + 1]
-            finished = all(c.done or c is child for c in parent.children)
-            if child.repeat or not finished:
-                break
-            found.append(Ancestry(ancestry[: depth + 1]))
-        return found
 
     @property
     def entries(self) -> list[str]:
@@ -1531,7 +1426,7 @@ class Completion:
         kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
         events = []
         for completion in self.completions:
-            stream = self.ids[completion.ancestry.stream.raw_index]
+            stream = self.lines.ids[completion.ancestry.stream.raw_index]
             payload = completion.payload
             events.append(Event(kind, f'task/{stream}', payload))
         return [*self.assignments, *events]
@@ -1543,8 +1438,9 @@ class Completion:
         A rescheduled task takes its next due date. The attributes go
         to the named task alone.
         """
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        day, ancestries = self.completed_on, self.ancestries
+        lines = self.lines
+        recurrence, rescheduled = lines.recurrence, lines.rescheduled
+        day, ancestries = self.completed_on, lines.ancestries
         list_name = self.path.stem
         completions = []
         for ancestry in ancestries:
@@ -1563,13 +1459,14 @@ class Completion:
         A block that goes keeps no line to carry an id, so it records
         none.
         """
+        lines = self.lines
         streams = {
             ancestry.stream.raw_index: ancestry.stream
-            for ancestry in self.ancestries
+            for ancestry in lines.ancestries
         }
         return [
             IdAssignment(streams[index], fields['ID'], self.path.stem).event
-            for index, fields in self.stamps.items()
+            for index, fields in lines.stamps.items()
                 if not streams[index].task_id
         ]  # fmt: skip
 

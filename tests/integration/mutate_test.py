@@ -1484,7 +1484,7 @@ class CompletionTests(TestCase):
 
             completion.write()
 
-            stream = f'task/{completion.ids[2]}'
+            stream = f'task/{completion.lines.ids[2]}'
             t.assertEqual(
                 journaled(completion.source),
                 [('TaskUpdated', stream), ('TaskCompleted', stream)],
@@ -1509,7 +1509,7 @@ class CompletionTests(TestCase):
 
             scratched.write()
 
-            stream = f'task/{scratched.ids[2]}'
+            stream = f'task/{scratched.lines.ids[2]}'
             t.assertEqual(
                 journaled(scratched.source),
                 [('TaskUpdated', stream), ('TaskScratched', stream)],
@@ -1531,7 +1531,7 @@ class CompletionTests(TestCase):
 
             ret = completed.text
 
-            child_id = completed.ids[6]
+            child_id = completed.lines.ids[6]
             line = f'  - [x] A subtask of it [LOE:2] [ID:{child_id}]'
             t.assertEqual(ret, A_LIST.replace(A_CHILD, line))
 
@@ -1895,7 +1895,7 @@ class CompletionTests(TestCase):
 
             stamp, item = completed.events
 
-            task_id = completed.ids[2]
+            task_id = completed.lines.ids[2]
             t.assertEqual(
                 stamp,
                 (
@@ -1974,7 +1974,7 @@ class CompletionTests(TestCase):
 
             (ret,) = scratched.events
 
-            t.assertEqual(ret.stream, f'task/{scratched.ids[8]}')
+            t.assertEqual(ret.stream, f'task/{scratched.lines.ids[8]}')
 
         with t.subTest('a scratched checklist item: its owner stamp first'):
             scratched = scratch_of(
@@ -1983,7 +1983,7 @@ class CompletionTests(TestCase):
 
             stamp, item = scratched.events
 
-            task_id = scratched.ids[2]
+            task_id = scratched.lines.ids[2]
             t.assertEqual(stamp.type, 'TaskUpdated')
             t.assertEqual(
                 (item.type, item.stream, item.payload['checklist_item']),
