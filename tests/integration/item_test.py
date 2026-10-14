@@ -65,6 +65,15 @@ UNDATED_TEXT = """Undated task
   rank  2.0
   P     2.0"""
 
+# The chore of REPEATING_CHORES: its subtask shows its repeat.
+CHORE_TEXT = """A chore
+  list  chores
+  id    ch01ab
+  rank  2.0
+  P     2.0
+  subtasks
+    [ ] A repeating step [DUE:2026-08-12] [REPEAT:7d] [ID:rs01ab]"""
+
 # Ranked 1.952 on the day of NOW, which a view row shows as 2.0. The
 # published rank, 1.95, would show as 1.9.
 SOON_TEXT = """Soon task
@@ -195,6 +204,14 @@ class ItemViewTests(TestCase):
         with t.subTest('the rank reads as a view row shows it'):
             ret = ItemView(read(t.source, 'Soon')).text
             t.assertEqual(ret, SOON_TEXT)
+
+        with t.subTest('a repeating subtask shows its repeat'):
+            listed = t.source / 'chores.md'
+            listed.write_text(REPEATING_CHORES, encoding='utf-8')
+
+            ret = ItemView(read(t.source, 'ch01ab')).text
+
+            t.assertEqual(ret, CHORE_TEXT)
 
 
 def source_dir(t: TestCase) -> Path:
