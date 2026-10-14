@@ -8,6 +8,7 @@ from ..rank import (
     due_factor,
     multiplier,
     parse_curve,
+    parse_point,
     rank,
 )
 
@@ -234,13 +235,7 @@ class ParseCurveTests(TestCase):
             'an empty value': ('', "''"),
             'an empty segment': ('-30:0.5,,0:2.0', "''"),
             'a trailing comma': ('-30:0.5, 0:2.0,', "''"),
-            'no factor': ('-30:0.5, -7', "'-7'"),
-            'a factor that is not a number': ('0:two', "'0:two'"),
-            'a day that is not whole': ('-7.5:1.0', "'-7.5:1.0'"),
-            'a second colon': ('0:1:2', "'0:1:2'"),
-            'a factor that is not a number at all': ('0:nan', "'0:nan'"),
-            'a factor without a bound': ('14:inf', "'14:inf'"),
-            'a factor below zero': ('0:-1.0', "'0:-1.0'"),
+            'a point that does not read': ('-30:0.5, -7', "'-7'"),
         }
 
         for name, (value, segment) in cases.items():
@@ -260,3 +255,33 @@ class ParseCurveTests(TestCase):
                 str(caught.exception),
                 "a rank due curve names a day twice: '0:3.0'",
             )
+
+
+class ParsePointTests(TestCase):
+    """Unit tests for battodo.rank.parse_point."""
+
+    def test_point(t) -> None:
+        # The segment is stripped, the day read whole, the factor as a float.
+        ret = parse_point(' -7:1 ')
+        t.assertEqual(ret, (-7, 1.0))
+
+    def test_refusal(t) -> None:
+        cases = {
+            'no factor': '-7',
+            'a factor that is not a number': '0:two',
+            'a day that is not whole': '-7.5:1.0',
+            'a second colon': '0:1:2',
+            'a factor that is not a number at all': '0:nan',
+            'a factor without a bound': '14:inf',
+            'a factor below zero': '0:-1.0',
+        }
+
+        for name, segment in cases.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    parse_point(segment)
+                t.assertEqual(
+                    str(caught.exception),
+                    f'a rank due curve point must read days:factor: '
+                    f'{segment!r}',
+                )
