@@ -271,8 +271,9 @@ class TodoDocument:
     The document performs every edit of a list itself: `set_fields`,
     `set_field`, `set_title` and `mark_done` rewrite one raw line where
     it stands, `append_open` and `insert` add a line,
-    `insert_description` adds description lines, and `drop` removes
-    lines. An edit leaves `tasks` as it was read.
+    `insert_description` adds description lines, `set_description`
+    replaces them, and `drop` removes lines. An edit leaves `tasks` as it
+    was read.
     """
 
     def __init__(self, source: str) -> None:
@@ -480,8 +481,12 @@ class TodoDocument:
             self.insert(index + offset, f'{lead}{line}')
 
     def set_description(self, node: TaskNode, lines: list[str]) -> None:
-        """Replace the description lines of `node` with `lines`."""
-        raise NotImplementedError
+        """Replace the description lines of `node` with `lines`.
+
+        `node` is a task as this document read it.
+        """
+        self.drop(set(node.note_indices))
+        self.insert_description(node.raw_index, lines)
 
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.

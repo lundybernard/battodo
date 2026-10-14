@@ -885,8 +885,7 @@ class UpdateTests(TestCase):
                 doc.method_calls,
                 [
                     call.set_fields(1, sentinel.written),
-                    call.drop({2}),
-                    call.insert_description(1, sentinel.lines),
+                    call.set_description(t.parent, sentinel.lines),
                 ],
             )
 
@@ -1587,11 +1586,10 @@ class ReopenTests(TestCase):
             _ = t.ro.document
 
             t.assertEqual(
-                doc.method_calls[-3:],
+                doc.method_calls[-2:],
                 [
                     call.set_fields(3, sentinel.checked),
-                    call.drop({4}),
-                    call.insert_description(3, sentinel.lines),
+                    call.set_description(node.return_value, sentinel.lines),
                 ],
             )
 

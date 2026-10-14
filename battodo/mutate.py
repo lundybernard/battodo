@@ -594,8 +594,7 @@ class Update:
             doc.set_title(index, self.new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.drop(set(self.node.note_indices))
-            doc.insert_description(index, new_description.lines)
+            doc.set_description(self.node, new_description.lines)
         return doc
 
     @cached_property
@@ -921,8 +920,7 @@ class Reopen:
             doc.set_title(node.raw_index, new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.drop(set(node.note_indices))
-            doc.insert_description(node.raw_index, new_description.lines)
+            doc.set_description(node, new_description.lines)
         return doc
 
     @property
