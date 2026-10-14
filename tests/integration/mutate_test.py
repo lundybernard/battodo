@@ -26,8 +26,10 @@ from battodo.mutate import (
     ListError,
     Reopen,
     SubtaskAddition,
+    SuppliedEdit,
     Update,
 )
+from battodo.parser import TodoDocument
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
 from battodo.task import Task
@@ -2364,6 +2366,206 @@ class ChangesetTests(TestCase):
             t.assertEqual(path.stat().st_mtime_ns, 0)
             t.assertEqual(logged, 'a record\n')
             t.assertEqual(journaled(source), [('TaskAdded', 'task/zz01ab')])
+
+
+class SuppliedEditTests(TestCase):
+    """Contract tests for battodo.mutate.SuppliedEdit."""
+
+    def setUp(t) -> None:
+        # The task with every field, and a task that carries no repeat
+        # and no description.
+        t.node = TodoDocument(FIELDED_LIST).tasks[0]
+        t.bare = TodoDocument(A_LIST).tasks[1]
+        t.se = SuppliedEdit(
+            {'P': '5', 'DUE': '20260901'},
+            'A new title',
+            'A new line.',
+            TODAY,
+        )
+
+    def test_changed(t) -> None:
+        with t.subTest('each value read, a due date in ISO form'):
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'DUE': '2026-09-01'})
+
+        with t.subTest('a repeat of None clears the field'):
+            t.se.fields = {'P': '5', 'REPEAT': 'None'}
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'REPEAT': None})
+
+        refused = {
+            'a value that does not read': (
+                {'DUE': 'x'},
+                ValueError,
+                "DUE must be an ISO date, not 'x'",
+            ),
+            'an empty repeat, which is no clear': (
+                {'REPEAT': ''},
+                RepeatError,
+                "unrecognised REPEAT value: ''",
+            ),
+        }
+        for name, (fields, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                t.se.fields = fields
+                _ = t.se.changed
+
+    def test_supplied(t) -> None:
+        ret = t.se.supplied
+        t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+
+    def test_checked_title(t) -> None:
+        with t.subTest('the named title'):
+            ret = t.se.checked_title
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where none is named'):
+            t.se.title = None
+            ret = t.se.checked_title
+            t.assertIsNone(ret)
+
+        with t.subTest('a title with a line break is refused'):
+            t.se.title = 'A new\ntitle'
+
+            with t.assertRaisesRegex(ValueError, 'title must hold no line'):
+                _ = t.se.checked_title
+
+    def test_checked_description(t) -> None:
+        with t.subTest('the named description, its lines read'):
+            ret = t.se.checked_description
+            t.assertEqual(ret, ['A new line.'])
+
+        with t.subTest('None clears, as an empty description does'):
+            t.se.description = 'None'
+            ret = t.se.checked_description
+            t.assertEqual(ret, [])
+
+        with t.subTest('none, where none is named'):
+            t.se.description = None
+            ret = t.se.checked_description
+            t.assertIsNone(ret)
+
+        with t.subTest('a line that reads as a task is refused'):
+            t.se.description = '- [ ] A task'
+
+            with t.assertRaisesRegex(ValueError, 'reads as a task line'):
+                _ = t.se.checked_description
+
+    def test_changes(t) -> None:
+        cases = {
+            'a new value is a change': (
+                t.node,
+                {'P': '5'},
+                {'P': '5'},
+            ),
+            'each value the task holds is no change': (
+                t.node,
+                {'P': '2', 'DUE': '20260901', 'REPEAT': '7d', 'TAGS': 'a-tag'},
+                {},
+            ),
+            'a clear of a field the task carries is a change': (
+                t.node,
+                {'REPEAT': 'None'},
+                {'REPEAT': None},
+            ),
+            'a clear of a field the task does not carry is not': (
+                t.bare,
+                {'REPEAT': 'None'},
+                {},
+            ),
+        }
+        for name, (node, fields, expected) in cases.items():
+            with t.subTest(name):
+                t.se.fields = fields
+                ret = t.se.changes(node)
+                t.assertEqual(ret, expected)
+
+    def test_new_title(t) -> None:
+        with t.subTest('a title that changes the task'):
+            ret = t.se.new_title(t.node)
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where the task holds it'):
+            t.se.title = 'A task with every field'
+            ret = t.se.new_title(t.node)
+            t.assertIsNone(ret)
+
+        with t.subTest('none, where it holds it, a trailing space aside'):
+            t.se.title = 'A task with every field '
+            ret = t.se.new_title(t.node)
+            t.assertIsNone(ret)
+
+    def test_new_description(t) -> None:
+        with t.subTest('a description that changes the task'):
+            ret = t.se.new_description(t.node)
+            t.assertEqual(ret, ['A new line.'])
+
+        cases = {
+            'none, where the task holds it, as the file indents it': (
+                t.node,
+                'A description line, indented by hand.',
+            ),
+            'none, where it clears a task with no description': (
+                t.bare,
+                'None',
+            ),
+        }
+        for name, (node, description) in cases.items():
+            with t.subTest(name):
+                t.se.description = description
+                ret = t.se.new_description(node)
+                t.assertIsNone(ret)
+
+    def test_refuse_root_fields(t) -> None:
+        with t.subTest('a field a subtask carries'):
+            t.se.fields = {'DUE': '2026-09-01', 'REPEAT': '7d'}
+            t.se.refuse_root_fields()
+
+        with t.subTest('a field only the top-level task carries'):
+            t.se.fields = {'P': '5'}
+
+            with t.assertRaisesRegex(ValueError, 'P belongs to the top-level'):
+                t.se.refuse_root_fields()
+
+    def test_delta(t) -> None:
+        with t.subTest('each written field, the title, the description'):
+            ret = t.se.delta(t.node, {'P': '5', 'DUE': '2026-09-01'})
+            t.assertEqual(
+                ret,
+                {
+                    'P': ['2', '5'],
+                    'DUE': ['2026-09-01', '2026-09-01'],
+                    'title': ['A task with every field', 'A new title'],
+                    'description': [
+                        'A description line, indented by hand.',
+                        'A new line.',
+                    ],
+                },
+            )
+
+        with t.subTest('a cleared description, against null'):
+            t.se.title = None
+            t.se.description = ''
+
+            ret = t.se.delta(t.node, {})
+
+            t.assertEqual(
+                ret,
+                {
+                    'description': [
+                        'A description line, indented by hand.',
+                        None,
+                    ],
+                },
+            )
+
+        with t.subTest('nothing that the task holds'):
+            t.se.title = 'A task with every field'
+            t.se.description = 'A description line, indented by hand.'
+
+            ret = t.se.delta(t.node, {})
+
+            t.assertEqual(ret, {})
 
 
 def a_source(t: TestCase) -> Path:

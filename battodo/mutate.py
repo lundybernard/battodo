@@ -32,7 +32,7 @@ so the write edits the document that selection read.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
@@ -1890,6 +1890,71 @@ class NamedList:
     def lists(self) -> list[Path]:
         """Every list in the source. Cached: discovery reads each one."""
         return discover_lists(self.source)
+
+
+class SuppliedEdit:
+    """The fields, the title and the description an update names.
+
+    Each value is read before any write. The clear token is decoded here
+    alone. A value the task holds is no change (ADR 0028), so each
+    comparison takes the task as the update finds it.
+    """
+
+    def __init__(
+        self,
+        fields: dict[str, str],
+        title: str | None,
+        description: str | None,
+        today: date,
+    ) -> None:
+        self.fields = fields
+        self.title = title
+        self.description = description
+        self.today = today
+
+    @property
+    def changed(self) -> dict[str, str | None]:
+        """The named fields, read, a cleared one None."""
+        raise NotImplementedError
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The named fields, read against `today`."""
+        raise NotImplementedError
+
+    @property
+    def checked_title(self) -> str | None:
+        """The named title, read, or None where none is named."""
+        raise NotImplementedError
+
+    @property
+    def checked_description(self) -> list[str] | None:
+        """The lines of the named description, or None where none is named."""
+        raise NotImplementedError
+
+    def changes(self, node: TaskNode) -> dict[str, str | None]:
+        """The named fields that change `node`, read, a cleared one None."""
+        raise NotImplementedError
+
+    def new_title(self, node: TaskNode) -> str | None:
+        """The named title where it changes `node`, or None."""
+        raise NotImplementedError
+
+    def new_description(self, node: TaskNode) -> list[str] | None:
+        """The named description lines where they change `node`, or None."""
+        raise NotImplementedError
+
+    def refuse_root_fields(self) -> None:
+        """Refuse a named field that only the top-level task carries."""
+        raise NotImplementedError
+
+    def delta(
+        self,
+        node: TaskNode,
+        written: Mapping[str, str | None],
+    ) -> dict[str, list[Any]]:
+        """Each written field, title and description that changes `node`."""
+        raise NotImplementedError
 
 
 class SuppliedTitle:

@@ -33,6 +33,7 @@ from ..mutate import (
     SubtaskAddition,
     SuppliedAttributes,
     SuppliedDescription,
+    SuppliedEdit,
     SuppliedFields,
     SuppliedTitle,
     TaskCompletion,
@@ -3547,6 +3548,225 @@ class NamedListTests(TestCase):
         again = t.nl.lists
         t.assertIs(again, ret)
         discover_lists.assert_called_once_with(SOURCE)
+
+
+class SuppliedEditTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedEdit."""
+
+    def setUp(t) -> None:
+        t.node = parent_node()
+        t.se = SuppliedEdit({'P': '5'}, 'A new title', 'A line.', TODAY)
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_changed(t, next_due: MagicMock) -> None:
+        with t.subTest('no clear: the fields, each value read'):
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5'})
+
+        with t.subTest('a repeat is read as add reads it'):
+            t.se.fields = {'REPEAT': '14d'}
+
+            ret = t.se.changed
+
+            next_due.assert_called_once_with('14d', TODAY)
+            t.assertEqual(ret, {'REPEAT': '14d'})
+
+        with t.subTest('a repeat of None clears the field, unread'):
+            next_due.reset_mock()
+            t.se.fields = {'P': '3', 'REPEAT': 'None'}
+
+            ret = t.se.changed
+
+            next_due.assert_not_called()
+            t.assertEqual(ret, {'P': '3', 'REPEAT': None})
+
+        with t.subTest('an empty repeat is no clear: the read refuses it'):
+            t.se.fields = {'REPEAT': ''}
+            next_due.side_effect = ValueError("unrecognised REPEAT value: ''")
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.se.changed
+
+            t.assertEqual(
+                str(caught.exception), "unrecognised REPEAT value: ''"
+            )
+
+    @patch(f'{SRC}.SuppliedFields', autospec=True)
+    def test_supplied(t, supplied_fields: MagicMock) -> None:
+        ret = t.se.supplied
+        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
+        t.assertIs(ret, supplied_fields.return_value)
+
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
+    def test_checked_title(t, supplied_title: MagicMock) -> None:
+        with t.subTest('the named title, read'):
+            ret = t.se.checked_title
+            supplied_title.assert_called_once_with('A new title')
+            t.assertIs(ret, supplied_title.return_value.checked)
+
+        with t.subTest('none, where none is named'):
+            supplied_title.reset_mock()
+            t.se.title = None
+
+            ret = t.se.checked_title
+
+            supplied_title.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_checked_description(t, supplied_description: MagicMock) -> None:
+        supplied_description.return_value.lines = ['A line.']
+
+        with t.subTest('the lines of the named description, read'):
+            ret = t.se.checked_description
+            supplied_description.assert_called_once_with('A line.')
+            t.assertEqual(ret, ['A line.'])
+
+        with t.subTest('a description of None clears, as an empty one'):
+            supplied_description.reset_mock()
+            t.se.description = 'None'
+
+            _ = t.se.checked_description
+
+            supplied_description.assert_called_once_with('')
+
+        with t.subTest('none, where none is named'):
+            supplied_description.reset_mock()
+            t.se.description = None
+
+            ret = t.se.checked_description
+
+            supplied_description.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch.object(SuppliedEdit, 'changed', new_callable=PropertyMock)
+    def test_changes(t, changed: PropertyMock) -> None:
+        t.node.fields = {'P': '4', 'DUE': '2026-08-01', 'REPEAT': '7d'}
+        cases = {
+            'a new value is a change': ({'P': '5'}, {'P': '5'}),
+            'the value the task holds is no change': ({'P': '4'}, {}),
+            'a value read as the one it holds is no change': (
+                {'P': '5', 'DUE': '2026-08-01'},
+                {'P': '5'},
+            ),
+            'a clear of a field the task carries is a change': (
+                {'REPEAT': None},
+                {'REPEAT': None},
+            ),
+        }
+        for name, (read, expected) in cases.items():
+            with t.subTest(name):
+                changed.return_value = read
+                ret = t.se.changes(t.node)
+                t.assertEqual(ret, expected)
+
+        held = {
+            'a clear of a field the task does not carry is no change': (
+                {},
+                {'REPEAT': None},
+            ),
+            'nor is a clear of a field it carries empty': (
+                {'REPEAT': ''},
+                {'REPEAT': None},
+            ),
+            'nor is an empty value the task holds': (
+                {'TAGS': ''},
+                {'TAGS': ''},
+            ),
+        }
+        for name, (fields, read) in held.items():
+            with t.subTest(name):
+                t.node.fields = fields
+                changed.return_value = read
+
+                ret = t.se.changes(t.node)
+
+                t.assertEqual(ret, {})
+
+    @patch.object(SuppliedEdit, 'checked_title', new_callable=PropertyMock)
+    def test_new_title(t, checked_title: PropertyMock) -> None:
+        cases = {
+            'a title that changes the task': ('A new title', 'A new title'),
+            'none, where the task holds that title': ('A task', None),
+            'none, where it holds the title spaces aside': (' A task ', None),
+            'none, where none is named': (None, None),
+        }
+        for name, (title, expected) in cases.items():
+            with t.subTest(name):
+                checked_title.return_value = title
+                ret = t.se.new_title(t.node)
+                t.assertEqual(ret, expected)
+
+    @patch.object(
+        SuppliedEdit, 'checked_description', new_callable=PropertyMock
+    )
+    def test_new_description(t, checked_description: PropertyMock) -> None:
+        t.node.description_lines = ['A line.']
+        cases = {
+            'lines that change the task': (['A new line.'], ['A new line.']),
+            'a clear of the lines the task holds': ([], []),
+            'none, where the task holds those lines': (['A line.'], None),
+            'none, where none is named': (None, None),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                checked_description.return_value = lines
+                ret = t.se.new_description(t.node)
+                t.assertEqual(ret, expected)
+
+        with t.subTest('none, where it clears a task with no description'):
+            t.node.description_lines = []
+            checked_description.return_value = []
+
+            ret = t.se.new_description(t.node)
+
+            t.assertIsNone(ret)
+
+    @patch.object(SuppliedEdit, 'supplied', new_callable=PropertyMock)
+    def test_refuse_root_fields(t, supplied: PropertyMock) -> None:
+        supplied.return_value = MagicMock(spec=['refuse_root_fields'])
+        t.se.refuse_root_fields()
+        supplied.return_value.refuse_root_fields.assert_called_once_with()
+
+    @patch.object(SuppliedEdit, 'new_description', autospec=True)
+    @patch.object(SuppliedEdit, 'new_title', autospec=True)
+    def test_delta(
+        t,
+        new_title: MagicMock,
+        new_description: MagicMock,
+    ) -> None:
+        t.node.description_lines = ['A line.']
+        new_title.return_value = 'A new title'
+        new_description.return_value = ['A first line.', 'A second line.']
+
+        with t.subTest('each written field, the title, the description'):
+            ret = t.se.delta(t.node, {'P': '5', 'DUE': '2026-09-01'})
+
+            new_title.assert_called_once_with(t.se, t.node)
+            new_description.assert_called_once_with(t.se, t.node)
+            t.assertEqual(
+                ret,
+                {
+                    'P': ['4', '5'],
+                    'DUE': [None, '2026-09-01'],
+                    'title': ['A task', 'A new title'],
+                    'description': [
+                        'A line.',
+                        'A first line.\nA second line.',
+                    ],
+                },
+            )
+
+        with t.subTest('a cleared description, against null'):
+            new_title.return_value = None
+            new_description.return_value = []
+            ret = t.se.delta(t.node, {})
+            t.assertEqual(ret, {'description': ['A line.', None]})
+
+        with t.subTest('nothing that changes the task'):
+            new_description.return_value = None
+            ret = t.se.delta(t.node, {})
+            t.assertEqual(ret, {})
 
 
 class SuppliedTitleTests(TestCase):
