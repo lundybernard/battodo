@@ -595,7 +595,7 @@ class Update:
             doc.set_title(index, self.new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.set_description(self.node, new_description.lines)
+            doc.set_description(self.node, new_description)
         return doc
 
     @cached_property
@@ -658,40 +658,42 @@ class Update:
                     f'{node.title!r} is a subtask: --list moves a '
                     'top-level task, and its subtasks with it'
                 )
-            self.supplied.refuse_root_fields()
+            self.edit.refuse_root_fields()
         return node
 
     @property
     def new_title(self) -> str | None:
-        """The title the update writes, or None where it names none.
+        """The title that changes the task, or None.
 
-        A title the task holds is no change, so it is None too. The list
-        reads a title back without its outer spaces, so they are no
-        change either.
+        The title is read before the task, and the task only where a
+        title is named.
 
         Raises
         ------
         ValueError
             The title holds a line break.
         """
-        if self.title is None:
+        edit = self.edit
+        if edit.checked_title is None:
             return None
-        title = SuppliedTitle(self.title).checked
-        return None if title.strip() == self.node.title else title
+        return edit.new_title(self.node)
 
     @property
-    def new_description(self) -> 'SuppliedDescription | None':
-        """The description the update writes, or None where it names none.
+    def new_description(self) -> list[str] | None:
+        """The description lines that change the task, or None.
 
-        An empty description, or one of `None`, clears the description
-        lines. A description the task holds is no change, so it is None
-        too.
+        The description is read before the task, and the task only where
+        a description is named.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
         """
-        if self.description is None:
+        edit = self.edit
+        if edit.checked_description is None:
             return None
-        text = '' if self.description == CLEAR_TOKEN else self.description
-        supplied = SuppliedDescription(text)
-        return None if supplied.checked == self.node.description else supplied
+        return edit.new_description(self.node)
 
     @property
     def checked(self) -> dict[str, str | None]:
@@ -722,40 +724,37 @@ class Update:
                 'nothing to update: name a field, a title, a description '
                 'or a list'
             )
-        return {
-            name: value
-            for name, value in self.supplied.changed.items()
-                if name in changes
-        }  # fmt: skip
+        return changes
 
     @property
-    def changes(self) -> dict[str, str]:
-        """The named fields, less each that is no change.
+    def changes(self) -> dict[str, str | None]:
+        """The named fields that change the task, before any refusal.
 
-        A value the task holds is no change, and a clear of a field the
-        task does not carry, or carries empty, is no change either. The
-        values are read first, and the task only where a field is named.
+        The values are read before the task, and the task only where a
+        field is named.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
-        changed = self.supplied.changed
-        if not changed:
+        edit = self.edit
+        if not edit.changed:
             return {}
-        held = self.node.fields
-        return {
-            name: self.fields[name]
-            for name, value in changed.items()
-                if value != held.get(name)
-                and (value is not None or held.get(name))
-        }  # fmt: skip
+        return edit.changes(self.node)
 
     @property
-    def supplied(self) -> 'SuppliedFields':
-        """The named fields, read against the day of the task."""
-        return SuppliedFields(self.fields, self.task.today)
+    def edit(self) -> 'SuppliedEdit':
+        """The named fields, title and description, read against the day.
+
+        The day is the day of the task.
+        """
+        return SuppliedEdit(
+            self.fields,
+            self.title,
+            self.description,
+            self.task.today,
+        )
 
     @cached_property
     def task_id(self) -> str:
@@ -805,19 +804,7 @@ class Update:
     @property
     def delta(self) -> dict[str, list[Any]]:
         """Each value written against the one it replaced."""
-        fields = self.node.fields
-        delta = {
-            name: [fields.get(name), value]
-            for name, value in self.written.items()
-        }
-        if self.new_title is not None:
-            delta['title'] = [self.node.title, self.new_title]
-        new_description = self.new_description
-        if new_description is not None:
-            delta['description'] = [
-                self.node.description,
-                new_description.checked,
-            ]
+        delta = self.edit.delta(self.node, self.written)
         if self.moved:
             delta['list'] = [self.task.path.stem, self.path.stem]
         return delta
@@ -921,37 +908,38 @@ class Reopen:
             doc.set_title(node.raw_index, new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.set_description(node, new_description.lines)
+            doc.set_description(node, new_description)
         return doc
 
     @property
     def checked(self) -> dict[str, str | None]:
         """The named fields that change the task, read, a cleared one None.
 
-        A value the task holds is no change, and a clear of a field the
-        task does not carry, or carries empty, is no change either. The
-        values are read first, and the task only where a field is named.
+        The values are read before the task, and the task only where a
+        field is named.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
-        changed = self.supplied.changed
-        if not changed:
+        edit = self.edit
+        if not edit.changed:
             return {}
-        held = self.node.fields
-        return {
-            name: value
-            for name, value in changed.items()
-                if value != held.get(name)
-                and (value is not None or held.get(name))
-        }  # fmt: skip
+        return edit.changes(self.node)
 
     @property
-    def supplied(self) -> 'SuppliedFields':
-        """The named fields, read against the day of the task."""
-        return SuppliedFields(self.fields, self.task.today)
+    def edit(self) -> 'SuppliedEdit':
+        """The named fields, title and description, read against the day.
+
+        The day is the day of the task.
+        """
+        return SuppliedEdit(
+            self.fields,
+            self.title,
+            self.description,
+            self.task.today,
+        )
 
     @property
     def stream(self) -> TaskStream:
@@ -1034,7 +1022,7 @@ class Reopen:
                 f'{stream.title!r} is a subtask: --list moves a top-level '
                 'task, and its subtasks with it'
             )
-        self.supplied.refuse_root_fields()
+        self.edit.refuse_root_fields()
 
     @cached_property
     def path(self) -> Path:
@@ -1207,34 +1195,37 @@ class Reopen:
 
     @property
     def new_title(self) -> str | None:
-        """The title the reopen writes, or None where it names none.
+        """The title that changes the task, or None.
 
-        A title the task holds is no change, so it is None too. The list
-        reads a title back without its outer spaces, so they are no
-        change either.
+        The title is read before the task, and the task only where a
+        title is named.
 
         Raises
         ------
         ValueError
             The title holds a line break.
         """
-        if self.title is None:
+        edit = self.edit
+        if edit.checked_title is None:
             return None
-        title = SuppliedTitle(self.title).checked
-        return None if title.strip() == self.node.title else title
+        return edit.new_title(self.node)
 
     @property
-    def new_description(self) -> 'SuppliedDescription | None':
-        """The description the reopen writes, or None where it names none.
+    def new_description(self) -> list[str] | None:
+        """The description lines that change the task, or None.
 
-        A description of `None` clears, as an empty one does. A
-        description the task holds is no change, so it is None too.
+        The description is read before the task, and the task only where
+        a description is named.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
         """
-        if self.description is None:
+        edit = self.edit
+        if edit.checked_description is None:
             return None
-        text = '' if self.description == CLEAR_TOKEN else self.description
-        supplied = SuppliedDescription(text)
-        return None if supplied.checked == self.node.description else supplied
+        return edit.new_description(self.node)
 
     @property
     def entry(self) -> str:
@@ -1275,20 +1266,7 @@ class Reopen:
         A top-level task that comes back to another list records the
         list it left.
         """
-        node = self.node
-        delta = {
-            name: [node.fields.get(name), value]
-            for name, value in self.checked.items()
-        }
-        new_title = self.new_title
-        if new_title is not None:
-            delta['title'] = [node.title, new_title]
-        new_description = self.new_description
-        if new_description is not None:
-            delta['description'] = [
-                node.description,
-                new_description.checked,
-            ]
+        delta = self.edit.delta(self.node, self.checked)
         list_left, list_name = self.list_left, self.path.stem
         if list_left != list_name:
             delta['list'] = [list_left, list_name]
@@ -2070,11 +2048,6 @@ class SuppliedDescription:
         self.text = text
 
     @property
-    def checked(self) -> str | None:
-        """The description as a snapshot stores it, or None if empty."""
-        return '\n'.join(self.lines) or None
-
-    @property
     def lines(self) -> list[str]:
         """The description lines, each stripped of its indent.
 
@@ -2165,21 +2138,6 @@ class SuppliedFields:
             # an unreadable one must fail before a task carries it.
             next_due(repeat, self.today)
         return checked
-
-    @property
-    def changed(self) -> dict[str, str | None]:
-        """The fields as an update writes them: read, a cleared one None.
-
-        A `REPEAT` of `None` clears the field and is not read.
-        """
-        if self.fields.get('REPEAT') != CLEAR_TOKEN:
-            return dict(self.checked)
-        kept = {
-            name: value
-            for name, value in self.fields.items()
-                if name != 'REPEAT'
-        }  # fmt: skip
-        return {**SuppliedFields(kept, self.today).checked, 'REPEAT': None}
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
