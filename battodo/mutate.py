@@ -1475,7 +1475,7 @@ class Completion:
 
     @property
     def rescheduled(self) -> date | None:
-        """The next due date of the recurrence, where it repeats.
+        """The next due date of the recurrence, or None without one.
 
         Raises
         ------
@@ -1483,10 +1483,9 @@ class Completion:
             Its `[REPEAT:]` does not read.
         """
         recurrence = self.recurrence
-        repeat = recurrence and recurrence.repeat
-        if not repeat:
+        if recurrence is None:
             return None
-        return next_due(repeat, self.completed_on)
+        return next_due(recurrence.fields['REPEAT'], self.completed_on)
 
     @property
     def recurrence(self) -> TaskNode | None:

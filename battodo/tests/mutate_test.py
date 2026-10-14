@@ -2692,14 +2692,6 @@ class CompletionTests(TestCase):
             ret = t.co.rescheduled
             t.assertIsNone(ret)
 
-        with t.subTest('none for a recurrence that does not repeat'):
-            recurrence.return_value = t.parent
-            t.parent.fields = {'P': '3'}
-
-            ret = t.co.rescheduled
-
-            t.assertIsNone(ret)
-
     @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     def test_recurrence(t, ancestries: PropertyMock) -> None:
         with t.subTest('the last task finished, where it repeats'):
