@@ -741,6 +741,25 @@ class TodoDocumentTests(TestCase):
             t.td.insert_description(ALPHA_INDEX, [])
             t.assertEqual(t.td.lines, OPEN_DOC.split('\n'))
 
+    def test_set_description(t) -> None:
+        doc = TodoDocument(
+            '## Open\n- [ ] A task\n      An old line.\n'
+            '      Another old line.\n- [ ] Another task'
+        )
+        node = doc.tasks[0]
+
+        doc.set_description(node, ['A new line.'])
+
+        t.assertEqual(
+            doc.lines,
+            [
+                '## Open',
+                '- [ ] A task',
+                '      A new line.',
+                '- [ ] Another task',
+            ],
+        )
+
     def test_drop(t) -> None:
         lines = OPEN_DOC.split('\n')
 

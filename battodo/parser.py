@@ -479,6 +479,10 @@ class TodoDocument:
         for offset, line in enumerate(lines, start=1):
             self.insert(index + offset, f'{lead}{line}')
 
+    def set_description(self, node: TaskNode, lines: list[str]) -> None:
+        """Replace the description lines of `node` with `lines`."""
+        raise NotImplementedError
+
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.
 
