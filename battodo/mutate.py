@@ -78,8 +78,9 @@ SUBTASK_INDENT = 2
 # The fields a top-level task owns. SCHEMA.md gives a subtask no `P` of
 # its own, because only a top-level task is ranked.
 ROOT_ONLY_FIELDS = ('P',)
-# The value an update names to clear what an option writes (ADR 0028).
-CLEAR_VALUE = 'None'
+# The clear token: the value an update names to clear what an option
+# writes (ADR 0028). A word of the CLI, not a credential.
+CLEAR_TOKEN = 'None'  # noqa: S105
 # An attribute key: a letter, then letters, digits or underscores.
 ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
 # The one place `--attrs` splits: a comma, spaces or tabs, then the next
@@ -688,7 +689,7 @@ class Update:
         """
         if self.description is None:
             return None
-        text = '' if self.description == CLEAR_VALUE else self.description
+        text = '' if self.description == CLEAR_TOKEN else self.description
         supplied = SuppliedDescription(text)
         return None if supplied.checked == self.node.description else supplied
 
@@ -1224,7 +1225,7 @@ class Reopen:
         """
         if self.description is None:
             return None
-        text = '' if self.description == CLEAR_VALUE else self.description
+        text = '' if self.description == CLEAR_TOKEN else self.description
         supplied = SuppliedDescription(text)
         return None if supplied.checked == self.node.description else supplied
 
@@ -2022,7 +2023,7 @@ class SuppliedFields:
 
         A `REPEAT` of `None` clears the field and is not read.
         """
-        if self.fields.get('REPEAT') != CLEAR_VALUE:
+        if self.fields.get('REPEAT') != CLEAR_TOKEN:
             return dict(self.checked)
         kept = {
             name: value
