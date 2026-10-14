@@ -115,3 +115,15 @@ in the ranking, and the next completion is where the rule applies.
 subtask takes `update --repeat` and `add --repeat`, and the rest of
 this decision applies to it unchanged. A repeating subtask keeps its
 parent open, and `done` refuses the parent until the repeat is removed.
+
+## Amendment — 2026-10-14
+
+The no-change rule covers every input of `update`, not the repeat
+alone. A `P`, `DUE`, `REPEAT` or `TAGS` value that the task holds is no
+change, and so are the title and the description that it holds. A clear
+of a field or a description that the task does not carry is no change
+either. btodo reads each value before it compares it, so a `DUE` in
+another ISO form compares as the date it names. The delta records only
+the changes, and an update with no change left refuses with "nothing to
+update". A reopen applies the same rule
+([ADR 0025](0025-reopen-by-update.md)).

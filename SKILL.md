@@ -97,12 +97,16 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   effort: 1, 2, 3, 5 or 8. `--repeat` is `Nd`, `Nw`, `weekly:DAY` or
   `monthly:N`. `--tags` is a comma-separated list.
 - `update --repeat R` sets or changes the repeat of a task at any
-  depth.
-  `update --repeat None` removes it; btodo refuses an empty `--repeat`.
-  `DUE` stays as it is: the new rule applies at the next completion,
-  and with no repeat the next `done` completes the task. A repeat the
-  task already carries, or `None` on a task with none, is no change:
-  with no other option, `update` exits 1 with "nothing to update".
+  depth. `update --repeat None` removes it; btodo refuses an empty
+  `--repeat`. `DUE` stays as it is: the new rule applies at the next
+  completion, and with no repeat the next `done` completes the task.
+- A value that the task already holds is no change: a `-p`, `--due`,
+  `--repeat` or `--tags` value, a `--title` or a `--description`. So is
+  `--repeat None` on a task with no repeat, and `--description None` or
+  `''` on a task with no description. btodo compares `--due` as a date.
+  It writes only the changes, and the journal delta records only them.
+  With no change left, `update` on an open task exits 1 with "nothing
+  to update" and writes nothing; a closed task still reopens.
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
 - `--description` sets the description of a task: each line of `TEXT`
