@@ -144,7 +144,7 @@ class TaskNode:
     @property
     def description(self) -> str | None:
         """The description lines joined by newlines, or None if none."""
-        return '\n'.join(self.description_lines) or None
+        return join_description(self.description_lines)
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -530,7 +530,7 @@ def parse_date(value: str | None) -> date | None:
 
 def join_description(lines: list[str]) -> str | None:
     """The description `lines` hold, joined by newlines, or None if none."""
-    raise NotImplementedError
+    return '\n'.join(lines) or None
 
 
 def _parse_fields(text: str) -> dict[str, str]:
