@@ -1773,35 +1773,6 @@ class Backfill:
         ]  # fmt: skip
 
 
-class CompletedLog:
-    """The completed log of a source, which is append-only (SCHEMA.md)."""
-
-    def __init__(self, source: Path) -> None:
-        self.source = source
-
-    @property
-    def path(self) -> Path:
-        """The log file in the source directory."""
-        return self.source / COMPLETED_LOG
-
-    @property
-    def lead(self) -> str:
-        """What precedes a new record: a newline if the log ends mid-line."""
-        existing = self.path.read_text() if self.path.exists() else ''
-        return '\n' if existing and not existing.endswith('\n') else ''
-
-    def append(self, entries: Sequence[str]) -> None:
-        """Append `entries`, one per line.
-
-        No entry leaves the log as it was, absent or not.
-        """
-        if not entries:
-            return
-        lead = self.lead
-        with self.path.open('a', encoding='utf-8') as handle:
-            handle.write(lead + '\n'.join(entries) + '\n')
-
-
 class Changeset:
     """What one write changes in a source: lists, the log, the journal.
 
@@ -1843,6 +1814,35 @@ class Changeset:
                 actor=ACTOR,
                 source_file=self.path.name,
             )
+
+
+class CompletedLog:
+    """The completed log of a source, which is append-only (SCHEMA.md)."""
+
+    def __init__(self, source: Path) -> None:
+        self.source = source
+
+    @property
+    def path(self) -> Path:
+        """The log file in the source directory."""
+        return self.source / COMPLETED_LOG
+
+    @property
+    def lead(self) -> str:
+        """What precedes a new record: a newline if the log ends mid-line."""
+        existing = self.path.read_text() if self.path.exists() else ''
+        return '\n' if existing and not existing.endswith('\n') else ''
+
+    def append(self, entries: Sequence[str]) -> None:
+        """Append `entries`, one per line.
+
+        No entry leaves the log as it was, absent or not.
+        """
+        if not entries:
+            return
+        lead = self.lead
+        with self.path.open('a', encoding='utf-8') as handle:
+            handle.write(lead + '\n'.join(entries) + '\n')
 
 
 class NamedList:
