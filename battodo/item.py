@@ -225,6 +225,7 @@ class SubtaskView:
         stored = (
             ('LOE', self.node.loe),
             ('DUE', self.node.due),
+            ('REPEAT', self.node.repeat),
             ('TAGS', ','.join(self.node.tags) or None),
             ('ID', self.node.task_id),
         )
