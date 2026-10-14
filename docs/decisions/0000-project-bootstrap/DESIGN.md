@@ -306,10 +306,10 @@ late.
 ### Unparseable dates
 
 A missing or unparseable `ADDED` contributes 0 to its term. A missing or
-unparseable `DUE` gives a due-date factor of 1. This
-is a hard robustness rule, not a convenience: `van-trip-prep-template.md`
-carries literal `[DUE:YYYY-MM-DD]` placeholder text, and placeholder text
-must never change an outcome, let alone raise.
+unparseable `DUE` gives a due-date factor of 1. This is a hard
+robustness rule, not a convenience: `van-trip-prep-template.md` carries
+literal `[DUE:YYYY-MM-DD]` placeholder text, and placeholder text must
+never change an outcome, let alone raise.
 
 ### Backfilling `ADDED`
 

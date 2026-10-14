@@ -113,11 +113,11 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
 - `--description` sets the description of a task: each line of `TEXT`
-  becomes one description line under the task.
-  `update --description None` clears it, as `update --description ''`
-  does. A subtask takes a description too. btodo refuses a line
-  that is blank, reads as a task, a heading or a comment, or holds a
-  carriage return. `show` prints the description.
+  becomes one description line under the task. `update --description
+  None` clears it, as `update --description ''` does. A subtask takes a
+  description too. btodo refuses a line that is blank, reads as a task,
+  a heading or a comment, or holds a carriage return. `show` prints the
+  description.
 - Before `add`, look for a finished task with the same meaning:
   `btodo history <a key word of the title>`. One match prints that
   task's history. Several matches exit 1 and print one candidate per

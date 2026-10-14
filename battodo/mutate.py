@@ -18,9 +18,9 @@ ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task, at any depth, instead
 of closing it. A scratched `Completion` abandons a task: the block
 goes, the log records it as SCRATCHED, and nothing cascades or
-reschedules. `Update`
-sets the fields and the title it is given and leaves the rest of the
-list, or moves a top-level task and its block to another list.
+reschedules. `Update` sets the fields and the title it is given and
+leaves the rest of the list, or moves a top-level task and its block to
+another list.
 `Reopen` brings a closed task back open, named by its stream in the
 journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
