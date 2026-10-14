@@ -134,6 +134,14 @@ STEPPED_LIST = (
     '    - [ ] A repeating step below [DUE:2026-08-05] [REPEAT:3d] '
     '[ID:rb01ab]\n'
 )
+# A list whose one task carries every field an update writes, and a
+# description line that the file indents by hand.
+FIELDED_LIST = (
+    '## Open\n'
+    '- [ ] A task with every field [P:2] [DUE:2026-09-01] [REPEAT:7d] '
+    '[TAGS:a-tag] [ID:ef01ab]\n'
+    '    A description line, indented by hand.\n'
+)
 
 
 # A list whose top-level task keeps a closed subtask, and a closed
@@ -222,6 +230,27 @@ CLOSED_EVENTS = (
                 'list': 'a-list',
             },
             'ancestry': 'A scratched task',
+        },
+    ),
+    (
+        'TaskScratched',
+        'task/ce01ab',
+        {
+            'delta': {'removed': [False, True]},
+            'snapshot': {
+                'title': 'A closed task with every field',
+                'done': False,
+                'fields': {
+                    'P': '2',
+                    'DUE': '2026-09-01',
+                    'REPEAT': '7d',
+                    'TAGS': 'a-tag',
+                    'ID': 'ce01ab',
+                },
+                'description': 'Its description.',
+                'list': 'a-list',
+            },
+            'ancestry': 'A closed task with every field',
         },
     ),
     (
@@ -848,6 +877,21 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, STEPPED_LIST.replace(' [REPEAT:7d]', ''))
 
+        fielded = a_fielded_source(t)
+        with t.subTest('a value the task holds is not written again'):
+            kept = Update(
+                Task(fielded, 'ef01ab', TODAY),
+                {'P': '2', 'TAGS': 'another-tag'},
+                description='A description line, indented by hand.',
+            )
+
+            ret = kept.text
+
+            t.assertEqual(
+                ret,
+                FIELDED_LIST.replace('[TAGS:a-tag]', '[TAGS:another-tag]'),
+            )
+
         refused = {
             'an update that names nothing': (
                 Update(Task(t.source, '9o71lx', TODAY), {}),
@@ -879,6 +923,51 @@ class UpdateTests(TestCase):
                     Task(t.source, 'A subtask that does not', TODAY),
                     {'REPEAT': 'None'},
                 ),
+                ValueError,
+                'nothing to update',
+            ),
+            'the priority the task holds, and no other change': (
+                Update(Task(fielded, 'ef01ab', TODAY), {'P': '2'}),
+                ValueError,
+                'nothing to update',
+            ),
+            'the due date the task holds, in another ISO form': (
+                Update(Task(fielded, 'ef01ab', TODAY), {'DUE': '20260901'}),
+                ValueError,
+                'nothing to update',
+            ),
+            'the tags the task holds, and no other change': (
+                Update(Task(fielded, 'ef01ab', TODAY), {'TAGS': 'a-tag'}),
+                ValueError,
+                'nothing to update',
+            ),
+            'the title the task holds, and no other change': (
+                Update(
+                    Task(fielded, 'ef01ab', TODAY),
+                    {},
+                    title='A task with every field',
+                ),
+                ValueError,
+                'nothing to update',
+            ),
+            'the title the task holds, a trailing space aside': (
+                Update(
+                    Task(fielded, 'ef01ab', TODAY),
+                    {},
+                    title='A task with every field ',
+                ),
+                ValueError,
+                'nothing to update',
+            ),
+            'the description the task holds, and no other change': (
+                described_update(
+                    fielded, 'ef01ab', 'A description line, indented by hand.'
+                ),
+                ValueError,
+                'nothing to update',
+            ),
+            'a clear of a task with no description, and no other change': (
+                described_update(t.source, 'rr01ab', 'None'),
                 ValueError,
                 'nothing to update',
             ),
@@ -1077,6 +1166,21 @@ class UpdateTests(TestCase):
 
             t.assertEqual(kept_event.payload['delta'], {'P': ['3', '5']})
             t.assertEqual(absent_event.payload['delta'], {'P': ['4', '5']})
+
+        with t.subTest('every other value the task holds stays out too'):
+            kept = Update(
+                Task(a_fielded_source(t), 'ef01ab', TODAY),
+                {'P': '2', 'DUE': '20260901', 'TAGS': 'another-tag'},
+                title='A task with every field',
+                description='A description line, indented by hand.',
+            )
+
+            (event,) = kept.events
+
+            t.assertEqual(
+                event.payload['delta'],
+                {'TAGS': ['a-tag', 'another-tag']},
+            )
 
         with t.subTest('a subtask records where it sits, and its new id'):
             child = Update(
@@ -1371,6 +1475,19 @@ class ReopenTests(TestCase):
         with t.subTest('a clear of a repeat it does not carry: no change'):
             cleared = reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'})
             (event,) = cleared.events
+            t.assertEqual(event.payload['delta'], {'done': [True, False]})
+
+        with t.subTest('a value it holds is no change, and it still opens'):
+            kept = reopen_of(
+                t.source,
+                'ce01ab',
+                {'P': '2', 'DUE': '20260901', 'REPEAT': '7d', 'TAGS': 'a-tag'},
+                title='A closed task with every field',
+                description='Its description.',
+            )
+
+            (event,) = kept.events
+
             t.assertEqual(event.payload['delta'], {'done': [True, False]})
 
         with t.subTest('a subtask in a record opens its top-level task'):
@@ -2299,6 +2416,14 @@ def a_stepped_source(t: TestCase) -> Path:
     source = a_source(t)
     stepped = source / 'a-stepped-list.md'
     stepped.write_text(STEPPED_LIST, encoding='utf-8')
+    return source
+
+
+def a_fielded_source(t: TestCase) -> Path:
+    """A source directory holding both lists and the fielded list."""
+    source = a_source(t)
+    fielded = source / 'a-fielded-list.md'
+    fielded.write_text(FIELDED_LIST, encoding='utf-8')
     return source
 
 

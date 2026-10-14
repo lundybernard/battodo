@@ -1018,45 +1018,89 @@ class UpdateTests(TestCase):
             refuse_root_fields.assert_not_called()
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
-    def test_new_title(t, supplied_title: MagicMock) -> None:
+    @patch.object(Update, 'node', new_callable=PropertyMock)
+    def test_new_title(
+        t,
+        node: PropertyMock,
+        supplied_title: MagicMock,
+    ) -> None:
+        node.return_value = t.parent
+        supplied_title.return_value.checked = 'A new title'
+
         with t.subTest('the title the update names, read'):
             ret = t.up.new_title
             supplied_title.assert_called_once_with('A new title')
-            t.assertIs(ret, supplied_title.return_value.checked)
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where the task holds that title'):
+            supplied_title.return_value.checked = 'A task'
+            ret = t.up.new_title
+            t.assertIsNone(ret)
+
+        with t.subTest('none, where it holds the title spaces aside'):
+            supplied_title.return_value.checked = ' A task '
+            ret = t.up.new_title
+            t.assertIsNone(ret)
 
         with t.subTest('none, where the update names no title'):
             supplied_title.reset_mock()
+            node.reset_mock()
             t.up.title = None
 
             ret = t.up.new_title
 
             supplied_title.assert_not_called()
+            node.assert_not_called()
             t.assertIsNone(ret)
 
     @patch(f'{SRC}.SuppliedDescription', autospec=True)
-    def test_new_description(t, supplied_description: MagicMock) -> None:
+    @patch.object(Update, 'node', new_callable=PropertyMock)
+    def test_new_description(
+        t,
+        node: PropertyMock,
+        supplied_description: MagicMock,
+    ) -> None:
+        node.return_value = t.parent
+        supplied = supplied_description.return_value
+
         with t.subTest('none, where the update names no description'):
             ret = t.up.new_description
+
             supplied_description.assert_not_called()
+            node.assert_not_called()
             t.assertIsNone(ret)
 
         with t.subTest('the description the update names'):
             t.up.description = 'A description'
+            supplied.checked = 'A description'
 
             ret = t.up.new_description
 
             supplied_description.assert_called_once_with('A description')
-            t.assertIs(ret, supplied_description.return_value)
+            t.assertIs(ret, supplied)
+
+        with t.subTest('none, where the task holds that description'):
+            t.parent.description_lines = ['A description']
+            ret = t.up.new_description
+            t.assertIsNone(ret)
 
         with t.subTest('a description of None clears, as an empty one'):
             supplied_description.reset_mock()
             t.up.description = 'None'
+            supplied.checked = None
 
             ret = t.up.new_description
 
             supplied_description.assert_called_once_with('')
-            t.assertIs(ret, supplied_description.return_value)
+            t.assertIs(ret, supplied)
 
+        with t.subTest('none, where it clears a task with no description'):
+            t.parent.description_lines = []
+            ret = t.up.new_description
+            t.assertIsNone(ret)
+
+    @patch.object(Update, 'new_description', new_callable=PropertyMock)
+    @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'changes', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
     @patch.object(Update, 'supplied', new_callable=PropertyMock)
@@ -1065,11 +1109,15 @@ class UpdateTests(TestCase):
         supplied: PropertyMock,
         moved: PropertyMock,
         changes: PropertyMock,
+        new_title: PropertyMock,
+        new_description: PropertyMock,
     ) -> None:
         supplied.return_value = MagicMock(spec=['changed'])
         supplied.return_value.changed = {'P': '5'}
         moved.return_value = True
         changes.return_value = {'P': '5'}
+        new_title.return_value = None
+        new_description.return_value = None
 
         with t.subTest('the named fields, as an update writes them'):
             ret = t.up.checked
@@ -1083,25 +1131,41 @@ class UpdateTests(TestCase):
         with t.subTest('a title alone names no field'):
             changes.return_value = {}
             supplied.return_value.changed = {}
+            new_title.return_value = 'A new title'
 
             ret = t.up.checked
 
             t.assertEqual(ret, {})
 
-        with t.subTest('nor does a description alone, an empty one too'):
-            t.up = Update(t.task, {}, description='')
+        with t.subTest('nor does a description alone'):
+            new_title.return_value = None
+            new_description.return_value = sentinel.description
             ret = t.up.checked
             t.assertEqual(ret, {})
 
         with t.subTest('nor does a list alone'):
+            new_description.return_value = None
             t.up = Update(t.task, {}, list_name='another-list')
             ret = t.up.checked
             t.assertEqual(ret, {})
 
-        with t.subTest('a repeat that is no change, and nothing else'):
+        with t.subTest('a title and a description that are no change'):
             supplied.reset_mock()
-            changes.return_value = {}
-            t.up = Update(t.task, {'REPEAT': '7d'})
+            t.up = Update(t.task, {}, title='A task', description='')
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.up.checked
+
+            t.assertEqual(
+                str(caught.exception),
+                'nothing to update: name a field, a title, a description '
+                'or a list',
+            )
+            supplied.assert_not_called()
+
+        with t.subTest('a field that is no change, and nothing else'):
+            supplied.reset_mock()
+            t.up = Update(t.task, {'P': '4'})
 
             with t.assertRaises(ValueError) as caught:
                 _ = t.up.checked
@@ -1156,47 +1220,81 @@ class UpdateTests(TestCase):
             )
             supplied.assert_not_called()
 
+    @patch.object(Update, 'supplied', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
-    def test_changes(t, node: PropertyMock) -> None:
+    def test_changes(t, node: PropertyMock, supplied: PropertyMock) -> None:
         node.return_value = t.parent
-        t.parent.fields['REPEAT'] = '7d'
+        t.parent.fields = {'P': '4', 'DUE': '2026-08-01', 'REPEAT': '7d'}
+        supplied.return_value = MagicMock(spec=['changed'])
 
-        with t.subTest('no repeat named: the fields, the task not read'):
-            ret = t.up.changes
-            t.assertEqual(ret, {'P': '5'})
-            node.assert_not_called()
-
-        cases = {
-            'a new repeat is a change': (
-                {'P': '5', 'REPEAT': '14d'},
-                {'P': '5', 'REPEAT': '14d'},
-            ),
-            'the repeat the task carries is no change': (
-                {'P': '5', 'REPEAT': '7d'},
-                {'P': '5'},
-            ),
-            'a clear of its repeat is a change': (
-                {'REPEAT': 'None'},
-                {'REPEAT': 'None'},
-            ),
-            'an empty repeat is a change, which the read refuses': (
-                {'REPEAT': ''},
-                {'REPEAT': ''},
-            ),
-        }
-        for name, (fields, expected) in cases.items():
-            with t.subTest(name):
-                t.up.fields = fields
-                ret = t.up.changes
-                t.assertEqual(ret, expected)
-
-        with t.subTest('a clear of a task with no repeat is no change'):
-            del t.parent.fields['REPEAT']
-            t.up.fields = {'REPEAT': 'None'}
+        with t.subTest('no field named: the task is not read'):
+            t.up.fields = {}
+            supplied.return_value.changed = {}
 
             ret = t.up.changes
 
             t.assertEqual(ret, {})
+            node.assert_not_called()
+
+        cases = {
+            'a new value is a change': ({'P': '5'}, {'P': '5'}, {'P': '5'}),
+            'the value the task holds is no change': (
+                {'P': '4'},
+                {'P': '4'},
+                {},
+            ),
+            'a value that reads as the one it holds is no change': (
+                {'P': '5', 'DUE': '20260801'},
+                {'P': '5', 'DUE': '2026-08-01'},
+                {'P': '5'},
+            ),
+            'a clear of a field the task carries is a change': (
+                {'REPEAT': 'None'},
+                {'REPEAT': None},
+                {'REPEAT': 'None'},
+            ),
+        }
+        for name, (fields, read, expected) in cases.items():
+            with t.subTest(name):
+                t.up.fields = fields
+                supplied.return_value.changed = read
+
+                ret = t.up.changes
+
+                t.assertEqual(ret, expected)
+
+        held = {
+            'a clear of a field the task does not carry is no change': {},
+            'nor is a clear of a field it carries empty': {'REPEAT': ''},
+        }
+        for name, fields in held.items():
+            with t.subTest(name):
+                t.parent.fields = fields
+                t.up.fields = {'REPEAT': 'None'}
+                supplied.return_value.changed = {'REPEAT': None}
+
+                ret = t.up.changes
+
+                t.assertEqual(ret, {})
+
+        with t.subTest('an empty value the task holds is no change'):
+            t.parent.fields = {'TAGS': ''}
+            t.up.fields = {'TAGS': ''}
+            supplied.return_value.changed = {'TAGS': ''}
+
+            ret = t.up.changes
+
+            t.assertEqual(ret, {})
+
+        with t.subTest('a value that does not read refuses first'):
+            node.reset_mock()
+            t.up.fields = {'DUE': 'x'}
+            supplied.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                _ = t.up.changes
+
+            node.assert_not_called()
 
     @patch(f'{SRC}.SuppliedFields', autospec=True)
     def test_supplied(t, supplied_fields: MagicMock) -> None:
@@ -1503,9 +1601,12 @@ class ReopenTests(TestCase):
 
         with t.subTest('the named fields, as an update writes them'):
             ret = t.ro.checked
-
             t.assertEqual(ret, {'P': '5'})
-            node.assert_not_called()
+
+        with t.subTest('a value the task holds is no change'):
+            supplied.return_value.changed = {'P': '4', 'LOE': '2'}
+            ret = t.ro.checked
+            t.assertEqual(ret, {'LOE': '2'})
 
         with t.subTest('a clear of a field the task carries'):
             node.return_value.fields['REPEAT'] = '7d'
@@ -1994,44 +2095,86 @@ class ReopenTests(TestCase):
         t.assertIs(ret, sentinel.named)
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
-    def test_new_title(t, supplied_title: MagicMock) -> None:
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    def test_new_title(
+        t,
+        node: PropertyMock,
+        supplied_title: MagicMock,
+    ) -> None:
+        node.return_value = parent_node()
+        supplied_title.return_value.checked = 'A new title'
+
         with t.subTest('the title the reopen names, read'):
             ret = t.ro.new_title
             supplied_title.assert_called_once_with('A new title')
-            t.assertIs(ret, supplied_title.return_value.checked)
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where the task holds that title'):
+            supplied_title.return_value.checked = 'A task'
+            ret = t.ro.new_title
+            t.assertIsNone(ret)
+
+        with t.subTest('none, where it holds the title spaces aside'):
+            supplied_title.return_value.checked = ' A task '
+            ret = t.ro.new_title
+            t.assertIsNone(ret)
 
         with t.subTest('none, where the reopen names no title'):
             supplied_title.reset_mock()
+            node.reset_mock()
             t.ro.title = None
 
             ret = t.ro.new_title
 
             supplied_title.assert_not_called()
+            node.assert_not_called()
             t.assertIsNone(ret)
 
     @patch(f'{SRC}.SuppliedDescription', autospec=True)
-    def test_new_description(t, supplied_description: MagicMock) -> None:
+    @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    def test_new_description(
+        t,
+        node: PropertyMock,
+        supplied_description: MagicMock,
+    ) -> None:
+        node.return_value = parent_node()
+        supplied = supplied_description.return_value
+
         with t.subTest('none, where the reopen names no description'):
             ret = t.ro.new_description
+
             supplied_description.assert_not_called()
+            node.assert_not_called()
             t.assertIsNone(ret)
 
         with t.subTest('the description the reopen names'):
             t.ro.description = 'A description'
+            supplied.checked = 'A description'
 
             ret = t.ro.new_description
 
             supplied_description.assert_called_once_with('A description')
-            t.assertIs(ret, supplied_description.return_value)
+            t.assertIs(ret, supplied)
+
+        with t.subTest('none, where the task holds that description'):
+            node.return_value.description_lines = ['A description']
+            ret = t.ro.new_description
+            t.assertIsNone(ret)
 
         with t.subTest('a description of None clears, as an empty one'):
             supplied_description.reset_mock()
             t.ro.description = 'None'
+            supplied.checked = None
 
             ret = t.ro.new_description
 
             supplied_description.assert_called_once_with('')
-            t.assertIs(ret, supplied_description.return_value)
+            t.assertIs(ret, supplied)
+
+        with t.subTest('none, where it clears a task with no description'):
+            node.return_value.description_lines = []
+            ret = t.ro.new_description
+            t.assertIsNone(ret)
 
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
     @patch.object(Reopen, 'document', new_callable=PropertyMock)
