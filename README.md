@@ -105,15 +105,6 @@ inputs that btodo refuses before it writes anything.
 2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
 ```
 
-`btodo completed` shows them after the title as `key=value` pairs.
-
-`done` also writes the attributes on the record it adds to
-`completed.md`, as one JSON block after the fields:
-
-```text
-2026-10-01 | errands | DONE | Renew the permit [attrs:{"cost": "45.00"}]
-```
-
 `btodo completed` shows them after the title as `key=value` pairs, and
 `--format json` gives each entry an `attrs` object, empty where the
 record carries none.
