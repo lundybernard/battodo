@@ -233,6 +233,11 @@ class Ancestry:
         return self.tasks[-1]
 
     @property
+    def nested(self) -> bool:
+        """Whether the task sits below another task, at any depth."""
+        raise NotImplementedError
+
+    @property
     def path(self) -> str:
         """The `Parent > Child` path SCHEMA.md logs a nested task under."""
         return ANCESTRY_SEPARATOR.join(task.title for task in self.tasks)

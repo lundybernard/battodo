@@ -433,6 +433,16 @@ class AncestryTests(TestCase):
         ret = t.an.node
         t.assertIs(ret, t.item)
 
+    def test_nested(t) -> None:
+        with t.subTest('a task below another is nested'):
+            ret = t.an.nested
+            t.assertTrue(ret)
+
+        with t.subTest('a top-level task is not'):
+            t.an.tasks = [t.task]
+            ret = t.an.nested
+            t.assertFalse(ret)
+
     def test_path(t) -> None:
         ret = t.an.path
         t.assertEqual(ret, 'A task > A subtask > A checklist item')
