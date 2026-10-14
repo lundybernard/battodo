@@ -59,6 +59,7 @@ from .parser import (
     Ancestry,
     TaskNode,
     TodoDocument,
+    join_description,
     parse_date,
 )
 from .repeat import next_due
@@ -1914,47 +1915,125 @@ class SuppliedEdit:
 
     @property
     def changed(self) -> dict[str, str | None]:
-        """The named fields, read, a cleared one None."""
-        raise NotImplementedError
+        """The named fields, read, a cleared one None.
+
+        A `REPEAT` of the clear token clears the field and is not read.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read.
+        """
+        changed: dict[str, str | None] = {**self.supplied.checked}
+        if self.fields.get('REPEAT') == CLEAR_TOKEN:
+            changed['REPEAT'] = None
+        return changed
 
     @property
     def supplied(self) -> 'SuppliedFields':
-        """The named fields, read against `today`."""
-        raise NotImplementedError
+        """The named fields to read against `today`.
+
+        A cleared repeat is not read, so it is left out.
+        """
+        read = {
+            name: value
+            for name, value in self.fields.items()
+                if (name, value) != ('REPEAT', CLEAR_TOKEN)
+        }  # fmt: skip
+        return SuppliedFields(read, self.today)
 
     @property
     def checked_title(self) -> str | None:
-        """The named title, read, or None where none is named."""
-        raise NotImplementedError
+        """The named title, read, or None where none is named.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line break.
+        """
+        if self.title is None:
+            return None
+        return SuppliedTitle(self.title).checked
 
     @property
     def checked_description(self) -> list[str] | None:
-        """The lines of the named description, or None where none is named."""
-        raise NotImplementedError
+        """The lines of the named description, or None where none is named.
+
+        An empty description, or the clear token, holds no line, so it
+        clears the description.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return None
+        text = '' if self.description == CLEAR_TOKEN else self.description
+        return SuppliedDescription(text).lines
 
     def changes(self, node: TaskNode) -> dict[str, str | None]:
-        """The named fields that change `node`, read, a cleared one None."""
-        raise NotImplementedError
+        """The named fields that change `node`, read, a cleared one None.
+
+        A value the task holds is no change, and a clear of a field the
+        task does not carry, or carries empty, is no change either.
+        """
+        held = node.fields
+        return {
+            name: value
+            for name, value in self.changed.items()
+                if value != held.get(name)
+                and (value is not None or held.get(name))
+        }  # fmt: skip
 
     def new_title(self, node: TaskNode) -> str | None:
-        """The named title where it changes `node`, or None."""
-        raise NotImplementedError
+        """The named title where it changes `node`, or None.
+
+        The list reads a title back without its outer spaces, so they
+        are no change.
+        """
+        title = self.checked_title
+        if title is None or title.strip() == node.title:
+            return None
+        return title
 
     def new_description(self, node: TaskNode) -> list[str] | None:
         """The named description lines where they change `node`, or None."""
-        raise NotImplementedError
+        lines = self.checked_description
+        return None if lines == node.description_lines else lines
 
     def refuse_root_fields(self) -> None:
-        """Refuse a named field that only the top-level task carries."""
-        raise NotImplementedError
+        """Refuse a named field that only the top-level task carries.
+
+        Raises
+        ------
+        ValueError
+            The fields name one.
+        """
+        self.supplied.refuse_root_fields()
 
     def delta(
         self,
         node: TaskNode,
         written: Mapping[str, str | None],
     ) -> dict[str, list[Any]]:
-        """Each written field, title and description that changes `node`."""
-        raise NotImplementedError
+        """Each written field, title and description that changes `node`.
+
+        Each stands against the one it replaces. A cleared field or
+        description stands as None.
+        """
+        delta: dict[str, list[Any]] = {
+            name: [node.fields.get(name), value]
+            for name, value in written.items()
+        }
+        new_title = self.new_title(node)
+        if new_title is not None:
+            delta['title'] = [node.title, new_title]
+        new_description = self.new_description(node)
+        if new_description is not None:
+            text = join_description(new_description)
+            delta['description'] = [node.description, text]
+        return delta
 
 
 class SuppliedTitle:
