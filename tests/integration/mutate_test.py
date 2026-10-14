@@ -867,10 +867,9 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, STEPPED_LIST.replace(' [REPEAT:7d]', ''))
 
-        fielded = a_fielded_source(t)
         with t.subTest('a value the task holds is not written again'):
             kept = Update(
-                Task(fielded, 'ef01ab', TODAY),
+                Task(a_fielded_source(t), 'ef01ab', TODAY),
                 {'P': '2', 'TAGS': 'another-tag'},
                 description='A description line, indented by hand.',
             )
@@ -882,20 +881,23 @@ class UpdateTests(TestCase):
                 FIELDED_LIST.replace('[TAGS:a-tag]', '[TAGS:another-tag]'),
             )
 
+    def test_checked(t) -> None:
+        with t.subTest('the named fields that change the task, read'):
+            ret = t.up.checked
+            t.assertEqual(ret, {'P': '5', 'DUE': '2026-09-01'})
+
+        fielded = a_fielded_source(t)
         refused = {
             'an update that names nothing': (
                 Update(Task(t.source, '9o71lx', TODAY), {}),
-                ValueError,
                 'nothing to update',
             ),
             'a value that does not read': (
                 Update(Task(t.source, '9o71lx', TODAY), {'DUE': 'x'}),
-                ValueError,
                 "DUE must be an ISO date, not 'x'",
             ),
             'the repeat the task carries, and no other change': (
                 Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': '7d'}),
-                ValueError,
                 'nothing to update',
             ),
             'the title the task holds, and no other change': (
@@ -904,7 +906,6 @@ class UpdateTests(TestCase):
                     {},
                     title='A task with every field',
                 ),
-                ValueError,
                 'nothing to update',
             ),
             'the title the task holds, a trailing space aside': (
@@ -913,20 +914,21 @@ class UpdateTests(TestCase):
                     {},
                     title='A task with every field ',
                 ),
-                ValueError,
                 'nothing to update',
             ),
             'the description the task holds, and no other change': (
                 described_update(
                     fielded, 'ef01ab', 'A description line, indented by hand.'
                 ),
-                ValueError,
                 'nothing to update',
             ),
-            'a field only the top-level task carries': (
-                Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
-                ValueError,
-                'P belongs to the top-level task',
+            'the list the task is in, and no other change': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='a-list',
+                ),
+                'nothing to update',
             ),
             'an open task with its subtasks': (
                 Update(
@@ -934,8 +936,23 @@ class UpdateTests(TestCase):
                     {},
                     with_subtasks=True,
                 ),
-                ValueError,
                 "'9o71lx' names an open task: --with-subtasks reopens",
+            ),
+        }
+        for name, (refusal, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(ValueError, message):
+                _ = refusal.checked
+
+    def test_node(t) -> None:
+        with t.subTest('the task the selector names'):
+            ret = t.up.node
+            t.assertEqual(ret.raw, A_TASK)
+
+        refused = {
+            'a field only the top-level task carries': (
+                Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
+                ValueError,
+                'P belongs to the top-level task',
             ),
             'a checklist item, which a field would promote': (
                 Update(
@@ -945,28 +962,10 @@ class UpdateTests(TestCase):
                 ValueError,
                 'is a checklist item',
             ),
-            'a selector that names no task': (
-                Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
-                SelectionError,
-                "no open task matches 'nothing'",
-            ),
-            'a list that is not there': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    list_name='wrk',
-                ),
-                ListError,
-                "no list named 'wrk'",
-            ),
-            'the list the task is in, and no other change': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    list_name='a-list',
-                ),
+            'a checklist item, which takes no description': (
+                described_update(t.source, 'A checklist item', 'A line.'),
                 ValueError,
-                'nothing to update',
+                'is a checklist item',
             ),
             'a subtask, which moves with its top-level task': (
                 Update(
@@ -977,15 +976,35 @@ class UpdateTests(TestCase):
                 ValueError,
                 "'A subtask of it' is a subtask",
             ),
-            'a checklist item, which takes no description': (
-                described_update(t.source, 'A checklist item', 'A line.'),
-                ValueError,
-                'is a checklist item',
+            'a selector that names no task': (
+                Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
+                SelectionError,
+                "no open task matches 'nothing'",
             ),
         }
         for name, (refusal, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
-                _ = refusal.text
+                _ = refusal.node
+
+    def test_path(t) -> None:
+        with t.subTest('the list of the task, where no list is named'):
+            ret = t.up.path
+            t.assertEqual(ret, t.source / 'a-list.md')
+
+        with t.subTest('the list a move names'):
+            t.up = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {},
+                list_name='another-list',
+            )
+            ret = t.up.path
+            t.assertEqual(ret, t.source / 'another-list.md')
+
+        with t.subTest('a list that is not there is refused'):
+            t.up = Update(Task(t.source, '9o71lx', TODAY), {}, list_name='wrk')
+
+            with t.assertRaisesRegex(ListError, "no list named 'wrk'"):
+                _ = t.up.path
 
     def test_entry(t) -> None:
         ret = t.up.entry
@@ -1054,32 +1073,7 @@ class UpdateTests(TestCase):
                 ],
             )
 
-        with t.subTest('a cleared repeat, against null'):
-            cleared = Update(
-                Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}
-            )
-
-            (event,) = cleared.events
-
-            t.assertEqual(event.stream, 'task/rr01ab')
-            t.assertEqual(event.payload['delta'], {'REPEAT': ['7d', None]})
-
-        with t.subTest('every other value the task holds stays out too'):
-            kept = Update(
-                Task(a_fielded_source(t), 'ef01ab', TODAY),
-                {'P': '2', 'DUE': '20260901', 'TAGS': 'another-tag'},
-                title='A task with every field',
-                description='A description line, indented by hand.',
-            )
-
-            (event,) = kept.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {'TAGS': ['a-tag', 'another-tag']},
-            )
-
-        with t.subTest('a subtask records where it sits, and its new id'):
+        with t.subTest('a task with no id: the stream of its new id'):
             child = Update(
                 Task(t.source, 'A subtask of it', TODAY),
                 {'DUE': '2026-09-01'},
@@ -1088,37 +1082,66 @@ class UpdateTests(TestCase):
             (event,) = child.events
 
             t.assertEqual(event.stream, f'task/{child.task_id}')
-            t.assertEqual(event.payload['delta']['ID'], [None, child.task_id])
-            t.assertEqual(
-                event.payload['ancestry'],
-                'A task > A subtask of it',
-            )
 
-        with t.subTest('the attributes go on its event'):
-            updated = Update(
+    def test_payload(t) -> None:
+        with t.subTest('a subtask records where it sits'):
+            t.up = Update(
+                Task(t.source, 'A subtask of it', TODAY),
+                {'DUE': '2026-09-01'},
+            )
+            ret = t.up.payload
+            t.assertEqual(ret['ancestry'], 'A task > A subtask of it')
+
+        with t.subTest('the attributes, where any are given'):
+            t.up = Update(
                 Task(t.source, '9o71lx', TODAY),
                 {'P': '5'},
                 attrs={'cost': '45.00'},
             )
+            ret = t.up.payload
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
 
-            (event,) = updated.events
+        with t.subTest('a move: the task as it was, in the list it left'):
+            t.up.list_name = 'another-list'
+            ret = t.up.payload
+            t.assertEqual(ret['snapshot']['list'], 'a-list')
 
-            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
-
-        with t.subTest('a move records the list it leaves and joins'):
-            moved = Update(
-                Task(t.source, '9o71lx', TODAY),
-                {},
-                list_name='another-list',
-            )
-
-            (event,) = moved.events
-
-            t.assertEqual(
-                event.payload['delta'],
+    def test_delta(t) -> None:
+        unidentified = Update(
+            Task(t.source, 'A task with no id', TODAY),
+            {'P': '5'},
+        )
+        cases = {
+            'a cleared repeat, against null': (
+                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}),
+                {'REPEAT': ['7d', None]},
+            ),
+            'a value the task holds stays out': (
+                Update(
+                    Task(a_fielded_source(t), 'ef01ab', TODAY),
+                    {'P': '2', 'DUE': '20260901', 'TAGS': 'another-tag'},
+                    title='A task with every field',
+                    description='A description line, indented by hand.',
+                ),
+                {'TAGS': ['a-tag', 'another-tag']},
+            ),
+            'a new id, against null': (
+                unidentified,
+                {'P': ['2', '5'], 'ID': [None, unidentified.task_id]},
+            ),
+            'a move: the list it leaves and the list it joins': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='another-list',
+                ),
                 {'list': ['a-list', 'another-list']},
-            )
-            t.assertEqual(event.payload['snapshot']['list'], 'a-list')
+            ),
+        }
+        for name, (update, expected) in cases.items():
+            with t.subTest(name):
+                ret = update.delta
+                t.assertEqual(ret, expected)
 
 
 class ReopenTests(TestCase):
@@ -1148,15 +1171,23 @@ class ReopenTests(TestCase):
             FINISHED_BLOCK[0].replace('[x]', '[ ]').replace('[P:2]', '[P:5]'),
             *FINISHED_BLOCK[1:],
         ]
+        with_subtask_open = with_lines(
+            A_LIST,
+            RESTORED_INDEX,
+            [
+                FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                FINISHED_BLOCK[1],
+                FINISHED_BLOCK[2].replace('[x]', '[ ]'),
+                FINISHED_BLOCK[3],
+            ],
+        )
         cases = {
             'a top-level task, open, its children closed': (
                 t.ro,
-                'a-list.md',
                 with_lines(A_LIST, RESTORED_INDEX, opened),
             ),
             'a reopen that names nothing reopens the task unchanged': (
                 reopen_of(t.source, 'A finished task'),
-                'a-list.md',
                 with_lines(
                     A_LIST,
                     RESTORED_INDEX,
@@ -1166,7 +1197,6 @@ class ReopenTests(TestCase):
             ),
             'a description replaces the recorded one': (
                 reopen_of(t.source, 'ft01ab', description='A new note.'),
-                'a-list.md',
                 with_lines(
                     A_LIST,
                     RESTORED_INDEX,
@@ -1179,60 +1209,47 @@ class ReopenTests(TestCase):
             ),
             'a scratched task, to the list a reopen names': (
                 reopen_of(t.source, 'sc01ab', list_name='another-list'),
-                'another-list.md',
                 ANOTHER_LIST + '- [ ] A scratched task [P:1] [ID:sc01ab]\n',
             ),
             'a subtask whose line a list holds, each closed task above': (
                 reopen_of(t.source, 'db03ef'),
-                'a-held-list.md',
                 HELD_LIST.replace('[x]', '[ ]'),
             ),
             'a top-level task with its subtasks, a checklist item closed': (
                 reopen_of(t.source, 'ft01ab', with_subtasks=True),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [
-                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[1],
-                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[3],
-                    ],
-                ),
+                with_subtask_open,
             ),
             'a subtask with the closed subtask below it': (
                 reopen_of(t.source, 'ds02cd', with_subtasks=True),
-                'a-held-list.md',
                 HELD_LIST.replace('[x]', '[ ]'),
             ),
             'a subtask in the record of its top-level task': (
                 reopen_of(t.source, 'fs02cd'),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [
-                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[1],
-                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[3],
-                    ],
-                ),
+                with_subtask_open,
             ),
         }
-        for name, (reopen, list_file, expected) in cases.items():
+        for name, (reopen, expected) in cases.items():
             with t.subTest(name):
                 ret = reopen.text
-                t.assertEqual(reopen.path, t.source / list_file)
                 t.assertEqual(ret, expected)
 
+    def test_checked(t) -> None:
+        with t.subTest('the named fields that change the task, read'):
+            ret = t.ro.checked
+            t.assertEqual(ret, {'P': '5'})
+
+        with t.subTest('a value that does not read is refused'):
+            t.ro = reopen_of(t.source, 'ft01ab', {'DUE': 'x'})
+
+            with t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'):
+                _ = t.ro.checked
+
+    def test_stream(t) -> None:
+        with t.subTest('the closed stream the selector names'):
+            ret = t.ro.stream
+            t.assertEqual(ret.task_id, 'ft01ab')
+
         refused = {
-            'a value that does not read': (
-                reopen_of(t.source, 'ft01ab', {'DUE': 'x'}),
-                ValueError,
-                "DUE must be an ISO date, not 'x'",
-            ),
             'a selector that names no task at all': (
                 reopen_of(t.source, 'nothing'),
                 SelectionError,
@@ -1252,33 +1269,71 @@ class ReopenTests(TestCase):
                 ValueError,
                 r'names a checklist item of \[ID:ft01ab\]',
             ),
-            'a list that is not there': (
-                reopen_of(t.source, 'ft01ab', list_name='wrk'),
-                ListError,
-                "no list named 'wrk'",
-            ),
+        }
+        for name, (refusal, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                _ = refusal.stream
+
+    def test_refuse_nested_changes(t) -> None:
+        with t.subTest('a top-level task takes a list and any field'):
+            t.ro = reopen_of(t.source, 'ft01ab', list_name='another-list')
+            t.ro.refuse_nested_changes()
+
+        refused = {
             'a list for a subtask': (
                 reopen_of(t.source, 'fs02cd', list_name='a-list'),
-                ValueError,
                 "'Its subtask' is a subtask: --list moves a top-level task",
             ),
             'a field only the top-level task carries, on a subtask': (
                 reopen_of(t.source, 'db03ef', {'P': '3'}),
-                ValueError,
                 'P belongs to the top-level task',
             ),
-            'a subtask whose line no list and no record holds': (
-                reopen_of(t.source, 'ls01ab'),
-                ValueError,
-                (
-                    r"'A lost subtask' is a subtask of \[ID:lp00ab\], and "
-                    'no list and no record of a closed task holds its line'
-                ),
+        }
+        for name, (refusal, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(ValueError, message):
+                refusal.refuse_nested_changes()
+
+    def test_path(t) -> None:
+        cases = {
+            'the list its record names': (t.ro, 'a-list.md'),
+            'the list a reopen names': (
+                reopen_of(t.source, 'sc01ab', list_name='another-list'),
+                'another-list.md',
+            ),
+            'the list that holds the line of a subtask': (
+                reopen_of(t.source, 'db03ef'),
+                'a-held-list.md',
+            ),
+            'the list the record of its top-level task names': (
+                reopen_of(t.source, 'fs02cd'),
+                'a-list.md',
             ),
         }
-        for name, (refusal, error, message) in refused.items():
-            with t.subTest(name), t.assertRaisesRegex(error, message):
-                _ = refusal.text
+        for name, (reopen, list_file) in cases.items():
+            with t.subTest(name):
+                ret = reopen.path
+                t.assertEqual(ret, t.source / list_file)
+
+        with t.subTest('a list that is not there is refused'):
+            t.ro = reopen_of(t.source, 'ft01ab', list_name='wrk')
+
+            with t.assertRaisesRegex(ListError, "no list named 'wrk'"):
+                _ = t.ro.path
+
+    def test_record(t) -> None:
+        with t.subTest('the record of a top-level task is its own stream'):
+            ret = t.ro.record
+            t.assertEqual(ret.task_id, 'ft01ab')
+
+        with t.subTest('a subtask whose line no list and no record holds'):
+            t.ro = reopen_of(t.source, 'ls01ab')
+
+            with t.assertRaisesRegex(
+                ValueError,
+                r"'A lost subtask' is a subtask of \[ID:lp00ab\], and "
+                'no list and no record of a closed task holds its line',
+            ):
+                _ = t.ro.record
 
     def test_entry(t) -> None:
         ret = t.ro.entry
