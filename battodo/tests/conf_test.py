@@ -127,6 +127,12 @@ class ConfigFileTests(TestCase):
         )
         t.cf_named = ConfigFile('/given.toml')
 
+    def test_init(t):
+        ret = ConfigFile('/given.toml', config_env='another-env')
+        # The inputs are stored raw.
+        t.assertEqual(ret._name, '/given.toml')
+        t.assertEqual(ret._config_env, 'another-env')
+
     def test_named(t):
         with t.subTest('nothing names a file'):
             ret = t.cf.named
