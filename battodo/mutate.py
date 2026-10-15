@@ -82,6 +82,8 @@ ROOT_ONLY_FIELDS = ('P',)
 # The clear token: the value an update names to clear what an option
 # writes (ADR 0028). A word of the CLI, not a credential.
 CLEAR_TOKEN = 'None'  # noqa: S105
+# The fields the clear token clears. Any other field reads it as a value.
+CLEARABLE_FIELDS = ('DUE', 'REPEAT', 'TAGS')
 # An attribute key: a letter, then letters, digits or underscores.
 ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
 # The one place `--attrs` splits: a comma, spaces or tabs, then the next
@@ -1803,6 +1805,11 @@ class SuppliedEdit:
         if self.fields.get('REPEAT') == CLEAR_TOKEN:
             changed['REPEAT'] = None
         return changed
+
+    @property
+    def cleared(self) -> list[str]:
+        """The named fields that the clear token clears, in order."""
+        raise NotImplementedError
 
     @property
     def supplied(self) -> 'SuppliedFields':

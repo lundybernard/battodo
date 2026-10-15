@@ -3106,11 +3106,53 @@ class SuppliedEditTests(TestCase):
                 str(caught.exception), "unrecognised REPEAT value: ''"
             )
 
+        with t.subTest('a due date and tags of None clear each field'):
+            next_due.side_effect = None
+            t.se.fields = {'P': '3', 'DUE': 'None', 'TAGS': 'None'}
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '3', 'DUE': None, 'TAGS': None})
+
+    def test_cleared(t) -> None:
+        with t.subTest('none, where no field names the clear token'):
+            ret = t.se.cleared
+            t.assertEqual(ret, [])
+
+        with t.subTest('each due date, repeat and tags it names'):
+            t.se.fields = {
+                'P': '3',
+                'DUE': 'None',
+                'REPEAT': 'None',
+                'TAGS': 'None',
+            }
+
+            ret = t.se.cleared
+
+            t.assertEqual(ret, ['DUE', 'REPEAT', 'TAGS'])
+
+        with t.subTest('not a priority, which reads the token as a value'):
+            t.se.fields = {'P': 'None'}
+            ret = t.se.cleared
+            t.assertEqual(ret, [])
+
+        with t.subTest('not an empty value'):
+            t.se.fields = {'TAGS': ''}
+            ret = t.se.cleared
+            t.assertEqual(ret, [])
+
     @patch(f'{SRC}.SuppliedFields', autospec=True)
     def test_supplied(t, supplied_fields: MagicMock) -> None:
-        ret = t.se.supplied
-        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
-        t.assertIs(ret, supplied_fields.return_value)
+        with t.subTest('the named fields, against the day'):
+            ret = t.se.supplied
+            supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
+            t.assertIs(ret, supplied_fields.return_value)
+
+        with t.subTest('a cleared field is left out, unread'):
+            supplied_fields.reset_mock()
+            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
+
+            _ = t.se.supplied
+
+            supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
 
     @patch(f'{SRC}.SuppliedTitle', autospec=True)
     def test_checked_title(t, supplied_title: MagicMock) -> None:

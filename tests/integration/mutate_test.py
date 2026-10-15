@@ -2182,6 +2182,11 @@ class SuppliedEditTests(TestCase):
             ret = t.se.changed
             t.assertEqual(ret, {'P': '5', 'REPEAT': None})
 
+        with t.subTest('a due date and tags of None clear each field'):
+            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'DUE': None, 'TAGS': None})
+
         refused = {
             'a value that does not read': (
                 {'DUE': 'x'},
@@ -2193,15 +2198,36 @@ class SuppliedEditTests(TestCase):
                 RepeatError,
                 "unrecognised REPEAT value: ''",
             ),
+            'a priority of None, which is no clear': (
+                {'P': 'None'},
+                ValueError,
+                "P must be a whole number, not 'None'",
+            ),
         }
         for name, (fields, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
                 t.se.fields = fields
                 _ = t.se.changed
 
+    def test_cleared(t) -> None:
+        with t.subTest('none, where no field names the clear token'):
+            ret = t.se.cleared
+            t.assertEqual(ret, [])
+
+        with t.subTest('each due date, repeat and tags it names'):
+            t.se.fields = {'DUE': 'None', 'REPEAT': 'None', 'TAGS': 'None'}
+            ret = t.se.cleared
+            t.assertEqual(ret, ['DUE', 'REPEAT', 'TAGS'])
+
     def test_supplied(t) -> None:
-        ret = t.se.supplied
-        t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+        with t.subTest('the named fields, read'):
+            ret = t.se.supplied
+            t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+
+        with t.subTest('a cleared field is left out'):
+            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
+            ret = t.se.supplied
+            t.assertEqual(ret.ordered, {'P': '5'})
 
     def test_checked_title(t) -> None:
         with t.subTest('the named title'):
@@ -2260,6 +2286,16 @@ class SuppliedEditTests(TestCase):
             'a clear of a field the task does not carry is not': (
                 t.bare,
                 {'REPEAT': 'None'},
+                {},
+            ),
+            'a clear of a due date and tags the task carries is a change': (
+                t.node,
+                {'DUE': 'None', 'TAGS': 'None'},
+                {'DUE': None, 'TAGS': None},
+            ),
+            'a clear of a due date and tags it does not carry is not': (
+                t.bare,
+                {'DUE': 'None', 'TAGS': 'None'},
                 {},
             ),
         }
