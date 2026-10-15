@@ -113,28 +113,16 @@ class Journal:
             flock(handle.fileno(), LOCK_EX)
             try:
                 self._forget()
-                existing = self.events
-                event = {
-                    'seq': len(existing) + 1,
-                    'event_id': str(uuid4()),
-                    'stream_id': stream_id,
-                    'stream_seq': sum(
-                        e['stream_id'] == stream_id for e in existing
-                    )
-                    + 1,
-                    'type': event_type,
-                    'schema_version': SCHEMA_VERSION,
-                    'occurred_at': occurred_at or recorded_at,
-                    'recorded_at': recorded_at,
-                    'metadata': {
-                        'actor': actor,
-                        'source_file': source_file,
-                    },
-                    'payload': payload,
-                }
-                handle.write(dumps(event) + '\n')
-                handle.flush()
-                fsync(handle.fileno())
+                event = self.next_event(
+                    event_type,
+                    stream_id,
+                    payload,
+                    actor=actor,
+                    source_file=source_file,
+                    occurred_at=occurred_at,
+                    recorded_at=recorded_at,
+                )
+                self._write(handle, event)
             finally:
                 self._forget()
                 flock(handle.fileno(), LOCK_UN)
