@@ -85,11 +85,6 @@ class Journal:
             streams.setdefault(event['stream_id'], []).append(event)
         return streams
 
-    def _forget(self) -> None:
-        """Drop the cached text and the events parsed from it."""
-        self.__dict__.pop('text', None)
-        self.__dict__.pop('events', None)
-
     def append(
         self,
         event_type: str,
@@ -128,6 +123,11 @@ class Journal:
                 flock(handle.fileno(), LOCK_UN)
 
         return event
+
+    def _forget(self) -> None:
+        """Drop the cached text and the events parsed from it."""
+        self.__dict__.pop('text', None)
+        self.__dict__.pop('events', None)
 
     def next_event(
         self,
