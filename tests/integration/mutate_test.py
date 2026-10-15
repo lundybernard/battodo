@@ -1731,6 +1731,30 @@ class CompletionTests(TestCase):
                 ],
             )
 
+        with t.subTest('a recurrence records its next due date and ADDED'):
+            completed = completion_of(t.source, 'A subtask that does not')
+
+            _, ret = completed.events
+
+            t.assertEqual(
+                ret.payload['delta'],
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': [None, '2026-08-08'],
+                },
+            )
+
+        with t.subTest('a repeating subtask records its next due date alone'):
+            completed = completion_of(a_stepped_source(t), 'rs01ab')
+
+            (ret,) = completed.events
+
+            t.assertEqual(
+                ret.payload['delta'],
+                {'done': [False, True], 'DUE': ['2026-08-05', '2026-08-15']},
+            )
+
         with t.subTest('a checklist item lands on its owner stream'):
             completed = completion_of(t.source, 'A checklist item')
 
