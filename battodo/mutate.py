@@ -1794,7 +1794,7 @@ class SuppliedEdit:
     def changed(self) -> dict[str, str | None]:
         """The named fields, read, a cleared one None.
 
-        A `REPEAT` of the clear token clears the field and is not read.
+        A cleared field is not read.
 
         Raises
         ------
@@ -1802,25 +1802,30 @@ class SuppliedEdit:
             A supplied value does not read.
         """
         changed: dict[str, str | None] = {**self.supplied.checked}
-        if self.fields.get('REPEAT') == CLEAR_TOKEN:
-            changed['REPEAT'] = None
+        for name in self.cleared:
+            changed[name] = None
         return changed
 
     @property
     def cleared(self) -> list[str]:
         """The named fields that the clear token clears, in order."""
-        raise NotImplementedError
+        return [
+            name
+            for name, value in self.fields.items()
+                if value == CLEAR_TOKEN and name in CLEARABLE_FIELDS
+        ]  # fmt: skip
 
     @property
     def supplied(self) -> 'SuppliedFields':
         """The named fields to read against `today`.
 
-        A cleared repeat is not read, so it is left out.
+        A cleared field is not read, so it is left out.
         """
+        cleared = self.cleared
         read = {
             name: value
             for name, value in self.fields.items()
-                if (name, value) != ('REPEAT', CLEAR_TOKEN)
+                if name not in cleared
         }  # fmt: skip
         return SuppliedFields(read, self.today)
 
