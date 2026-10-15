@@ -156,17 +156,33 @@ class Journal:
 
         An `occurred_at` of None is `recorded_at`.
         """
-        raise NotImplementedError
+        return {
+            'seq': self.next_seq,
+            'event_id': str(uuid4()),
+            'stream_id': stream_id,
+            'stream_seq': self.next_stream_seq(stream_id),
+            'type': event_type,
+            'schema_version': SCHEMA_VERSION,
+            'occurred_at': occurred_at or recorded_at,
+            'recorded_at': recorded_at,
+            'metadata': {
+                'actor': actor,
+                'source_file': source_file,
+            },
+            'payload': payload,
+        }
 
     @property
     def next_seq(self) -> int:
         """The `seq` of the next event: one past the events of the text."""
-        raise NotImplementedError
+        return len(self.events) + 1
 
     def next_stream_seq(self, stream_id: str) -> int:
         """The `stream_seq` of the next event of `stream_id`."""
-        raise NotImplementedError
+        return len(self.streams.get(stream_id, [])) + 1
 
     def _write(self, handle: TextIO, event: dict[str, Any]) -> None:
         """Write `event` as one JSON line, and sync it to the disk."""
-        raise NotImplementedError
+        handle.write(dumps(event) + '\n')
+        handle.flush()
+        fsync(handle.fileno())
