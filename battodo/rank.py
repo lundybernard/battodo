@@ -154,8 +154,8 @@ def parse_point(segment: str) -> tuple[int, float]:
         of 0 or more.
     """
     text = segment.strip()
-    days_text, _, factor_text = text.partition(':')
     try:
+        days_text, factor_text = text.split(':')
         days, factor = int(days_text), float(factor_text)
     except ValueError:
         raise ValueError(f'{CURVE_ERROR}: {text!r}') from None
