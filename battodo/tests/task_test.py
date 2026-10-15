@@ -56,13 +56,19 @@ class TaskTests(TestCase):
 
         with t.subTest('a date btodo cannot read is refused'):
             t.parse_date.return_value = None
-            with t.assertRaises(ValueError):
+
+            with t.assertRaises(ValueError) as caught:
                 Task.from_config(
                     t.conf,
                     t.now,
                     selector='a selector',
                     date='yesterday',
                 )
+
+            t.assertEqual(
+                str(caught.exception),
+                "completion date must be an ISO date, not 'yesterday'",
+            )
 
     def test_source(t):
         ret = t.tk.source
