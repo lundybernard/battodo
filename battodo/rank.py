@@ -112,9 +112,7 @@ def age_score(task: TaskNode, today: date) -> float:
     added = parse_date(task.added)
     if added is None:
         return 0.0
-    days = (today - added).days
-    if days <= 0:
-        return 0.0
+    days = max((today - added).days, 0)
     return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
