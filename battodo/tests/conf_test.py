@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -112,9 +113,13 @@ class ConfigFileTests(TestCase):
     """
 
     def setUp(t):
-        patcher = patch.dict('os.environ', {}, clear=True)
+        # Only the variables ConfigFile reads go: a cleared environment
+        # also hides the variable that selects the active mutant.
+        patcher = patch.dict(environ)
         patcher.start()
         t.addCleanup(patcher.stop)
+        for name in (CONFIG_FILE_ENV_VAR, 'XDG_CONFIG_HOME'):
+            environ.pop(name, None)
 
         t.cf = ConfigFile(
             # Default: name=None,
