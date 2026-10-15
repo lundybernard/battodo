@@ -161,4 +161,5 @@ def parse_point(segment: str) -> tuple[int, float]:
         raise ValueError(f'{CURVE_ERROR}: {text!r}') from None
     if not isfinite(factor) or factor < 0:
         raise ValueError(f'{CURVE_ERROR}: {text!r}')
-    return days, factor
+    # A factor of -0 passes the bound; abs reads it as 0.0.
+    return days, abs(factor)
