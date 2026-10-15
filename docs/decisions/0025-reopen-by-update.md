@@ -108,3 +108,12 @@ outside the schema. The owner's journal was migrated in place by a
 one-off local script that is not part of the project, so every snapshot
 in it names its list. The reader does not fall back to `source_file`,
 and it does not refuse a record without a list.
+
+## Amendment — 2026-10-14
+
+A reopen applies the no-change rule of
+[ADR 0028](0028-update-repeat.md), as amended on 2026-10-14. A field
+value, a title or a description that the task holds stays out of the
+delta. The reopen is a change by itself, so a reopen whose named inputs
+are all no change still opens the task, and its delta records the
+opening alone.

@@ -303,10 +303,14 @@ class SubtaskViewTests(TestCase):
 
     def test_fields(t) -> None:
         with t.subTest('every field, in SCHEMA.md order'):
+            t.node.fields['REPEAT'] = '7d'
+
             ret = t.sv.fields
+
             t.assertEqual(
                 ret,
-                ' [LOE:2] [DUE:2026-09-01] [TAGS:yard,summer] [ID:abc123]',
+                ' [LOE:2] [DUE:2026-09-01] [REPEAT:7d] [TAGS:yard,summer]'
+                ' [ID:abc123]',
             )
 
         with t.subTest('an absent field is left out'):

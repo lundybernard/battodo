@@ -49,14 +49,17 @@ btodo completed [today|week|month] [--format text|json]
 `show --format json` carries `description` on the item and on each
 entry of `subtasks`: the description lines joined by `\n`, or `null`
 when the task has none. It carries `repeat` on both too: the
-`[REPEAT:]` value, or `null` when the task does not repeat.
+`[REPEAT:]` value, or `null` when the task does not repeat. The text
+form of `show` prints a subtask's repeat as `[REPEAT:]` on its line.
 
-`history` lists each completion and each reopen of one task, and every
-other event of that task that carries attributes, newest first. Its
-JSON holds `id`, `title` and `entries`. Each entry holds `kind` (the
-event type: `TaskCompleted`, `TaskAnnotated`, or `TaskUpdated` for a
-reopen and an update with attributes), `checklist_item` (true for the
-completion of a checklist item under the task), `day` and `attrs`.
+`history` lists each close and each reopen of one task, and every
+other event of that task that carries attributes, newest first. A
+completion and a scratch each close the task, with or without
+attributes. Its JSON holds `id`, `title` and `entries`. Each entry
+holds `kind` (the event type: `TaskCompleted`, `TaskScratched`,
+`TaskAnnotated`, or `TaskUpdated` for a reopen and an update with
+attributes), `checklist_item` (true for the close of a checklist item
+under the task), `day` and `attrs`.
 [README.md](README.md#history-of-a-task) states how each entry takes
 its day and its place in the order.
 
@@ -97,12 +100,16 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   effort: 1, 2, 3, 5 or 8. `--repeat` is `Nd`, `Nw`, `weekly:DAY` or
   `monthly:N`. `--tags` is a comma-separated list.
 - `update --repeat R` sets or changes the repeat of a task at any
-  depth.
-  `update --repeat None` removes it; btodo refuses an empty `--repeat`.
-  `DUE` stays as it is: the new rule applies at the next completion,
-  and with no repeat the next `done` completes the task. A repeat the
-  task already carries, or `None` on a task with none, is no change:
-  with no other option, `update` exits 1 with "nothing to update".
+  depth. `update --repeat None` removes it; btodo refuses an empty
+  `--repeat`. `DUE` stays as it is: the new rule applies at the next
+  completion, and with no repeat the next `done` completes the task.
+- A value that the task already holds is no change: a `-p`, `--due`,
+  `--repeat` or `--tags` value, a `--title` or a `--description`. So is
+  `--repeat None` on a task with no repeat, and `--description None` or
+  `''` on a task with no description. btodo compares `--due` as a date.
+  It writes only the changes, and the journal delta records only them.
+  With no change left, `update` on an open task exits 1 with "nothing
+  to update" and writes nothing; a closed task still reopens.
 - Give the title without `[FIELD:]` markup. Fields go in through their
   own options.
 - `--description` sets the description of a task: each line of `TEXT`

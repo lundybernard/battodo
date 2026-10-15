@@ -219,12 +219,12 @@ A finished one-shot task stays reachable after its block leaves the
 list. A task with no stream is an error.
 
 **Text output.** A header line with the task's title and `[ID:]`, then
-one entry per completion on the stream and one per other event that
-carries attributes. Each entry shows its kind, its day, and each
+one entry per completion or scratch on the stream and one per other
+event that carries attributes. Each entry shows its kind, its day, and each
 attribute as `key=value`, in recorded order. The kind is the event
-type; the checklist marker labels the completion of a checklist item.
-A completion's day is `completed_on`; any other entry's day is the
-local day of `occurred_at`. Entries run newest first by day. On one
+type; the checklist marker labels the close of a checklist item. A
+close's day is its `completed_on`; any other entry's day is the local
+day of `occurred_at`. Entries run newest first by day. On one
 day, the later event in journal order
 ([ADR 0010](../0008-journal-authority/0010-event-ordering-key.md))
 comes first. A stream with no entries gives the header and an empty

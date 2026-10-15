@@ -33,9 +33,11 @@ STREAM_IDS = ('aa11aa', 'bb22bb', 'cc33cc')
 # The characters a drawn title holds: few, so titles share parts.
 TITLE_ALPHABET = 'abAB '
 COMPLETED = 'TaskCompleted'
-# The writes that record a checklist item on its ancestor's stream.
-CHECKLIST_WRITES = (COMPLETED, 'TaskScratched')
-WRITES = ('TaskAdded', 'TaskUpdated', 'TaskAnnotated', *CHECKLIST_WRITES)
+SCRATCHED = 'TaskScratched'
+# The writes that close a task. Each records a checklist item on its
+# ancestor's stream.
+CLOSES = (COMPLETED, SCRATCHED)
+WRITES = ('TaskAdded', 'TaskUpdated', 'TaskAnnotated', *CLOSES)
 # Any character a JSON journal holds, a line break excluded.
 VALUE_CHARACTERS = st.characters(codec='utf-8', exclude_characters='\n\r')
 INDENT = '  '
@@ -92,9 +94,8 @@ def recorded_events(draw: st.DrawFn) -> Recorded:
     """One event in the shape a write records it.
 
     An update may rename the task, and may reopen it. A completion or a
-    scratch may be a checklist item's, which carries no attributes. A
-    completion may predate `completed_on`. A note always carries
-    attributes.
+    scratch may be a checklist item's, which carries no attributes, and
+    may predate `completed_on`. A note always carries attributes.
     """
     kind = draw(st.sampled_from(WRITES))
     title = draw(titles())
@@ -106,10 +107,10 @@ def recorded_events(draw: st.DrawFn) -> Recorded:
         if draw(st.booleans()):
             delta['done'] = [True, False]
         payload['delta'] = delta
-    checklist = kind in CHECKLIST_WRITES and draw(st.booleans())
+    checklist = kind in CLOSES and draw(st.booleans())
     if checklist:
         payload['checklist_item'] = True
-    if kind == COMPLETED and draw(st.booleans()):
+    if kind in CLOSES and draw(st.booleans()):
         payload['completed_on'] = draw(st.dates(EARLIEST, LATEST)).isoformat()
     noted = 1 if kind == 'TaskAnnotated' else 0
     attrs = {} if checklist else draw(attribute_maps(noted))
@@ -280,7 +281,7 @@ def current_title(events: list[Recorded], task_id: str) -> str | None:
 
 
 def entries_of(events: list[Recorded], task_id: str) -> list[Recorded]:
-    """The completions, the reopens and the events with attributes.
+    """The closes, the reopens and the events with attributes.
 
     Newest first: a later event in the journal comes before an earlier
     one of its day.
@@ -289,7 +290,7 @@ def entries_of(events: list[Recorded], task_id: str) -> list[Recorded]:
         (position, event)
         for position, event in enumerate(events)
             if event.task_id == task_id
-            if event.type == COMPLETED
+            if event.type in CLOSES
                 or event.payload.get('delta', {}).get('done') == [True, False]
                 or event.payload.get('attrs')
     ]  # fmt: skip
@@ -301,7 +302,7 @@ def entries_of(events: list[Recorded], task_id: str) -> list[Recorded]:
 
 
 def day_of(event: Recorded) -> date:
-    """The day the completion is for, or the local day of the event."""
+    """The day the close is for, or the local day of the event."""
     completed_on = event.payload.get('completed_on')
     if completed_on:
         return date.fromisoformat(completed_on)

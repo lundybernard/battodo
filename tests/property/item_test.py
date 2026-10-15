@@ -214,6 +214,7 @@ def outline(tasks: list[TaskNode], depth: int) -> list[str]:
             for name, value in (
                 ('LOE', task.loe),
                 ('DUE', task.due),
+                ('REPEAT', task.repeat),
                 ('TAGS', ','.join(task.tags) or None),
                 ('ID', task.task_id),
             )

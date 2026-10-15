@@ -331,6 +331,10 @@ class TaskHistoryTests(TestCase):
                 [('TaskCompleted', False, date(2026, 7, 31), {})],
             ),
             'a stream with no entries': ('qq11rr', []),
+            'a scratch with no attributes': (
+                'pf11pf',
+                [('TaskScratched', False, date(2026, 8, 7), {})],
+            ),
             'a reopen, beside its completion; a plain update is no entry': (
                 'rx33rx',
                 [
@@ -489,7 +493,10 @@ class HistoryViewTests(TestCase):
                 'qq11rr',
                 'Sweep the deck [ID:qq11rr]',
             ),
-            'no title recorded: the id alone': ('dd44ee', '[ID:dd44ee]'),
+            'no title recorded: the id alone heads it': (
+                'dd44ee',
+                '[ID:dd44ee]\n  2026-08-04  TaskScratched (checklist item)',
+            ),
         }
         for name, (selector, expected) in cases.items():
             with t.subTest(name):
@@ -510,7 +517,18 @@ class HistoryJsonViewTests(TestCase):
             'the document the text form lays out': ('ab12cd', PERMIT_DATA),
             'no title recorded: null': (
                 'dd44ee',
-                {'id': 'dd44ee', 'title': None, 'entries': []},
+                {
+                    'id': 'dd44ee',
+                    'title': None,
+                    'entries': [
+                        {
+                            'kind': 'TaskScratched',
+                            'checklist_item': True,
+                            'day': '2026-08-04',
+                            'attrs': {},
+                        },
+                    ],
+                },
             ),
         }
         for name, (selector, expected) in cases.items():

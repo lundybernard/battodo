@@ -563,7 +563,7 @@ class Update:
         Raises
         ------
         ValueError
-            Nothing is named to change, or a supplied value does not
+            Nothing named changes the task, or a supplied value does not
             read.
         SelectionError
             The selector does not name exactly one open task.
@@ -664,6 +664,10 @@ class Update:
     def new_title(self) -> str | None:
         """The title the update writes, or None where it names none.
 
+        A title the task holds is no change, so it is None too. The list
+        reads a title back without its outer spaces, so they are no
+        change either.
+
         Raises
         ------
         ValueError
@@ -671,20 +675,22 @@ class Update:
         """
         if self.title is None:
             return None
-        return SuppliedTitle(self.title).checked
+        title = SuppliedTitle(self.title).checked
+        return None if title.strip() == self.node.title else title
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
         """The description the update writes, or None where it names none.
 
         An empty description, or one of `None`, clears the description
-        lines.
+        lines. A description the task holds is no change, so it is None
+        too.
         """
         if self.description is None:
             return None
-        if self.description == CLEAR_VALUE:
-            return SuppliedDescription('')
-        return SuppliedDescription(self.description)
+        text = '' if self.description == CLEAR_VALUE else self.description
+        supplied = SuppliedDescription(text)
+        return None if supplied.checked == self.node.description else supplied
 
     @property
     def checked(self) -> dict[str, str | None]:
@@ -693,27 +699,28 @@ class Update:
         Raises
         ------
         ValueError
-            The update asks for the subtasks of a reopen, no field
-            changes, no title or description is named and no list moves
-            the task, or a supplied value does not read. The list is read
-            only when nothing else is named.
+            The update asks for the subtasks of a reopen, no field, title
+            or description changes the task and no list moves it, or a
+            supplied value does not read.
         """
         if self.with_subtasks:
             raise ValueError(
                 f'{self.task.selector!r} names an open task: '
                 '--with-subtasks reopens a closed task and its subtasks'
             )
-        named = (self.title, self.description)
+        changes = self.changes
+        new_title, new_description = self.new_title, self.new_description
+        moved = self.list_name is not None and self.moved
         if (
-            not self.changes
-            and all(value is None for value in named)
-            and not (self.list_name is not None and self.moved)
+            not changes
+            and new_title is None
+            and new_description is None
+            and not moved
         ):
             raise ValueError(
                 'nothing to update: name a field, a title, a description '
                 'or a list'
             )
-        changes = self.changes
         return {
             name: value
             for name, value in self.supplied.changed.items()
@@ -722,20 +729,27 @@ class Update:
 
     @property
     def changes(self) -> dict[str, str]:
-        """The named fields, less a `REPEAT` that is no change.
+        """The named fields, less each that is no change.
 
-        The task is read only where the update names a `REPEAT`. The
-        repeat the task carries is no change, and a clear of a task
-        with none is no change either.
+        A value the task holds is no change, and a clear of a field the
+        task does not carry, or carries empty, is no change either. The
+        values are read first, and the task only where a field is named.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read.
         """
-        changes = dict(self.fields)
-        repeat = changes.get('REPEAT')
-        if repeat is None:
-            return changes
-        written = None if repeat == CLEAR_VALUE else repeat
-        if written == (self.node.repeat or None):
-            del changes['REPEAT']
-        return changes
+        changed = self.supplied.changed
+        if not changed:
+            return {}
+        held = self.node.fields
+        return {
+            name: self.fields[name]
+            for name, value in changed.items()
+                if value != held.get(name)
+                and (value is not None or held.get(name))
+        }  # fmt: skip
 
     @property
     def supplied(self) -> 'SuppliedFields':
@@ -912,20 +926,26 @@ class Reopen:
 
     @property
     def checked(self) -> dict[str, str | None]:
-        """The named fields, read, a cleared one None.
+        """The named fields that change the task, read, a cleared one None.
 
-        A clear of a field the task does not carry is no change. The task
-        is read only where the reopen names a clear.
+        A value the task holds is no change, and a clear of a field the
+        task does not carry, or carries empty, is no change either. The
+        values are read first, and the task only where a field is named.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
+        changed = self.supplied.changed
+        if not changed:
+            return {}
+        held = self.node.fields
         return {
             name: value
-            for name, value in self.supplied.changed.items()
-                if value is not None or self.node.fields.get(name)
+            for name, value in changed.items()
+                if value != held.get(name)
+                and (value is not None or held.get(name))
         }  # fmt: skip
 
     @property
@@ -1181,6 +1201,10 @@ class Reopen:
     def new_title(self) -> str | None:
         """The title the reopen writes, or None where it names none.
 
+        A title the task holds is no change, so it is None too. The list
+        reads a title back without its outer spaces, so they are no
+        change either.
+
         Raises
         ------
         ValueError
@@ -1188,19 +1212,21 @@ class Reopen:
         """
         if self.title is None:
             return None
-        return SuppliedTitle(self.title).checked
+        title = SuppliedTitle(self.title).checked
+        return None if title.strip() == self.node.title else title
 
     @property
     def new_description(self) -> 'SuppliedDescription | None':
         """The description the reopen writes, or None where it names none.
 
-        A description of `None` clears, as an empty one does.
+        A description of `None` clears, as an empty one does. A
+        description the task holds is no change, so it is None too.
         """
         if self.description is None:
             return None
-        if self.description == CLEAR_VALUE:
-            return SuppliedDescription('')
-        return SuppliedDescription(self.description)
+        text = '' if self.description == CLEAR_VALUE else self.description
+        supplied = SuppliedDescription(text)
+        return None if supplied.checked == self.node.description else supplied
 
     @property
     def entry(self) -> str:

@@ -103,6 +103,7 @@ class TaskHistoryTests(TestCase):
             sentinel.completed,
             sentinel.annotated,
             sentinel.reopened,
+            sentinel.scratched,
         ]
         added = an_entry('TaskAdded', date(2026, 9, 1), {})
         updated = an_entry('TaskUpdated', date(2026, 9, 2), {'k': 'v'})
@@ -110,12 +111,14 @@ class TaskHistoryTests(TestCase):
         annotated = an_entry('TaskAnnotated', date(2026, 9, 30), {'k': 'v'})
         reopened = an_entry('TaskUpdated', date(2026, 10, 1), {})
         reopened.reopen = True
+        scratched = an_entry('TaskScratched', date(2026, 10, 2), {})
         history_entry.side_effect = [
             added,
             updated,
             completed,
             annotated,
             reopened,
+            scratched,
         ]
 
         ret = t.th.entries
@@ -128,12 +131,16 @@ class TaskHistoryTests(TestCase):
                     call(sentinel.completed, sentinel.zone),
                     call(sentinel.annotated, sentinel.zone),
                     call(sentinel.reopened, sentinel.zone),
+                    call(sentinel.scratched, sentinel.zone),
                 ]
             )
 
-        with t.subTest('a completion, a reopen, an event with attributes'):
+        with t.subTest('each close, a reopen, an event with attributes'):
             # Newest first by day. In a tie, the later event comes first.
-            t.assertEqual(ret, [reopened, annotated, completed, updated])
+            t.assertEqual(
+                ret,
+                [scratched, reopened, annotated, completed, updated],
+            )
 
 
 class StreamSelectionTests(TestCase):

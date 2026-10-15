@@ -338,9 +338,10 @@ def update_item(
 
     The selector names an open task, or else a closed task in the
     journal, which the update reopens (ADR 0025). A reopen with no
-    other input reopens the task unchanged. Only the inputs that are not
-    None are written. A `REPEAT` leaves `DUE` as it is, and takes effect
-    at the next completion (ADR 0028).
+    other input reopens the task unchanged. Only the inputs that change
+    the task are written: a value the task holds is no change. A
+    `REPEAT` leaves `DUE` as it is, and takes effect at the next
+    completion (ADR 0028).
 
     Parameters
     ----------
@@ -358,7 +359,7 @@ def update_item(
         `repeat` of `None`, the word, removes the `REPEAT` field.
     description : str or None
         The new description, one description line per line. An empty
-        one clears the description.
+        one, or `None`, the word, clears the description.
     attrs : str or None
         The attributes of the update, as `key=value` segments.
     note : str or None
@@ -382,9 +383,10 @@ def update_item(
         The selector names several open tasks, or names no open task
         and no closed task.
     ValueError
-        The attributes do not read, nothing was named to change, the
-        task cannot carry a field, a supplied value is unreadable, the
-        title holds a line break, or a description line is refused.
+        The attributes do not read, nothing named changes an open
+        task, the task cannot carry a field, a supplied value is
+        unreadable, the title holds a line break, or a description line
+        is refused.
         A reopen also refuses several closed tasks, a checklist item,
         and a subtask line that no list and no record holds. Raised
         before anything is written.

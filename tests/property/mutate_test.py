@@ -223,29 +223,20 @@ class UpdateItemTests(TestCase):
         text, _ = drawn
         ancestries = descend(TodoDocument(text).tasks, [])
         selector = data.draw(item_selectors(ancestries))
-        options = data.draw(supplied_options(UPDATE_OPTIONS))
-        title = data.draw(st.one_of(st.none(), supplied_titles()))
-        description = data.draw(supplied_descriptions())
+        found = outcome(text, ancestries, selector)
+        drawn_inputs = data.draw(update_inputs())
+        named = data.draw(with_held(drawn_inputs, held_inputs(found)))
         list_name = data.draw(st.one_of(st.none(), list_names()))
         with_subtasks = data.draw(either(st.just(False), st.booleans()))
-        titled = options if title is None else {**options, 'title': title}
-        named = described(titled, description)
         given = data.draw(supplied_attributes())
         before = Source(source_lists(text), None, [])
-        found = outcome(text, ancestries, selector)
-        if 'repeat' in options and data.draw(st.booleans()):
-            # Half the repeats name the one the task carries, or a clear
-            # of a task with none: no change.
-            options = {**options, 'repeat': carried_repeat(found)}
-            titled = options if title is None else {**options, 'title': title}
-            named = described(titled, description)
         expected = foreseen(
             updated,
             before,
             found,
-            title,
-            options,
-            description,
+            named.get('title'),
+            options_of(named),
+            named.get('description'),
             given,
             list_name,
             selector,
@@ -316,22 +307,19 @@ class UpdateItemTests(TestCase):
         tasks = TodoDocument(text).tasks
         assume(tasks)
         closed = data.draw(st.sampled_from(tasks))
-        options = data.draw(supplied_options(UPDATE_OPTIONS))
-        title = data.draw(st.one_of(st.none(), supplied_titles()))
-        description = data.draw(supplied_descriptions())
+        drawn_inputs = data.draw(update_inputs())
+        named = data.draw(with_held(drawn_inputs, held_inputs(closed)))
         list_name = data.draw(st.one_of(st.none(), list_names()))
         with_subtasks = data.draw(st.booleans())
-        titled = options if title is None else {**options, 'title': title}
-        named = described(titled, description)
         given = data.draw(supplied_attributes())
         before = closed_source(text, closed)
         expected = foreseen(
             reopened,
             before,
             closed,
-            title,
-            options,
-            description,
+            named.get('title'),
+            options_of(named),
+            named.get('description'),
             given,
             list_name,
             with_subtasks,
@@ -602,6 +590,77 @@ def supplied_options(
     return st.fixed_dictionaries(drawn).map(given_options)
 
 
+def update_inputs() -> st.SearchStrategy[dict[str, str]]:
+    """The options, the title and the description an update names.
+
+    Each is left off or given a drawn value.
+    """
+    return st.builds(
+        described,
+        st.builds(
+            titled,
+            supplied_options(UPDATE_OPTIONS),
+            st.one_of(st.none(), supplied_titles()),
+        ),
+        supplied_descriptions(),
+    )
+
+
+def titled(options: dict[str, str], title: str | None) -> dict[str, str]:
+    """The options, and the title where one is supplied."""
+    if title is None:
+        return options
+    return {**options, 'title': title}
+
+
+def with_held(
+    named: dict[str, str],
+    held: dict[str, str],
+) -> st.SearchStrategy[dict[str, str]]:
+    """The named inputs, each the one the task holds in half the draws.
+
+    An input the task holds is no change.
+    """
+    drawn = {
+        name: either(st.just(value), st.just(held.get(name, value)))
+        for name, value in named.items()
+    }
+    return st.fixed_dictionaries(drawn)
+
+
+def held_inputs(found: Answer | TaskNode) -> dict[str, str]:
+    """The inputs an update names to leave the task as it is.
+
+    A field the task does not carry is held by no option, except the
+    repeat, which a clear leaves as it is. A task with no description
+    holds the empty one. A selector that reached no task holds only the
+    clear of a repeat.
+    """
+    if isinstance(found, str):
+        return {'repeat': 'None'}
+    task = found if isinstance(found, TaskNode) else found[2][-1]
+    held = {
+        option: task.fields[field]
+        for field, option in UPDATE_OPTIONS.items()
+            if field in task.fields
+    }  # fmt: skip
+    return {
+        **held,
+        'repeat': task.repeat or 'None',
+        'title': task.title,
+        'description': task.description or '',
+    }
+
+
+def options_of(named: dict[str, str]) -> dict[str, str]:
+    """The options among the named inputs, without title or description."""
+    return {
+        name: value
+        for name, value in named.items()
+            if name in UPDATE_OPTIONS.values()
+    }  # fmt: skip
+
+
 def supplied_descriptions() -> st.SearchStrategy[str | None]:
     """A description a caller supplies, or None for none supplied.
 
@@ -857,11 +916,12 @@ def updated(
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A repeat of None clears the repeat, and a repeat
-    that leaves the task as it was is no change. A task with no id is
-    given one. The event carries the attributes. A top-level task bound
-    for another list takes its whole block there, last in the open
-    section. An open task refuses the subtasks of a reopen.
+    one clears them. A repeat of None clears the repeat. A field value,
+    a title or a description that the task holds is no change, and so is
+    a clear of a field it does not carry. A task with no id is given one.
+    The event carries the attributes. A top-level task bound for another
+    list takes its whole block there, last in the open section. An open
+    task refuses the subtasks of a reopen.
     """
     attrs = attributes(given)
     fields = supplied(options, UPDATE_OPTIONS)
@@ -875,37 +935,34 @@ def updated(
             f'{selector!r} names an open task: --with-subtasks reopens a '
             'closed task and its subtasks'
         )
-    changes = dict(fields)
-    if 'REPEAT' in fields:
-        # The task is read to tell whether the repeat changes it.
+    # Each named input is read, then the task, to tell whether the input
+    # changes it.
+    values = changed(fields)
+    if values:
         _, ancestry = reached_task(found, list_name, fields)
-        stored = ancestry[-1].fields.get('REPEAT') or None
-        repeat = None if fields['REPEAT'] == 'None' else fields['REPEAT']
-        if repeat == stored:
-            del changes['REPEAT']
-    if not changes and title is None and description is None:
-        # The list counts only where it moves the task.
-        file = None if list_name is None else list_file(before, list_name)
-        if file is not None:
-            reached(found)
-        if file in (None, LIST_FILE):
-            raise ValueError(
-                'nothing to update: name a field, a title, a description '
-                'or a list'
-            )
-    # A field that is no change is not written.
-    values = {
-        field: value
-        for field, value in changed(fields).items()
-            if field in changes
-    }  # fmt: skip
+        values = unheld(values, ancestry[-1])
+    if title is not None:
+        refuse_line_break(title)
+        _, ancestry = reached_task(found, list_name, fields)
+        title = None if title.strip() == ancestry[-1].title else title
+    lines = updated_lines(description)
+    if lines is not None:
+        _, ancestry = reached_task(found, list_name, fields)
+        held = ancestry[-1].description_lines
+        lines = None if lines == held else lines
+    # The list counts only where it moves the task.
+    file = None if list_name is None else list_file(before, list_name)
+    if file is not None:
+        reached(found)
+    moves = file not in (None, LIST_FILE)
+    if not values and title is None and lines is None and not moves:
+        raise ValueError(
+            'nothing to update: name a field, a title, a description or a list'
+        )
     text, ancestry = reached_task(found, list_name, fields)
     node = ancestry[-1]
     nested = len(ancestry) > 1
-    if title is not None:
-        refuse_line_break(title)
-    lines = updated_lines(description)
-    name = LIST_FILE if list_name is None else list_file(before, list_name)
+    name = LIST_FILE if file is None else file
     task_id = node.task_id or next(new_ids())
     written_fields = dict(values)
     if not node.task_id:
@@ -946,15 +1003,21 @@ def updated(
     return Outcome(f'{entry}\n{SOURCE}/{name}', after)
 
 
-def carried_repeat(found: Answer) -> str:
-    """The repeat of the task a selector reached, or `None` if it has none.
+def unheld(
+    values: dict[str, str | None],
+    task: TaskNode,
+) -> dict[str, str | None]:
+    """The values that change `task`.
 
-    A selector that reached no task carries none.
+    A value the task holds is no change, and so is a clear of a field it
+    does not carry or carries empty.
     """
-    if isinstance(found, str):
-        return 'None'
-    _, _, ancestry = found
-    return ancestry[-1].repeat or 'None'
+    return {
+        field: value
+        for field, value in values.items()
+            if value != task.fields.get(field)
+            and (value is not None or task.fields.get(field))
+    }  # fmt: skip
 
 
 def reached_task(
@@ -1086,12 +1149,11 @@ def reopened(
         doc.lines[at] = doc.lines[at].replace('- [x]', '- [ ]', 1)
         if not chain[-1].task_id:
             doc.set_field(at, 'ID', stamped[at])
-    # A clear of a field the task does not carry is no change.
-    values = {
-        field: value
-        for field, value in values.items()
-            if value is not None or root.fields.get(field)
-    }  # fmt: skip
+    values = unheld(values, root)
+    if title is not None and title.strip() == root.title:
+        title = None
+    if lines == root.description_lines:
+        lines = None
     doc.set_fields(index, values)
     if title is not None:
         doc.set_title(index, title)

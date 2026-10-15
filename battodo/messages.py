@@ -67,9 +67,9 @@ MESSAGES = {
     'show.selector.help': "the task's [ID:] value, or part of its title",
     'show.format.help': 'output format: text for a terminal, json for agents',
     # history
-    'history.description': "list one task's completions, its reopens and"
-    ' its other events that carry attributes, newest first, from the'
-    ' journal',
+    'history.description': "list one task's completions, scratches and"
+    ' reopens, and its other events that carry attributes, newest first,'
+    ' from the journal',
     'history.help': 'for details use history --help',
     'history.selector.metavar': 'selector',
     'history.selector.help': "the task's [ID:] value, or part of its"
