@@ -277,9 +277,14 @@ class ParsePointTests(TestCase):
     """Unit tests for battodo.rank.parse_point."""
 
     def test_point(t) -> None:
-        # The segment is stripped, the day read whole, the factor as a float.
-        ret = parse_point(' -7:1 ')
-        t.assertEqual(ret, (-7, 1.0))
+        with t.subTest('stripped, the day read whole, the factor a float'):
+            ret = parse_point(' -7:1 ')
+            t.assertEqual(ret, (-7, 1.0))
+
+        with t.subTest('a factor of -0 reads as 0.0'):
+            ret = parse_point('0:-0')
+            # The two zeros compare equal; only the repr tells them apart.
+            t.assertEqual(repr(ret), '(0, 0.0)')
 
     def test_refusal(t) -> None:
         cases = {
