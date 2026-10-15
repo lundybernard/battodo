@@ -2393,6 +2393,26 @@ class CompletionLinesTests(TestCase):
                 ret = lines.stamps
                 t.assertEqual(ret, expected)
 
+    def test_recurrence_fields(t) -> None:
+        cases = {
+            'a top-level recurrence: its next due date, the day as ADDED': (
+                lines_of(t.source, 'A subtask that does not'),
+                {'DUE': '2026-08-15', 'ADDED': '2026-08-08'},
+            ),
+            'a repeating subtask: its next due date alone': (
+                lines_of(t.stepped, 'rs01ab'),
+                {'DUE': '2026-08-15'},
+            ),
+            'none without a recurrence': (
+                lines_of(t.source, 'A subtask of it'),
+                {},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.recurrence_fields
+                t.assertEqual(ret, expected)
+
     def test_checked_off(t) -> None:
         cases = {
             'a task that stays': (lines_of(t.source, 'A subtask of it'), [6]),

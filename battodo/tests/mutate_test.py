@@ -3758,6 +3758,30 @@ class CompletionLinesTests(TestCase):
 
             t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
 
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'rescheduled', new_callable=PropertyMock)
+    def test_recurrence_fields(
+        t,
+        rescheduled: PropertyMock,
+        root_done: PropertyMock,
+    ) -> None:
+        rescheduled.return_value = date(2026, 8, 15)
+
+        with t.subTest('a top-level recurrence: its next due date, its day'):
+            root_done.return_value = True
+            ret = t.cl.recurrence_fields
+            t.assertEqual(ret, {'DUE': '2026-08-15', 'ADDED': '2026-08-01'})
+
+        with t.subTest('a repeating subtask: its next due date alone'):
+            root_done.return_value = False
+            ret = t.cl.recurrence_fields
+            t.assertEqual(ret, {'DUE': '2026-08-15'})
+
+        with t.subTest('none without a recurrence'):
+            rescheduled.return_value = None
+            ret = t.cl.recurrence_fields
+            t.assertEqual(ret, {})
+
     @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
     @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
     @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)

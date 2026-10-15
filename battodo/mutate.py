@@ -2229,6 +2229,15 @@ class CompletionLines:
         return {index: {**fields, 'ID': self.ids[index]}}
 
     @property
+    def recurrence_fields(self) -> dict[str, str]:
+        """The fields the recurrence gains, or none without one.
+
+        Its next due date, and on a top-level task the day as its
+        `[ADDED:]`, so its age counts from the last completion.
+        """
+        raise NotImplementedError
+
+    @property
     def checked_off(self) -> list[int]:
         """The lines whose box is checked.
 
