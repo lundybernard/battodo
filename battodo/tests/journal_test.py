@@ -248,3 +248,94 @@ class JournalTests(TestCase):
             t.assertEqual(written['seq'], 3)
             t.assertEqual(written['stream_seq'], 3)
             t.assertEqual(len(events), 3)
+
+    def test_next_event(t) -> None:
+        t.journal.events = [
+            {'stream_id': 'task/aa'},
+            {'stream_id': 'task/bb'},
+        ]
+
+        with t.subTest('the envelope carries the event and its metadata'):
+            ret = t.journal.next_event(
+                'TaskUpdated',
+                'task/aa',
+                {'delta': {}},
+                actor='agent',
+                source_file='a-list.md',
+                occurred_at=None,
+                recorded_at=STAMP,
+            )
+
+            t.assertEqual(
+                ret,
+                {
+                    'seq': 3,
+                    'event_id': 'ffff-1',
+                    'stream_id': 'task/aa',
+                    'stream_seq': 2,
+                    'type': 'TaskUpdated',
+                    'schema_version': SCHEMA_VERSION,
+                    'occurred_at': STAMP,
+                    'recorded_at': STAMP,
+                    'metadata': {
+                        'actor': 'agent',
+                        'source_file': 'a-list.md',
+                    },
+                    'payload': {'delta': {}},
+                },
+            )
+
+        with t.subTest('a given time is when the change happened'):
+            ret = t.journal.next_event(
+                'TaskUpdated',
+                'task/aa',
+                {},
+                actor='agent',
+                source_file='a-list.md',
+                occurred_at='2026-08-05T09:00:00+00:00',
+                recorded_at=STAMP,
+            )
+
+            t.assertEqual(ret['occurred_at'], '2026-08-05T09:00:00+00:00')
+            t.assertEqual(ret['recorded_at'], STAMP)
+
+    def test_next_seq(t) -> None:
+        with t.subTest('the first event is one'):
+            t.journal.events = []
+            ret = t.journal.next_seq
+            t.assertEqual(ret, 1)
+
+        with t.subTest('one past the events of the text'):
+            t.journal.events = [
+                {'stream_id': 'task/aa'},
+                {'stream_id': 'task/bb'},
+            ]
+
+            ret = t.journal.next_seq
+
+            t.assertEqual(ret, 3)
+
+    def test_next_stream_seq(t) -> None:
+        t.journal.events = [
+            {'stream_id': 'task/aa'},
+            {'stream_id': 'task/bb'},
+            {'stream_id': 'task/aa'},
+        ]
+
+        with t.subTest('one past the events of the stream'):
+            ret = t.journal.next_stream_seq('task/aa')
+            t.assertEqual(ret, 3)
+
+        with t.subTest('a stream with no events starts at one'):
+            ret = t.journal.next_stream_seq('task/cc')
+            t.assertEqual(ret, 1)
+
+    def test__write(t) -> None:
+        t.journal._write(t.handle, {'seq': 1})
+
+        with t.subTest('the event is written as one JSON line'):
+            t.handle.write.assert_called_once_with('{"seq": 1}\n')
+
+        with t.subTest('and flushed to the disk it claims to be on'):
+            t.handle.flush.assert_called_once_with()
+            t.fsync.assert_called_once_with(t.handle.fileno.return_value)

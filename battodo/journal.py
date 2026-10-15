@@ -18,7 +18,7 @@ from json import dumps, loads
 from os import fsync
 from pathlib import Path
 from secrets import choice
-from typing import Any
+from typing import Any, TextIO
 from uuid import uuid4
 
 SCHEMA_VERSION = 1
@@ -140,3 +140,33 @@ class Journal:
                 flock(handle.fileno(), LOCK_UN)
 
         return event
+
+    def next_event(
+        self,
+        event_type: str,
+        stream_id: str,
+        payload: dict[str, Any],
+        *,
+        actor: str,
+        source_file: str,
+        occurred_at: str | None,
+        recorded_at: str,
+    ) -> dict[str, Any]:
+        """The next event of `stream_id`, in its envelope.
+
+        An `occurred_at` of None is `recorded_at`.
+        """
+        raise NotImplementedError
+
+    @property
+    def next_seq(self) -> int:
+        """The `seq` of the next event: one past the events of the text."""
+        raise NotImplementedError
+
+    def next_stream_seq(self, stream_id: str) -> int:
+        """The `stream_seq` of the next event of `stream_id`."""
+        raise NotImplementedError
+
+    def _write(self, handle: TextIO, event: dict[str, Any]) -> None:
+        """Write `event` as one JSON line, and sync it to the disk."""
+        raise NotImplementedError
