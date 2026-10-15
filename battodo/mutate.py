@@ -2235,7 +2235,13 @@ class CompletionLines:
         Its next due date, and on a top-level task the day as its
         `[ADDED:]`, so its age counts from the last completion.
         """
-        raise NotImplementedError
+        rescheduled = self.rescheduled
+        if rescheduled is None:
+            return {}
+        fields = {'DUE': rescheduled.isoformat()}
+        if self.root_done:
+            fields['ADDED'] = self.day.isoformat()
+        return fields
 
     @property
     def checked_off(self) -> list[int]:
