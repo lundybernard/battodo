@@ -2343,9 +2343,11 @@ class CompletionTests(TestCase):
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
-        lines = MagicMock(spec=['ancestries', 'recurrence', 'rescheduled'])
+        lines = MagicMock(
+            spec=['ancestries', 'recurrence', 'recurrence_fields']
+        )
         lines.ancestries = [below, top]
-        lines.rescheduled = date(2026, 8, 15)
+        lines.recurrence_fields = sentinel.recurrence_fields
         t.co.lines = lines
         completed_on.return_value = GIVEN_DAY
         t.co.attrs = sentinel.attrs
@@ -2360,14 +2362,14 @@ class CompletionTests(TestCase):
                 task_completion.call_args_list,
                 [
                     call(
-                        below, None, GIVEN_DAY, 'a-list', sentinel.attrs, False
+                        below, {}, GIVEN_DAY, 'a-list', sentinel.attrs, False
                     ),
-                    call(top, None, GIVEN_DAY, 'a-list', None, False),
+                    call(top, {}, GIVEN_DAY, 'a-list', None, False),
                 ],
             )
             t.assertEqual(ret, [task_completion.return_value] * 2)
 
-        with t.subTest('a recurrence takes its next due date'):
+        with t.subTest('a recurrence takes the fields it gains'):
             task_completion.reset_mock()
             lines.recurrence = t.parent
 
@@ -2377,11 +2379,11 @@ class CompletionTests(TestCase):
                 task_completion.call_args_list,
                 [
                     call(
-                        below, None, GIVEN_DAY, 'a-list', sentinel.attrs, False
+                        below, {}, GIVEN_DAY, 'a-list', sentinel.attrs, False
                     ),
                     call(
                         top,
-                        date(2026, 8, 15),
+                        sentinel.recurrence_fields,
                         GIVEN_DAY,
                         'a-list',
                         None,
@@ -2401,13 +2403,13 @@ class CompletionTests(TestCase):
                 [
                     call(
                         below,
-                        date(2026, 8, 15),
+                        sentinel.recurrence_fields,
                         GIVEN_DAY,
                         'a-list',
                         sentinel.attrs,
                         False,
                     ),
-                    call(top, None, GIVEN_DAY, 'a-list', None, False),
+                    call(top, {}, GIVEN_DAY, 'a-list', None, False),
                 ],
             )
 
@@ -2420,7 +2422,7 @@ class CompletionTests(TestCase):
             _ = t.co.completions
 
             task_completion.assert_called_once_with(
-                below, None, GIVEN_DAY, 'a-list', sentinel.attrs, True
+                below, {}, GIVEN_DAY, 'a-list', sentinel.attrs, True
             )
 
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
@@ -3703,16 +3705,16 @@ class CompletionLinesTests(TestCase):
         t.parent.children = [t.child, done_child_node()]
         t.cl = CompletionLines([t.parent, t.child], GIVEN_DAY)
 
-    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    @patch.object(
+        CompletionLines, 'recurrence_fields', new_callable=PropertyMock
+    )
     @patch.object(CompletionLines, 'dropped', new_callable=PropertyMock)
-    @patch.object(CompletionLines, 'rescheduled', new_callable=PropertyMock)
     @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
     def test_stamps(
         t,
         recurrence: PropertyMock,
-        rescheduled: PropertyMock,
         dropped: PropertyMock,
-        root_done: PropertyMock,
+        recurrence_fields: PropertyMock,
     ) -> None:
         t.cl.ids = {3: 'zz01ab', 1: '9o71lx'}
         dropped.return_value = set()
@@ -3732,10 +3734,12 @@ class CompletionLinesTests(TestCase):
             ret = t.cl.stamps
             t.assertEqual(ret, {})
 
-        with t.subTest('a recurrence: its next due date, its day, its id'):
+        with t.subTest('a recurrence: the fields it gains, then its id'):
             recurrence.return_value = t.parent
-            rescheduled.return_value = date(2026, 8, 15)
-            root_done.return_value = True
+            recurrence_fields.return_value = {
+                'DUE': '2026-08-15',
+                'ADDED': '2026-08-01',
+            }
 
             ret = t.cl.stamps
 
@@ -3750,9 +3754,9 @@ class CompletionLinesTests(TestCase):
                 },
             )
 
-        with t.subTest('a repeating subtask: its next due date, its id'):
+        with t.subTest('a repeating subtask: its fields on its own line'):
             recurrence.return_value = t.child
-            root_done.return_value = False
+            recurrence_fields.return_value = {'DUE': '2026-08-15'}
 
             ret = t.cl.stamps
 
@@ -4032,7 +4036,7 @@ class TaskCompletionTests(TestCase):
         t.node = parent_node()
         t.tc = TaskCompletion(
             ancestry_of(t.node, path='a path'),
-            None,
+            {},
             GIVEN_DAY,
             'a-list',
         )
@@ -4091,10 +4095,13 @@ class TaskCompletionTests(TestCase):
             ret = t.tc.delta
             t.assertEqual(ret, {'done': [False, True]})
 
-        with t.subTest('a recurrence records its new due and added dates'):
+        with t.subTest('each field the task gains, against its own'):
             t.node.fields['DUE'] = '2026-08-05'
             t.node.fields['ADDED'] = '2026-07-06'
-            t.tc.rescheduled = date(2026, 8, 15)
+            t.tc.recurrence_fields = {
+                'DUE': '2026-08-15',
+                'ADDED': '2026-08-01',
+            }
 
             ret = t.tc.delta
 
@@ -4107,10 +4114,9 @@ class TaskCompletionTests(TestCase):
                 },
             )
 
-        with t.subTest('a rescheduled subtask records its new due date'):
-            child = child_node()
-            child.fields['DUE'] = '2026-08-05'
-            t.tc.ancestry = ancestry_of(t.node, child)
+        with t.subTest('a field the task does not carry stands against None'):
+            t.tc.ancestry = ancestry_of(t.node, child_node())
+            t.tc.recurrence_fields = {'DUE': '2026-08-15'}
 
             ret = t.tc.delta
 
@@ -4118,12 +4124,12 @@ class TaskCompletionTests(TestCase):
                 ret,
                 {
                     'done': [False, True],
-                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'DUE': [None, '2026-08-15'],
                 },
             )
 
         with t.subTest('a scratch records the removal instead'):
-            t.tc.rescheduled = None
+            t.tc.recurrence_fields = {}
             t.tc.scratched = True
             ret = t.tc.delta
             t.assertEqual(ret, {'removed': [False, True]})

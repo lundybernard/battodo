@@ -1435,19 +1435,19 @@ class Completion:
     def completions(self) -> list['TaskCompletion']:
         """One per task the completion finishes, deepest first.
 
-        A rescheduled task takes its next due date. The attributes go
-        to the named task alone.
+        The recurrence takes the fields it gains. The attributes go to
+        the named task alone.
         """
         lines = self.lines
-        recurrence, rescheduled = lines.recurrence, lines.rescheduled
+        recurrence, gained = lines.recurrence, lines.recurrence_fields
         day, ancestries = self.completed_on, lines.ancestries
         list_name = self.path.stem
         completions = []
         for ancestry in ancestries:
-            due = rescheduled if ancestry.node is recurrence else None
+            fields = gained if ancestry.node is recurrence else {}
             attrs = self.attrs if ancestry is ancestries[0] else None
             completion = TaskCompletion(
-                ancestry, due, day, list_name, attrs, self.scratched
+                ancestry, fields, day, list_name, attrs, self.scratched
             )
             completions.append(completion)
         return completions
@@ -2209,13 +2209,11 @@ class CompletionLines:
     def stamps(self) -> dict[int, dict[str, str]]:
         """The fields each line gains, by its index.
 
-        A task still in the list gains the id of its stream. A recurring
-        task gains its next due date. A recurring top-level task also
-        gains the day as its `[ADDED:]`, so its age counts from the last
-        completion.
+        A task still in the list gains the id of its stream. The
+        recurrence gains its own fields as well.
         """
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        if recurrence is None or rescheduled is None:
+        recurrence = self.recurrence
+        if recurrence is None:
             dropped = self.dropped
             return {
                 index: {'ID': task_id}
@@ -2223,10 +2221,7 @@ class CompletionLines:
                     if index not in dropped
             }  # fmt: skip
         index = recurrence.raw_index
-        fields = {'DUE': rescheduled.isoformat()}
-        if self.root_done:
-            fields['ADDED'] = self.day.isoformat()
-        return {index: {**fields, 'ID': self.ids[index]}}
+        return {index: {**self.recurrence_fields, 'ID': self.ids[index]}}
 
     @property
     def recurrence_fields(self) -> dict[str, str]:
@@ -2342,10 +2337,10 @@ class CompletionLines:
 class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
-    `rescheduled` is the next due date of a task the completion
-    reschedules, and None for every other task. `day` is the day the
-    completion is for, and `list_name` the stem of the list that holds
-    the task. `attrs` holds the attributes of the named task, and None
+    `recurrence_fields` holds the fields that a task the completion
+    reschedules gains, and is empty for every other task. `day` is the
+    day the completion is for, and `list_name` the stem of the list that
+    holds the task. `attrs` holds the attributes of the named task, and None
     for every other task. The event of a checklist item lands on the
     stream of an ancestor, so its payload marks it as a checklist item.
     `scratched` marks the close of a task that is not completed.
@@ -2354,14 +2349,14 @@ class TaskCompletion:
     def __init__(
         self,
         ancestry: Ancestry,
-        rescheduled: date | None,
+        recurrence_fields: dict[str, str],
         day: date,
         list_name: str,
         attrs: dict[str, str] | None = None,
         scratched: bool = False,
     ) -> None:
         self.ancestry = ancestry
-        self.rescheduled = rescheduled
+        self.recurrence_fields = recurrence_fields
         self.day = day
         self.list_name = list_name
         self.attrs = attrs
@@ -2389,18 +2384,15 @@ class TaskCompletion:
 
     @property
     def delta(self) -> dict[str, list[Any]]:
-        """The done or the removal, and a new due date beside it.
+        """The done or the removal, and each field the task gains.
 
-        A rescheduled top-level task also records its new `[ADDED:]`,
-        the day.
+        A gained field stands against the value it replaces.
         """
         node = self.ancestry.node
         change = 'removed' if self.scratched else 'done'
         delta: dict[str, list[Any]] = {change: [False, True]}
-        if self.rescheduled is not None:
-            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-            if not self.ancestry.nested:
-                delta['ADDED'] = [node.added, self.day.isoformat()]
+        for name, value in self.recurrence_fields.items():
+            delta[name] = [node.fields.get(name), value]
         return delta
 
     @property

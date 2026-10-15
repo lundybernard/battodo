@@ -117,6 +117,8 @@ OWNER_SNAPSHOT = {
         },
     ],
 }
+# The fields the recurring task rr01ab gains at its completion on TODAY.
+RR01AB_GAINED = {'DUE': '2026-08-15', 'ADDED': '2026-08-08'}
 
 
 # A list of chores with repeating steps. The titles name the role each
@@ -2598,16 +2600,18 @@ class TaskCompletionTests(TestCase):
                 record_of(t.source, '9o71lx'),
                 {'done': [False, True]},
             ),
-            'a top-level recurrence: its new due date and ADDED': (
-                record_of(t.source, 'rr01ab', date(2026, 8, 15)),
+            'a recurrence: each field it gains, against its own': (
+                record_of(t.source, 'rr01ab', RR01AB_GAINED),
                 {
                     'done': [False, True],
                     'DUE': ['2026-08-05', '2026-08-15'],
                     'ADDED': [None, '2026-08-08'],
                 },
             ),
-            'a rescheduled subtask: its new due date alone': (
-                record_of(a_stepped_source(t), 'os01ab', date(2026, 9, 5)),
+            'a rescheduled subtask: the one field it gains': (
+                record_of(
+                    a_stepped_source(t), 'os01ab', {'DUE': '2026-09-05'}
+                ),
                 {
                     'done': [False, True],
                     'DUE': ['2026-08-05', '2026-09-05'],
@@ -2625,7 +2629,7 @@ class TaskCompletionTests(TestCase):
 
     def test_payload(t) -> None:
         with t.subTest('the delta, the task as it was, its path, its day'):
-            record = record_of(t.source, 'rr01ab', date(2026, 8, 15))
+            record = record_of(t.source, 'rr01ab', RR01AB_GAINED)
 
             ret = record.payload
 
@@ -2749,13 +2753,14 @@ def lines_of(
 def record_of(
     source: Path,
     selector: str,
-    rescheduled: date | None = None,
+    recurrence_fields: dict[str, str] | None = None,
     scratched: bool = False,
 ) -> TaskCompletion:
     """The record of a close of the task `selector` names, on TODAY."""
     ancestry = Ancestry(Task(source, selector, TODAY).ancestry)
+    gained = recurrence_fields or {}
     return TaskCompletion(
-        ancestry, rescheduled, TODAY, 'a-list', scratched=scratched
+        ancestry, gained, TODAY, 'a-list', scratched=scratched
     )
 
 
