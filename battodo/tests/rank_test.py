@@ -142,6 +142,22 @@ class DueFactorTests(TestCase):
                 ret = due_factor(t.tk, TODAY, [(0, 1.5)])
                 t.assertAlmostEqual(ret, 1.5)
 
+    def test_point(t) -> None:
+        # A day on a point reads the factor of that point exactly. These
+        # factors do not round clean: 0.2 + (0.9 - 0.2) is not 0.9.
+        curve = [(-7, 0.2), (0, 0.9), (14, 0.1)]
+        cases = {
+            '2026-08-15': 0.2,
+            '2026-08-08': 0.9,
+            '2026-07-25': 0.1,
+        }
+
+        for value, expected in cases.items():
+            with t.subTest(f'DUE:{value}'):
+                t.tk.fields = {'DUE': value}
+                ret = due_factor(t.tk, TODAY, curve)
+                t.assertEqual(ret, expected)
+
 
 class RankTests(TestCase):
     """Unit tests for battodo.rank.rank."""
