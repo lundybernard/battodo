@@ -38,23 +38,36 @@ design, so the two cannot coexist.
 ## Options
 
 ### Option 1 — Union merge, dedup by `event_id`, rewrite (chosen)
-- [pro] Convergent: any two copies merged in any order produce the same file and the same state
-- [pro] The whole implementation is concat, dedup, sort — no per-device bookkeeping
-- [pro] Idempotent, so merging an already-merged log is a no-op and repeated syncs are safe
+
+- [pro] Convergent: any two copies merged in any order produce the same file and
+  the same state
+- [pro] The whole implementation is concat, dedup, sort — no per-device
+  bookkeeping
+- [pro] Idempotent, so merging an already-merged log is a no-op and repeated
+  syncs are safe
 - [con] The file is rewritten, so it is not strictly append-only any more
-- [con] Deletes the reserved hash-chain fields, closing that door without having tried it
+- [con] Deletes the reserved hash-chain fields, closing that door without having
+  tried it
 
 ### Option 2 — One log file per device, merged at read
-- [pro] Every file stays strictly append-only, and sync never produces a conflict
-- [con] Machinery — device identity, file discovery, N-way read merge — for a problem union merge already solves at this volume
-- [con] Was ADR 0004's stated fix for a trigger (recurring conflict files) that has not fired
+
+- [pro] Every file stays strictly append-only, and sync never produces a
+  conflict
+- [con] Machinery — device identity, file discovery, N-way read merge — for a
+  problem union merge already solves at this volume
+- [con] Was ADR 0004's stated fix for a trigger (recurring conflict files) that
+  has not fired
 
 ### Option 3 — Keep the hash chain
+
 - [pro] Tamper-evidence, and shared event vocabulary with OpenFrameKeeper
-- [con] A chain assumes an immutable sequence, which rewrite-on-reconcile violates on every merge
-- [con] Never implemented, so nothing depends on it and there is no tamper-evidence to lose
+- [con] A chain assumes an immutable sequence, which rewrite-on-reconcile
+  violates on every merge
+- [con] Never implemented, so nothing depends on it and there is no
+  tamper-evidence to lose
 
 ### Option 4 — CRDTs
+
 - [pro] Principled convergence with per-field conflict semantics
 - [con] Overkill for a single-user tool with a handful of events a day
 
