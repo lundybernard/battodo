@@ -21,6 +21,7 @@ from ..mutate import (
     Changeset,
     CompletedLog,
     Completion,
+    CompletionLines,
     Event,
     IdAssignment,
     ListBackfill,
@@ -33,6 +34,7 @@ from ..mutate import (
     SubtaskAddition,
     SuppliedAttributes,
     SuppliedDescription,
+    SuppliedEdit,
     SuppliedFields,
     SuppliedTitle,
     TaskCompletion,
@@ -876,8 +878,7 @@ class UpdateTests(TestCase):
 
         with t.subTest('a description replaces the description lines'):
             doc.reset_mock()
-            new_description.return_value = MagicMock(spec=['lines'])
-            new_description.return_value.lines = sentinel.lines
+            new_description.return_value = sentinel.lines
 
             _ = t.up.document
 
@@ -885,8 +886,7 @@ class UpdateTests(TestCase):
                 doc.method_calls,
                 [
                     call.set_fields(1, sentinel.written),
-                    call.drop({2}),
-                    call.insert_description(1, sentinel.lines),
+                    call.set_description(t.parent, sentinel.lines),
                 ],
             )
 
@@ -970,14 +970,14 @@ class UpdateTests(TestCase):
             t.assertEqual(ret, {'P': '5', 'ID': 'zz01ab'})
 
     @patch.object(TaskNode, 'refuse_checklist_item', autospec=True)
-    @patch.object(Update, 'supplied', new_callable=PropertyMock)
+    @patch.object(Update, 'edit', new_callable=PropertyMock)
     def test_node(
         t,
-        supplied: PropertyMock,
+        edit: PropertyMock,
         refuse_checklist_item: MagicMock,
     ) -> None:
-        supplied.return_value = MagicMock(spec=['refuse_root_fields'])
-        refuse_root_fields = supplied.return_value.refuse_root_fields
+        edit.return_value = MagicMock(spec=['refuse_root_fields'])
+        refuse_root_fields = edit.return_value.refuse_root_fields
 
         with t.subTest('the task the selector names'):
             ret = t.up.node
@@ -1017,168 +1017,130 @@ class UpdateTests(TestCase):
 
             refuse_root_fields.assert_not_called()
 
-    @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch.object(Update, 'node', new_callable=PropertyMock)
-    def test_new_title(
-        t,
-        node: PropertyMock,
-        supplied_title: MagicMock,
-    ) -> None:
+    @patch.object(Update, 'edit', new_callable=PropertyMock)
+    def test_new_title(t, edit: PropertyMock, node: PropertyMock) -> None:
+        edit.return_value = MagicMock(spec=['checked_title', 'new_title'])
+        edited = edit.return_value
         node.return_value = t.parent
-        supplied_title.return_value.checked = 'A new title'
 
-        with t.subTest('the title the update names, read'):
+        with t.subTest('the title that changes the task'):
+            edited.checked_title = 'A new title'
+
             ret = t.up.new_title
-            supplied_title.assert_called_once_with('A new title')
-            t.assertEqual(ret, 'A new title')
 
-        with t.subTest('none, where the task holds that title'):
-            supplied_title.return_value.checked = 'A task'
-            ret = t.up.new_title
-            t.assertIsNone(ret)
+            edited.new_title.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.new_title.return_value)
 
-        with t.subTest('none, where it holds the title spaces aside'):
-            supplied_title.return_value.checked = ' A task '
-            ret = t.up.new_title
-            t.assertIsNone(ret)
-
-        with t.subTest('none, where the update names no title'):
-            supplied_title.reset_mock()
+        with t.subTest('none, where none is named: the task is not read'):
+            edited.new_title.reset_mock()
             node.reset_mock()
-            t.up.title = None
+            edited.checked_title = None
 
             ret = t.up.new_title
 
-            supplied_title.assert_not_called()
+            edited.new_title.assert_not_called()
             node.assert_not_called()
             t.assertIsNone(ret)
 
-    @patch(f'{SRC}.SuppliedDescription', autospec=True)
     @patch.object(Update, 'node', new_callable=PropertyMock)
+    @patch.object(Update, 'edit', new_callable=PropertyMock)
     def test_new_description(
         t,
+        edit: PropertyMock,
         node: PropertyMock,
-        supplied_description: MagicMock,
     ) -> None:
+        edit.return_value = MagicMock(
+            spec=['checked_description', 'new_description']
+        )
+        edited = edit.return_value
         node.return_value = t.parent
-        supplied = supplied_description.return_value
 
-        with t.subTest('none, where the update names no description'):
+        with t.subTest('the description lines that change the task'):
+            edited.checked_description = ['A line.']
+
             ret = t.up.new_description
 
-            supplied_description.assert_not_called()
+            edited.new_description.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.new_description.return_value)
+
+        with t.subTest('none, where none is named: the task is not read'):
+            edited.new_description.reset_mock()
+            node.reset_mock()
+            edited.checked_description = None
+
+            ret = t.up.new_description
+
+            edited.new_description.assert_not_called()
             node.assert_not_called()
-            t.assertIsNone(ret)
-
-        with t.subTest('the description the update names'):
-            t.up.description = 'A description'
-            supplied.checked = 'A description'
-
-            ret = t.up.new_description
-
-            supplied_description.assert_called_once_with('A description')
-            t.assertIs(ret, supplied)
-
-        with t.subTest('none, where the task holds that description'):
-            t.parent.description_lines = ['A description']
-            ret = t.up.new_description
-            t.assertIsNone(ret)
-
-        with t.subTest('a description of None clears, as an empty one'):
-            supplied_description.reset_mock()
-            t.up.description = 'None'
-            supplied.checked = None
-
-            ret = t.up.new_description
-
-            supplied_description.assert_called_once_with('')
-            t.assertIs(ret, supplied)
-
-        with t.subTest('none, where it clears a task with no description'):
-            t.parent.description_lines = []
-            ret = t.up.new_description
             t.assertIsNone(ret)
 
     @patch.object(Update, 'new_description', new_callable=PropertyMock)
     @patch.object(Update, 'new_title', new_callable=PropertyMock)
     @patch.object(Update, 'changes', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
-    @patch.object(Update, 'supplied', new_callable=PropertyMock)
     def test_checked(
         t,
-        supplied: PropertyMock,
         moved: PropertyMock,
         changes: PropertyMock,
         new_title: PropertyMock,
         new_description: PropertyMock,
     ) -> None:
-        supplied.return_value = MagicMock(spec=['changed'])
-        supplied.return_value.changed = {'P': '5'}
-        moved.return_value = True
-        changes.return_value = {'P': '5'}
-        new_title.return_value = None
-        new_description.return_value = None
+        # Each case: the changes, the new title, the new description, a
+        # list named, and whether it moves the task.
+        cases = {
+            'the named fields that change the task': (
+                {'P': '5'},
+                None,
+                None,
+                None,
+                False,
+            ),
+            'a title alone names no field': ({}, 'A title', None, None, False),
+            'nor does a description alone': (
+                {},
+                None,
+                ['A line.'],
+                None,
+                False,
+            ),
+            'nor does a move alone': ({}, None, None, 'another-list', True),
+        }
+        for name, (fields, title, lines, list_name, moves) in cases.items():
+            with t.subTest(name):
+                changes.return_value = fields
+                new_title.return_value = title
+                new_description.return_value = lines
+                t.up = Update(t.task, {}, list_name=list_name)
+                moved.return_value = moves
 
-        with t.subTest('the named fields, as an update writes them'):
-            ret = t.up.checked
-            t.assertEqual(ret, {'P': '5'})
+                ret = t.up.checked
 
-        with t.subTest('a repeat that is no change is not written'):
-            supplied.return_value.changed = {'P': '5', 'REPEAT': None}
-            ret = t.up.checked
-            t.assertEqual(ret, {'P': '5'})
+                t.assertEqual(ret, fields)
 
-        with t.subTest('a title alone names no field'):
-            changes.return_value = {}
-            supplied.return_value.changed = {}
-            new_title.return_value = 'A new title'
+        refused = {
+            'no change, and no list': None,
+            'the list the task is in, and no change': 'a-list',
+        }
+        for name, list_name in refused.items():
+            with t.subTest(name):
+                changes.return_value = {}
+                new_title.return_value = None
+                new_description.return_value = None
+                t.up = Update(t.task, {}, list_name=list_name)
+                moved.return_value = False
 
-            ret = t.up.checked
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.up.checked
 
-            t.assertEqual(ret, {})
+                t.assertEqual(
+                    str(caught.exception),
+                    'nothing to update: name a field, a title, a description '
+                    'or a list',
+                )
 
-        with t.subTest('nor does a description alone'):
-            new_title.return_value = None
-            new_description.return_value = sentinel.description
-            ret = t.up.checked
-            t.assertEqual(ret, {})
-
-        with t.subTest('nor does a list alone'):
-            new_description.return_value = None
-            t.up = Update(t.task, {}, list_name='another-list')
-            ret = t.up.checked
-            t.assertEqual(ret, {})
-
-        with t.subTest('a title and a description that are no change'):
-            supplied.reset_mock()
-            t.up = Update(t.task, {}, title='A task', description='')
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(
-                str(caught.exception),
-                'nothing to update: name a field, a title, a description '
-                'or a list',
-            )
-            supplied.assert_not_called()
-
-        with t.subTest('a field that is no change, and nothing else'):
-            supplied.reset_mock()
-            t.up = Update(t.task, {'P': '4'})
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(
-                str(caught.exception),
-                'nothing to update: name a field, a title, a description '
-                'or a list',
-            )
-            supplied.assert_not_called()
-
-        with t.subTest('an open task takes no --with-subtasks'):
-            supplied.reset_mock()
+        with t.subTest('an open task takes no --with-subtasks, first'):
+            changes.reset_mock()
             t.up = Update(t.task, {'P': '5'}, with_subtasks=True)
 
             with t.assertRaises(ValueError) as caught:
@@ -1189,119 +1151,42 @@ class UpdateTests(TestCase):
                 "'a selector' names an open task: --with-subtasks reopens "
                 'a closed task and its subtasks',
             )
-            supplied.assert_not_called()
+            changes.assert_not_called()
 
-        with t.subTest('no field, title, description or list: refused'):
-            supplied.reset_mock()
-            t.up = Update(t.task, {})
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(
-                str(caught.exception),
-                'nothing to update: name a field, a title, a description '
-                'or a list',
-            )
-            supplied.assert_not_called()
-
-        with t.subTest('the list the task is in names no change'):
-            supplied.reset_mock()
-            moved.return_value = False
-            t.up = Update(t.task, {}, list_name='a-list')
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.up.checked
-
-            t.assertEqual(
-                str(caught.exception),
-                'nothing to update: name a field, a title, a description '
-                'or a list',
-            )
-            supplied.assert_not_called()
-
-    @patch.object(Update, 'supplied', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
-    def test_changes(t, node: PropertyMock, supplied: PropertyMock) -> None:
+    @patch.object(Update, 'edit', new_callable=PropertyMock)
+    def test_changes(t, edit: PropertyMock, node: PropertyMock) -> None:
+        edit.return_value = MagicMock(spec=['changed', 'changes'])
+        edited = edit.return_value
         node.return_value = t.parent
-        t.parent.fields = {'P': '4', 'DUE': '2026-08-01', 'REPEAT': '7d'}
-        supplied.return_value = MagicMock(spec=['changed'])
 
-        with t.subTest('no field named: the task is not read'):
-            t.up.fields = {}
-            supplied.return_value.changed = {}
+        with t.subTest('the named fields that change the task'):
+            edited.changed = {'P': '5'}
 
             ret = t.up.changes
 
-            t.assertEqual(ret, {})
-            node.assert_not_called()
+            edited.changes.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.changes.return_value)
 
-        cases = {
-            'a new value is a change': ({'P': '5'}, {'P': '5'}, {'P': '5'}),
-            'the value the task holds is no change': (
-                {'P': '4'},
-                {'P': '4'},
-                {},
-            ),
-            'a value that reads as the one it holds is no change': (
-                {'P': '5', 'DUE': '20260801'},
-                {'P': '5', 'DUE': '2026-08-01'},
-                {'P': '5'},
-            ),
-            'a clear of a field the task carries is a change': (
-                {'REPEAT': 'None'},
-                {'REPEAT': None},
-                {'REPEAT': 'None'},
-            ),
-        }
-        for name, (fields, read, expected) in cases.items():
-            with t.subTest(name):
-                t.up.fields = fields
-                supplied.return_value.changed = read
-
-                ret = t.up.changes
-
-                t.assertEqual(ret, expected)
-
-        held = {
-            'a clear of a field the task does not carry is no change': {},
-            'nor is a clear of a field it carries empty': {'REPEAT': ''},
-        }
-        for name, fields in held.items():
-            with t.subTest(name):
-                t.parent.fields = fields
-                t.up.fields = {'REPEAT': 'None'}
-                supplied.return_value.changed = {'REPEAT': None}
-
-                ret = t.up.changes
-
-                t.assertEqual(ret, {})
-
-        with t.subTest('an empty value the task holds is no change'):
-            t.parent.fields = {'TAGS': ''}
-            t.up.fields = {'TAGS': ''}
-            supplied.return_value.changed = {'TAGS': ''}
-
-            ret = t.up.changes
-
-            t.assertEqual(ret, {})
-
-        with t.subTest('a value that does not read refuses first'):
+        with t.subTest('none, where no field is named: the task is not read'):
+            edited.changes.reset_mock()
             node.reset_mock()
-            t.up.fields = {'DUE': 'x'}
-            supplied.side_effect = ValueError('refused')
+            edited.changed = {}
 
-            with t.assertRaises(ValueError):
-                _ = t.up.changes
+            ret = t.up.changes
 
+            edited.changes.assert_not_called()
             node.assert_not_called()
+            t.assertEqual(ret, {})
 
-    @patch(f'{SRC}.SuppliedFields', autospec=True)
-    def test_supplied(t, supplied_fields: MagicMock) -> None:
-        ret = t.up.supplied
-        # The fields, read against the day of the task.
-        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
-        t.assertIs(ret, supplied_fields.return_value)
+    @patch(f'{SRC}.SuppliedEdit', autospec=True)
+    def test_edit(t, supplied_edit: MagicMock) -> None:
+        ret = t.up.edit
+        # The named values, read against the day of the task.
+        supplied_edit.assert_called_once_with(
+            {'P': '5'}, 'A new title', None, TODAY
+        )
+        t.assertIs(ret, supplied_edit.return_value)
 
     @patch(f'{SRC}.new_task_id', autospec=True)
     @patch.object(Update, 'node', new_callable=PropertyMock)
@@ -1363,17 +1248,20 @@ class UpdateTests(TestCase):
 
     @patch.object(TaskNode, 'listed_snapshot', autospec=True)
     @patch.object(Update, 'ancestry', new_callable=PropertyMock)
+    @patch.object(Update, 'nested', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'delta', new_callable=PropertyMock)
     def test_payload(
         t,
         delta: PropertyMock,
         node: PropertyMock,
+        nested: PropertyMock,
         ancestry: PropertyMock,
         snapshot: MagicMock,
     ) -> None:
         delta.return_value = sentinel.delta
         node.return_value = t.parent
+        nested.return_value = False
         ancestry.return_value = MagicMock(spec=['path'])
         ancestry.return_value.path = 'a path'
         snapshot.return_value = sentinel.snapshot
@@ -1388,12 +1276,12 @@ class UpdateTests(TestCase):
             )
 
         with t.subTest('a subtask records where it sits'):
-            t.task.ancestry = [t.parent, child_node()]
+            nested.return_value = True
             ret = t.up.payload
             t.assertEqual(ret['ancestry'], 'a path')
 
         with t.subTest('the attributes, where any are given'):
-            t.task.ancestry = [t.parent]
+            nested.return_value = False
             t.up.attrs = {'cost': '45.00'}
 
             ret = t.up.payload
@@ -1408,56 +1296,38 @@ class UpdateTests(TestCase):
             )
 
     @patch.object(Update, 'moved', new_callable=PropertyMock)
-    @patch.object(Update, 'new_description', new_callable=PropertyMock)
-    @patch.object(Update, 'new_title', new_callable=PropertyMock)
+    @patch.object(Update, 'edit', new_callable=PropertyMock)
     @patch.object(Update, 'node', new_callable=PropertyMock)
     @patch.object(Update, 'written', new_callable=PropertyMock)
     def test_delta(
         t,
         written: PropertyMock,
         node: PropertyMock,
-        new_title: PropertyMock,
-        new_description: PropertyMock,
+        edit: PropertyMock,
         moved: PropertyMock,
     ) -> None:
-        written.return_value = {'P': '5', 'DUE': '2026-09-01'}
+        written.return_value = sentinel.written
         node.return_value = t.parent
-        new_title.return_value = 'A checked title'
-        new_description.return_value = None
+        edit.return_value = MagicMock(spec=['delta'])
+        edit_delta = edit.return_value.delta
         moved.return_value = False
 
-        with t.subTest('each field written against the one it replaced'):
-            ret = t.up.delta
-            t.assertEqual(
-                ret,
-                {
-                    'P': ['4', '5'],
-                    'DUE': [None, '2026-09-01'],
-                    'title': ['A task', 'A checked title'],
-                },
-            )
-
-        with t.subTest('a title left off names no title change'):
-            new_title.return_value = None
-            ret = t.up.delta
-            t.assertNotIn('title', ret)
-
-        with t.subTest('a description, against the one it replaced'):
-            t.parent.description_lines = ['A line.']
-            new_description.return_value = MagicMock(spec=['checked'])
-            new_description.return_value.checked = 'A new line.'
+        with t.subTest('the fields written, the title and the description'):
+            edit_delta.return_value = {'P': ['4', '5']}
 
             ret = t.up.delta
 
-            t.assertEqual(ret['description'], ['A line.', 'A new line.'])
+            edit_delta.assert_called_once_with(t.parent, sentinel.written)
+            t.assertEqual(ret, {'P': ['4', '5']})
 
         with t.subTest('a move, from the list it leaves to the one it joins'):
+            edit_delta.return_value = {}
             moved.return_value = True
             t.up.path = ANOTHER_PATH
 
             ret = t.up.delta
 
-            t.assertEqual(ret['list'], ['a-list', 'another-list'])
+            t.assertEqual(ret, {'list': ['a-list', 'another-list']})
 
     @patch(f'{SRC}.Ancestry', autospec=True)
     def test_ancestry(t, ancestry: MagicMock) -> None:
@@ -1578,62 +1448,52 @@ class ReopenTests(TestCase):
         with t.subTest('a description replaces the description lines'):
             doc.reset_mock()
             new_title.return_value = None
-            new_description.return_value = MagicMock(spec=['lines'])
-            new_description.return_value.lines = sentinel.lines
+            new_description.return_value = sentinel.lines
 
             _ = t.ro.document
 
             t.assertEqual(
-                doc.method_calls[-3:],
+                doc.method_calls[-2:],
                 [
                     call.set_fields(3, sentinel.checked),
-                    call.drop({4}),
-                    call.insert_description(3, sentinel.lines),
+                    call.set_description(node.return_value, sentinel.lines),
                 ],
             )
 
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
-    @patch.object(Reopen, 'supplied', new_callable=PropertyMock)
-    def test_checked(t, supplied: PropertyMock, node: PropertyMock) -> None:
-        supplied.return_value = MagicMock(spec=['changed'])
-        supplied.return_value.changed = {'P': '5'}
+    @patch.object(Reopen, 'edit', new_callable=PropertyMock)
+    def test_checked(t, edit: PropertyMock, node: PropertyMock) -> None:
+        edit.return_value = MagicMock(spec=['changed', 'changes'])
+        edited = edit.return_value
         node.return_value = parent_node()
 
-        with t.subTest('the named fields, as an update writes them'):
-            ret = t.ro.checked
-            t.assertEqual(ret, {'P': '5'})
-
-        with t.subTest('a value the task holds is no change'):
-            supplied.return_value.changed = {'P': '4', 'LOE': '2'}
-            ret = t.ro.checked
-            t.assertEqual(ret, {'LOE': '2'})
-
-        with t.subTest('a clear of a field the task carries'):
-            node.return_value.fields['REPEAT'] = '7d'
-            supplied.return_value.changed = {'P': '5', 'REPEAT': None}
+        with t.subTest('the named fields that change the task'):
+            edited.changed = {'P': '5'}
 
             ret = t.ro.checked
 
-            t.assertEqual(ret, {'P': '5', 'REPEAT': None})
+            edited.changes.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.changes.return_value)
 
-        with t.subTest('a clear of a field the task does not carry: none'):
-            del node.return_value.fields['REPEAT']
-            ret = t.ro.checked
-            t.assertEqual(ret, {'P': '5'})
-
-        with t.subTest('a reopen that names nothing is no refusal'):
-            t.ro = Reopen(t.task, sentinel.zone, {})
-            supplied.return_value.changed = {}
+        with t.subTest('none, where no field is named: the task is not read'):
+            edited.changes.reset_mock()
+            node.reset_mock()
+            edited.changed = {}
 
             ret = t.ro.checked
 
+            edited.changes.assert_not_called()
+            node.assert_not_called()
             t.assertEqual(ret, {})
 
-    @patch(f'{SRC}.SuppliedFields', autospec=True)
-    def test_supplied(t, supplied_fields: MagicMock) -> None:
-        ret = t.ro.supplied
-        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
-        t.assertIs(ret, supplied_fields.return_value)
+    @patch(f'{SRC}.SuppliedEdit', autospec=True)
+    def test_edit(t, supplied_edit: MagicMock) -> None:
+        ret = t.ro.edit
+        # The named values, read against the day of the task.
+        supplied_edit.assert_called_once_with(
+            {'P': '5'}, 'A new title', None, TODAY
+        )
+        t.assertIs(ret, supplied_edit.return_value)
 
     @patch(f'{SRC}.StreamSelection', autospec=True)
     @patch.object(Reopen, 'refuse_checklist_item', autospec=True)
@@ -1736,16 +1596,17 @@ class ReopenTests(TestCase):
             t.task.selector = 'nothing'
             t.ro.refuse_checklist_item()
 
-    @patch.object(Reopen, 'supplied', new_callable=PropertyMock)
+    @patch.object(Reopen, 'edit', new_callable=PropertyMock)
     @patch.object(Reopen, 'stream', new_callable=PropertyMock)
     def test_refuse_nested_changes(
         t,
         stream: PropertyMock,
-        supplied: PropertyMock,
+        edit: PropertyMock,
     ) -> None:
         stream.return_value = Mock(spec=['nested', 'title'])
         stream.return_value.title = 'A subtask'
-        refuse_root_fields = supplied.return_value.refuse_root_fields
+        edit.return_value = MagicMock(spec=['refuse_root_fields'])
+        refuse_root_fields = edit.return_value.refuse_root_fields
 
         with t.subTest('a top-level task takes any change'):
             stream.return_value.nested = False
@@ -2094,86 +1955,62 @@ class ReopenTests(TestCase):
         ret = t.ro.node
         t.assertIs(ret, sentinel.named)
 
-    @patch(f'{SRC}.SuppliedTitle', autospec=True)
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
-    def test_new_title(
-        t,
-        node: PropertyMock,
-        supplied_title: MagicMock,
-    ) -> None:
+    @patch.object(Reopen, 'edit', new_callable=PropertyMock)
+    def test_new_title(t, edit: PropertyMock, node: PropertyMock) -> None:
+        edit.return_value = MagicMock(spec=['checked_title', 'new_title'])
+        edited = edit.return_value
         node.return_value = parent_node()
-        supplied_title.return_value.checked = 'A new title'
 
-        with t.subTest('the title the reopen names, read'):
+        with t.subTest('the title that changes the task'):
+            edited.checked_title = 'A new title'
+
             ret = t.ro.new_title
-            supplied_title.assert_called_once_with('A new title')
-            t.assertEqual(ret, 'A new title')
 
-        with t.subTest('none, where the task holds that title'):
-            supplied_title.return_value.checked = 'A task'
-            ret = t.ro.new_title
-            t.assertIsNone(ret)
+            edited.new_title.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.new_title.return_value)
 
-        with t.subTest('none, where it holds the title spaces aside'):
-            supplied_title.return_value.checked = ' A task '
-            ret = t.ro.new_title
-            t.assertIsNone(ret)
-
-        with t.subTest('none, where the reopen names no title'):
-            supplied_title.reset_mock()
+        with t.subTest('none, where none is named: the task is not read'):
+            edited.new_title.reset_mock()
             node.reset_mock()
-            t.ro.title = None
+            edited.checked_title = None
 
             ret = t.ro.new_title
 
-            supplied_title.assert_not_called()
+            edited.new_title.assert_not_called()
             node.assert_not_called()
             t.assertIsNone(ret)
 
-    @patch(f'{SRC}.SuppliedDescription', autospec=True)
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
+    @patch.object(Reopen, 'edit', new_callable=PropertyMock)
     def test_new_description(
         t,
+        edit: PropertyMock,
         node: PropertyMock,
-        supplied_description: MagicMock,
     ) -> None:
+        edit.return_value = MagicMock(
+            spec=['checked_description', 'new_description']
+        )
+        edited = edit.return_value
         node.return_value = parent_node()
-        supplied = supplied_description.return_value
 
-        with t.subTest('none, where the reopen names no description'):
+        with t.subTest('the description lines that change the task'):
+            edited.checked_description = ['A line.']
+
             ret = t.ro.new_description
 
-            supplied_description.assert_not_called()
+            edited.new_description.assert_called_once_with(node.return_value)
+            t.assertIs(ret, edited.new_description.return_value)
+
+        with t.subTest('none, where none is named: the task is not read'):
+            edited.new_description.reset_mock()
+            node.reset_mock()
+            edited.checked_description = None
+
+            ret = t.ro.new_description
+
+            edited.new_description.assert_not_called()
             node.assert_not_called()
-            t.assertIsNone(ret)
-
-        with t.subTest('the description the reopen names'):
-            t.ro.description = 'A description'
-            supplied.checked = 'A description'
-
-            ret = t.ro.new_description
-
-            supplied_description.assert_called_once_with('A description')
-            t.assertIs(ret, supplied)
-
-        with t.subTest('none, where the task holds that description'):
-            node.return_value.description_lines = ['A description']
-            ret = t.ro.new_description
-            t.assertIsNone(ret)
-
-        with t.subTest('a description of None clears, as an empty one'):
-            supplied_description.reset_mock()
-            t.ro.description = 'None'
-            supplied.checked = None
-
-            ret = t.ro.new_description
-
-            supplied_description.assert_called_once_with('')
-            t.assertIs(ret, supplied)
-
-        with t.subTest('none, where it clears a task with no description'):
-            node.return_value.description_lines = []
-            ret = t.ro.new_description
             t.assertIsNone(ret)
 
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
@@ -2246,50 +2083,37 @@ class ReopenTests(TestCase):
 
     @patch.object(Reopen, 'path', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
-    @patch.object(Reopen, 'new_description', new_callable=PropertyMock)
-    @patch.object(Reopen, 'new_title', new_callable=PropertyMock)
+    @patch.object(Reopen, 'edit', new_callable=PropertyMock)
     @patch.object(Reopen, 'checked', new_callable=PropertyMock)
     @patch.object(Reopen, 'node', new_callable=PropertyMock)
     def test_delta(
         t,
         node: PropertyMock,
         checked: PropertyMock,
-        new_title: PropertyMock,
-        new_description: PropertyMock,
+        edit: PropertyMock,
         list_left: PropertyMock,
         path: PropertyMock,
     ) -> None:
-        node.return_value = parent_node()
-        checked.return_value = {'P': '5', 'DUE': '2026-09-01'}
-        new_title.return_value = 'A checked title'
-        new_description.return_value = None
+        node.return_value = sentinel.node
+        checked.return_value = sentinel.checked
+        edit.return_value = MagicMock(spec=['delta'])
+        edit_delta = edit.return_value.delta
         list_left.return_value = 'a-list'
         path.return_value = LIST_PATH
 
-        with t.subTest('each value written against the recorded one'):
-            ret = t.ro.delta
-            t.assertEqual(
-                ret,
-                {
-                    'P': ['4', '5'],
-                    'DUE': [None, '2026-09-01'],
-                    'title': ['A task', 'A checked title'],
-                },
-            )
-
-        with t.subTest('a description, against the recorded one'):
-            node.return_value.description_lines = ['A line.']
-            new_description.return_value = MagicMock(spec=['checked'])
-            new_description.return_value.checked = 'A new line.'
+        with t.subTest('the values written, the title and the description'):
+            edit_delta.return_value = {'P': ['4', '5']}
 
             ret = t.ro.delta
 
-            t.assertEqual(ret['description'], ['A line.', 'A new line.'])
+            edit_delta.assert_called_once_with(sentinel.node, sentinel.checked)
+            t.assertEqual(ret, {'P': ['4', '5']})
 
         with t.subTest('another list, against the list it left'):
+            edit_delta.return_value = {}
             path.return_value = ANOTHER_PATH
             ret = t.ro.delta
-            t.assertEqual(ret['list'], ['a-list', 'another-list'])
+            t.assertEqual(ret, {'list': ['a-list', 'another-list']})
 
     @patch.object(Reopen, 'record', new_callable=PropertyMock)
     @patch.object(Reopen, 'held', new_callable=PropertyMock)
@@ -2441,19 +2265,11 @@ class CompletionTests(TestCase):
             t.co.refuse_repeating_subtask()
 
     @patch(f'{SRC}.TodoDocument', autospec=True)
-    @patch.object(Completion, 'dropped', new_callable=PropertyMock)
-    @patch.object(Completion, 'checked_off', new_callable=PropertyMock)
-    @patch.object(Completion, 'stamps', new_callable=PropertyMock)
-    def test_document(
-        t,
-        stamps: PropertyMock,
-        checked_off: PropertyMock,
-        dropped: PropertyMock,
-        todo_document: MagicMock,
-    ) -> None:
-        stamps.return_value = {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}}
-        checked_off.return_value = [3, 1]
-        dropped.return_value = {5}
+    def test_document(t, todo_document: MagicMock) -> None:
+        t.co.lines = MagicMock(spec=['stamps', 'checked_off', 'dropped'])
+        t.co.lines.stamps = {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}}
+        t.co.lines.checked_off = [3, 1]
+        t.co.lines.dropped = {5}
         doc = todo_document.return_value
 
         ret = t.co.document
@@ -2472,314 +2288,19 @@ class CompletionTests(TestCase):
         )
         t.assertIs(ret, doc)
 
-    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
-    @patch.object(Completion, 'dropped', new_callable=PropertyMock)
-    @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
-    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
-    def test_stamps(
-        t,
-        recurrence: PropertyMock,
-        rescheduled: PropertyMock,
-        dropped: PropertyMock,
-        completed_on: PropertyMock,
-    ) -> None:
-        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
-        dropped.return_value = set()
-        completed_on.return_value = GIVEN_DAY
+    @patch(f'{SRC}.CompletionLines', autospec=True)
+    def test_lines(t, completion_lines: MagicMock) -> None:
+        # Two reads: the lines draw new ids, which the events must name.
+        ret = t.co.lines
+        again = t.co.lines
 
-        with t.subTest('a block that stays: each stream gains its id'):
-            recurrence.return_value = None
-            ret = t.co.stamps
-            t.assertEqual(ret, {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}})
-
-        with t.subTest('a stream whose line goes: no id'):
-            dropped.return_value = {3}
-            ret = t.co.stamps
-            t.assertEqual(ret, {1: {'ID': '9o71lx'}})
-
-        with t.subTest('a finished block that goes: nothing'):
-            dropped.return_value = {1, 3}
-            ret = t.co.stamps
-            t.assertEqual(ret, {})
-
-        with t.subTest('a recurrence: its next due date, its day, its id'):
-            recurrence.return_value = t.parent
-            rescheduled.return_value = date(2026, 8, 15)
-
-            ret = t.co.stamps
-
-            t.assertEqual(
-                ret,
-                {
-                    1: {
-                        'DUE': '2026-08-15',
-                        'ADDED': '2026-08-01',
-                        'ID': '9o71lx',
-                    }
-                },
-            )
-
-        with t.subTest('a repeating subtask: its next due date, its id'):
-            recurrence.return_value = t.child
-            ret = t.co.stamps
-            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
-
-    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
-    def test_checked_off(
-        t,
-        root_done: PropertyMock,
-        ancestries: PropertyMock,
-        recurrence: PropertyMock,
-    ) -> None:
-        ancestries.return_value = [
-            ancestry_of(t.parent, t.child),
-            ancestry_of(t.parent),
-        ]
-        recurrence.return_value = None
-
-        with t.subTest('a block that stays: each completed task'):
-            root_done.return_value = False
-            ret = t.co.checked_off
-            t.assertEqual(ret, [3, 1])
-
-        with t.subTest('a recurrence: none, as it stays open'):
-            ancestries.return_value = [ancestry_of(t.parent, t.child)]
-            recurrence.return_value = t.child
-
-            ret = t.co.checked_off
-
-            t.assertEqual(ret, [])
-
-        with t.subTest('a finished block: none, as the block goes'):
-            root_done.return_value = True
-            ret = t.co.checked_off
-            t.assertEqual(ret, [])
-
-        with t.subTest('a scratch: none, as its block goes'):
-            root_done.return_value = False
-            recurrence.return_value = None
-            t.co.scratched = True
-
-            ret = t.co.checked_off
-
-            t.assertEqual(ret, [])
-
-    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
-    @patch.object(Completion, 'root_done', new_callable=PropertyMock)
-    def test_dropped(
-        t,
-        root_done: PropertyMock,
-        recurrence: PropertyMock,
-    ) -> None:
-        recurrence.return_value = None
-
-        with t.subTest('a block that stays: nothing'):
-            root_done.return_value = False
-            ret = t.co.dropped
-            t.assertEqual(ret, set())
-
-        with t.subTest('a finished block: every line of it'):
-            root_done.return_value = True
-            ret = t.co.dropped
-            t.assertEqual(ret, {1, 2, 3, 4})
-
-        with t.subTest('a recurrence: its children, not it or its notes'):
-            recurrence.return_value = t.parent
-            ret = t.co.dropped
-            t.assertEqual(ret, {3, 4})
-
-        with t.subTest('a repeating subtask: its children'):
-            root_done.return_value = False
-            step = child_node()
-            step.children = [grandchild_node()]
-            recurrence.return_value = step
-
-            ret = t.co.dropped
-
-            t.assertEqual(ret, {5})
-
-        with t.subTest('a scratch: the block of the named task'):
-            recurrence.return_value = None
-            t.co.scratched = True
-
-            ret = t.co.dropped
-
-            t.assertEqual(ret, {3})
-
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_root_done(t, ancestries: PropertyMock) -> None:
-        with t.subTest('a cascade that ends below the top level'):
-            ancestries.return_value = [ancestry_of(t.parent, t.child)]
-            ret = t.co.root_done
-            t.assertFalse(ret)
-
-        with t.subTest('one that reaches it'):
-            ancestries.return_value = [
-                ancestry_of(t.parent, t.child),
-                ancestry_of(t.parent),
-            ]
-
-            ret = t.co.root_done
-
-            t.assertTrue(ret)
-
-    @patch(f'{SRC}.new_task_id', autospec=True)
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_ids(t, ancestries: PropertyMock, new_task_id: MagicMock) -> None:
-        new_task_id.return_value = 'zz01ab'
-
-        with t.subTest('a stream keeps its id; one with none is given one'):
-            # A checklist item lands on its parent's stream.
-            ancestries.return_value = [
-                ancestry_of(t.parent, checklist_node(), stream=t.parent),
-                ancestry_of(t.parent, t.child),
-            ]
-
-            ret = t.co.ids
-
-            t.assertEqual(ret, {1: '9o71lx', 3: 'zz01ab'})
-
-        with t.subTest('a new id is drawn once, however often it is read'):
-            # Two reads: an id drawn at random must name one task.
-            new_task_id.reset_mock()
-            t.co = Completion(t.task)
-            bare = bare_node()
-            ancestries.return_value = [
-                ancestry_of(bare, checklist_node(), stream=bare),
-                ancestry_of(bare),
-            ]
-
-            ret = t.co.ids
-            t.assertEqual(ret, {1: 'zz01ab'})
-
-            again = t.co.ids
-            t.assertIs(again, ret)
-            new_task_id.assert_called_once_with()
-
-    @patch(f'{SRC}.next_due', autospec=True)
-    @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
-    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
-    def test_rescheduled(
-        t,
-        recurrence: PropertyMock,
-        completed_on: PropertyMock,
-        next_due: MagicMock,
-    ) -> None:
-        t.parent.fields = {'P': '3', 'REPEAT': '7d', 'ID': '9o71lx'}
-        completed_on.return_value = GIVEN_DAY
-
-        with t.subTest('a recurrence that repeats, against the day'):
-            recurrence.return_value = t.parent
-
-            ret = t.co.rescheduled
-
-            next_due.assert_called_once_with('7d', GIVEN_DAY)
-            t.assertIs(ret, next_due.return_value)
-
-        with t.subTest('none where there is no recurrence'):
-            recurrence.return_value = None
-            ret = t.co.rescheduled
-            t.assertIsNone(ret)
-
-        with t.subTest('none for a recurrence that does not repeat'):
-            recurrence.return_value = t.parent
-            t.parent.fields = {'P': '3'}
-
-            ret = t.co.rescheduled
-
-            t.assertIsNone(ret)
-
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_recurrence(t, ancestries: PropertyMock) -> None:
-        with t.subTest('the last task finished, where it repeats'):
-            t.child.fields = {'REPEAT': '7d'}
-            ancestries.return_value = [ancestry_of(t.parent, t.child)]
-
-            ret = t.co.recurrence
-
-            t.assertIs(ret, t.child)
-
-        with t.subTest('the top-level task, where the cascade reaches it'):
-            t.parent.fields = {'REPEAT': '7d'}
-            ancestries.return_value = [
-                ancestry_of(t.parent, t.child),
-                ancestry_of(t.parent),
-            ]
-
-            ret = t.co.recurrence
-
-            t.assertIs(ret, t.parent)
-
-        with t.subTest('none where the last task finished does not repeat'):
-            t.parent.fields = {'P': '4'}
-            ret = t.co.recurrence
-            t.assertIsNone(ret)
-
-        with t.subTest('none for a scratch, which reschedules nothing'):
-            ancestries.return_value = [ancestry_of(t.parent, t.child)]
-            t.co.scratched = True
-
-            ret = t.co.recurrence
-
-            t.assertIsNone(ret)
-
-    def test_root(t) -> None:
-        ret = t.co.root
-        t.assertIs(ret, t.parent)
+        completion_lines.assert_called_once_with(t.task.ancestry, TODAY, False)
+        t.assertIs(ret, completion_lines.return_value)
+        t.assertIs(again, ret)
 
     def test_completed_on(t) -> None:
         ret = t.co.completed_on
         t.assertIs(ret, t.task.today)
-
-    @patch(f'{SRC}.Ancestry', autospec=True)
-    def test_ancestries(t, ancestry: MagicMock) -> None:
-        # Each ancestry stands in as the tuple of the tasks it holds.
-        ancestry.side_effect = tuple
-
-        with t.subTest('an open sibling stops the cascade'):
-            t.parent.children[1].done = False
-            ret = t.co.ancestries
-            t.assertEqual(ret, [(t.parent, t.child)])
-
-        with t.subTest('the last open child completes its parent'):
-            t.parent.children[1].done = True
-            ret = t.co.ancestries
-            t.assertEqual(ret, [(t.parent, t.child), (t.parent,)])
-
-        with t.subTest('and that may complete its own parent, deepest first'):
-            below = grandchild_node()
-            t.child.children = [below]
-            t.task.ancestry = [t.parent, t.child, below]
-
-            ret = t.co.ancestries
-
-            t.assertEqual(
-                ret,
-                [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
-            )
-
-        with t.subTest('a scratch: the named task alone, nothing cascades'):
-            t.co.scratched = True
-            ret = t.co.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
-
-        with t.subTest('a repeating task finishes no parent'):
-            t.co.scratched = False
-            below.fields = {'REPEAT': '7d'}
-            ret = t.co.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
-
-        with t.subTest('and a cascade ends at a repeating parent'):
-            below.fields = {'LOE': '1'}
-            t.child.fields = {'REPEAT': '7d'}
-
-            ret = t.co.ancestries
-
-            t.assertEqual(
-                ret, [(t.parent, t.child, below), (t.parent, t.child)]
-            )
 
     @patch(f'{SRC}.LogEntry', autospec=True)
     @patch.object(Completion, 'completions', new_callable=PropertyMock)
@@ -2816,25 +2337,21 @@ class CompletionTests(TestCase):
 
     @patch(f'{SRC}.TaskCompletion', autospec=True)
     @patch.object(Completion, 'completed_on', new_callable=PropertyMock)
-    @patch.object(Completion, 'rescheduled', new_callable=PropertyMock)
-    @patch.object(Completion, 'recurrence', new_callable=PropertyMock)
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
     def test_completions(
         t,
-        ancestries: PropertyMock,
-        recurrence: PropertyMock,
-        rescheduled: PropertyMock,
         completed_on: PropertyMock,
         task_completion: MagicMock,
     ) -> None:
         below, top = ancestry_of(t.parent, t.child), ancestry_of(t.parent)
-        ancestries.return_value = [below, top]
-        rescheduled.return_value = date(2026, 8, 15)
+        lines = MagicMock(spec=['ancestries', 'recurrence', 'rescheduled'])
+        lines.ancestries = [below, top]
+        lines.rescheduled = date(2026, 8, 15)
+        t.co.lines = lines
         completed_on.return_value = GIVEN_DAY
         t.co.attrs = sentinel.attrs
 
         with t.subTest('one a task finished, deepest first'):
-            recurrence.return_value = None
+            lines.recurrence = None
 
             ret = t.co.completions
 
@@ -2852,7 +2369,7 @@ class CompletionTests(TestCase):
 
         with t.subTest('a recurrence takes its next due date'):
             task_completion.reset_mock()
-            recurrence.return_value = t.parent
+            lines.recurrence = t.parent
 
             _ = t.co.completions
 
@@ -2875,7 +2392,7 @@ class CompletionTests(TestCase):
 
         with t.subTest('the recurrence, whichever task it is'):
             task_completion.reset_mock()
-            recurrence.return_value = t.child
+            lines.recurrence = t.child
 
             _ = t.co.completions
 
@@ -2896,8 +2413,8 @@ class CompletionTests(TestCase):
 
         with t.subTest('a scratch marks each one scratched'):
             task_completion.reset_mock()
-            recurrence.return_value = None
-            ancestries.return_value = [below]
+            lines.recurrence = None
+            lines.ancestries = [below]
             t.co.scratched = True
 
             _ = t.co.completions
@@ -2922,7 +2439,8 @@ class CompletionTests(TestCase):
         top.ancestry = ancestry_of(t.parent)
         top.payload = sentinel.top
         completions.return_value = [below, top]
-        t.co.ids = {3: 'zz01ab', 1: '9o71lx'}
+        t.co.lines = MagicMock(spec=['ids'])
+        t.co.lines.ids = {3: 'zz01ab', 1: '9o71lx'}
         t.co.attrs = sentinel.attrs
 
         with t.subTest('one TaskCompleted a completion, deepest first'):
@@ -2967,23 +2485,18 @@ class CompletionTests(TestCase):
             )
 
     @patch(f'{SRC}.IdAssignment', autospec=True)
-    @patch.object(Completion, 'stamps', new_callable=PropertyMock)
-    @patch.object(Completion, 'ancestries', new_callable=PropertyMock)
-    def test_assignments(
-        t,
-        ancestries: PropertyMock,
-        stamps: PropertyMock,
-        id_assignment: MagicMock,
-    ) -> None:
+    def test_assignments(t, id_assignment: MagicMock) -> None:
         bare = bare_node()
         event = id_assignment.return_value.event
+        lines = MagicMock(spec=['ancestries', 'stamps'])
+        t.co.lines = lines
 
         with t.subTest('a stream with no id: its new id, on its own event'):
             # A checklist item lands on the stream of its parent.
-            ancestries.return_value = [
+            lines.ancestries = [
                 ancestry_of(bare, checklist_node(), stream=bare),
             ]
-            stamps.return_value = {1: {'ID': 'zz01ab'}}
+            lines.stamps = {1: {'ID': 'zz01ab'}}
 
             ret = t.co.assignments
 
@@ -2994,10 +2507,10 @@ class CompletionTests(TestCase):
             id_assignment.reset_mock()
             empty = bare_node()
             empty.fields = {'P': '2', 'ID': ''}
-            ancestries.return_value = [
+            lines.ancestries = [
                 ancestry_of(empty, checklist_node(), stream=empty),
             ]
-            stamps.return_value = {1: {'ID': 'ee04gh'}}
+            lines.stamps = {1: {'ID': 'ee04gh'}}
 
             ret = t.co.assignments
 
@@ -3006,10 +2519,10 @@ class CompletionTests(TestCase):
 
         with t.subTest('a stream that keeps its id: none'):
             id_assignment.reset_mock()
-            ancestries.return_value = [
+            lines.ancestries = [
                 ancestry_of(t.parent, checklist_node(), stream=t.parent),
             ]
-            stamps.return_value = {1: {'ID': '9o71lx'}}
+            lines.stamps = {1: {'ID': '9o71lx'}}
 
             ret = t.co.assignments
 
@@ -3018,8 +2531,8 @@ class CompletionTests(TestCase):
 
         with t.subTest('a recurrence: its new id beside its due date'):
             id_assignment.reset_mock()
-            ancestries.return_value = [ancestry_of(bare)]
-            stamps.return_value = {1: {'DUE': '2026-08-15', 'ID': 'rr01ab'}}
+            lines.ancestries = [ancestry_of(bare)]
+            lines.stamps = {1: {'DUE': '2026-08-15', 'ID': 'rr01ab'}}
 
             ret = t.co.assignments
 
@@ -3028,7 +2541,7 @@ class CompletionTests(TestCase):
 
         with t.subTest('a finished block that goes: none'):
             id_assignment.reset_mock()
-            stamps.return_value = {}
+            lines.stamps = {}
 
             ret = t.co.assignments
 
@@ -3037,11 +2550,11 @@ class CompletionTests(TestCase):
 
         with t.subTest('each stream given an id, deepest first'):
             id_assignment.reset_mock()
-            ancestries.return_value = [
+            lines.ancestries = [
                 ancestry_of(bare, t.child),
                 ancestry_of(bare),
             ]
-            stamps.return_value = {
+            lines.stamps = {
                 3: {'ID': 'cc03ef'},
                 1: {'ID': 'pp02cd'},
             }
@@ -3550,6 +3063,225 @@ class NamedListTests(TestCase):
         discover_lists.assert_called_once_with(SOURCE)
 
 
+class SuppliedEditTests(TestCase):
+    """Unit tests for battodo.mutate.SuppliedEdit."""
+
+    def setUp(t) -> None:
+        t.node = parent_node()
+        t.se = SuppliedEdit({'P': '5'}, 'A new title', 'A line.', TODAY)
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_changed(t, next_due: MagicMock) -> None:
+        with t.subTest('no clear: the fields, each value read'):
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5'})
+
+        with t.subTest('a repeat is read as add reads it'):
+            t.se.fields = {'REPEAT': '14d'}
+
+            ret = t.se.changed
+
+            next_due.assert_called_once_with('14d', TODAY)
+            t.assertEqual(ret, {'REPEAT': '14d'})
+
+        with t.subTest('a repeat of None clears the field, unread'):
+            next_due.reset_mock()
+            t.se.fields = {'P': '3', 'REPEAT': 'None'}
+
+            ret = t.se.changed
+
+            next_due.assert_not_called()
+            t.assertEqual(ret, {'P': '3', 'REPEAT': None})
+
+        with t.subTest('an empty repeat is no clear: the read refuses it'):
+            t.se.fields = {'REPEAT': ''}
+            next_due.side_effect = ValueError("unrecognised REPEAT value: ''")
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.se.changed
+
+            t.assertEqual(
+                str(caught.exception), "unrecognised REPEAT value: ''"
+            )
+
+    @patch(f'{SRC}.SuppliedFields', autospec=True)
+    def test_supplied(t, supplied_fields: MagicMock) -> None:
+        ret = t.se.supplied
+        supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
+        t.assertIs(ret, supplied_fields.return_value)
+
+    @patch(f'{SRC}.SuppliedTitle', autospec=True)
+    def test_checked_title(t, supplied_title: MagicMock) -> None:
+        with t.subTest('the named title, read'):
+            ret = t.se.checked_title
+            supplied_title.assert_called_once_with('A new title')
+            t.assertIs(ret, supplied_title.return_value.checked)
+
+        with t.subTest('none, where none is named'):
+            supplied_title.reset_mock()
+            t.se.title = None
+
+            ret = t.se.checked_title
+
+            supplied_title.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch(f'{SRC}.SuppliedDescription', autospec=True)
+    def test_checked_description(t, supplied_description: MagicMock) -> None:
+        supplied_description.return_value.lines = ['A line.']
+
+        with t.subTest('the lines of the named description, read'):
+            ret = t.se.checked_description
+            supplied_description.assert_called_once_with('A line.')
+            t.assertEqual(ret, ['A line.'])
+
+        with t.subTest('a description of None clears, as an empty one'):
+            supplied_description.reset_mock()
+            t.se.description = 'None'
+
+            _ = t.se.checked_description
+
+            supplied_description.assert_called_once_with('')
+
+        with t.subTest('none, where none is named'):
+            supplied_description.reset_mock()
+            t.se.description = None
+
+            ret = t.se.checked_description
+
+            supplied_description.assert_not_called()
+            t.assertIsNone(ret)
+
+    @patch.object(SuppliedEdit, 'changed', new_callable=PropertyMock)
+    def test_changes(t, changed: PropertyMock) -> None:
+        t.node.fields = {'P': '4', 'DUE': '2026-08-01', 'REPEAT': '7d'}
+        cases = {
+            'a new value is a change': ({'P': '5'}, {'P': '5'}),
+            'the value the task holds is no change': ({'P': '4'}, {}),
+            'a value read as the one it holds is no change': (
+                {'P': '5', 'DUE': '2026-08-01'},
+                {'P': '5'},
+            ),
+            'a clear of a field the task carries is a change': (
+                {'REPEAT': None},
+                {'REPEAT': None},
+            ),
+        }
+        for name, (read, expected) in cases.items():
+            with t.subTest(name):
+                changed.return_value = read
+                ret = t.se.changes(t.node)
+                t.assertEqual(ret, expected)
+
+        held = {
+            'a clear of a field the task does not carry is no change': (
+                {},
+                {'REPEAT': None},
+            ),
+            'nor is a clear of a field it carries empty': (
+                {'REPEAT': ''},
+                {'REPEAT': None},
+            ),
+            'nor is an empty value the task holds': (
+                {'TAGS': ''},
+                {'TAGS': ''},
+            ),
+        }
+        for name, (fields, read) in held.items():
+            with t.subTest(name):
+                t.node.fields = fields
+                changed.return_value = read
+
+                ret = t.se.changes(t.node)
+
+                t.assertEqual(ret, {})
+
+    @patch.object(SuppliedEdit, 'checked_title', new_callable=PropertyMock)
+    def test_new_title(t, checked_title: PropertyMock) -> None:
+        cases = {
+            'a title that changes the task': ('A new title', 'A new title'),
+            'none, where the task holds that title': ('A task', None),
+            'none, where it holds the title spaces aside': (' A task ', None),
+            'none, where none is named': (None, None),
+        }
+        for name, (title, expected) in cases.items():
+            with t.subTest(name):
+                checked_title.return_value = title
+                ret = t.se.new_title(t.node)
+                t.assertEqual(ret, expected)
+
+    @patch.object(
+        SuppliedEdit, 'checked_description', new_callable=PropertyMock
+    )
+    def test_new_description(t, checked_description: PropertyMock) -> None:
+        t.node.description_lines = ['A line.']
+        cases = {
+            'lines that change the task': (['A new line.'], ['A new line.']),
+            'a clear of the lines the task holds': ([], []),
+            'none, where the task holds those lines': (['A line.'], None),
+            'none, where none is named': (None, None),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                checked_description.return_value = lines
+                ret = t.se.new_description(t.node)
+                t.assertEqual(ret, expected)
+
+        with t.subTest('none, where it clears a task with no description'):
+            t.node.description_lines = []
+            checked_description.return_value = []
+
+            ret = t.se.new_description(t.node)
+
+            t.assertIsNone(ret)
+
+    @patch.object(SuppliedEdit, 'supplied', new_callable=PropertyMock)
+    def test_refuse_root_fields(t, supplied: PropertyMock) -> None:
+        supplied.return_value = MagicMock(spec=['refuse_root_fields'])
+        t.se.refuse_root_fields()
+        supplied.return_value.refuse_root_fields.assert_called_once_with()
+
+    @patch.object(SuppliedEdit, 'new_description', autospec=True)
+    @patch.object(SuppliedEdit, 'new_title', autospec=True)
+    def test_delta(
+        t,
+        new_title: MagicMock,
+        new_description: MagicMock,
+    ) -> None:
+        t.node.description_lines = ['A line.']
+        new_title.return_value = 'A new title'
+        new_description.return_value = ['A first line.', 'A second line.']
+
+        with t.subTest('each written field, the title, the description'):
+            ret = t.se.delta(t.node, {'P': '5', 'DUE': '2026-09-01'})
+
+            new_title.assert_called_once_with(t.se, t.node)
+            new_description.assert_called_once_with(t.se, t.node)
+            t.assertEqual(
+                ret,
+                {
+                    'P': ['4', '5'],
+                    'DUE': [None, '2026-09-01'],
+                    'title': ['A task', 'A new title'],
+                    'description': [
+                        'A line.',
+                        'A first line.\nA second line.',
+                    ],
+                },
+            )
+
+        with t.subTest('a cleared description, against null'):
+            new_title.return_value = None
+            new_description.return_value = []
+            ret = t.se.delta(t.node, {})
+            t.assertEqual(ret, {'description': ['A line.', None]})
+
+        with t.subTest('nothing that changes the task'):
+            new_description.return_value = None
+            ret = t.se.delta(t.node, {})
+            t.assertEqual(ret, {})
+
+
 class SuppliedTitleTests(TestCase):
     """Unit tests for battodo.mutate.SuppliedTitle."""
 
@@ -3627,18 +3359,6 @@ class SuppliedDescriptionTests(TestCase):
                     _ = t.sd.lines
 
                 t.assertEqual(str(caught.exception), message)
-
-    @patch.object(SuppliedDescription, 'lines', new_callable=PropertyMock)
-    def test_checked(t, lines: PropertyMock) -> None:
-        with t.subTest('the lines, joined by newlines'):
-            lines.return_value = ['A line.', 'Another line.']
-            ret = t.sd.checked
-            t.assertEqual(ret, 'A line.\nAnother line.')
-
-        with t.subTest('none, where the text holds no line'):
-            lines.return_value = []
-            ret = t.sd.checked
-            t.assertIsNone(ret)
 
 
 class SuppliedFieldsTests(TestCase):
@@ -3727,40 +3447,6 @@ class SuppliedFieldsTests(TestCase):
                     _ = t.sf.checked
 
                 t.assertEqual(str(caught.exception), message)
-
-    @patch(f'{SRC}.next_due', autospec=True)
-    def test_changed(t, next_due: MagicMock) -> None:
-        with t.subTest('no clear: the fields, each value read'):
-            ret = t.sf.changed
-            t.assertEqual(ret, {'TAGS': 'a-tag', 'P': '3'})
-
-        with t.subTest('a repeat is read as add reads it'):
-            t.sf.fields = {'REPEAT': '14d'}
-
-            ret = t.sf.changed
-
-            next_due.assert_called_once_with('14d', TODAY)
-            t.assertEqual(ret, {'REPEAT': '14d'})
-
-        with t.subTest('a repeat of None clears the field, unread'):
-            next_due.reset_mock()
-            t.sf.fields = {'P': '3', 'REPEAT': 'None'}
-
-            ret = t.sf.changed
-
-            next_due.assert_not_called()
-            t.assertEqual(ret, {'P': '3', 'REPEAT': None})
-
-        with t.subTest('an empty repeat is no clear: the read refuses it'):
-            t.sf.fields = {'REPEAT': ''}
-            next_due.side_effect = ValueError("unrecognised REPEAT value: ''")
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.sf.changed
-
-            t.assertEqual(
-                str(caught.exception), "unrecognised REPEAT value: ''"
-            )
 
     def test_refuse_root_fields(t) -> None:
         with t.subTest('the fields a subtask carries, a repeat among them'):
@@ -4008,6 +3694,313 @@ class IdAssignmentTests(TestCase):
         )
 
 
+class CompletionLinesTests(TestCase):
+    """Unit tests for battodo.mutate.CompletionLines."""
+
+    def setUp(t) -> None:
+        t.child = child_node()
+        t.parent = parent_node()
+        t.parent.children = [t.child, done_child_node()]
+        t.cl = CompletionLines([t.parent, t.child], GIVEN_DAY)
+
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'dropped', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'rescheduled', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    def test_stamps(
+        t,
+        recurrence: PropertyMock,
+        rescheduled: PropertyMock,
+        dropped: PropertyMock,
+        root_done: PropertyMock,
+    ) -> None:
+        t.cl.ids = {3: 'zz01ab', 1: '9o71lx'}
+        dropped.return_value = set()
+
+        with t.subTest('a block that stays: each stream gains its id'):
+            recurrence.return_value = None
+            ret = t.cl.stamps
+            t.assertEqual(ret, {3: {'ID': 'zz01ab'}, 1: {'ID': '9o71lx'}})
+
+        with t.subTest('a stream whose line goes: no id'):
+            dropped.return_value = {3}
+            ret = t.cl.stamps
+            t.assertEqual(ret, {1: {'ID': '9o71lx'}})
+
+        with t.subTest('a finished block that goes: nothing'):
+            dropped.return_value = {1, 3}
+            ret = t.cl.stamps
+            t.assertEqual(ret, {})
+
+        with t.subTest('a recurrence: its next due date, its day, its id'):
+            recurrence.return_value = t.parent
+            rescheduled.return_value = date(2026, 8, 15)
+            root_done.return_value = True
+
+            ret = t.cl.stamps
+
+            t.assertEqual(
+                ret,
+                {
+                    1: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-01',
+                        'ID': '9o71lx',
+                    }
+                },
+            )
+
+        with t.subTest('a repeating subtask: its next due date, its id'):
+            recurrence.return_value = t.child
+            root_done.return_value = False
+
+            ret = t.cl.stamps
+
+            t.assertEqual(ret, {3: {'DUE': '2026-08-15', 'ID': 'zz01ab'}})
+
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    def test_checked_off(
+        t,
+        root_done: PropertyMock,
+        ancestries: PropertyMock,
+        recurrence: PropertyMock,
+    ) -> None:
+        ancestries.return_value = [
+            ancestry_of(t.parent, t.child),
+            ancestry_of(t.parent),
+        ]
+        recurrence.return_value = None
+
+        with t.subTest('a block that stays: each completed task'):
+            root_done.return_value = False
+            ret = t.cl.checked_off
+            t.assertEqual(ret, [3, 1])
+
+        with t.subTest('a recurrence: none, as it stays open'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            recurrence.return_value = t.child
+
+            ret = t.cl.checked_off
+
+            t.assertEqual(ret, [])
+
+        with t.subTest('a finished block: none, as the block goes'):
+            root_done.return_value = True
+            ret = t.cl.checked_off
+            t.assertEqual(ret, [])
+
+        with t.subTest('a scratch: none, as its block goes'):
+            root_done.return_value = False
+            recurrence.return_value = None
+            t.cl.scratched = True
+
+            ret = t.cl.checked_off
+
+            t.assertEqual(ret, [])
+
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    @patch.object(CompletionLines, 'root_done', new_callable=PropertyMock)
+    def test_dropped(
+        t,
+        root_done: PropertyMock,
+        recurrence: PropertyMock,
+    ) -> None:
+        recurrence.return_value = None
+
+        with t.subTest('a block that stays: nothing'):
+            root_done.return_value = False
+            ret = t.cl.dropped
+            t.assertEqual(ret, set())
+
+        with t.subTest('a finished block: every line of it'):
+            root_done.return_value = True
+            ret = t.cl.dropped
+            t.assertEqual(ret, {1, 2, 3, 4})
+
+        with t.subTest('a recurrence: its children, not it or its notes'):
+            recurrence.return_value = t.parent
+            ret = t.cl.dropped
+            t.assertEqual(ret, {3, 4})
+
+        with t.subTest('a repeating subtask: its children'):
+            root_done.return_value = False
+            step = child_node()
+            step.children = [grandchild_node()]
+            recurrence.return_value = step
+
+            ret = t.cl.dropped
+
+            t.assertEqual(ret, {5})
+
+        with t.subTest('a scratch: the block of the named task'):
+            recurrence.return_value = None
+            t.cl.scratched = True
+
+            ret = t.cl.dropped
+
+            t.assertEqual(ret, {3})
+
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_root_done(t, ancestries: PropertyMock) -> None:
+        with t.subTest('a cascade that ends below the top level'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            ret = t.cl.root_done
+            t.assertFalse(ret)
+
+        with t.subTest('one that reaches it'):
+            ancestries.return_value = [
+                ancestry_of(t.parent, t.child),
+                ancestry_of(t.parent),
+            ]
+
+            ret = t.cl.root_done
+
+            t.assertTrue(ret)
+
+    @patch(f'{SRC}.new_task_id', autospec=True)
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_ids(t, ancestries: PropertyMock, new_task_id: MagicMock) -> None:
+        new_task_id.return_value = 'zz01ab'
+
+        with t.subTest('a stream keeps its id; one with none is given one'):
+            # A checklist item lands on its parent's stream.
+            ancestries.return_value = [
+                ancestry_of(t.parent, checklist_node(), stream=t.parent),
+                ancestry_of(t.parent, t.child),
+            ]
+
+            ret = t.cl.ids
+
+            t.assertEqual(ret, {1: '9o71lx', 3: 'zz01ab'})
+
+        with t.subTest('a new id is drawn once, however often it is read'):
+            # Two reads: an id drawn at random must name one task.
+            new_task_id.reset_mock()
+            t.cl = CompletionLines([t.parent, t.child], GIVEN_DAY)
+            bare = bare_node()
+            ancestries.return_value = [
+                ancestry_of(bare, checklist_node(), stream=bare),
+                ancestry_of(bare),
+            ]
+
+            ret = t.cl.ids
+            t.assertEqual(ret, {1: 'zz01ab'})
+
+            again = t.cl.ids
+            t.assertIs(again, ret)
+            new_task_id.assert_called_once_with()
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    @patch.object(CompletionLines, 'recurrence', new_callable=PropertyMock)
+    def test_rescheduled(
+        t,
+        recurrence: PropertyMock,
+        next_due: MagicMock,
+    ) -> None:
+        t.parent.fields = {'P': '3', 'REPEAT': '7d', 'ID': '9o71lx'}
+
+        with t.subTest('a recurrence that repeats, against the day'):
+            recurrence.return_value = t.parent
+
+            ret = t.cl.rescheduled
+
+            next_due.assert_called_once_with('7d', GIVEN_DAY)
+            t.assertIs(ret, next_due.return_value)
+
+        with t.subTest('none where there is no recurrence'):
+            recurrence.return_value = None
+            ret = t.cl.rescheduled
+            t.assertIsNone(ret)
+
+    @patch.object(CompletionLines, 'ancestries', new_callable=PropertyMock)
+    def test_recurrence(t, ancestries: PropertyMock) -> None:
+        with t.subTest('the last task finished, where it repeats'):
+            t.child.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+
+            ret = t.cl.recurrence
+
+            t.assertIs(ret, t.child)
+
+        with t.subTest('the top-level task, where the cascade reaches it'):
+            t.parent.fields = {'REPEAT': '7d'}
+            ancestries.return_value = [
+                ancestry_of(t.parent, t.child),
+                ancestry_of(t.parent),
+            ]
+
+            ret = t.cl.recurrence
+
+            t.assertIs(ret, t.parent)
+
+        with t.subTest('none where the last task finished does not repeat'):
+            t.parent.fields = {'P': '4'}
+            ret = t.cl.recurrence
+            t.assertIsNone(ret)
+
+        with t.subTest('none for a scratch, which reschedules nothing'):
+            ancestries.return_value = [ancestry_of(t.parent, t.child)]
+            t.cl.scratched = True
+
+            ret = t.cl.recurrence
+
+            t.assertIsNone(ret)
+
+    def test_root(t) -> None:
+        ret = t.cl.root
+        t.assertIs(ret, t.parent)
+
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    def test_ancestries(t, ancestry: MagicMock) -> None:
+        # Each ancestry stands in as the tuple of the tasks it holds.
+        ancestry.side_effect = tuple
+
+        with t.subTest('an open sibling stops the cascade'):
+            t.parent.children[1].done = False
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child)])
+
+        with t.subTest('the last open child completes its parent'):
+            t.parent.children[1].done = True
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child), (t.parent,)])
+
+        with t.subTest('and that may complete its own parent, deepest first'):
+            below = grandchild_node()
+            t.child.children = [below]
+            t.cl.ancestry = [t.parent, t.child, below]
+
+            ret = t.cl.ancestries
+
+            t.assertEqual(
+                ret,
+                [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
+            )
+
+        with t.subTest('a scratch: the named task alone, nothing cascades'):
+            t.cl.scratched = True
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('a repeating task finishes no parent'):
+            t.cl.scratched = False
+            below.fields = {'REPEAT': '7d'}
+            ret = t.cl.ancestries
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+        with t.subTest('and a cascade ends at a repeating parent'):
+            below.fields = {'LOE': '1'}
+            t.child.fields = {'REPEAT': '7d'}
+
+            ret = t.cl.ancestries
+
+            t.assertEqual(
+                ret, [(t.parent, t.child, below), (t.parent, t.child)]
+            )
+
+
 class TaskCompletionTests(TestCase):
     """Unit tests for battodo.mutate.TaskCompletion."""
 
@@ -4021,56 +4014,26 @@ class TaskCompletionTests(TestCase):
         )
 
     @patch.object(TaskNode, 'listed_snapshot', autospec=True)
-    def test_payload(t, snapshot: MagicMock) -> None:
+    @patch.object(TaskCompletion, 'delta', new_callable=PropertyMock)
+    def test_payload(t, delta: PropertyMock, snapshot: MagicMock) -> None:
+        delta.return_value = sentinel.delta
         snapshot.return_value = sentinel.snapshot
 
-        with t.subTest('the done, the task as it was, its path, its day'):
+        with t.subTest('the delta, the task as it was, its path, its day'):
             ret = t.tc.payload
 
             snapshot.assert_called_once_with(t.node, 'a-list')
             t.assertEqual(
                 ret,
                 {
-                    'delta': {'done': [False, True]},
+                    'delta': sentinel.delta,
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'completed_on': '2026-08-01',
                 },
             )
 
-        with t.subTest('a recurrence records its new due and added dates'):
-            t.node.fields['DUE'] = '2026-08-05'
-            t.node.fields['ADDED'] = '2026-07-06'
-            t.tc.rescheduled = date(2026, 8, 15)
-
-            ret = t.tc.payload
-
-            t.assertEqual(
-                ret['delta'],
-                {
-                    'done': [False, True],
-                    'DUE': ['2026-08-05', '2026-08-15'],
-                    'ADDED': ['2026-07-06', '2026-08-01'],
-                },
-            )
-
-        with t.subTest('a rescheduled subtask records its new due date'):
-            child = child_node()
-            child.fields['DUE'] = '2026-08-05'
-            t.tc.ancestry = ancestry_of(t.node, child, path='a path')
-
-            ret = t.tc.payload
-
-            t.assertEqual(
-                ret['delta'],
-                {
-                    'done': [False, True],
-                    'DUE': ['2026-08-05', '2026-08-15'],
-                },
-            )
-
         with t.subTest('a checklist item is marked as one'):
-            t.tc.rescheduled = None
             t.tc.ancestry = ancestry_of(
                 t.node,
                 checklist_node(),
@@ -4080,16 +4043,7 @@ class TaskCompletionTests(TestCase):
 
             ret = t.tc.payload
 
-            t.assertEqual(
-                ret,
-                {
-                    'delta': {'done': [False, True]},
-                    'snapshot': sentinel.snapshot,
-                    'ancestry': 'a path',
-                    'checklist_item': True,
-                    'completed_on': '2026-08-01',
-                },
-            )
+            t.assertIs(ret['checklist_item'], True)
 
         with t.subTest('the attributes of the named task'):
             t.tc.ancestry = ancestry_of(t.node, path='a path')
@@ -4100,7 +4054,7 @@ class TaskCompletionTests(TestCase):
             t.assertEqual(
                 ret,
                 {
-                    'delta': {'done': [False, True]},
+                    'delta': sentinel.delta,
                     'snapshot': sentinel.snapshot,
                     'ancestry': 'a path',
                     'attrs': {'cost': '45.00'},
@@ -4108,21 +4062,47 @@ class TaskCompletionTests(TestCase):
                 },
             )
 
-        with t.subTest('a scratch records the removal instead'):
-            t.tc.scratched = True
+    def test_delta(t) -> None:
+        with t.subTest('the done'):
+            ret = t.tc.delta
+            t.assertEqual(ret, {'done': [False, True]})
 
-            ret = t.tc.payload
+        with t.subTest('a recurrence records its new due and added dates'):
+            t.node.fields['DUE'] = '2026-08-05'
+            t.node.fields['ADDED'] = '2026-07-06'
+            t.tc.rescheduled = date(2026, 8, 15)
+
+            ret = t.tc.delta
 
             t.assertEqual(
                 ret,
                 {
-                    'delta': {'removed': [False, True]},
-                    'snapshot': sentinel.snapshot,
-                    'ancestry': 'a path',
-                    'attrs': {'cost': '45.00'},
-                    'completed_on': '2026-08-01',
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': ['2026-07-06', '2026-08-01'],
                 },
             )
+
+        with t.subTest('a rescheduled subtask records its new due date'):
+            child = child_node()
+            child.fields['DUE'] = '2026-08-05'
+            t.tc.ancestry = ancestry_of(t.node, child)
+
+            ret = t.tc.delta
+
+            t.assertEqual(
+                ret,
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                },
+            )
+
+        with t.subTest('a scratch records the removal instead'):
+            t.tc.rescheduled = None
+            t.tc.scratched = True
+            ret = t.tc.delta
+            t.assertEqual(ret, {'removed': [False, True]})
 
     def test_status(t) -> None:
         with t.subTest('a completion: DONE'):
@@ -4588,9 +4568,10 @@ def ancestry_of(
 
     Its events land on `stream`, the last task unless one is named.
     """
-    ancestry = MagicMock(spec=['tasks', 'node', 'path', 'stream'])
+    ancestry = MagicMock(spec=['tasks', 'node', 'nested', 'path', 'stream'])
     ancestry.tasks = list(tasks)
     ancestry.node = tasks[-1]
+    ancestry.nested = len(tasks) > 1
     ancestry.path = path
     ancestry.stream = tasks[-1] if stream is None else stream
     return ancestry

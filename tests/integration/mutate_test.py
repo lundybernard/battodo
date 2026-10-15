@@ -22,12 +22,16 @@ from battodo.mutate import (
     Changeset,
     CompletedLog,
     Completion,
+    CompletionLines,
     Event,
     ListError,
     Reopen,
     SubtaskAddition,
+    SuppliedEdit,
+    TaskCompletion,
     Update,
 )
+from battodo.parser import Ancestry, TodoDocument
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
 from battodo.task import Task
@@ -834,22 +838,10 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, without(A_LIST, 5))
 
-        with t.subTest('a description of None clears them too'):
-            cleared = described_update(t.source, '9o71lx', 'None')
-            ret = cleared.text
-            t.assertEqual(ret, without(A_LIST, 5))
-
         with t.subTest('a task with none takes them before its children'):
             described = described_update(t.source, 'rr01ab', DESCRIPTION)
             ret = described.text
             t.assertEqual(ret, with_lines(A_LIST, 10, DESCRIPTION_LINES))
-
-        with t.subTest('a new repeat replaces the one the task carries'):
-            changed = Update(
-                Task(t.source, 'rr01ab', TODAY), {'REPEAT': '14d'}
-            )
-            ret = changed.text
-            t.assertEqual(ret, A_LIST.replace('[REPEAT:7d]', '[REPEAT:14d]'))
 
         with t.subTest('a repeat of None clears it, the due date kept'):
             cleared = Update(
@@ -877,10 +869,9 @@ class UpdateTests(TestCase):
             ret = cleared.text
             t.assertEqual(ret, STEPPED_LIST.replace(' [REPEAT:7d]', ''))
 
-        fielded = a_fielded_source(t)
         with t.subTest('a value the task holds is not written again'):
             kept = Update(
-                Task(fielded, 'ef01ab', TODAY),
+                Task(a_fielded_source(t), 'ef01ab', TODAY),
                 {'P': '2', 'TAGS': 'another-tag'},
                 description='A description line, indented by hand.',
             )
@@ -892,53 +883,23 @@ class UpdateTests(TestCase):
                 FIELDED_LIST.replace('[TAGS:a-tag]', '[TAGS:another-tag]'),
             )
 
+    def test_checked(t) -> None:
+        with t.subTest('the named fields that change the task, read'):
+            ret = t.up.checked
+            t.assertEqual(ret, {'P': '5', 'DUE': '2026-09-01'})
+
+        fielded = a_fielded_source(t)
         refused = {
             'an update that names nothing': (
                 Update(Task(t.source, '9o71lx', TODAY), {}),
-                ValueError,
                 'nothing to update',
             ),
             'a value that does not read': (
                 Update(Task(t.source, '9o71lx', TODAY), {'DUE': 'x'}),
-                ValueError,
                 "DUE must be an ISO date, not 'x'",
-            ),
-            'an empty repeat, which is no clear': (
-                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': ''}),
-                RepeatError,
-                "unrecognised REPEAT value: ''",
             ),
             'the repeat the task carries, and no other change': (
                 Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': '7d'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'a clear of a task with no repeat, and no other change': (
-                Update(Task(t.source, '9o71lx', TODAY), {'REPEAT': 'None'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'a clear of a subtask with no repeat, and no other change': (
-                Update(
-                    Task(t.source, 'A subtask that does not', TODAY),
-                    {'REPEAT': 'None'},
-                ),
-                ValueError,
-                'nothing to update',
-            ),
-            'the priority the task holds, and no other change': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'P': '2'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'the due date the task holds, in another ISO form': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'DUE': '20260901'}),
-                ValueError,
-                'nothing to update',
-            ),
-            'the tags the task holds, and no other change': (
-                Update(Task(fielded, 'ef01ab', TODAY), {'TAGS': 'a-tag'}),
-                ValueError,
                 'nothing to update',
             ),
             'the title the task holds, and no other change': (
@@ -947,7 +908,6 @@ class UpdateTests(TestCase):
                     {},
                     title='A task with every field',
                 ),
-                ValueError,
                 'nothing to update',
             ),
             'the title the task holds, a trailing space aside': (
@@ -956,25 +916,21 @@ class UpdateTests(TestCase):
                     {},
                     title='A task with every field ',
                 ),
-                ValueError,
                 'nothing to update',
             ),
             'the description the task holds, and no other change': (
                 described_update(
                     fielded, 'ef01ab', 'A description line, indented by hand.'
                 ),
-                ValueError,
                 'nothing to update',
             ),
-            'a clear of a task with no description, and no other change': (
-                described_update(t.source, 'rr01ab', 'None'),
-                ValueError,
+            'the list the task is in, and no other change': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='a-list',
+                ),
                 'nothing to update',
-            ),
-            'a field only the top-level task carries': (
-                Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
-                ValueError,
-                'P belongs to the top-level task',
             ),
             'an open task with its subtasks': (
                 Update(
@@ -982,8 +938,23 @@ class UpdateTests(TestCase):
                     {},
                     with_subtasks=True,
                 ),
-                ValueError,
                 "'9o71lx' names an open task: --with-subtasks reopens",
+            ),
+        }
+        for name, (refusal, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(ValueError, message):
+                _ = refusal.checked
+
+    def test_node(t) -> None:
+        with t.subTest('the task the selector names'):
+            ret = t.up.node
+            t.assertEqual(ret.raw, A_TASK)
+
+        refused = {
+            'a field only the top-level task carries': (
+                Update(Task(t.source, 'A subtask of', TODAY), {'P': '5'}),
+                ValueError,
+                'P belongs to the top-level task',
             ),
             'a checklist item, which a field would promote': (
                 Update(
@@ -993,28 +964,10 @@ class UpdateTests(TestCase):
                 ValueError,
                 'is a checklist item',
             ),
-            'a selector that names no task': (
-                Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
-                SelectionError,
-                "no open task matches 'nothing'",
-            ),
-            'a list that is not there': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    list_name='wrk',
-                ),
-                ListError,
-                "no list named 'wrk'",
-            ),
-            'the list the task is in, and no other change': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    list_name='a-list',
-                ),
+            'a checklist item, which takes no description': (
+                described_update(t.source, 'A checklist item', 'A line.'),
                 ValueError,
-                'nothing to update',
+                'is a checklist item',
             ),
             'a subtask, which moves with its top-level task': (
                 Update(
@@ -1025,29 +978,35 @@ class UpdateTests(TestCase):
                 ValueError,
                 "'A subtask of it' is a subtask",
             ),
-            'a title with a line break': (
-                Update(
-                    Task(t.source, '9o71lx', TODAY),
-                    {},
-                    title='A renamed\rtask',
-                ),
-                ValueError,
-                'title must hold no line break',
-            ),
-            'a description line that reads as a task': (
-                described_update(t.source, '9o71lx', '- [ ] A task'),
-                ValueError,
-                r"description line '- \[ \] A task' reads as a task line",
-            ),
-            'a checklist item, which takes no description': (
-                described_update(t.source, 'A checklist item', 'A line.'),
-                ValueError,
-                'is a checklist item',
+            'a selector that names no task': (
+                Update(Task(t.source, 'nothing', TODAY), {'P': '5'}),
+                SelectionError,
+                "no open task matches 'nothing'",
             ),
         }
         for name, (refusal, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
-                _ = refusal.text
+                _ = refusal.node
+
+    def test_path(t) -> None:
+        with t.subTest('the list of the task, where no list is named'):
+            ret = t.up.path
+            t.assertEqual(ret, t.source / 'a-list.md')
+
+        with t.subTest('the list a move names'):
+            t.up = Update(
+                Task(t.source, '9o71lx', TODAY),
+                {},
+                list_name='another-list',
+            )
+            ret = t.up.path
+            t.assertEqual(ret, t.source / 'another-list.md')
+
+        with t.subTest('a list that is not there is refused'):
+            t.up = Update(Task(t.source, '9o71lx', TODAY), {}, list_name='wrk')
+
+            with t.assertRaisesRegex(ListError, "no list named 'wrk'"):
+                _ = t.up.path
 
     def test_entry(t) -> None:
         ret = t.up.entry
@@ -1116,73 +1075,7 @@ class UpdateTests(TestCase):
                 ],
             )
 
-        with t.subTest('a description, against the one it replaced'):
-            described = described_update(t.source, '9o71lx', DESCRIPTION)
-
-            (event,) = described.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {
-                    'description': [
-                        'A note that stays put.',
-                        'A first line.\nA second line.',
-                    ],
-                },
-            )
-
-        with t.subTest('a cleared description, against null'):
-            cleared = described_update(t.source, '9o71lx', '')
-
-            (event,) = cleared.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {'description': ['A note that stays put.', None]},
-            )
-
-        with t.subTest('a cleared repeat, against null'):
-            cleared = Update(
-                Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}
-            )
-
-            (event,) = cleared.events
-
-            t.assertEqual(event.stream, 'task/rr01ab')
-            t.assertEqual(event.payload['delta'], {'REPEAT': ['7d', None]})
-
-        with t.subTest('a repeat that is no change stays out of the delta'):
-            kept = Update(
-                Task(t.source, 'rr01ab', TODAY),
-                {'P': '5', 'REPEAT': '7d'},
-            )
-            absent = Update(
-                Task(t.source, '9o71lx', TODAY),
-                {'P': '5', 'REPEAT': 'None'},
-            )
-
-            (kept_event,) = kept.events
-            (absent_event,) = absent.events
-
-            t.assertEqual(kept_event.payload['delta'], {'P': ['3', '5']})
-            t.assertEqual(absent_event.payload['delta'], {'P': ['4', '5']})
-
-        with t.subTest('every other value the task holds stays out too'):
-            kept = Update(
-                Task(a_fielded_source(t), 'ef01ab', TODAY),
-                {'P': '2', 'DUE': '20260901', 'TAGS': 'another-tag'},
-                title='A task with every field',
-                description='A description line, indented by hand.',
-            )
-
-            (event,) = kept.events
-
-            t.assertEqual(
-                event.payload['delta'],
-                {'TAGS': ['a-tag', 'another-tag']},
-            )
-
-        with t.subTest('a subtask records where it sits, and its new id'):
+        with t.subTest('a task with no id: the stream of its new id'):
             child = Update(
                 Task(t.source, 'A subtask of it', TODAY),
                 {'DUE': '2026-09-01'},
@@ -1191,37 +1084,66 @@ class UpdateTests(TestCase):
             (event,) = child.events
 
             t.assertEqual(event.stream, f'task/{child.task_id}')
-            t.assertEqual(event.payload['delta']['ID'], [None, child.task_id])
-            t.assertEqual(
-                event.payload['ancestry'],
-                'A task > A subtask of it',
-            )
 
-        with t.subTest('the attributes go on its event'):
-            updated = Update(
+    def test_payload(t) -> None:
+        with t.subTest('a subtask records where it sits'):
+            t.up = Update(
+                Task(t.source, 'A subtask of it', TODAY),
+                {'DUE': '2026-09-01'},
+            )
+            ret = t.up.payload
+            t.assertEqual(ret['ancestry'], 'A task > A subtask of it')
+
+        with t.subTest('the attributes, where any are given'):
+            t.up = Update(
                 Task(t.source, '9o71lx', TODAY),
                 {'P': '5'},
                 attrs={'cost': '45.00'},
             )
+            ret = t.up.payload
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
 
-            (event,) = updated.events
+        with t.subTest('a move: the task as it was, in the list it left'):
+            t.up.list_name = 'another-list'
+            ret = t.up.payload
+            t.assertEqual(ret['snapshot']['list'], 'a-list')
 
-            t.assertEqual(event.payload['attrs'], {'cost': '45.00'})
-
-        with t.subTest('a move records the list it leaves and joins'):
-            moved = Update(
-                Task(t.source, '9o71lx', TODAY),
-                {},
-                list_name='another-list',
-            )
-
-            (event,) = moved.events
-
-            t.assertEqual(
-                event.payload['delta'],
+    def test_delta(t) -> None:
+        unidentified = Update(
+            Task(t.source, 'A task with no id', TODAY),
+            {'P': '5'},
+        )
+        cases = {
+            'a cleared repeat, against null': (
+                Update(Task(t.source, 'rr01ab', TODAY), {'REPEAT': 'None'}),
+                {'REPEAT': ['7d', None]},
+            ),
+            'a value the task holds stays out': (
+                Update(
+                    Task(a_fielded_source(t), 'ef01ab', TODAY),
+                    {'P': '2', 'DUE': '20260901', 'TAGS': 'another-tag'},
+                    title='A task with every field',
+                    description='A description line, indented by hand.',
+                ),
+                {'TAGS': ['a-tag', 'another-tag']},
+            ),
+            'a new id, against null': (
+                unidentified,
+                {'P': ['2', '5'], 'ID': [None, unidentified.task_id]},
+            ),
+            'a move: the list it leaves and the list it joins': (
+                Update(
+                    Task(t.source, '9o71lx', TODAY),
+                    {},
+                    list_name='another-list',
+                ),
                 {'list': ['a-list', 'another-list']},
-            )
-            t.assertEqual(event.payload['snapshot']['list'], 'a-list')
+            ),
+        }
+        for name, (update, expected) in cases.items():
+            with t.subTest(name):
+                ret = update.delta
+                t.assertEqual(ret, expected)
 
 
 class ReopenTests(TestCase):
@@ -1251,15 +1173,23 @@ class ReopenTests(TestCase):
             FINISHED_BLOCK[0].replace('[x]', '[ ]').replace('[P:2]', '[P:5]'),
             *FINISHED_BLOCK[1:],
         ]
+        with_subtask_open = with_lines(
+            A_LIST,
+            RESTORED_INDEX,
+            [
+                FINISHED_BLOCK[0].replace('[x]', '[ ]'),
+                FINISHED_BLOCK[1],
+                FINISHED_BLOCK[2].replace('[x]', '[ ]'),
+                FINISHED_BLOCK[3],
+            ],
+        )
         cases = {
             'a top-level task, open, its children closed': (
                 t.ro,
-                'a-list.md',
                 with_lines(A_LIST, RESTORED_INDEX, opened),
             ),
             'a reopen that names nothing reopens the task unchanged': (
                 reopen_of(t.source, 'A finished task'),
-                'a-list.md',
                 with_lines(
                     A_LIST,
                     RESTORED_INDEX,
@@ -1269,7 +1199,6 @@ class ReopenTests(TestCase):
             ),
             'a description replaces the recorded one': (
                 reopen_of(t.source, 'ft01ab', description='A new note.'),
-                'a-list.md',
                 with_lines(
                     A_LIST,
                     RESTORED_INDEX,
@@ -1280,72 +1209,49 @@ class ReopenTests(TestCase):
                     ],
                 ),
             ),
-            'a repeat of None, on a task with none, writes none': (
-                reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'}),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [FINISHED_BLOCK[0].replace('[x]', '[ ]')]
-                    + FINISHED_BLOCK[1:],
-                ),
-            ),
             'a scratched task, to the list a reopen names': (
                 reopen_of(t.source, 'sc01ab', list_name='another-list'),
-                'another-list.md',
                 ANOTHER_LIST + '- [ ] A scratched task [P:1] [ID:sc01ab]\n',
             ),
             'a subtask whose line a list holds, each closed task above': (
                 reopen_of(t.source, 'db03ef'),
-                'a-held-list.md',
                 HELD_LIST.replace('[x]', '[ ]'),
             ),
             'a top-level task with its subtasks, a checklist item closed': (
                 reopen_of(t.source, 'ft01ab', with_subtasks=True),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [
-                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[1],
-                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[3],
-                    ],
-                ),
+                with_subtask_open,
             ),
             'a subtask with the closed subtask below it': (
                 reopen_of(t.source, 'ds02cd', with_subtasks=True),
-                'a-held-list.md',
                 HELD_LIST.replace('[x]', '[ ]'),
             ),
             'a subtask in the record of its top-level task': (
                 reopen_of(t.source, 'fs02cd'),
-                'a-list.md',
-                with_lines(
-                    A_LIST,
-                    RESTORED_INDEX,
-                    [
-                        FINISHED_BLOCK[0].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[1],
-                        FINISHED_BLOCK[2].replace('[x]', '[ ]'),
-                        FINISHED_BLOCK[3],
-                    ],
-                ),
+                with_subtask_open,
             ),
         }
-        for name, (reopen, list_file, expected) in cases.items():
+        for name, (reopen, expected) in cases.items():
             with t.subTest(name):
                 ret = reopen.text
-                t.assertEqual(reopen.path, t.source / list_file)
                 t.assertEqual(ret, expected)
 
+    def test_checked(t) -> None:
+        with t.subTest('the named fields that change the task, read'):
+            ret = t.ro.checked
+            t.assertEqual(ret, {'P': '5'})
+
+        with t.subTest('a value that does not read is refused'):
+            t.ro = reopen_of(t.source, 'ft01ab', {'DUE': 'x'})
+
+            with t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'):
+                _ = t.ro.checked
+
+    def test_stream(t) -> None:
+        with t.subTest('the closed stream the selector names'):
+            ret = t.ro.stream
+            t.assertEqual(ret.task_id, 'ft01ab')
+
         refused = {
-            'a value that does not read': (
-                reopen_of(t.source, 'ft01ab', {'DUE': 'x'}),
-                ValueError,
-                "DUE must be an ISO date, not 'x'",
-            ),
             'a selector that names no task at all': (
                 reopen_of(t.source, 'nothing'),
                 SelectionError,
@@ -1365,38 +1271,71 @@ class ReopenTests(TestCase):
                 ValueError,
                 r'names a checklist item of \[ID:ft01ab\]',
             ),
-            'a list that is not there': (
-                reopen_of(t.source, 'ft01ab', list_name='wrk'),
-                ListError,
-                "no list named 'wrk'",
-            ),
+        }
+        for name, (refusal, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                _ = refusal.stream
+
+    def test_refuse_nested_changes(t) -> None:
+        with t.subTest('a top-level task takes a list and any field'):
+            t.ro = reopen_of(t.source, 'ft01ab', list_name='another-list')
+            t.ro.refuse_nested_changes()
+
+        refused = {
             'a list for a subtask': (
                 reopen_of(t.source, 'fs02cd', list_name='a-list'),
-                ValueError,
                 "'Its subtask' is a subtask: --list moves a top-level task",
             ),
             'a field only the top-level task carries, on a subtask': (
                 reopen_of(t.source, 'db03ef', {'P': '3'}),
-                ValueError,
                 'P belongs to the top-level task',
             ),
-            'a subtask whose line no list and no record holds': (
-                reopen_of(t.source, 'ls01ab'),
-                ValueError,
-                (
-                    r"'A lost subtask' is a subtask of \[ID:lp00ab\], and "
-                    'no list and no record of a closed task holds its line'
-                ),
+        }
+        for name, (refusal, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(ValueError, message):
+                refusal.refuse_nested_changes()
+
+    def test_path(t) -> None:
+        cases = {
+            'the list its record names': (t.ro, 'a-list.md'),
+            'the list a reopen names': (
+                reopen_of(t.source, 'sc01ab', list_name='another-list'),
+                'another-list.md',
             ),
-            'a title with a line break': (
-                reopen_of(t.source, 'ft01ab', title='A finished\rtask'),
-                ValueError,
-                'title must hold no line break',
+            'the list that holds the line of a subtask': (
+                reopen_of(t.source, 'db03ef'),
+                'a-held-list.md',
+            ),
+            'the list the record of its top-level task names': (
+                reopen_of(t.source, 'fs02cd'),
+                'a-list.md',
             ),
         }
-        for name, (refusal, error, message) in refused.items():
-            with t.subTest(name), t.assertRaisesRegex(error, message):
-                _ = refusal.text
+        for name, (reopen, list_file) in cases.items():
+            with t.subTest(name):
+                ret = reopen.path
+                t.assertEqual(ret, t.source / list_file)
+
+        with t.subTest('a list that is not there is refused'):
+            t.ro = reopen_of(t.source, 'ft01ab', list_name='wrk')
+
+            with t.assertRaisesRegex(ListError, "no list named 'wrk'"):
+                _ = t.ro.path
+
+    def test_record(t) -> None:
+        with t.subTest('the record of a top-level task is its own stream'):
+            ret = t.ro.record
+            t.assertEqual(ret.task_id, 'ft01ab')
+
+        with t.subTest('a subtask whose line no list and no record holds'):
+            t.ro = reopen_of(t.source, 'ls01ab')
+
+            with t.assertRaisesRegex(
+                ValueError,
+                r"'A lost subtask' is a subtask of \[ID:lp00ab\], and "
+                'no list and no record of a closed task holds its line',
+            ):
+                _ = t.ro.record
 
     def test_entry(t) -> None:
         ret = t.ro.entry
@@ -1472,11 +1411,6 @@ class ReopenTests(TestCase):
                 'A finished task > Its subtask',
             )
 
-        with t.subTest('a clear of a repeat it does not carry: no change'):
-            cleared = reopen_of(t.source, 'ft01ab', {'REPEAT': 'None'})
-            (event,) = cleared.events
-            t.assertEqual(event.payload['delta'], {'done': [True, False]})
-
         with t.subTest('a value it holds is no change, and it still opens'):
             kept = reopen_of(
                 t.source,
@@ -1550,7 +1484,7 @@ class CompletionTests(TestCase):
 
             completion.write()
 
-            stream = f'task/{completion.ids[2]}'
+            stream = f'task/{completion.lines.ids[2]}'
             t.assertEqual(
                 journaled(completion.source),
                 [('TaskUpdated', stream), ('TaskCompleted', stream)],
@@ -1575,7 +1509,7 @@ class CompletionTests(TestCase):
 
             scratched.write()
 
-            stream = f'task/{scratched.ids[2]}'
+            stream = f'task/{scratched.lines.ids[2]}'
             t.assertEqual(
                 journaled(scratched.source),
                 [('TaskUpdated', stream), ('TaskScratched', stream)],
@@ -1597,7 +1531,7 @@ class CompletionTests(TestCase):
 
             ret = completed.text
 
-            child_id = completed.ids[6]
+            child_id = completed.lines.ids[6]
             line = f'  - [x] A subtask of it [LOE:2] [ID:{child_id}]'
             t.assertEqual(ret, A_LIST.replace(A_CHILD, line))
 
@@ -1614,31 +1548,6 @@ class CompletionTests(TestCase):
                 '[DUE:2026-08-15] [REPEAT:7d] [ID:rr01ab] [ADDED:2026-08-08]',
             )
             t.assertEqual(ret, without(rescheduled, 10))
-
-        with t.subTest('a recurrence completed on a given day is added then'):
-            task = Task(a_source(t), 'A subtask that does not', GIVEN_DAY)
-            completed = Completion(task)
-
-            ret = completed.text
-
-            rescheduled = A_LIST.replace(
-                '[DUE:2026-08-05] [REPEAT:7d] [ID:rr01ab]',
-                '[DUE:2026-08-08] [REPEAT:7d] [ID:rr01ab] [ADDED:2026-08-01]',
-            )
-            t.assertEqual(ret, without(rescheduled, 10))
-
-        with t.subTest('a recurrence that does not read is refused'):
-            odd = t.source / 'a-list.md'
-            odd.write_text('## Open\n- [ ] An odd one [REPEAT:often]\n')
-            completed = completion_of(t.source, 'An odd one')
-
-            with t.assertRaises(RepeatError) as caught:
-                _ = completed.text
-
-            t.assertEqual(
-                str(caught.exception),
-                "unrecognised REPEAT value: 'often'",
-            )
 
         with t.subTest('a rescheduled task keeps its description lines'):
             described = t.source / 'a-list.md'
@@ -1664,57 +1573,6 @@ class CompletionTests(TestCase):
                 ),
             )
 
-        with t.subTest('from the given day'):
-            task = Task(a_stepped_source(t), 'rs01ab', GIVEN_DAY)
-            completed = Completion(task)
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '[DUE:2026-08-05] [REPEAT:7d]',
-                    '[DUE:2026-08-08] [REPEAT:7d]',
-                ),
-            )
-
-        with t.subTest('the last open subtask, rescheduled, ends no parent'):
-            completed = completion_of(a_stepped_source(t), 'os01ab')
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '[DUE:2026-08-05] [REPEAT:monthly:5]',
-                    '[DUE:2026-09-05] [REPEAT:monthly:5]',
-                ),
-            )
-
-        with t.subTest('the last plain subtask beside a repeating one'):
-            completed = completion_of(a_stepped_source(t), 'ps01ab')
-
-            ret = completed.text
-
-            t.assertEqual(
-                ret,
-                STEPPED_LIST.replace(
-                    '  - [ ] A plain step [LOE:1]',
-                    '  - [x] A plain step [LOE:1]',
-                ),
-            )
-
-        with t.subTest('a rescheduled subtask loses its children'):
-            completed = completion_of(a_stepped_source(t), 'rw01ab')
-
-            ret = completed.text
-
-            rescheduled = STEPPED_LIST.replace(
-                '[DUE:2026-08-05] [REPEAT:1w]',
-                '[DUE:2026-08-15] [REPEAT:1w]',
-            )
-            t.assertEqual(ret, without(rescheduled, 5))
-
         with t.subTest('and its last open child reschedules it'):
             completed = completion_of(a_stepped_source(t), 'sb01ab')
 
@@ -1726,11 +1584,27 @@ class CompletionTests(TestCase):
             )
             t.assertEqual(ret, without(rescheduled, 5))
 
+        with t.subTest('a scratch drops a block that a repeat holds open'):
+            scratched = scratch_of(a_stepped_source(t), 'ch01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(STEPPED_LIST, 1, 2, 3, 4, 5))
+
+        with t.subTest('a scratch drops the task, its note and its children'):
+            scratched = scratch_of(a_source(t), '9o71lx')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 4, 5, 6, 7))
+
+        with t.subTest('a scratched recurring task goes, not rescheduled'):
+            scratched = scratch_of(a_source(t), 'rr01ab')
+            ret = scratched.text
+            t.assertEqual(ret, without(A_LIST, 9, 10))
+
+    def test_refuse_repeating_subtask(t) -> None:
         with t.subTest('a task that a repeating subtask holds open'):
             completed = completion_of(a_stepped_source(t), 'ch01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1743,7 +1617,7 @@ class CompletionTests(TestCase):
             completed = completion_of(a_stepped_source(t), 'cd01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1756,7 +1630,7 @@ class CompletionTests(TestCase):
             completed = completion_of(a_stepped_source(t), 'pa01ab')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1775,7 +1649,7 @@ class CompletionTests(TestCase):
             completed = completion_of(t.source, 'A recurring chore')
 
             with t.assertRaises(ValueError) as refused:
-                _ = completed.text
+                completed.refuse_repeating_subtask()
 
             t.assertEqual(
                 str(refused.exception),
@@ -1784,30 +1658,9 @@ class CompletionTests(TestCase):
                 "with update 'A hand-written repeating step' --repeat None",
             )
 
-        with t.subTest('a scratch drops a block that a repeat holds open'):
+        with t.subTest('a scratch completes nothing, so none is refused'):
             scratched = scratch_of(a_stepped_source(t), 'ch01ab')
-            ret = scratched.text
-            t.assertEqual(ret, without(STEPPED_LIST, 1, 2, 3, 4, 5))
-
-        with t.subTest('a scratch drops the task, its note and its children'):
-            scratched = scratch_of(a_source(t), '9o71lx')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 4, 5, 6, 7))
-
-        with t.subTest('a scratched subtask goes, and its parent stays'):
-            scratched = scratch_of(a_source(t), 'A subtask of')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 6))
-
-        with t.subTest('a scratch of the last open child ends no parent'):
-            scratched = scratch_of(a_source(t), 'A subtask that does not')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 10))
-
-        with t.subTest('a scratched recurring task goes, not rescheduled'):
-            scratched = scratch_of(a_source(t), 'rr01ab')
-            ret = scratched.text
-            t.assertEqual(ret, without(A_LIST, 9, 10))
+            scratched.refuse_repeating_subtask()
 
     def test_entries(t) -> None:
         with t.subTest('the task and each ancestor it ends, deepest first'):
@@ -1868,80 +1721,13 @@ class CompletionTests(TestCase):
         with t.subTest('one TaskCompleted a completion, deepest first'):
             completed = completion_of(t.source, 'A subtask that does not')
 
-            child, parent = completed.events
-
-            t.assertEqual(child.type, 'TaskCompleted')
-            t.assertEqual(
-                child.payload['ancestry'],
-                'A recurring task > A subtask that does not recur',
-            )
-            t.assertEqual(child.payload['completed_on'], '2026-08-08')
-            t.assertEqual(
-                parent,
-                (
-                    'TaskCompleted',
-                    'task/rr01ab',
-                    {
-                        'delta': {
-                            'done': [False, True],
-                            'DUE': ['2026-08-05', '2026-08-15'],
-                            'ADDED': [None, '2026-08-08'],
-                        },
-                        'snapshot': {
-                            'list': 'a-list',
-                            'title': 'A recurring task',
-                            'done': False,
-                            'fields': {
-                                'P': '3',
-                                'DUE': '2026-08-05',
-                                'REPEAT': '7d',
-                                'ID': 'rr01ab',
-                            },
-                            'children': [
-                                {
-                                    'title': 'A subtask that does not recur',
-                                    'done': False,
-                                    'fields': {'LOE': '1'},
-                                },
-                            ],
-                        },
-                        'ancestry': 'A recurring task',
-                        'completed_on': '2026-08-08',
-                    },
-                ),
-            )
-
-        with t.subTest('a rescheduled subtask: its new due date, no ADDED'):
-            completed = completion_of(a_stepped_source(t), 'os01ab')
             events = completed.events
+
             t.assertEqual(
-                events,
+                as_journaled(events),
                 [
-                    (
-                        'TaskCompleted',
-                        'task/os01ab',
-                        {
-                            'delta': {
-                                'done': [False, True],
-                                'DUE': ['2026-08-05', '2026-09-05'],
-                            },
-                            'snapshot': {
-                                'list': 'a-stepped-list',
-                                'title': 'Its only open step',
-                                'done': False,
-                                'fields': {
-                                    'DUE': '2026-08-05',
-                                    'REPEAT': 'monthly:5',
-                                    'ID': 'os01ab',
-                                },
-                            },
-                            'ancestry': (
-                                'A chore with one open step > '
-                                'Its only open step'
-                            ),
-                            'completed_on': '2026-08-08',
-                        },
-                    )
+                    ('TaskCompleted', f'task/{completed.lines.ids[10]}'),
+                    ('TaskCompleted', 'task/rr01ab'),
                 ],
             )
 
@@ -1961,7 +1747,7 @@ class CompletionTests(TestCase):
 
             stamp, item = completed.events
 
-            task_id = completed.ids[2]
+            task_id = completed.lines.ids[2]
             t.assertEqual(
                 stamp,
                 (
@@ -2004,35 +1790,14 @@ class CompletionTests(TestCase):
 
         with t.subTest('a scratch: one TaskScratched, on its stream'):
             scratched = scratch_of(t.source, '9o71lx', attrs={'cost': '0'})
-            events = scratched.events
+
+            (ret,) = scratched.events
+
             t.assertEqual(
-                events,
-                [
-                    (
-                        'TaskScratched',
-                        'task/9o71lx',
-                        {
-                            'delta': {'removed': [False, True]},
-                            'snapshot': {
-                                'list': 'a-list',
-                                'title': 'A task',
-                                'done': False,
-                                'fields': {
-                                    'P': '4',
-                                    'LOE': '8',
-                                    'ADDED': '2026-07-06',
-                                    'ID': '9o71lx',
-                                },
-                                'description': 'A note that stays put.',
-                                'children': A_TASK_CHILDREN,
-                            },
-                            'ancestry': 'A task',
-                            'attrs': {'cost': '0'},
-                            'completed_on': '2026-08-08',
-                        },
-                    )
-                ],
+                (ret.type, ret.stream), ('TaskScratched', 'task/9o71lx')
             )
+            t.assertEqual(ret.payload['delta'], {'removed': [False, True]})
+            t.assertEqual(ret.payload['attrs'], {'cost': '0'})
 
         with t.subTest('a scratched task with no id takes no stamp'):
             # Its line goes, so no line keeps the new id.
@@ -2040,7 +1805,7 @@ class CompletionTests(TestCase):
 
             (ret,) = scratched.events
 
-            t.assertEqual(ret.stream, f'task/{scratched.ids[8]}')
+            t.assertEqual(ret.stream, f'task/{scratched.lines.ids[8]}')
 
         with t.subTest('a scratched checklist item: its owner stamp first'):
             scratched = scratch_of(
@@ -2049,7 +1814,7 @@ class CompletionTests(TestCase):
 
             stamp, item = scratched.events
 
-            task_id = scratched.ids[2]
+            task_id = scratched.lines.ids[2]
             t.assertEqual(stamp.type, 'TaskUpdated')
             t.assertEqual(
                 (item.type, item.stream, item.payload['checklist_item']),
@@ -2366,6 +2131,505 @@ class ChangesetTests(TestCase):
             t.assertEqual(journaled(source), [('TaskAdded', 'task/zz01ab')])
 
 
+class SuppliedEditTests(TestCase):
+    """Contract tests for battodo.mutate.SuppliedEdit."""
+
+    def setUp(t) -> None:
+        # The task with every field, and a task that carries no repeat
+        # and no description.
+        t.node = TodoDocument(FIELDED_LIST).tasks[0]
+        t.bare = TodoDocument(A_LIST).tasks[1]
+        t.se = SuppliedEdit(
+            {'P': '5', 'DUE': '20260901'},
+            'A new title',
+            'A new line.',
+            TODAY,
+        )
+
+    def test_changed(t) -> None:
+        with t.subTest('each value read, a due date in ISO form'):
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'DUE': '2026-09-01'})
+
+        with t.subTest('a repeat of None clears the field'):
+            t.se.fields = {'P': '5', 'REPEAT': 'None'}
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'REPEAT': None})
+
+        refused = {
+            'a value that does not read': (
+                {'DUE': 'x'},
+                ValueError,
+                "DUE must be an ISO date, not 'x'",
+            ),
+            'an empty repeat, which is no clear': (
+                {'REPEAT': ''},
+                RepeatError,
+                "unrecognised REPEAT value: ''",
+            ),
+        }
+        for name, (fields, error, message) in refused.items():
+            with t.subTest(name), t.assertRaisesRegex(error, message):
+                t.se.fields = fields
+                _ = t.se.changed
+
+    def test_supplied(t) -> None:
+        ret = t.se.supplied
+        t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+
+    def test_checked_title(t) -> None:
+        with t.subTest('the named title'):
+            ret = t.se.checked_title
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where none is named'):
+            t.se.title = None
+            ret = t.se.checked_title
+            t.assertIsNone(ret)
+
+        with t.subTest('a title with a line break is refused'):
+            t.se.title = 'A new\ntitle'
+
+            with t.assertRaisesRegex(ValueError, 'title must hold no line'):
+                _ = t.se.checked_title
+
+    def test_checked_description(t) -> None:
+        with t.subTest('the named description, its lines read'):
+            ret = t.se.checked_description
+            t.assertEqual(ret, ['A new line.'])
+
+        with t.subTest('None clears, as an empty description does'):
+            t.se.description = 'None'
+            ret = t.se.checked_description
+            t.assertEqual(ret, [])
+
+        with t.subTest('none, where none is named'):
+            t.se.description = None
+            ret = t.se.checked_description
+            t.assertIsNone(ret)
+
+        with t.subTest('a line that reads as a task is refused'):
+            t.se.description = '- [ ] A task'
+
+            with t.assertRaisesRegex(ValueError, 'reads as a task line'):
+                _ = t.se.checked_description
+
+    def test_changes(t) -> None:
+        cases = {
+            'a new value is a change': (
+                t.node,
+                {'P': '5'},
+                {'P': '5'},
+            ),
+            'each value the task holds is no change': (
+                t.node,
+                {'P': '2', 'DUE': '20260901', 'REPEAT': '7d', 'TAGS': 'a-tag'},
+                {},
+            ),
+            'a clear of a field the task carries is a change': (
+                t.node,
+                {'REPEAT': 'None'},
+                {'REPEAT': None},
+            ),
+            'a clear of a field the task does not carry is not': (
+                t.bare,
+                {'REPEAT': 'None'},
+                {},
+            ),
+        }
+        for name, (node, fields, expected) in cases.items():
+            with t.subTest(name):
+                t.se.fields = fields
+                ret = t.se.changes(node)
+                t.assertEqual(ret, expected)
+
+    def test_new_title(t) -> None:
+        with t.subTest('a title that changes the task'):
+            ret = t.se.new_title(t.node)
+            t.assertEqual(ret, 'A new title')
+
+        with t.subTest('none, where the task holds it'):
+            t.se.title = 'A task with every field'
+            ret = t.se.new_title(t.node)
+            t.assertIsNone(ret)
+
+        with t.subTest('none, where it holds it, a trailing space aside'):
+            t.se.title = 'A task with every field '
+            ret = t.se.new_title(t.node)
+            t.assertIsNone(ret)
+
+    def test_new_description(t) -> None:
+        with t.subTest('a description that changes the task'):
+            ret = t.se.new_description(t.node)
+            t.assertEqual(ret, ['A new line.'])
+
+        cases = {
+            'none, where the task holds it, as the file indents it': (
+                t.node,
+                'A description line, indented by hand.',
+            ),
+            'none, where it clears a task with no description': (
+                t.bare,
+                'None',
+            ),
+        }
+        for name, (node, description) in cases.items():
+            with t.subTest(name):
+                t.se.description = description
+                ret = t.se.new_description(node)
+                t.assertIsNone(ret)
+
+    def test_refuse_root_fields(t) -> None:
+        with t.subTest('a field a subtask carries'):
+            t.se.fields = {'DUE': '2026-09-01', 'REPEAT': '7d'}
+            t.se.refuse_root_fields()
+
+        with t.subTest('a field only the top-level task carries'):
+            t.se.fields = {'P': '5'}
+
+            with t.assertRaisesRegex(ValueError, 'P belongs to the top-level'):
+                t.se.refuse_root_fields()
+
+    def test_delta(t) -> None:
+        with t.subTest('each written field, the title, the description'):
+            ret = t.se.delta(t.node, {'P': '5', 'DUE': '2026-09-01'})
+            t.assertEqual(
+                ret,
+                {
+                    'P': ['2', '5'],
+                    'DUE': ['2026-09-01', '2026-09-01'],
+                    'title': ['A task with every field', 'A new title'],
+                    'description': [
+                        'A description line, indented by hand.',
+                        'A new line.',
+                    ],
+                },
+            )
+
+        with t.subTest('a cleared description, against null'):
+            t.se.title = None
+            t.se.description = ''
+
+            ret = t.se.delta(t.node, {})
+
+            t.assertEqual(
+                ret,
+                {
+                    'description': [
+                        'A description line, indented by hand.',
+                        None,
+                    ],
+                },
+            )
+
+        with t.subTest('nothing that the task holds'):
+            t.se.title = 'A task with every field'
+            t.se.description = 'A description line, indented by hand.'
+
+            ret = t.se.delta(t.node, {})
+
+            t.assertEqual(ret, {})
+
+
+class CompletionLinesTests(TestCase):
+    """Contract tests for battodo.mutate.CompletionLines."""
+
+    def setUp(t) -> None:
+        t.source = a_source(t)
+        t.stepped = a_stepped_source(t)
+
+    def test_stamps(t) -> None:
+        with t.subTest('a task that stays gains the id of its stream'):
+            lines = lines_of(t.source, 'A subtask of it')
+            ret = lines.stamps
+            t.assertEqual(ret, {6: {'ID': lines.ids[6]}})
+
+        cases = {
+            'a recurrence: its next due date, the day as its ADDED': (
+                lines_of(t.source, 'A subtask that does not'),
+                {
+                    9: {
+                        'DUE': '2026-08-15',
+                        'ADDED': '2026-08-08',
+                        'ID': 'rr01ab',
+                    }
+                },
+            ),
+            'a repeating subtask: its next due date, no ADDED': (
+                lines_of(t.stepped, 'rs01ab'),
+                {2: {'DUE': '2026-08-15', 'ID': 'rs01ab'}},
+            ),
+            'a finished block: nothing, as its lines go': (
+                lines_of(t.source, 'A task with no id'),
+                {},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.stamps
+                t.assertEqual(ret, expected)
+
+    def test_checked_off(t) -> None:
+        cases = {
+            'a task that stays': (lines_of(t.source, 'A subtask of it'), [6]),
+            'the last plain step beside a repeating one': (
+                lines_of(t.stepped, 'ps01ab'),
+                [3],
+            ),
+            'none where a recurrence stays open': (
+                lines_of(t.source, 'A subtask that does not'),
+                [],
+            ),
+            'none once the block goes': (
+                lines_of(t.source, 'A task with no id'),
+                [],
+            ),
+            'none for a scratch': (
+                lines_of(t.source, 'A subtask of it', scratched=True),
+                [],
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.checked_off
+                t.assertEqual(ret, expected)
+
+    def test_dropped(t) -> None:
+        cases = {
+            'nothing where the block stays': (
+                lines_of(t.source, 'A subtask of it'),
+                set(),
+            ),
+            'a finished block: every line of it': (
+                lines_of(t.source, 'A task with no id'),
+                {8},
+            ),
+            'a recurrence: its children, not it': (
+                lines_of(t.source, 'A subtask that does not'),
+                {10},
+            ),
+            'a repeating subtask: its children': (
+                lines_of(t.stepped, 'rw01ab'),
+                {5},
+            ),
+            'a scratch: the block of the task, its note and children': (
+                lines_of(t.source, '9o71lx', scratched=True),
+                {4, 5, 6, 7},
+            ),
+            'a scratched subtask: its line alone': (
+                lines_of(t.source, 'A subtask of it', scratched=True),
+                {6},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.dropped
+                t.assertEqual(ret, expected)
+
+    def test_root_done(t) -> None:
+        cases = {
+            'a top-level task with no open child': (
+                lines_of(t.source, 'A task with no id'),
+                True,
+            ),
+            'a subtask beside an open sibling': (
+                lines_of(t.source, 'A subtask of it'),
+                False,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.root_done
+                t.assertEqual(ret, expected)
+
+    def test_ids(t) -> None:
+        with t.subTest('a stream keeps its id'):
+            lines = lines_of(t.source, 'A subtask that does not')
+            ret = lines.ids
+            t.assertEqual(ret[9], 'rr01ab')
+
+        with t.subTest('an owner with no id takes one, drawn once'):
+            lines = lines_of(an_owner_source(t), 'A checklist item to write')
+
+            ret = lines.ids
+            again = lines.ids
+
+            t.assertEqual(list(ret), [2])
+            t.assertIs(again, ret)
+
+    def test_rescheduled(t) -> None:
+        cases = {
+            'the next due date of the recurrence': (
+                lines_of(t.source, 'A subtask that does not'),
+                date(2026, 8, 15),
+            ),
+            'from the given day': (
+                lines_of(t.source, 'A subtask that does not', GIVEN_DAY),
+                date(2026, 8, 8),
+            ),
+            'a monthly repeat of a subtask': (
+                lines_of(t.stepped, 'os01ab'),
+                date(2026, 9, 5),
+            ),
+            'none without a recurrence': (
+                lines_of(t.source, 'A subtask of it'),
+                None,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.rescheduled
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a repeat that does not read is refused'):
+            odd = t.source / 'a-list.md'
+            odd.write_text('## Open\n- [ ] An odd one [REPEAT:often]\n')
+            lines = lines_of(t.source, 'An odd one')
+
+            with t.assertRaisesRegex(RepeatError, "'often'"):
+                _ = lines.rescheduled
+
+    def test_recurrence(t) -> None:
+        cases = {
+            'the last task finished, where it repeats': (
+                lines_of(t.source, 'A subtask that does not'),
+                TodoDocument(A_LIST).tasks[2],
+            ),
+            'none where it does not repeat': (
+                lines_of(t.source, 'A subtask of it'),
+                None,
+            ),
+            'none for a scratch': (
+                lines_of(t.source, 'rr01ab', scratched=True),
+                None,
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.recurrence
+                t.assertEqual(ret, expected)
+
+    def test_root(t) -> None:
+        lines = lines_of(t.source, 'A subtask of it')
+        ret = lines.root
+        t.assertEqual(ret.title, 'A task')
+
+    def test_ancestries(t) -> None:
+        cases = {
+            'an open sibling stops the cascade': (
+                lines_of(t.source, 'A subtask of it'),
+                ['A task > A subtask of it'],
+            ),
+            'the last open child completes its parent': (
+                lines_of(t.source, 'A subtask that does not'),
+                [
+                    'A recurring task > A subtask that does not recur',
+                    'A recurring task',
+                ],
+            ),
+            'a repeating subtask finishes no parent': (
+                lines_of(t.stepped, 'os01ab'),
+                ['A chore with one open step > Its only open step'],
+            ),
+            'a scratch finishes nothing above it': (
+                lines_of(t.source, 'A subtask that does not', scratched=True),
+                ['A recurring task > A subtask that does not recur'],
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = [ancestry.path for ancestry in lines.ancestries]
+                t.assertEqual(ret, expected)
+
+
+class TaskCompletionTests(TestCase):
+    """Contract tests for battodo.mutate.TaskCompletion."""
+
+    def setUp(t) -> None:
+        t.source = a_source(t)
+
+    def test_delta(t) -> None:
+        cases = {
+            'a completion: the done': (
+                record_of(t.source, '9o71lx'),
+                {'done': [False, True]},
+            ),
+            'a top-level recurrence: its new due date and ADDED': (
+                record_of(t.source, 'rr01ab', date(2026, 8, 15)),
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': [None, '2026-08-08'],
+                },
+            ),
+            'a rescheduled subtask: its new due date alone': (
+                record_of(a_stepped_source(t), 'os01ab', date(2026, 9, 5)),
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-09-05'],
+                },
+            ),
+            'a scratch: the removal': (
+                record_of(t.source, '9o71lx', scratched=True),
+                {'removed': [False, True]},
+            ),
+        }
+        for name, (record, expected) in cases.items():
+            with t.subTest(name):
+                ret = record.delta
+                t.assertEqual(ret, expected)
+
+    def test_payload(t) -> None:
+        with t.subTest('the delta, the task as it was, its path, its day'):
+            record = record_of(t.source, 'rr01ab', date(2026, 8, 15))
+
+            ret = record.payload
+
+            t.assertEqual(
+                ret,
+                {
+                    'delta': {
+                        'done': [False, True],
+                        'DUE': ['2026-08-05', '2026-08-15'],
+                        'ADDED': [None, '2026-08-08'],
+                    },
+                    'snapshot': {
+                        'list': 'a-list',
+                        'title': 'A recurring task',
+                        'done': False,
+                        'fields': {
+                            'P': '3',
+                            'DUE': '2026-08-05',
+                            'REPEAT': '7d',
+                            'ID': 'rr01ab',
+                        },
+                        'children': [
+                            {
+                                'title': 'A subtask that does not recur',
+                                'done': False,
+                                'fields': {'LOE': '1'},
+                            },
+                        ],
+                    },
+                    'ancestry': 'A recurring task',
+                    'completed_on': '2026-08-08',
+                },
+            )
+
+        with t.subTest('a checklist item is marked as one'):
+            record = record_of(t.source, 'A checklist item')
+            ret = record.payload
+            t.assertIs(ret['checklist_item'], True)
+
+        with t.subTest('the attributes it is given'):
+            record = record_of(t.source, '9o71lx')
+            record.attrs = {'cost': '45.00'}
+
+            ret = record.payload
+
+            t.assertEqual(ret['attrs'], {'cost': '45.00'})
+
+
 def a_source(t: TestCase) -> Path:
     """A source directory holding both lists, removed at the end."""
     tmp = TemporaryDirectory()
@@ -2425,6 +2689,30 @@ def a_fielded_source(t: TestCase) -> Path:
     fielded = source / 'a-fielded-list.md'
     fielded.write_text(FIELDED_LIST, encoding='utf-8')
     return source
+
+
+def lines_of(
+    source: Path,
+    selector: str,
+    day: date = TODAY,
+    scratched: bool = False,
+) -> CompletionLines:
+    """The lines a close of the task `selector` names edits, on `day`."""
+    ancestry = Task(source, selector, day).ancestry
+    return CompletionLines(ancestry, day, scratched)
+
+
+def record_of(
+    source: Path,
+    selector: str,
+    rescheduled: date | None = None,
+    scratched: bool = False,
+) -> TaskCompletion:
+    """The record of a close of the task `selector` names, on TODAY."""
+    ancestry = Ancestry(Task(source, selector, TODAY).ancestry)
+    return TaskCompletion(
+        ancestry, rescheduled, TODAY, 'a-list', scratched=scratched
+    )
 
 
 def with_line(text: str, index: int, line: str) -> str:

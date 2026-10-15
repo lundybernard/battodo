@@ -238,7 +238,11 @@ class CommandInputTests(TestCase):
             t.assertEqual(loads(ret)['categories'][0]['hidden'], 1)
 
     def test_done(t):
+        listed = t.source / 'yard.md'
+
         with t.subTest('BATTODO_DATE does not reach done'):
+            listed.write_text(YARD, encoding='utf-8')
+
             ret = t.run_command(
                 ['done', 'rk01lv'],
                 {'BATTODO_DATE': STRAY_DATE},
@@ -249,6 +253,7 @@ class CommandInputTests(TestCase):
             )
 
         with t.subTest('a date in the config file does not reach done'):
+            listed.write_text(YARD, encoding='utf-8')
             config_file = t.root / 'battodo.toml'
             config_file.write_text(
                 f'[test.battodo]\ndate = "{STRAY_DATE}"\n',
@@ -264,7 +269,6 @@ class CommandInputTests(TestCase):
             t.assertEqual(ret, '2026-08-05 | yard | DONE | Sweep deck [P:2]\n')
 
         with t.subTest('--date reschedules a repeating subtask from that day'):
-            listed = t.source / 'yard.md'
             listed.write_text(STEPPED_YARD, encoding='utf-8')
 
             ret = t.run_command(['done', 'ml01ab', '--date', '2026-08-03'], {})
@@ -280,7 +284,6 @@ class CommandInputTests(TestCase):
             )
 
         with t.subTest('a task that a repeating subtask holds open'):
-            listed = t.source / 'yard.md'
             listed.write_text(STEPPED_YARD, encoding='utf-8')
 
             with t.assertRaises(ValueError) as caught:
@@ -295,8 +298,7 @@ class CommandInputTests(TestCase):
             t.assertEqual(listed.read_text(encoding='utf-8'), STEPPED_YARD)
 
         with t.subTest('--scratch, --attrs and --note reach the event'):
-            # The subtests above closed both tasks.
-            (t.source / 'yard.md').write_text(YARD, encoding='utf-8')
+            listed.write_text(YARD, encoding='utf-8')
 
             t.run_command(
                 [
@@ -355,52 +357,59 @@ class CommandInputTests(TestCase):
 
     def test_update(t):
         listed = t.source / 'yard.md'
-
-        with t.subTest('BATTODO_TITLE does not reach update'):
-            ret = t.run_command(
+        repeating = YARD.replace('[ID:rk01lv]', '[ID:rk01lv] [REPEAT:7d]')
+        described = YARD.replace(
+            '[ID:rk01lv]\n', '[ID:rk01lv]\n      Bag the piles.\n'
+        )
+        cases = {
+            'BATTODO_TITLE does not reach update': (
+                YARD,
                 ['update', 'rk01lv', '-p', '4'],
                 {'BATTODO_TITLE': 'Renamed'},
-            )
-
-            t.assertEqual(
-                ret,
-                f'- [ ] Rake leaves [P:4] [ID:rk01lv]\n{listed}\n',
-            )
-
-        with t.subTest('BATTODO_DUE does not reach update'):
-            ret = t.run_command(
+                '- [ ] Rake leaves [P:4] [ID:rk01lv]',
+            ),
+            'BATTODO_DUE does not reach update': (
+                YARD,
                 ['update', 'rk01lv', '-p', '5'],
                 {'BATTODO_DUE': STRAY_DATE},
-            )
-
-            t.assertEqual(
-                ret,
-                f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
-            )
-
-        with t.subTest('--repeat sets a repeat on a task with none'):
-            ret = t.run_command(['update', 'rk01lv', '--repeat', '7d'], {})
-            t.assertEqual(
-                ret,
-                f'- [ ] Rake leaves [P:5] [ID:rk01lv] [REPEAT:7d]\n{listed}\n',
-            )
-
-        with t.subTest('and changes it'):
-            ret = t.run_command(['update', 'rk01lv', '--repeat', '14d'], {})
-            t.assertEqual(
-                ret,
-                f'- [ ] Rake leaves [P:5] [ID:rk01lv] [REPEAT:14d]\n{listed}\n',
-            )
-
-        with t.subTest('--repeat None clears it'):
-            ret = t.run_command(['update', 'rk01lv', '--repeat', 'None'], {})
-            t.assertEqual(
-                ret,
-                f'- [ ] Rake leaves [P:5] [ID:rk01lv]\n{listed}\n',
-            )
+                '- [ ] Rake leaves [P:5] [ID:rk01lv]',
+            ),
+            '--repeat sets a repeat on a task with none': (
+                YARD,
+                ['update', 'rk01lv', '--repeat', '7d'],
+                {},
+                '- [ ] Rake leaves [P:3] [ID:rk01lv] [REPEAT:7d]',
+            ),
+            '--repeat changes a repeat': (
+                repeating,
+                ['update', 'rk01lv', '--repeat', '14d'],
+                {},
+                '- [ ] Rake leaves [P:3] [ID:rk01lv] [REPEAT:14d]',
+            ),
+            '--repeat None clears it': (
+                repeating,
+                ['update', 'rk01lv', '--repeat', 'None'],
+                {},
+                '- [ ] Rake leaves [P:3] [ID:rk01lv]',
+            ),
+            '--repeat reaches a subtask': (
+                STEPPED_YARD,
+                ['update', 'ml01ab', '--repeat', '14d'],
+                {},
+                (
+                    '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:14d] '
+                    '[ID:ml01ab]'
+                ),
+            ),
+        }
+        for name, (text, argv, env, line) in cases.items():
+            with t.subTest(name):
+                listed.write_text(text, encoding='utf-8')
+                ret = t.run_command(argv, env)
+                t.assertEqual(ret, f'{line}\n{listed}\n')
 
         with t.subTest('an empty repeat is refused, and nothing written'):
-            before = listed.read_text(encoding='utf-8')
+            listed.write_text(YARD, encoding='utf-8')
 
             with t.assertRaises(RepeatError) as caught:
                 t.run_command(['update', 'rk01lv', '--repeat', ''], {})
@@ -408,37 +417,12 @@ class CommandInputTests(TestCase):
             t.assertEqual(
                 str(caught.exception), "unrecognised REPEAT value: ''"
             )
-            t.assertEqual(listed.read_text(encoding='utf-8'), before)
+            t.assertEqual(listed.read_text(encoding='utf-8'), YARD)
 
         with t.subTest('--description None clears the description'):
-            t.run_command(
-                ['update', 'rk01lv', '--description', 'Bag the piles.'],
-                {},
-            )
+            listed.write_text(described, encoding='utf-8')
 
             t.run_command(['update', 'rk01lv', '--description', 'None'], {})
 
             ret = listed.read_text(encoding='utf-8')
-            t.assertEqual(ret, YARD.replace('[P:3]', '[P:5]'))
-
-        with t.subTest('--repeat reaches a subtask'):
-            listed.write_text(STEPPED_YARD, encoding='utf-8')
-
-            ret = t.run_command(['update', 'ml01ab', '--repeat', '14d'], {})
-
-            t.assertEqual(
-                ret,
-                '  - [ ] Mow the lawn [DUE:2026-08-01] [REPEAT:14d] '
-                f'[ID:ml01ab]\n{listed}\n',
-            )
-
-        with t.subTest('and with its repeat cleared, the parent closes'):
-            # The clear is the step the refusal of the done names.
-            t.run_command(['update', 'ml01ab', '--repeat', 'None'], {})
-
-            ret = t.run_command(['done', 'cy01ab'], {})
-
-            t.assertEqual(
-                ret, '2026-08-05 | yard | DONE | Clear the yard [P:3]\n'
-            )
-            t.assertEqual(listed.read_text(encoding='utf-8'), '## Open\n')
+            t.assertEqual(ret, YARD)

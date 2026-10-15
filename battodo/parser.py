@@ -93,7 +93,13 @@ class TaskNode:
     @property
     def tags(self) -> list[str]:
         raw = self.fields.get('TAGS')
-        return [tag for tag in raw.split(',') if tag] if raw else []
+        if not raw:
+            return []
+        return [
+            tag
+            for tag in raw.split(',')
+                if tag
+        ]  # fmt: skip
 
     @property
     def is_subtask(self) -> bool:
@@ -138,7 +144,7 @@ class TaskNode:
     @property
     def description(self) -> str | None:
         """The description lines joined by newlines, or None if none."""
-        return '\n'.join(self.description_lines) or None
+        return join_description(self.description_lines)
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -233,6 +239,11 @@ class Ancestry:
         return self.tasks[-1]
 
     @property
+    def nested(self) -> bool:
+        """Whether the task sits below another task, at any depth."""
+        return len(self.tasks) > 1
+
+    @property
     def path(self) -> str:
         """The `Parent > Child` path SCHEMA.md logs a nested task under."""
         return ANCESTRY_SEPARATOR.join(task.title for task in self.tasks)
@@ -260,8 +271,9 @@ class TodoDocument:
     The document performs every edit of a list itself: `set_fields`,
     `set_field`, `set_title` and `mark_done` rewrite one raw line where
     it stands, `append_open` and `insert` add a line,
-    `insert_description` adds description lines, and `drop` removes
-    lines. An edit leaves `tasks` as it was read.
+    `insert_description` adds description lines, `set_description`
+    replaces them, and `drop` removes lines. An edit leaves `tasks` as it
+    was read.
     """
 
     def __init__(self, source: str) -> None:
@@ -433,13 +445,14 @@ class TodoDocument:
             for index, line in enumerate(self.lines)
                 if line.strip() == OPEN_HEADING
         )  # fmt: skip
+        stop = len(self.lines)
         end = next(
             (
                 index
-                for index in range(start + 1, len(self.lines))
+                for index in range(start + 1, stop)
                     if self.lines[index].strip().startswith('## ')
             ),
-            len(self.lines),
+            stop,
         )  # fmt: skip
         # `start` is itself non-blank, so an empty section appends
         # directly under the heading rather than falling off the front
@@ -466,6 +479,14 @@ class TodoDocument:
         lead = indent + ' ' * DESCRIPTION_INDENT
         for offset, line in enumerate(lines, start=1):
             self.insert(index + offset, f'{lead}{line}')
+
+    def set_description(self, node: TaskNode, lines: list[str]) -> None:
+        """Replace the description lines of `node` with `lines`.
+
+        `node` is a task as this document read it.
+        """
+        self.drop(set(node.note_indices))
+        self.insert_description(node.raw_index, lines)
 
     def drop(self, indices: set[int]) -> None:
         """Remove the lines at `indices`.
@@ -514,6 +535,11 @@ def parse_date(value: str | None) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def join_description(lines: list[str]) -> str | None:
+    """The description `lines` hold, joined by newlines, or None if none."""
+    return '\n'.join(lines) or None
 
 
 def _parse_fields(text: str) -> dict[str, str]:

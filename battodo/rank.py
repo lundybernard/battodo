@@ -44,6 +44,12 @@ CURVE_DAY_ERROR = 'a rank due curve names a day twice'
 Curve = list[tuple[int, float]]
 
 
+def rank(task: TaskNode, today: date, curve: Curve) -> float:
+    """The task's computed rank on `curve`. Higher sorts first."""
+    scale = multiplier(task) * due_factor(task, today, curve)
+    return scale * (1 + age_score(task, today))
+
+
 def multiplier(task: TaskNode) -> float:
     """The task's priority as a 0-5 multiplier.
 
@@ -67,17 +73,6 @@ def multiplier(task: TaskNode) -> float:
     if priority <= MAX_MULTIPLIER:
         return float(priority)
     return min(MAX_MULTIPLIER, 1 + priority / LEGACY_P_DIVISOR)
-
-
-def age_score(task: TaskNode, today: date) -> float:
-    """How long the task has been waiting: +1 per month, capped at +2."""
-    added = parse_date(task.added)
-    if added is None:
-        return 0.0
-    days = (today - added).days
-    if days <= 0:
-        return 0.0
-    return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
 def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
@@ -112,10 +107,15 @@ def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
     return curve[-1][1]
 
 
-def rank(task: TaskNode, today: date, curve: Curve) -> float:
-    """The task's computed rank on `curve`. Higher sorts first."""
-    scale = multiplier(task) * due_factor(task, today, curve)
-    return scale * (1 + age_score(task, today))
+def age_score(task: TaskNode, today: date) -> float:
+    """How long the task has been waiting: +1 per month, capped at +2."""
+    added = parse_date(task.added)
+    if added is None:
+        return 0.0
+    days = (today - added).days
+    if days <= 0:
+        return 0.0
+    return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
 def parse_curve(value: str) -> Curve:

@@ -3,7 +3,13 @@ from typing import Any
 from unittest import TestCase
 from unittest.mock import Mock, PropertyMock, patch, sentinel
 
-from ..parser import Ancestry, TaskNode, TodoDocument, parse_date
+from ..parser import (
+    Ancestry,
+    TaskNode,
+    TodoDocument,
+    join_description,
+    parse_date,
+)
 
 OPEN_DOC = """# Work
 
@@ -433,6 +439,16 @@ class AncestryTests(TestCase):
         ret = t.an.node
         t.assertIs(ret, t.item)
 
+    def test_nested(t) -> None:
+        with t.subTest('a task below another is nested'):
+            ret = t.an.nested
+            t.assertTrue(ret)
+
+        with t.subTest('a top-level task is not'):
+            t.an.tasks = [t.task]
+            ret = t.an.nested
+            t.assertFalse(ret)
+
     def test_path(t) -> None:
         ret = t.an.path
         t.assertEqual(ret, 'A task > A subtask > A checklist item')
@@ -465,6 +481,18 @@ class ParseDateTests(TestCase):
             with t.subTest(str(value)):
                 ret = parse_date(value)
                 t.assertIsNone(ret)
+
+
+class JoinDescriptionTests(TestCase):
+    """Unit tests for battodo.parser.join_description."""
+
+    def test_lines(t) -> None:
+        ret = join_description(['A line.', 'Another line.'])
+        t.assertEqual(ret, 'A line.\nAnother line.')
+
+    def test_none(t) -> None:
+        ret = join_description([])
+        t.assertIsNone(ret)
 
 
 class TodoDocumentTests(TestCase):
@@ -712,6 +740,25 @@ class TodoDocumentTests(TestCase):
             t.td = TodoDocument(OPEN_DOC)
             t.td.insert_description(ALPHA_INDEX, [])
             t.assertEqual(t.td.lines, OPEN_DOC.split('\n'))
+
+    def test_set_description(t) -> None:
+        doc = TodoDocument(
+            '## Open\n- [ ] A task\n      An old line.\n'
+            '      Another old line.\n- [ ] Another task'
+        )
+        node = doc.tasks[0]
+
+        doc.set_description(node, ['A new line.'])
+
+        t.assertEqual(
+            doc.lines,
+            [
+                '## Open',
+                '- [ ] A task',
+                '      A new line.',
+                '- [ ] Another task',
+            ],
+        )
 
     def test_drop(t) -> None:
         lines = OPEN_DOC.split('\n')

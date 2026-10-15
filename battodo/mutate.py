@@ -18,9 +18,9 @@ ancestry to `completed.md`, checks the box, removes the block once all
 of it is done, and reschedules a recurring task, at any depth, instead
 of closing it. A scratched `Completion` abandons a task: the block
 goes, the log records it as SCRATCHED, and nothing cascades or
-reschedules. `Update`
-sets the fields and the title it is given and leaves the rest of the
-list, or moves a top-level task and its block to another list.
+reschedules. `Update` sets the fields and the title it is given and
+leaves the rest of the list, or moves a top-level task and its block to
+another list.
 `Reopen` brings a closed task back open, named by its stream in the
 journal. `Annotation` records a note on a task and changes nothing in it.
 `Backfill` stamps `[ADDED:]` once on every task that lacks it, and
@@ -32,7 +32,7 @@ so the write edits the document that selection read.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, tzinfo
 from functools import cached_property
 from json import dumps
@@ -59,6 +59,7 @@ from .parser import (
     Ancestry,
     TaskNode,
     TodoDocument,
+    join_description,
     parse_date,
 )
 from .repeat import next_due
@@ -78,8 +79,9 @@ SUBTASK_INDENT = 2
 # The fields a top-level task owns. SCHEMA.md gives a subtask no `P` of
 # its own, because only a top-level task is ranked.
 ROOT_ONLY_FIELDS = ('P',)
-# The value an update names to clear what an option writes (ADR 0028).
-CLEAR_VALUE = 'None'
+# The clear token: the value an update names to clear what an option
+# writes (ADR 0028). A word of the CLI, not a credential.
+CLEAR_TOKEN = 'None'  # noqa: S105
 # An attribute key: a letter, then letters, digits or underscores.
 ATTRIBUTE_KEY = re.compile(r'[a-z][a-z0-9_]*')
 # The one place `--attrs` splits: a comma, spaces or tabs, then the next
@@ -593,8 +595,7 @@ class Update:
             doc.set_title(index, self.new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.drop(set(self.node.note_indices))
-            doc.insert_description(index, new_description.lines)
+            doc.set_description(self.node, new_description)
         return doc
 
     @cached_property
@@ -657,40 +658,42 @@ class Update:
                     f'{node.title!r} is a subtask: --list moves a '
                     'top-level task, and its subtasks with it'
                 )
-            self.supplied.refuse_root_fields()
+            self.edit.refuse_root_fields()
         return node
 
     @property
     def new_title(self) -> str | None:
-        """The title the update writes, or None where it names none.
+        """The title that changes the task, or None.
 
-        A title the task holds is no change, so it is None too. The list
-        reads a title back without its outer spaces, so they are no
-        change either.
+        The title is read before the task, and the task only where a
+        title is named.
 
         Raises
         ------
         ValueError
             The title holds a line break.
         """
-        if self.title is None:
+        edit = self.edit
+        if edit.checked_title is None:
             return None
-        title = SuppliedTitle(self.title).checked
-        return None if title.strip() == self.node.title else title
+        return edit.new_title(self.node)
 
     @property
-    def new_description(self) -> 'SuppliedDescription | None':
-        """The description the update writes, or None where it names none.
+    def new_description(self) -> list[str] | None:
+        """The description lines that change the task, or None.
 
-        An empty description, or one of `None`, clears the description
-        lines. A description the task holds is no change, so it is None
-        too.
+        The description is read before the task, and the task only where
+        a description is named.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
         """
-        if self.description is None:
+        edit = self.edit
+        if edit.checked_description is None:
             return None
-        text = '' if self.description == CLEAR_VALUE else self.description
-        supplied = SuppliedDescription(text)
-        return None if supplied.checked == self.node.description else supplied
+        return edit.new_description(self.node)
 
     @property
     def checked(self) -> dict[str, str | None]:
@@ -721,40 +724,37 @@ class Update:
                 'nothing to update: name a field, a title, a description '
                 'or a list'
             )
-        return {
-            name: value
-            for name, value in self.supplied.changed.items()
-                if name in changes
-        }  # fmt: skip
+        return changes
 
     @property
-    def changes(self) -> dict[str, str]:
-        """The named fields, less each that is no change.
+    def changes(self) -> dict[str, str | None]:
+        """The named fields that change the task, before any refusal.
 
-        A value the task holds is no change, and a clear of a field the
-        task does not carry, or carries empty, is no change either. The
-        values are read first, and the task only where a field is named.
+        The values are read before the task, and the task only where a
+        field is named.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
-        changed = self.supplied.changed
-        if not changed:
+        edit = self.edit
+        if not edit.changed:
             return {}
-        held = self.node.fields
-        return {
-            name: self.fields[name]
-            for name, value in changed.items()
-                if value != held.get(name)
-                and (value is not None or held.get(name))
-        }  # fmt: skip
+        return edit.changes(self.node)
 
     @property
-    def supplied(self) -> 'SuppliedFields':
-        """The named fields, read against the day of the task."""
-        return SuppliedFields(self.fields, self.task.today)
+    def edit(self) -> 'SuppliedEdit':
+        """The named fields, title and description, read against the day.
+
+        The day is the day of the task.
+        """
+        return SuppliedEdit(
+            self.fields,
+            self.title,
+            self.description,
+            self.task.today,
+        )
 
     @cached_property
     def task_id(self) -> str:
@@ -767,7 +767,7 @@ class Update:
     @property
     def nested(self) -> bool:
         """Whether the task is a subtask, at any depth."""
-        return len(self.task.ancestry) > 1
+        return self.ancestry.nested
 
     @property
     def entry(self) -> str:
@@ -804,19 +804,7 @@ class Update:
     @property
     def delta(self) -> dict[str, list[Any]]:
         """Each value written against the one it replaced."""
-        fields = self.node.fields
-        delta = {
-            name: [fields.get(name), value]
-            for name, value in self.written.items()
-        }
-        if self.new_title is not None:
-            delta['title'] = [self.node.title, self.new_title]
-        new_description = self.new_description
-        if new_description is not None:
-            delta['description'] = [
-                self.node.description,
-                new_description.checked,
-            ]
+        delta = self.edit.delta(self.node, self.written)
         if self.moved:
             delta['list'] = [self.task.path.stem, self.path.stem]
         return delta
@@ -920,38 +908,38 @@ class Reopen:
             doc.set_title(node.raw_index, new_title)
         new_description = self.new_description
         if new_description is not None:
-            doc.drop(set(node.note_indices))
-            doc.insert_description(node.raw_index, new_description.lines)
+            doc.set_description(node, new_description)
         return doc
 
     @property
     def checked(self) -> dict[str, str | None]:
         """The named fields that change the task, read, a cleared one None.
 
-        A value the task holds is no change, and a clear of a field the
-        task does not carry, or carries empty, is no change either. The
-        values are read first, and the task only where a field is named.
+        The values are read before the task, and the task only where a
+        field is named.
 
         Raises
         ------
         ValueError
             A supplied value does not read.
         """
-        changed = self.supplied.changed
-        if not changed:
+        edit = self.edit
+        if not edit.changed:
             return {}
-        held = self.node.fields
-        return {
-            name: value
-            for name, value in changed.items()
-                if value != held.get(name)
-                and (value is not None or held.get(name))
-        }  # fmt: skip
+        return edit.changes(self.node)
 
     @property
-    def supplied(self) -> 'SuppliedFields':
-        """The named fields, read against the day of the task."""
-        return SuppliedFields(self.fields, self.task.today)
+    def edit(self) -> 'SuppliedEdit':
+        """The named fields, title and description, read against the day.
+
+        The day is the day of the task.
+        """
+        return SuppliedEdit(
+            self.fields,
+            self.title,
+            self.description,
+            self.task.today,
+        )
 
     @property
     def stream(self) -> TaskStream:
@@ -965,7 +953,11 @@ class Reopen:
         SelectionError
             The selector names no closed task either.
         """
-        closed = [stream for stream in self.streams if stream.closed]
+        closed = [
+            stream
+            for stream in self.streams
+                if stream.closed
+        ]  # fmt: skip
         selection = StreamSelection(closed, self.task.selector)
         if not selection.candidates:
             self.refuse_checklist_item()
@@ -1030,7 +1022,7 @@ class Reopen:
                 f'{stream.title!r} is a subtask: --list moves a top-level '
                 'task, and its subtasks with it'
             )
-        self.supplied.refuse_root_fields()
+        self.edit.refuse_root_fields()
 
     @cached_property
     def path(self) -> Path:
@@ -1159,7 +1151,11 @@ class Reopen:
 
         With `with_subtasks`, each closed subtask below the task follows.
         """
-        opened = [task for task in self.ancestry if task.done]
+        opened = [
+            task
+            for task in self.ancestry
+                if task.done
+        ]  # fmt: skip
         if self.with_subtasks:
             opened.extend(self.subtasks)
         return opened
@@ -1199,34 +1195,37 @@ class Reopen:
 
     @property
     def new_title(self) -> str | None:
-        """The title the reopen writes, or None where it names none.
+        """The title that changes the task, or None.
 
-        A title the task holds is no change, so it is None too. The list
-        reads a title back without its outer spaces, so they are no
-        change either.
+        The title is read before the task, and the task only where a
+        title is named.
 
         Raises
         ------
         ValueError
             The title holds a line break.
         """
-        if self.title is None:
+        edit = self.edit
+        if edit.checked_title is None:
             return None
-        title = SuppliedTitle(self.title).checked
-        return None if title.strip() == self.node.title else title
+        return edit.new_title(self.node)
 
     @property
-    def new_description(self) -> 'SuppliedDescription | None':
-        """The description the reopen writes, or None where it names none.
+    def new_description(self) -> list[str] | None:
+        """The description lines that change the task, or None.
 
-        A description of `None` clears, as an empty one does. A
-        description the task holds is no change, so it is None too.
+        The description is read before the task, and the task only where
+        a description is named.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
         """
-        if self.description is None:
+        edit = self.edit
+        if edit.checked_description is None:
             return None
-        text = '' if self.description == CLEAR_VALUE else self.description
-        supplied = SuppliedDescription(text)
-        return None if supplied.checked == self.node.description else supplied
+        return edit.new_description(self.node)
 
     @property
     def entry(self) -> str:
@@ -1267,20 +1266,7 @@ class Reopen:
         A top-level task that comes back to another list records the
         list it left.
         """
-        node = self.node
-        delta = {
-            name: [node.fields.get(name), value]
-            for name, value in self.checked.items()
-        }
-        new_title = self.new_title
-        if new_title is not None:
-            delta['title'] = [node.title, new_title]
-        new_description = self.new_description
-        if new_description is not None:
-            delta['description'] = [
-                node.description,
-                new_description.checked,
-            ]
+        delta = self.edit.delta(self.node, self.checked)
         list_left, list_name = self.list_left, self.path.stem
         if list_left != list_name:
             delta['list'] = [list_left, list_name]
@@ -1386,138 +1372,32 @@ class Completion:
     @property
     def document(self) -> TodoDocument:
         """The task's list: lines stamped, checked off, or dropped."""
-        stamps = self.stamps
+        lines = self.lines
+        stamps = lines.stamps
         doc = TodoDocument(self.task.doc.text)
         for index, fields in stamps.items():
             doc.set_fields(index, fields)
-        for index in self.checked_off:
+        for index in lines.checked_off:
             doc.mark_done(index)
-        doc.drop(self.dropped)
+        doc.drop(lines.dropped)
         return doc
 
-    @property
-    def stamps(self) -> dict[int, dict[str, str]]:
-        """The fields each line gains, by its index.
-
-        A task still in the list gains the id of its stream. A recurring
-        task gains its next due date. A recurring top-level task also
-        gains the completion day as its `[ADDED:]`, so its age counts
-        from the last completion.
-        """
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        if recurrence is None or rescheduled is None:
-            dropped = self.dropped
-            return {
-                index: {'ID': task_id}
-                for index, task_id in self.ids.items()
-                    if index not in dropped
-            }  # fmt: skip
-        index = recurrence.raw_index
-        fields = {'DUE': rescheduled.isoformat()}
-        if recurrence is self.root:
-            fields['ADDED'] = self.completed_on.isoformat()
-        return {index: {**fields, 'ID': self.ids[index]}}
-
-    @property
-    def checked_off(self) -> list[int]:
-        """The lines whose box is checked.
-
-        None once the block goes, and none where a recurrence stays open.
-        """
-        if self.root_done or self.scratched or self.recurrence is not None:
-            return []
-        return [ancestry.node.raw_index for ancestry in self.ancestries]
-
-    @property
-    def dropped(self) -> set[int]:
-        """The lines that go: the finished block, a recurrence kept.
-
-        The recurrence is the same task rescheduled, so it keeps its id
-        and its notes. Its children do not carry over. A scratch drops
-        the block of the named task.
-        """
-        if self.scratched:
-            return self.task.node.block
-        recurrence = self.recurrence
-        if recurrence is not None:
-            return set().union(*(child.block for child in recurrence.children))
-        if self.root_done:
-            return self.root.block
-        return set()
-
-    @property
-    def root_done(self) -> bool:
-        """Whether the completion finishes the top-level task."""
-        return len(self.ancestries[-1].tasks) == 1
-
     @cached_property
-    def ids(self) -> dict[int, str]:
-        """The id of each stream the completions land on, by its line.
+    def lines(self) -> 'CompletionLines':
+        """The lines the close stamps, checks off and drops.
 
-        A stream task with no id takes a new one. Cached: a new id is
-        drawn at random, so every read names one.
+        Cached: they draw new ids, and the events name the same ones.
         """
-        ids: dict[int, str] = {}
-        for ancestry in self.ancestries:
-            stream = ancestry.stream
-            if stream.raw_index not in ids:
-                ids[stream.raw_index] = stream.task_id or new_task_id()
-        return ids
-
-    @property
-    def rescheduled(self) -> date | None:
-        """The next due date of the recurrence, where it repeats.
-
-        Raises
-        ------
-        RepeatError
-            Its `[REPEAT:]` does not read.
-        """
-        recurrence = self.recurrence
-        repeat = recurrence and recurrence.repeat
-        if not repeat:
-            return None
-        return next_due(repeat, self.completed_on)
-
-    @property
-    def recurrence(self) -> TaskNode | None:
-        """The task the completion reschedules, or None.
-
-        The last task the completion finishes, where it repeats. A
-        scratch reschedules nothing.
-        """
-        last = self.ancestries[-1].node
-        return last if last.repeat and not self.scratched else None
-
-    @property
-    def root(self) -> TaskNode:
-        """The top-level task of the block."""
-        return self.task.ancestry[0]
+        return CompletionLines(
+            self.task.ancestry,
+            self.completed_on,
+            self.scratched,
+        )
 
     @property
     def completed_on(self) -> date:
         """The day the completion is for: the given day, or the clock's."""
         return self.task.today
-
-    @property
-    def ancestries(self) -> list[Ancestry]:
-        """The ancestry of the task and of each ancestor it finishes.
-
-        Deepest first, which is the order the completions are logged. A
-        scratch finishes no ancestor, and a repeating task stays open,
-        so it finishes no ancestor either.
-        """
-        ancestry = self.task.ancestry
-        found = [Ancestry(ancestry)]
-        if self.scratched:
-            return found
-        for depth in reversed(range(len(ancestry) - 1)):
-            parent, child = ancestry[depth], ancestry[depth + 1]
-            finished = all(c.done or c is child for c in parent.children)
-            if child.repeat or not finished:
-                break
-            found.append(Ancestry(ancestry[: depth + 1]))
-        return found
 
     @property
     def entries(self) -> list[str]:
@@ -1546,7 +1426,7 @@ class Completion:
         kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
         events = []
         for completion in self.completions:
-            stream = self.ids[completion.ancestry.stream.raw_index]
+            stream = self.lines.ids[completion.ancestry.stream.raw_index]
             payload = completion.payload
             events.append(Event(kind, f'task/{stream}', payload))
         return [*self.assignments, *events]
@@ -1558,8 +1438,9 @@ class Completion:
         A rescheduled task takes its next due date. The attributes go
         to the named task alone.
         """
-        recurrence, rescheduled = self.recurrence, self.rescheduled
-        day, ancestries = self.completed_on, self.ancestries
+        lines = self.lines
+        recurrence, rescheduled = lines.recurrence, lines.rescheduled
+        day, ancestries = self.completed_on, lines.ancestries
         list_name = self.path.stem
         completions = []
         for ancestry in ancestries:
@@ -1578,13 +1459,14 @@ class Completion:
         A block that goes keeps no line to carry an id, so it records
         none.
         """
+        lines = self.lines
         streams = {
             ancestry.stream.raw_index: ancestry.stream
-            for ancestry in self.ancestries
+            for ancestry in lines.ancestries
         }
         return [
             IdAssignment(streams[index], fields['ID'], self.path.stem).event
-            for index, fields in self.stamps.items()
+            for index, fields in lines.stamps.items()
                 if not streams[index].task_id
         ]  # fmt: skip
 
@@ -1731,7 +1613,7 @@ class Annotation:
     @property
     def nested(self) -> bool:
         """Whether the task is a subtask, at any depth."""
-        return len(self.task.ancestry) > 1
+        return self.ancestry.nested
 
     @property
     def ancestry(self) -> Ancestry:
@@ -1770,35 +1652,6 @@ class Backfill:
             for backfilled in found
                 if backfilled.tasks
         ]  # fmt: skip
-
-
-class CompletedLog:
-    """The completed log of a source, which is append-only (SCHEMA.md)."""
-
-    def __init__(self, source: Path) -> None:
-        self.source = source
-
-    @property
-    def path(self) -> Path:
-        """The log file in the source directory."""
-        return self.source / COMPLETED_LOG
-
-    @property
-    def lead(self) -> str:
-        """What precedes a new record: a newline if the log ends mid-line."""
-        existing = self.path.read_text() if self.path.exists() else ''
-        return '\n' if existing and not existing.endswith('\n') else ''
-
-    def append(self, entries: Sequence[str]) -> None:
-        """Append `entries`, one per line.
-
-        No entry leaves the log as it was, absent or not.
-        """
-        if not entries:
-            return
-        lead = self.lead
-        with self.path.open('a', encoding='utf-8') as handle:
-            handle.write(lead + '\n'.join(entries) + '\n')
 
 
 class Changeset:
@@ -1844,6 +1697,35 @@ class Changeset:
             )
 
 
+class CompletedLog:
+    """The completed log of a source, which is append-only (SCHEMA.md)."""
+
+    def __init__(self, source: Path) -> None:
+        self.source = source
+
+    @property
+    def path(self) -> Path:
+        """The log file in the source directory."""
+        return self.source / COMPLETED_LOG
+
+    @property
+    def lead(self) -> str:
+        """What precedes a new record: a newline if the log ends mid-line."""
+        existing = self.path.read_text() if self.path.exists() else ''
+        return '\n' if existing and not existing.endswith('\n') else ''
+
+    def append(self, entries: Sequence[str]) -> None:
+        """Append `entries`, one per line.
+
+        No entry leaves the log as it was, absent or not.
+        """
+        if not entries:
+            return
+        lead = self.lead
+        with self.path.open('a', encoding='utf-8') as handle:
+            handle.write(lead + '\n'.join(entries) + '\n')
+
+
 class NamedList:
     """The discovered list of a source whose filename stem is a name.
 
@@ -1886,6 +1768,149 @@ class NamedList:
         return discover_lists(self.source)
 
 
+class SuppliedEdit:
+    """The fields, the title and the description an update names.
+
+    Each value is read before any write. The clear token is decoded here
+    alone. A value the task holds is no change (ADR 0028), so each
+    comparison takes the task as the update finds it.
+    """
+
+    def __init__(
+        self,
+        fields: dict[str, str],
+        title: str | None,
+        description: str | None,
+        today: date,
+    ) -> None:
+        self.fields = fields
+        self.title = title
+        self.description = description
+        self.today = today
+
+    @property
+    def changed(self) -> dict[str, str | None]:
+        """The named fields, read, a cleared one None.
+
+        A `REPEAT` of the clear token clears the field and is not read.
+
+        Raises
+        ------
+        ValueError
+            A supplied value does not read.
+        """
+        changed: dict[str, str | None] = {**self.supplied.checked}
+        if self.fields.get('REPEAT') == CLEAR_TOKEN:
+            changed['REPEAT'] = None
+        return changed
+
+    @property
+    def supplied(self) -> 'SuppliedFields':
+        """The named fields to read against `today`.
+
+        A cleared repeat is not read, so it is left out.
+        """
+        read = {
+            name: value
+            for name, value in self.fields.items()
+                if (name, value) != ('REPEAT', CLEAR_TOKEN)
+        }  # fmt: skip
+        return SuppliedFields(read, self.today)
+
+    @property
+    def checked_title(self) -> str | None:
+        """The named title, read, or None where none is named.
+
+        Raises
+        ------
+        ValueError
+            The title holds a line break.
+        """
+        if self.title is None:
+            return None
+        return SuppliedTitle(self.title).checked
+
+    @property
+    def checked_description(self) -> list[str] | None:
+        """The lines of the named description, or None where none is named.
+
+        An empty description, or the clear token, holds no line, so it
+        clears the description.
+
+        Raises
+        ------
+        ValueError
+            A description line is refused.
+        """
+        if self.description is None:
+            return None
+        text = '' if self.description == CLEAR_TOKEN else self.description
+        return SuppliedDescription(text).lines
+
+    def changes(self, node: TaskNode) -> dict[str, str | None]:
+        """The named fields that change `node`, read, a cleared one None.
+
+        A value the task holds is no change, and a clear of a field the
+        task does not carry, or carries empty, is no change either.
+        """
+        held = node.fields
+        return {
+            name: value
+            for name, value in self.changed.items()
+                if value != held.get(name)
+                and (value is not None or held.get(name))
+        }  # fmt: skip
+
+    def new_title(self, node: TaskNode) -> str | None:
+        """The named title where it changes `node`, or None.
+
+        The list reads a title back without its outer spaces, so they
+        are no change.
+        """
+        title = self.checked_title
+        if title is None or title.strip() == node.title:
+            return None
+        return title
+
+    def new_description(self, node: TaskNode) -> list[str] | None:
+        """The named description lines where they change `node`, or None."""
+        lines = self.checked_description
+        return None if lines == node.description_lines else lines
+
+    def refuse_root_fields(self) -> None:
+        """Refuse a named field that only the top-level task carries.
+
+        Raises
+        ------
+        ValueError
+            The fields name one.
+        """
+        self.supplied.refuse_root_fields()
+
+    def delta(
+        self,
+        node: TaskNode,
+        written: Mapping[str, str | None],
+    ) -> dict[str, list[Any]]:
+        """Each written field, title and description that changes `node`.
+
+        Each stands against the one it replaces. A cleared field or
+        description stands as None.
+        """
+        delta: dict[str, list[Any]] = {
+            name: [node.fields.get(name), value]
+            for name, value in written.items()
+        }
+        new_title = self.new_title(node)
+        if new_title is not None:
+            delta['title'] = [node.title, new_title]
+        new_description = self.new_description(node)
+        if new_description is not None:
+            text = join_description(new_description)
+            delta['description'] = [node.description, text]
+        return delta
+
+
 class SuppliedTitle:
     """A title a caller supplies to a write, read before any write."""
 
@@ -1918,11 +1943,6 @@ class SuppliedDescription:
 
     def __init__(self, text: str) -> None:
         self.text = text
-
-    @property
-    def checked(self) -> str | None:
-        """The description as a snapshot stores it, or None if empty."""
-        return '\n'.join(self.lines) or None
 
     @property
     def lines(self) -> list[str]:
@@ -2015,21 +2035,6 @@ class SuppliedFields:
             # an unreadable one must fail before a task carries it.
             next_due(repeat, self.today)
         return checked
-
-    @property
-    def changed(self) -> dict[str, str | None]:
-        """The fields as an update writes them: read, a cleared one None.
-
-        A `REPEAT` of `None` clears the field and is not read.
-        """
-        if self.fields.get('REPEAT') != CLEAR_VALUE:
-            return dict(self.checked)
-        kept = {
-            name: value
-            for name, value in self.fields.items()
-                if name != 'REPEAT'
-        }  # fmt: skip
-        return {**SuppliedFields(kept, self.today).checked, 'REPEAT': None}
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
@@ -2182,6 +2187,143 @@ class IdAssignment:
         return Event(UPDATED_EVENT, f'task/{self.task_id}', payload)
 
 
+class CompletionLines:
+    """The lines a close edits: stamped, checked off, or dropped.
+
+    `ancestry` holds the named task and every task above it, outermost
+    first. `day` is the day the close is for. `scratched` marks a close
+    that completes nothing.
+    """
+
+    def __init__(
+        self,
+        ancestry: list[TaskNode],
+        day: date,
+        scratched: bool = False,
+    ) -> None:
+        self.ancestry = ancestry
+        self.day = day
+        self.scratched = scratched
+
+    @property
+    def stamps(self) -> dict[int, dict[str, str]]:
+        """The fields each line gains, by its index.
+
+        A task still in the list gains the id of its stream. A recurring
+        task gains its next due date. A recurring top-level task also
+        gains the day as its `[ADDED:]`, so its age counts from the last
+        completion.
+        """
+        recurrence, rescheduled = self.recurrence, self.rescheduled
+        if recurrence is None or rescheduled is None:
+            dropped = self.dropped
+            return {
+                index: {'ID': task_id}
+                for index, task_id in self.ids.items()
+                    if index not in dropped
+            }  # fmt: skip
+        index = recurrence.raw_index
+        fields = {'DUE': rescheduled.isoformat()}
+        if self.root_done:
+            fields['ADDED'] = self.day.isoformat()
+        return {index: {**fields, 'ID': self.ids[index]}}
+
+    @property
+    def checked_off(self) -> list[int]:
+        """The lines whose box is checked.
+
+        None once the block goes, and none where a recurrence stays open.
+        """
+        if self.root_done or self.scratched or self.recurrence is not None:
+            return []
+        return [ancestry.node.raw_index for ancestry in self.ancestries]
+
+    @property
+    def dropped(self) -> set[int]:
+        """The lines that go: the finished block, a recurrence kept.
+
+        The recurrence is the same task rescheduled, so it keeps its id
+        and its notes. Its children do not carry over. A scratch drops
+        the block of the named task.
+        """
+        if self.scratched:
+            return self.ancestry[-1].block
+        recurrence = self.recurrence
+        if recurrence is not None:
+            return set().union(*(child.block for child in recurrence.children))
+        if self.root_done:
+            return self.root.block
+        return set()
+
+    @property
+    def root_done(self) -> bool:
+        """Whether the close finishes the top-level task."""
+        return not self.ancestries[-1].nested
+
+    @cached_property
+    def ids(self) -> dict[int, str]:
+        """The id of each stream the closes land on, by its line.
+
+        A stream task with no id takes a new one. Cached: a new id is
+        drawn at random, so every read names one.
+        """
+        ids: dict[int, str] = {}
+        for ancestry in self.ancestries:
+            stream = ancestry.stream
+            if stream.raw_index not in ids:
+                ids[stream.raw_index] = stream.task_id or new_task_id()
+        return ids
+
+    @property
+    def rescheduled(self) -> date | None:
+        """The next due date of the recurrence, or None without one.
+
+        Raises
+        ------
+        RepeatError
+            Its `[REPEAT:]` does not read.
+        """
+        recurrence = self.recurrence
+        if recurrence is None:
+            return None
+        return next_due(recurrence.fields['REPEAT'], self.day)
+
+    @property
+    def recurrence(self) -> TaskNode | None:
+        """The task the close reschedules, or None.
+
+        The last task the close finishes, where it repeats. A scratch
+        reschedules nothing.
+        """
+        last = self.ancestries[-1].node
+        return last if last.repeat and not self.scratched else None
+
+    @property
+    def root(self) -> TaskNode:
+        """The top-level task of the block."""
+        return self.ancestry[0]
+
+    @property
+    def ancestries(self) -> list[Ancestry]:
+        """The ancestry of the task and of each ancestor it finishes.
+
+        Deepest first, which is the order the closes are logged. A
+        scratch finishes no ancestor, and a repeating task stays open,
+        so it finishes no ancestor either.
+        """
+        ancestry = self.ancestry
+        found = [Ancestry(ancestry)]
+        if self.scratched:
+            return found
+        for depth in reversed(range(len(ancestry) - 1)):
+            parent, child = ancestry[depth], ancestry[depth + 1]
+            finished = all(c.done or c is child for c in parent.children)
+            if child.repeat or not finished:
+                break
+            found.append(Ancestry(ancestry[: depth + 1]))
+        return found
+
+
 class TaskCompletion:
     """One task a completion finishes, as its `TaskCompleted` records it.
 
@@ -2212,22 +2354,14 @@ class TaskCompletion:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """The done, a new due date beside it, the task, its path, its day.
+        """The delta, the task as it was, its path, its day.
 
-        A rescheduled top-level task also records its new `[ADDED:]`,
-        the day. A checklist item also carries its mark, and the named
-        task its attributes. A scratch records the removal instead of
-        the done.
+        A checklist item also carries its mark, and the named task its
+        attributes.
         """
         node = self.ancestry.node
-        change = 'removed' if self.scratched else 'done'
-        delta: dict[str, list[Any]] = {change: [False, True]}
-        if self.rescheduled is not None:
-            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
-            if len(self.ancestry.tasks) == 1:
-                delta['ADDED'] = [node.added, self.day.isoformat()]
         payload: dict[str, Any] = {
-            'delta': delta,
+            'delta': self.delta,
             'snapshot': node.listed_snapshot(self.list_name),
             'ancestry': self.ancestry.path,
         }
@@ -2237,6 +2371,22 @@ class TaskCompletion:
             payload['attrs'] = self.attrs
         payload['completed_on'] = self.day.isoformat()
         return payload
+
+    @property
+    def delta(self) -> dict[str, list[Any]]:
+        """The done or the removal, and a new due date beside it.
+
+        A rescheduled top-level task also records its new `[ADDED:]`,
+        the day.
+        """
+        node = self.ancestry.node
+        change = 'removed' if self.scratched else 'done'
+        delta: dict[str, list[Any]] = {change: [False, True]}
+        if self.rescheduled is not None:
+            delta['DUE'] = [node.due, self.rescheduled.isoformat()]
+            if not self.ancestry.nested:
+                delta['ADDED'] = [node.added, self.day.isoformat()]
+        return delta
 
     @property
     def status(self) -> str:
@@ -2348,7 +2498,7 @@ class OpenedTask:
             'delta': delta,
             'snapshot': node.listed_snapshot(self.list_name),
         }
-        if len(self.ancestry.tasks) > 1:
+        if self.ancestry.nested:
             payload['ancestry'] = self.ancestry.path
         if self.attrs:
             payload['attrs'] = self.attrs

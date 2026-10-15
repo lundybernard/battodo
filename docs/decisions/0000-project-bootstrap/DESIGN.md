@@ -48,10 +48,10 @@ Syncthing conflict waiting to happen on a file a human also edits.
 The parser makes two different three-way distinctions, on two different
 signals. Reconciling them would be a bug:
 
-| Distinction | Signal |
+| Distinction | Signal present |
 | ----------- | ------ |
-| note / continuation line **vs** subtask | presence of a `- [ ]` / `- [x]` checkbox |
-| subtask **vs** checklist item (R2) | presence of at least one `[FIELD:…]` |
+| note / continuation line **vs** subtask | a `- [ ]` / `- [x]` checkbox |
+| subtask **vs** checklist item (R2) | at least one `[FIELD:…]` |
 
 Indent width is *not* the first discriminator, though it correlates:
 notes and continuation lines are indented 6 spaces and subtasks 2. A
@@ -101,6 +101,10 @@ ranked. `P` and `REPEAT` are refused on a child — SCHEMA.md gives a
 subtask no `P`, and only the root task is rescheduled, so either one
 would be written and never read.
 
+> Amended 2026-10-13 by [ADR 0029](../0029-subtask-repeat.md): a
+> subtask takes `REPEAT`, and its completion reschedules it in place.
+> Only `P` is refused on a child.
+
 **Which fields.** Only the ones the user supplied, in SCHEMA.md's own
 order — `P`, `LOE`, `DUE`, `REPEAT`, `TAGS`. Nothing is defaulted: an
 absent `P` already reads as 0 in the parser, so writing `[P:0]` would be
@@ -126,6 +130,11 @@ selector with `find_task`, the lookup `done` and `scratch` already use:
 an `[ID:]`, or a case-insensitive part of a title, matching exactly one
 *open* task. A completed task is out of reach of both.
 
+> Amended 2026-10-13 by [ADR 0027](../0027-scratch-through-done.md):
+> `scratch` is `done --scratch`. Amended 2026-10-12 by
+> [ADR 0025](../0025-reopen-by-update.md): when no open task matches,
+> `update` reaches a closed task in the journal and reopens it.
+
 **What `show` publishes.** Derived values, not stored ones: `P` reads as
 the 0–5 multiplier and a rank accompanies it, so one task reads the same
 here as in a `view` row. `subtasks` is the nested list of children, done
@@ -139,12 +148,19 @@ The rest of the line, and every other line, stays verbatim. `LOE` and
 `REPEAT` are deferred: a changed `REPEAT` reschedules the task on its
 next completion, which is a decision of its own.
 
+> Amended 2026-10-13 by [ADR 0028](../0028-update-repeat.md): `update`
+> writes `REPEAT` too, and `None` clears it; `LOE` stays deferred.
+> Amended 2026-10-14 by ADR 0028: a value the task holds is no change.
+
 **Subtasks, but not checklist items.** `update` reaches a child at any
 depth and edits it where it stands. A checklist item is refused: a
 field written to a fieldless child promotes it to a subtask (the
 discriminator above), and the `[ID:]` its event stream needs would
 promote it silently. `P` and `REPEAT` are refused on a child, as they
 are on `add --parent`.
+
+> Amended 2026-10-13 by [ADR 0029](../0029-subtask-repeat.md): a child
+> takes `REPEAT`. Only `P` is refused on a child.
 
 ## Digesting the completed log
 
@@ -306,10 +322,10 @@ late.
 ### Unparseable dates
 
 A missing or unparseable `ADDED` contributes 0 to its term. A missing or
-unparseable `DUE` gives a due-date factor of 1. This
-is a hard robustness rule, not a convenience: `van-trip-prep-template.md`
-carries literal `[DUE:YYYY-MM-DD]` placeholder text, and placeholder text
-must never change an outcome, let alone raise.
+unparseable `DUE` gives a due-date factor of 1. This is a hard
+robustness rule, not a convenience: `van-trip-prep-template.md` carries
+literal `[DUE:YYYY-MM-DD]` placeholder text, and placeholder text must
+never change an outcome, let alone raise.
 
 ### Backfilling `ADDED`
 

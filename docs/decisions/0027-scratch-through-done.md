@@ -82,3 +82,13 @@ which is the record of every task
   `TaskScratched` payload, under the key a completion uses, so
   `history` shows the day the log records.
 - `completed` still counts DONE records only.
+
+## Amendment — 2026-10-14
+
+The write object of a close keeps the name `Completion`, and the record
+of one closed task keeps `TaskCompletion`, though a scratch runs through
+both. The names follow the `done` command and the usual outcome of a
+close, and a rename would touch every caller with no change in
+behaviour. `Completion` composes `CompletionLines`, which holds the
+lines a close stamps, checks off and drops. The branches on a scratch
+in the line plan sit there, in one object.
