@@ -103,11 +103,15 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
   depth. `update --repeat None` removes it; btodo refuses an empty
   `--repeat`. `DUE` stays as it is: the new rule applies at the next
   completion, and with no repeat the next `done` completes the task.
+- `update --due None` removes the due date, and `update --tags None`
+  removes the tags. `update --tags ''` leaves an empty `[TAGS:]`
+  instead. `-p` has no clear: btodo refuses `-p None`.
 - A value that the task already holds is no change: a `-p`, `--due`,
   `--repeat` or `--tags` value, a `--title` or a `--description`. So is
-  `--repeat None` on a task with no repeat, and `--description None` or
-  `''` on a task with no description. btodo compares `--due` as a date.
-  It writes only the changes, and the journal delta records only them.
+  a `None` clear of a field that the task does not carry, and
+  `--description None` or `''` on a task with no description. btodo
+  compares `--due` as a date. It writes only the changes, and the
+  journal delta records only them.
   With no change left, `update` on an open task exits 1 with "nothing
   to update" and writes nothing; a closed task still reopens.
 - Give the title without `[FIELD:]` markup. Fields go in through their

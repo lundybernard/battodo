@@ -127,3 +127,12 @@ another ISO form compares as the date it names. The delta records only
 the changes, and an update with no change left refuses with "nothing to
 update". A reopen applies the same rule
 ([ADR 0025](0025-reopen-by-update.md)).
+
+## Amendment — 2026-10-15
+
+`update --due None` and `update --tags None` clear their fields, the
+clear form that the Decision deferred. btodo decodes the token for
+`DUE`, `REPEAT` and `TAGS` in one place and reads it as a value for any
+other field, so `-p None` stays refused. `--tags ''` still writes an
+empty `[TAGS:]`, which btodo reads as no tags. The no-change rule of
+the 2026-10-14 amendment covers both clears.
