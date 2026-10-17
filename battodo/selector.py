@@ -23,23 +23,6 @@ class SelectionError(Exception):
     """
 
 
-@dataclass
-class TaskRecord:
-    """One open task, the list it lives in, and its ancestry.
-
-    Internal to this module: `battodo.task.Task` gives callers the same
-    fields.
-    """
-
-    path: Path
-    doc: TodoDocument
-    ancestry: list[TaskNode]
-
-    @property
-    def task(self) -> TaskNode:
-        return self.ancestry[-1]
-
-
 class TaskSelection:
     """The open tasks a selector reaches in a source directory.
 
@@ -60,7 +43,7 @@ class TaskSelection:
         ]
 
     @cached_property
-    def records(self) -> list[TaskRecord]:
+    def records(self) -> list['TaskRecord']:
         """Every open task the selector reaches, at any depth.
 
         An `[ID:]` record narrows out the title records, so a
@@ -90,7 +73,7 @@ class TaskSelection:
         return task.task_id == self.selector or part in task.title.lower()
 
     @cached_property
-    def record(self) -> TaskRecord:
+    def record(self) -> 'TaskRecord':
         """The one open task the selector names.
 
         Raises
@@ -108,3 +91,20 @@ class TaskSelection:
                 f'{titles}'
             )
         return records[0]
+
+
+@dataclass
+class TaskRecord:
+    """One open task, the list it lives in, and its ancestry.
+
+    Internal to this module: `battodo.task.Task` gives callers the same
+    fields.
+    """
+
+    path: Path
+    doc: TodoDocument
+    ancestry: list[TaskNode]
+
+    @property
+    def task(self) -> TaskNode:
+        return self.ancestry[-1]
