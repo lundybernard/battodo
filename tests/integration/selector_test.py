@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from battodo.parser import TodoDocument
 from battodo.selector import SelectionError, TaskSelection
 
 WORK = """# Work
@@ -75,6 +76,25 @@ class TaskSelectionTests(TestCase):
                     'Bare',
                 ],
             )
+
+    def test_selects(t) -> None:
+        deck, bare = TodoDocument(WORK).tasks
+        chase, _ = TodoDocument(CHORES).tasks
+        cases = {
+            'a task whose id is the selector': ('9o71lx', deck, True),
+            'a task whose title holds it, in any case': (
+                'DECK re',
+                deck,
+                True,
+            ),
+            'a title that quotes an id': ('9o71lx', chase, True),
+            'a task that holds neither': ('Deck', bare, False),
+        }
+
+        for name, (selector, task, expected) in cases.items():
+            with t.subTest(name):
+                ret = TaskSelection(t.dir, selector).selects(task)
+                t.assertIs(ret, expected)
 
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, at any depth'):

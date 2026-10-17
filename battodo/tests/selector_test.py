@@ -100,6 +100,24 @@ class TaskSelectionTests(TestCase):
             )
             t.assertEqual(lists, [(t.path, t.TodoDocument.return_value)])
 
+    def test_selects(t) -> None:
+        cases = {
+            'a task whose id is the selector': ('9o71lx', t.parent, True),
+            'a task whose title holds it, in any case': (
+                'BRANCH ta',
+                t.parent,
+                True,
+            ),
+            'a title that quotes an id': ('9o71lx', t.quoting, True),
+            'a task that holds neither': ('Branch', t.sibling, False),
+        }
+
+        for name, (selector, task, expected) in cases.items():
+            with t.subTest(name):
+                t.ts.selector = selector
+                ret = t.ts.selects(task)
+                t.assertIs(ret, expected)
+
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, any depth'):
             ret = t.searching('b').records

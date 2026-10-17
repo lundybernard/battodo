@@ -96,6 +96,15 @@ class TaskSelection:
         ]  # fmt: skip
         return by_id or found
 
+    def selects(self, task: TaskNode) -> bool:
+        """Whether the selector names `task`, done or not.
+
+        An `[ID:]` equal to the selector names it, and so does a title
+        that holds the selector in any case.
+        """
+        part = self.selector.lower()
+        return task.task_id == self.selector or part in task.title.lower()
+
     @cached_property
     def record(self) -> TaskRecord:
         """The one open task the selector names.
