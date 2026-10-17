@@ -239,6 +239,11 @@ def read_attributes(block: str) -> dict[str, str] | None:
     return found
 
 
+def clean_title(title: str) -> str:
+    """The title as a digest shows it: no fields, no double spaces."""
+    return ' '.join(FIELD_RE.sub('', title).split())
+
+
 class Group:
     """One category's records within a digest."""
 
@@ -249,11 +254,6 @@ class Group:
     @property
     def title(self) -> str:
         return self.name.replace('-', ' ').capitalize()
-
-
-def clean_title(title: str) -> str:
-    """The title as a digest shows it: no fields, no double spaces."""
-    return ' '.join(FIELD_RE.sub('', title).split())
 
 
 class DigestView:
