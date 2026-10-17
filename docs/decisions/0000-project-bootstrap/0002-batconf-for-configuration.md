@@ -16,13 +16,16 @@ Use batconf for all runtime configuration from the first feature onward.
 ## Options
 
 ### Option 1 — batconf
+
 - [pro] Dogfooding on a greenfield project is a stated project goal
 - [pro] Layered lookup matches the composable-list-source requirement (R6)
 - [con] Possible friction on a tiny CLI; that friction is itself data
 
 ### Option 2 — stdlib (argparse defaults + tomllib)
+
 - [pro] Zero dependencies, trivially simple
-- [con] Produces no batconf evaluation signal; hand-rolls layering batconf already does
+- [con] Produces no batconf evaluation signal; hand-rolls layering batconf
+  already does
 
 ## Rationale
 

@@ -38,20 +38,28 @@ question resolves.
 ## Options
 
 ### Option 1 — Opt-in per project, bootstrap in and export out (chosen)
+
 - [pro] Adoption is reversible, so trying btd on a repo carries no lock-in
-- [pro] The "plain files in a repo" use case keeps working — collaborators need no tooling
+- [pro] The "plain files in a repo" use case keeps working — collaborators need
+  no tooling
 - [pro] Foreign lists get a defined, honest status instead of being half-managed
 - [con] Two classes of source to support in views: journaled and read-only
-- [con] The exit guarantee constrains the projection permanently — it can never carry less than full state
+- [con] The exit guarantee constrains the projection permanently — it can never
+  carry less than full state
 
 ### Option 2 — Every discovered source adopts btd
+
 - [pro] One code path; every list is journaled and every view is uniform
-- [con] Lock-in: dropping a todo directory into a working directory would silently claim it
-- [con] Breaks the plain-files-in-a-repo case that made project-carried lists useful
+- [con] Lock-in: dropping a todo directory into a working directory would
+  silently claim it
+- [con] Breaks the plain-files-in-a-repo case that made project-carried lists
+  useful
 
 ### Option 3 — Journal foreign sources without adopting them
+
 - [pro] Complete time series across everything the user sees
-- [con] Their edit history is not ours to record — we would be inferring events from diffs of files someone else owns
+- [con] Their edit history is not ours to record — we would be inferring events
+  from diffs of files someone else owns
 - [con] Requires exactly the diff-to-event machinery ADR 0009 declined to build
 
 ## Rationale

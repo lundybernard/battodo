@@ -22,18 +22,27 @@ exactly as it does today.
 ## Options
 
 ### Option 1 — In-file marker (chosen)
-- [pro] Self-describing and travels with the file — the same place `backlog.md` already states its intent in prose
-- [pro] Hand-editable, and keeps the list discoverable for mutations while hiding it from views
-- [con] A third extension to the SCHEMA.md grammar, and it needs the live file edited to take effect — so the live bug is only *fixable*, not fixed
+
+- [pro] Self-describing and travels with the file — the same place `backlog.md`
+  already states its intent in prose
+- [pro] Hand-editable, and keeps the list discoverable for mutations while
+  hiding it from views
+- [con] A third extension to the SCHEMA.md grammar, and it needs the live file
+  edited to take effect — so the live bug is only *fixable*, not fixed
 
 ### Option 2 — Multiplier-zero (`P:0` on every item)
+
 - [pro] No new grammar; falls out of the multiplier semantics for free
-- [con] Rewrites every item and loses their real priorities; conflates "this item is parked" with "this list is parked"
+- [con] Rewrites every item and loses their real priorities; conflates "this
+  item is parked" with "this list is parked"
 
 ### Option 3 — Exclusion list in batconf config
+
 - [pro] No file edits at all, and no grammar extension
-- [con] Out-of-band: the file says it is parked, but the reason it is hidden lives somewhere else entirely
-- [con] Config-file configuration is blocked on batconf 0.4.0/`TomlSource`, so this would be env-var-only today
+- [con] Out-of-band: the file says it is parked, but the reason it is hidden
+  lives somewhere else entirely
+- [con] Config-file configuration is blocked on batconf 0.4.0/`TomlSource`, so
+  this would be env-var-only today
 
 ## Rationale
 

@@ -42,23 +42,31 @@ a `battodo/` directory, which names it already.
 ## Options
 
 ### Option 1 — CLI, environment, working directory, XDG (chosen)
+
 - [pro] The CLI works from any directory, which is what a daily driver has to do
-- [pro] A checkout keeps its own config beside its own lists, so a sandbox run cannot reach the user's file
+- [pro] A checkout keeps its own config beside its own lists, so a sandbox run
+  cannot reach the user's file
 - [pro] XDG is where users already look for the config of a Unix CLI
 - [con] Four locations to reason about when a value resolves unexpectedly
 
 ### Option 2 — working directory only (status quo)
+
 - [pro] One location, no ambiguity, nothing to explain
-- [con] Leaves the CLI unconfigurable everywhere except a checkout — the defect being fixed
+- [con] Leaves the CLI unconfigurable everywhere except a checkout — the defect
+  being fixed
 
 ### Option 3 — XDG only
+
 - [pro] Two locations fewer, and the user file behaves the same wherever it runs
-- [con] A checkout cannot carry its own config, so sandbox runs need the environment variable every time
+- [con] A checkout cannot carry its own config, so sandbox runs need the
+  environment variable every time
 - [con] A per-project config file would have to be re-invented later
 
 ### Option 4 — an explicit path, always
+
 - [pro] Fully unambiguous: the config in use is on the command line
-- [con] Puts a path in every invocation of a command meant to be typed dozens of times a day
+- [con] Puts a path in every invocation of a command meant to be typed dozens of
+  times a day
 
 ## Rationale
 

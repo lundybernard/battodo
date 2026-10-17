@@ -97,6 +97,8 @@ SUBTASK_OPTIONS = {
 }
 # SCHEMA.md's field order, which an add and a log entry write in.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
+# The fields an update clears with `None` (ADR 0028).
+CLEARABLE_FIELDS = ('DUE', 'REPEAT', 'TAGS')
 LOE_VALUES = ('1', '2', '3', '5', '8')
 # The fields only a top-level task carries.
 ROOT_FIELDS = ('P',)
@@ -631,22 +633,26 @@ def with_held(
 def held_inputs(found: Answer | TaskNode) -> dict[str, str]:
     """The inputs an update names to leave the task as it is.
 
-    A field the task does not carry is held by no option, except the
-    repeat, which a clear leaves as it is. A task with no description
-    holds the empty one. A selector that reached no task holds only the
-    clear of a repeat.
+    A field the task does not carry is held by no option, except a
+    clearable one, which a clear leaves as it is. A task with no
+    description holds the empty one. A selector that reached no task
+    holds only the clears.
     """
     if isinstance(found, str):
-        return {'repeat': 'None'}
+        return {UPDATE_OPTIONS[field]: 'None' for field in CLEARABLE_FIELDS}
     task = found if isinstance(found, TaskNode) else found[2][-1]
     held = {
         option: task.fields[field]
         for field, option in UPDATE_OPTIONS.items()
             if field in task.fields
     }  # fmt: skip
+    cleared = {
+        UPDATE_OPTIONS[field]: task.fields.get(field) or 'None'
+        for field in CLEARABLE_FIELDS
+    }
     return {
         **held,
-        'repeat': task.repeat or 'None',
+        **cleared,
         'title': task.title,
         'description': task.description or '',
     }
@@ -916,9 +922,10 @@ def updated(
     """The task with the named fields and title written over its own.
 
     A description named replaces its description lines, and an empty
-    one clears them. A repeat of None clears the repeat. A field value,
-    a title or a description that the task holds is no change, and so is
-    a clear of a field it does not carry. A task with no id is given one.
+    one clears them. A due date, a repeat or tags of None clear the
+    field. A field value, a title or a description that the task holds
+    is no change, and so is a clear of a field it does not carry. A task
+    with no id is given one.
     The event carries the attributes. A top-level task bound for another
     list takes its whole block there, last in the open section. An open
     task refuses the subtasks of a reopen.
@@ -1472,18 +1479,22 @@ def option_values(field: str) -> st.SearchStrategy[str]:
     """A value given for `field`.
 
     Three draws in four read as the field; the rest are any field value
-    of the grammar. Half the readable `REPEAT` draws are `None`, which
-    an update reads as a clear and an add refuses.
+    of the grammar. Half the readable `DUE`, `REPEAT` and `TAGS` draws
+    are `None`, which an update reads as a clear. An add refuses it as a
+    `DUE` or a `REPEAT`, and writes it as tags.
     """
     readable = {
         'P': st.integers(min_value=0, max_value=130).map(str),
         'LOE': st.sampled_from(LOE_VALUES),
-        'DUE': st.dates(
-            min_value=TODAY - NEARBY,
-            max_value=TODAY + NEARBY,
-        ).map(str),
+        'DUE': either(
+            st.dates(
+                min_value=TODAY - NEARBY,
+                max_value=TODAY + NEARBY,
+            ).map(str),
+            st.just('None'),
+        ),
         'REPEAT': either(grammar.repeats, st.just('None')),
-        'TAGS': grammar.field_values,
+        'TAGS': either(grammar.field_values, st.just('None')),
     }
     reads = readable[field]
     return either(reads, either(reads, grammar.field_values))
@@ -1659,25 +1670,30 @@ def checked(fields: dict[str, str]) -> dict[str, str]:
 
 
 def changed(fields: dict[str, str]) -> dict[str, str | None]:
-    """The fields as an update writes them: a repeat of None is None.
+    """The fields as an update writes them: a clear of None is None.
 
     Raises
     ------
     ValueError
         A `P`, `LOE`, `DUE` or `REPEAT` does not read, checked in that
-        order. A repeat of None is not read.
+        order. A `DUE`, `REPEAT` or `TAGS` of None is not read.
     """
-    if fields.get('REPEAT') == 'None':
-        kept = {
-            name: value
-            for name, value in fields.items()
-                if name != 'REPEAT'
-        }  # fmt: skip
-        return {**checked(kept), 'REPEAT': None}
-    values: dict[str, str | None] = {**checked(fields)}
+    cleared = [
+        name
+        for name, value in fields.items()
+            if value == 'None' and name in CLEARABLE_FIELDS
+    ]  # fmt: skip
+    kept = {
+        name: value
+        for name, value in fields.items()
+            if name not in cleared
+    }  # fmt: skip
+    values: dict[str, str | None] = {**checked(kept)}
     repeat = values.get('REPEAT')
     if repeat is not None:
         next_due(repeat, TODAY)
+    for name in cleared:
+        values[name] = None
     return values
 
 
