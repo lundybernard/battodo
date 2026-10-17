@@ -142,6 +142,22 @@ class DueFactorTests(TestCase):
                 ret = due_factor(t.tk, TODAY, [(0, 1.5)])
                 t.assertAlmostEqual(ret, 1.5)
 
+    def test_point(t) -> None:
+        # A day on a point reads the factor of that point exactly. These
+        # factors do not round clean: 0.2 + (0.9 - 0.2) is not 0.9.
+        curve = [(-7, 0.2), (0, 0.9), (14, 0.1)]
+        cases = {
+            '2026-08-15': 0.2,
+            '2026-08-08': 0.9,
+            '2026-07-25': 0.1,
+        }
+
+        for value, expected in cases.items():
+            with t.subTest(f'DUE:{value}'):
+                t.tk.fields = {'DUE': value}
+                ret = due_factor(t.tk, TODAY, curve)
+                t.assertEqual(ret, expected)
+
 
 class RankTests(TestCase):
     """Unit tests for battodo.rank.rank."""
@@ -261,9 +277,14 @@ class ParsePointTests(TestCase):
     """Unit tests for battodo.rank.parse_point."""
 
     def test_point(t) -> None:
-        # The segment is stripped, the day read whole, the factor as a float.
-        ret = parse_point(' -7:1 ')
-        t.assertEqual(ret, (-7, 1.0))
+        with t.subTest('stripped, the day read whole, the factor a float'):
+            ret = parse_point(' -7:1 ')
+            t.assertEqual(ret, (-7, 1.0))
+
+        with t.subTest('a factor of -0 reads as 0.0'):
+            ret = parse_point('0:-0')
+            # The two zeros compare equal; only the repr tells them apart.
+            t.assertEqual(repr(ret), '(0, 0.0)')
 
     def test_refusal(t) -> None:
         cases = {

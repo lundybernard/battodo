@@ -23,6 +23,11 @@ upstream issue candidates against boxed/mutmut.
   do not reliably invalidate `mutants/`, so stale survivor lists read
   as real results. Clear the tree before any run whose numbers will be
   quoted.
+  2026-10-15: deleting `mutants/mutmut-stats.json` alone does not make
+  a cold run. On the next run mutmut reports "Found N new tests,
+  rerunning stats" and maps only the new test ids. A test whose body
+  changed keeps its old mapping, and its mutants keep their cached
+  results. Only `rm -rf mutants/` gives a cold run.
 - **`@property` bodies are never mutated:** converting a module of
   functions into classes whose computed data lives behind properties
   dropped the project's mutant count from 1614 to 1482 and removed the
@@ -56,3 +61,24 @@ upstream issue candidates against boxed/mutmut.
   Before you trust a "no survivors" line for a module, count its
   decorated functions and classes: their code has no mutant, so it
   cannot survive.
+  2026-10-15: the skip also covers `@contextmanager`. A refactor that
+  extracts a step into a decorated member takes that step out of the
+  mutation surface. When the refactor is itself the catch for a
+  survivor, keep the caught line in a plain method. In #123,
+  `Journal.next_seq` is a `@property`, so `len(self.events) + 1` has no
+  mutant, and only its unit test pins it.
+- **A cleared environment hides the active mutant:** the trampoline
+  reads `MUTANT_UNDER_TEST` from `os.environ` on every call. A test
+  under `patch.dict(os.environ, ..., clear=True)` removes it. The stats
+  pass then maps no function to that test, and the kill pass runs the
+  original code. Every test under the patch is blind to every mutant,
+  and mutmut reports nothing about it. In battodo the `ConfigFile` unit
+  fixture, the CLI runner of the behavioral suite and four integration
+  fixtures cleared the environment. mutmut reported
+  `ConfigFile.__init__` as "no tests", and no behavioral test ran
+  against a mutant (#123). The fixtures now remove only the battodo
+  variables, through `tests/environment.py` outside the unit suite. To
+  detect the defect, run `rg -n "clear=True"` over the test trees, and
+  look for the class in `tests_by_mangled_function_name` of
+  `mutants/mutmut-stats.json`. Upstream candidate: the docs do not say
+  that the variable must survive the environment of a test.

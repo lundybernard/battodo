@@ -112,9 +112,7 @@ def age_score(task: TaskNode, today: date) -> float:
     added = parse_date(task.added)
     if added is None:
         return 0.0
-    days = (today - added).days
-    if days <= 0:
-        return 0.0
+    days = max((today - added).days, 0)
     return min(AGE_CAP, days / AGE_SCALE_DAYS)
 
 
@@ -156,11 +154,12 @@ def parse_point(segment: str) -> tuple[int, float]:
         of 0 or more.
     """
     text = segment.strip()
-    days_text, _, factor_text = text.partition(':')
     try:
+        days_text, factor_text = text.split(':')
         days, factor = int(days_text), float(factor_text)
     except ValueError:
         raise ValueError(f'{CURVE_ERROR}: {text!r}') from None
     if not isfinite(factor) or factor < 0:
         raise ValueError(f'{CURVE_ERROR}: {text!r}')
-    return days, factor
+    # A factor of -0 passes the bound; abs reads it as 0.0.
+    return days, abs(factor)

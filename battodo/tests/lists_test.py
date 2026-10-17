@@ -80,8 +80,13 @@ class ItemCountTests(TestCase):
     """Unit tests for battodo.lists.item_count."""
 
     def test_number(t) -> None:
-        ret = item_count('2')
-        t.assertEqual(ret, 2)
+        # One is the least count.
+        cases = {'1': 1, '2': 2}
+
+        for value, expected in cases.items():
+            with t.subTest(f'{value!r} is a count'):
+                ret = item_count(value)
+                t.assertEqual(ret, expected)
 
     def test_rejected(t) -> None:
         for value in ('0', '-1', 'five', ''):

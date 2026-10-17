@@ -12,6 +12,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from battodo.conf import get_config
+from tests.environment import isolate_environ
 
 SRC = 'battodo.conf'
 
@@ -45,13 +46,9 @@ class ConfigFileSearchTests(TestCase):
         # The search reads the working directory and the environment.
         t.addCleanup(chdir, getcwd())
         chdir(t.project)
-        patcher = patch.dict(
-            environ,
-            {'XDG_CONFIG_HOME': str(t.config_home)},
-            clear=True,
+        t.enterContext(
+            isolate_environ({'XDG_CONFIG_HOME': str(t.config_home)})
         )
-        patcher.start()
-        t.addCleanup(patcher.stop)
 
     def test_get_config(t) -> None:
         """Each case adds a location above the last one."""
@@ -108,13 +105,7 @@ class TomlBackendTests(TestCase):
         # would answer first and hide whatever the file says. The
         # search reads the environment too, so the user config
         # directory is the empty temporary one.
-        patcher = patch.dict(
-            'os.environ',
-            {'XDG_CONFIG_HOME': tmp.name},
-            clear=True,
-        )
-        patcher.start()
-        t.addCleanup(patcher.stop)
+        t.enterContext(isolate_environ({'XDG_CONFIG_HOME': tmp.name}))
 
         # The searched working directory is the temporary one as well.
         cwd = patch(

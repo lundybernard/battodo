@@ -139,12 +139,20 @@ class JournalTests(TestCase):
         )
 
     def test_append(t) -> None:
-        event = t.journal.append(
-            'TaskAdded',
-            'task/zz01ab',
+        # A stale read: the file has gained an event since.
+        t.journal.events = [{'stream_id': 'task/aa'}]
+        t.file.exists.return_value = True
+        t.file.read_text.return_value = (
+            '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
+        )
+
+        ret = t.journal.append(
+            'TaskUpdated',
+            'task/aa',
             {'delta': {}},
             actor='agent',
             source_file='a-list.md',
+            occurred_at='2026-08-05T09:00:00+00:00',
         )
 
         with t.subTest('the journal directory is made before the write'):
@@ -153,15 +161,54 @@ class JournalTests(TestCase):
                 exist_ok=True,
             )
 
+        with t.subTest('the file opens for append, as UTF-8'):
+            t.file.open.assert_called_once_with('a', encoding='utf-8')
+
+        with t.subTest('under an exclusive lock, released at the end'):
+            taken, released = t.flock.call_args_list
+            t.assertEqual(taken.args[1], LOCK_EX)
+            t.assertEqual(released.args[1], LOCK_UN)
+
+        with t.subTest('the event counts the file as the lock found it'):
+            t.assertEqual(ret['seq'], 3)
+            t.assertEqual(ret['stream_seq'], 2)
+
+        with t.subTest('the change time is given, the record time is now'):
+            t.assertEqual(ret['occurred_at'], '2026-08-05T09:00:00+00:00')
+            t.assertEqual(ret['recorded_at'], STAMP)
+
+        with t.subTest('the event returned is the one written'):
+            t.handle.write.assert_called_once_with(json.dumps(ret) + '\n')
+
+        with t.subTest('and the write drops the read it invalidates'):
+            t.assertNotIn('text', t.journal.__dict__)
+            t.assertNotIn('events', t.journal.__dict__)
+
+    def test_next_event(t) -> None:
+        t.journal.events = [
+            {'stream_id': 'task/aa'},
+            {'stream_id': 'task/bb'},
+        ]
+
         with t.subTest('the envelope carries the event and its metadata'):
+            ret = t.journal.next_event(
+                'TaskUpdated',
+                'task/aa',
+                {'delta': {}},
+                actor='agent',
+                source_file='a-list.md',
+                occurred_at=None,
+                recorded_at=STAMP,
+            )
+
             t.assertEqual(
-                event,
+                ret,
                 {
-                    'seq': 1,
+                    'seq': 3,
                     'event_id': 'ffff-1',
-                    'stream_id': 'task/zz01ab',
-                    'stream_seq': 1,
-                    'type': 'TaskAdded',
+                    'stream_id': 'task/aa',
+                    'stream_seq': 2,
+                    'type': 'TaskUpdated',
                     'schema_version': SCHEMA_VERSION,
                     'occurred_at': STAMP,
                     'recorded_at': STAMP,
@@ -173,78 +220,57 @@ class JournalTests(TestCase):
                 },
             )
 
-        with t.subTest('which is written as one JSON line'):
-            t.handle.write.assert_called_once_with(json.dumps(event) + '\n')
-
-        with t.subTest('the write is flushed to the disk it claims to be on'):
-            t.fsync.assert_called_once_with(t.handle.fileno.return_value)
-
-        with t.subTest('under an exclusive lock, released at the end'):
-            taken, released = t.flock.call_args_list
-            t.assertEqual(taken.args[1], LOCK_EX)
-            t.assertEqual(released.args[1], LOCK_UN)
-
-        with t.subTest('the two counters count over different populations'):
-            t.file.exists.return_value = True
-            t.file.read_text.return_value = (
-                '{"stream_id": "task/aa"}\n{"stream_id": "task/bb"}\n'
-            )
-
-            event = t.journal.append(
+        with t.subTest('a given time is when the change happened'):
+            ret = t.journal.next_event(
                 'TaskUpdated',
                 'task/aa',
                 {},
                 actor='agent',
                 source_file='a-list.md',
-            )
-
-            t.assertEqual(event['seq'], 3)
-            t.assertEqual(event['stream_seq'], 2)
-
-        with t.subTest('a given time is when the change happened'):
-            t.file.read_text.return_value = ''
-
-            event = t.journal.append(
-                'TaskAdded',
-                'task/zz01ab',
-                {},
-                actor='agent',
-                source_file='a-list.md',
                 occurred_at='2026-08-05T09:00:00+00:00',
+                recorded_at=STAMP,
             )
 
-            t.assertEqual(event['occurred_at'], '2026-08-05T09:00:00+00:00')
-            t.assertEqual(event['recorded_at'], STAMP)
+            t.assertEqual(ret['occurred_at'], '2026-08-05T09:00:00+00:00')
+            t.assertEqual(ret['recorded_at'], STAMP)
 
-        with t.subTest('a write drops the text and events it invalidates'):
-            # TODO: a multi-cycle case. Issue #63 covers the Journal.append
-            # refactor that splits it.
-            t.file.exists.return_value = True
-            t.file.read_text.return_value = '{"stream_id": "task/aa"}\n'
+    def test_next_seq(t) -> None:
+        with t.subTest('the first event is one'):
+            t.journal.events = []
+            ret = t.journal.next_seq
+            t.assertEqual(ret, 1)
 
-            primed = t.journal.events
+        with t.subTest('one past the events of the text'):
+            t.journal.events = [
+                {'stream_id': 'task/aa'},
+                {'stream_id': 'task/bb'},
+            ]
 
-            t.assertEqual(primed, [{'stream_id': 'task/aa'}])
+            ret = t.journal.next_seq
 
-            t.file.read_text.return_value = (
-                '{"stream_id": "task/aa"}\n{"stream_id": "task/aa"}\n'
-            )
+            t.assertEqual(ret, 3)
 
-            written = t.journal.append(
-                'TaskAdded',
-                'task/aa',
-                {},
-                actor='agent',
-                source_file='a-list.md',
-            )
-            t.file.read_text.return_value = (
-                '{"stream_id": "task/aa"}\n'
-                '{"stream_id": "task/aa"}\n'
-                '{"stream_id": "task/bb"}\n'
-            )
+    def test_next_stream_seq(t) -> None:
+        t.journal.events = [
+            {'stream_id': 'task/aa'},
+            {'stream_id': 'task/bb'},
+            {'stream_id': 'task/aa'},
+        ]
 
-            events = t.journal.events
+        with t.subTest('one past the events of the stream'):
+            ret = t.journal.next_stream_seq('task/aa')
+            t.assertEqual(ret, 3)
 
-            t.assertEqual(written['seq'], 3)
-            t.assertEqual(written['stream_seq'], 3)
-            t.assertEqual(len(events), 3)
+        with t.subTest('a stream with no events starts at one'):
+            ret = t.journal.next_stream_seq('task/cc')
+            t.assertEqual(ret, 1)
+
+    def test__write(t) -> None:
+        t.journal._write(t.handle, {'seq': 1})
+
+        with t.subTest('the event is written as one JSON line'):
+            t.handle.write.assert_called_once_with('{"seq": 1}\n')
+
+        with t.subTest('and flushed to the disk it claims to be on'):
+            t.handle.flush.assert_called_once_with()
+            t.fsync.assert_called_once_with(t.handle.fileno.return_value)

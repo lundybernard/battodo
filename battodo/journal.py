@@ -18,7 +18,7 @@ from json import dumps, loads
 from os import fsync
 from pathlib import Path
 from secrets import choice
-from typing import Any
+from typing import Any, TextIO
 from uuid import uuid4
 
 SCHEMA_VERSION = 1
@@ -85,11 +85,6 @@ class Journal:
             streams.setdefault(event['stream_id'], []).append(event)
         return streams
 
-    def _forget(self) -> None:
-        """Drop the cached text and the events parsed from it."""
-        self.__dict__.pop('text', None)
-        self.__dict__.pop('events', None)
-
     def append(
         self,
         event_type: str,
@@ -113,30 +108,69 @@ class Journal:
             flock(handle.fileno(), LOCK_EX)
             try:
                 self._forget()
-                existing = self.events
-                event = {
-                    'seq': len(existing) + 1,
-                    'event_id': str(uuid4()),
-                    'stream_id': stream_id,
-                    'stream_seq': sum(
-                        e['stream_id'] == stream_id for e in existing
-                    )
-                    + 1,
-                    'type': event_type,
-                    'schema_version': SCHEMA_VERSION,
-                    'occurred_at': occurred_at or recorded_at,
-                    'recorded_at': recorded_at,
-                    'metadata': {
-                        'actor': actor,
-                        'source_file': source_file,
-                    },
-                    'payload': payload,
-                }
-                handle.write(dumps(event) + '\n')
-                handle.flush()
-                fsync(handle.fileno())
+                event = self.next_event(
+                    event_type,
+                    stream_id,
+                    payload,
+                    actor=actor,
+                    source_file=source_file,
+                    occurred_at=occurred_at,
+                    recorded_at=recorded_at,
+                )
+                self._write(handle, event)
             finally:
                 self._forget()
                 flock(handle.fileno(), LOCK_UN)
 
         return event
+
+    def _forget(self) -> None:
+        """Drop the cached text and the events parsed from it."""
+        self.__dict__.pop('text', None)
+        self.__dict__.pop('events', None)
+
+    def next_event(
+        self,
+        event_type: str,
+        stream_id: str,
+        payload: dict[str, Any],
+        *,
+        actor: str,
+        source_file: str,
+        occurred_at: str | None,
+        recorded_at: str,
+    ) -> dict[str, Any]:
+        """The next event of `stream_id`, in its envelope.
+
+        An `occurred_at` of None is `recorded_at`.
+        """
+        return {
+            'seq': self.next_seq,
+            'event_id': str(uuid4()),
+            'stream_id': stream_id,
+            'stream_seq': self.next_stream_seq(stream_id),
+            'type': event_type,
+            'schema_version': SCHEMA_VERSION,
+            'occurred_at': occurred_at or recorded_at,
+            'recorded_at': recorded_at,
+            'metadata': {
+                'actor': actor,
+                'source_file': source_file,
+            },
+            'payload': payload,
+        }
+
+    @property
+    def next_seq(self) -> int:
+        """The `seq` of the next event: one past the events of the text."""
+        return len(self.events) + 1
+
+    def next_stream_seq(self, stream_id: str) -> int:
+        """The `stream_seq` of the next event of `stream_id`."""
+        return len(self.streams.get(stream_id, [])) + 1
+
+    def _write(self, handle: TextIO, event: dict[str, Any]) -> None:
+        """Write `event` as one JSON line, and sync it to the disk."""
+        handle.write(dumps(event) + '\n')
+        handle.flush()
+        fsync(handle.fileno())

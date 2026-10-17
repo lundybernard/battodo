@@ -9,12 +9,12 @@ collecting it.
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from os import chdir, environ, getcwd
+from os import chdir, getcwd
 from tempfile import TemporaryDirectory
 from typing import Any
-from unittest.mock import patch
 
 from battodo.cli import BATCLI
+from tests.environment import isolate_environ
 
 
 def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
@@ -25,11 +25,11 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
     args : list of str
         The command line, without the program name.
     env : dict
-        The whole environment of the run: the host's environment is
-        cleared first. The run starts in an empty sandbox directory,
-        and searches that sandbox for the user config file unless
-        `env` names another, so no config file of the host reaches
-        the run.
+        The variables of the run, set over the host's environment once
+        its battodo variables are removed. The run starts in an empty
+        sandbox directory, and searches that sandbox for the user
+        config file unless `env` names another, so no config file of
+        the host reaches the run.
 
     Raises
     ------
@@ -41,11 +41,7 @@ def run_cli(args: list[str], env: dict[str, str]) -> tuple[str, str, Any]:
     try:
         with (
             TemporaryDirectory() as sandbox,
-            patch.dict(
-                environ,
-                {'XDG_CONFIG_HOME': sandbox} | env,
-                clear=True,
-            ),
+            isolate_environ({'XDG_CONFIG_HOME': sandbox} | env),
             redirect_stdout(out),
             redirect_stderr(err),
         ):

@@ -24,6 +24,7 @@ from battodo.cli import TZ, argparser, get_config
 from battodo.journal import Journal
 from battodo.repeat import RepeatError
 from battodo.view import TOP_N
+from tests.environment import isolate_environ
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
@@ -66,9 +67,7 @@ class CliArgsResolutionTests(TestCase):
     def setUp(t):
         # The environment source outranks the schema defaults: an
         # ambient BATTODO_* var would answer before them.
-        patcher = patch.dict('os.environ', clear=True)
-        patcher.start()
-        t.addCleanup(patcher.stop)
+        t.enterContext(isolate_environ())
 
     def resolve(t, argv):
         args = argparser().parse_args(argv)
@@ -136,7 +135,7 @@ class CommandInputTests(TestCase):
         env: dict[str, str],
         config_file: SourceInterfaceP | None = None,
     ) -> str:
-        """Run one command with `env` as the whole environment.
+        """Run one command with `env` over an isolated environment.
 
         The configuration reads its sources lazily, so the command runs
         inside the patched environment. Returns what the command
@@ -145,7 +144,7 @@ class CommandInputTests(TestCase):
         args = argparser().parse_args(argv)
         out = StringIO()
         with (
-            patch.dict(environ, {SOURCE_VAR: str(t.source)} | env, clear=True),
+            isolate_environ({SOURCE_VAR: str(t.source)} | env),
             redirect_stdout(out),
         ):
             conf = get_config(

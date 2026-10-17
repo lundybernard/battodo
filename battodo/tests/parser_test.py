@@ -783,6 +783,11 @@ class TodoDocumentTests(TestCase):
             t.td.drop({0})
             t.assertEqual(t.td.lines, lines[1:])
 
+        with t.subTest('a span under a blank first line takes one along'):
+            t.td.lines = ['', '- [ ] A task', '', '- [ ] Another task']
+            t.td.drop({1})
+            t.assertEqual(t.td.lines, ['', '- [ ] Another task'])
+
         with t.subTest('no index leaves every line'):
             t.td.lines = list(lines)
             t.td.drop(set())
