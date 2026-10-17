@@ -69,7 +69,13 @@ class TaskSelectionTests(TestCase):
             fields={},
         )
         t.doc = create_autospec(TodoDocument, instance=True)
-        t.doc.tasks = [t.parent, t.sibling, t.quoting]
+        t.doc.ancestries = [
+            [t.parent],
+            [t.parent, t.child],
+            [t.parent, t.checked],
+            [t.sibling],
+            [t.quoting],
+        ]
 
         t.ts = TaskSelection(t.dir, 'b')
 

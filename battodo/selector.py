@@ -7,7 +7,6 @@ land on exactly one open task; anything else is a `SelectionError`, and
 the fix is always a longer selector or the task's `[ID:]`.
 """
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -41,21 +40,6 @@ class TaskRecord:
         return self.ancestry[-1]
 
 
-def _descend(
-    tasks: list[TaskNode],
-    ancestry: list[TaskNode],
-) -> Iterator[list[TaskNode]]:
-    """Every task at any depth, each with its ancestry."""
-    for task in tasks:
-        found = [*ancestry, task]
-        yield found
-        yield from _descend(task.children, found)
-
-
-def _selects(task: TaskNode, selector: str) -> bool:
-    return task.task_id == selector or selector.lower() in task.title.lower()
-
-
 class TaskSelection:
     """The open tasks a selector reaches in a source directory.
 
@@ -86,9 +70,9 @@ class TaskSelection:
         found = [
             TaskRecord(path, doc, ancestry)
             for path, doc in self.lists
-            for ancestry in _descend(doc.tasks, [])
-            if not ancestry[-1].done and _selects(ancestry[-1], self.selector)
-        ]
+            for ancestry in doc.ancestries
+                if not ancestry[-1].done and self.selects(ancestry[-1])
+        ]  # fmt: skip
         by_id = [
             record
             for record in found
