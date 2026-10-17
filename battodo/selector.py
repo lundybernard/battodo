@@ -90,8 +90,10 @@ class TaskSelection:
             if not ancestry[-1].done and _selects(ancestry[-1], self.selector)
         ]
         by_id = [
-            record for record in found if record.task.task_id == self.selector
-        ]
+            record
+            for record in found
+                if record.task.task_id == self.selector
+        ]  # fmt: skip
         return by_id or found
 
     @cached_property
