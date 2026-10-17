@@ -129,6 +129,17 @@ class TaskNode:
         return owned
 
     @property
+    def ancestries(self) -> list[list['TaskNode']]:
+        """The task, then each task below it, each with its ancestry.
+
+        In file order. Each ancestry runs from this task down.
+        """
+        found = [[self]]
+        for child in self.children:
+            found.extend([self, *below] for below in child.ancestries)
+        return found
+
+    @property
     def repeating_subtasks(self) -> list['TaskNode']:
         """The open tasks below this one that repeat, at any depth.
 
@@ -333,6 +344,18 @@ class TodoDocument:
             stack.append((indent, task))
 
         return tasks
+
+    @property
+    def ancestries(self) -> list[list[TaskNode]]:
+        """Every open task at any depth, each with its ancestry.
+
+        In file order. Each ancestry runs from a top-level task down.
+        """
+        return [
+            ancestry
+            for task in self.tasks
+            for ancestry in task.ancestries
+        ]  # fmt: skip
 
     @property
     def text(self) -> str:

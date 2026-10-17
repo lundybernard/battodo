@@ -242,6 +242,49 @@ class TaskNodeTests(TestCase):
 
             t.assertEqual(ret, {2, 3, 4, 5, 6})
 
+    def test_ancestries(t) -> None:
+        grandchild = TaskNode(
+            raw_index=4,
+            indent=4,
+            done=False,
+            title='A checklist item',
+            fields={},
+        )
+        child = TaskNode(
+            raw_index=3,
+            indent=2,
+            done=False,
+            title='A subtask',
+            fields={'LOE': '1'},
+            children=[grandchild],
+        )
+        second = TaskNode(
+            raw_index=5,
+            indent=2,
+            done=True,
+            title='A done subtask',
+            fields={'LOE': '1'},
+        )
+
+        with t.subTest('a task alone is its own ancestry'):
+            ret = t.tk.ancestries
+            t.assertEqual(ret, [[t.tk]])
+
+        with t.subTest('then each task below it, at any depth, in file order'):
+            t.tk.children = [child, second]
+
+            ret = t.tk.ancestries
+
+            t.assertEqual(
+                ret,
+                [
+                    [t.tk],
+                    [t.tk, child],
+                    [t.tk, child, grandchild],
+                    [t.tk, second],
+                ],
+            )
+
     def test_description(t) -> None:
         with t.subTest('the description lines, joined by newlines'):
             t.tk.description_lines = ['A line.', 'Another line.']
@@ -566,6 +609,36 @@ class TodoDocumentTests(TestCase):
             outside_tasks = outside.tasks
 
             t.assertEqual(outside_tasks, [])
+
+    def test_ancestries(t) -> None:
+        below = TaskNode(
+            raw_index=3,
+            indent=2,
+            done=False,
+            title='A subtask',
+            fields={'LOE': '1'},
+        )
+        first = TaskNode(
+            raw_index=1,
+            indent=0,
+            done=False,
+            title='A task',
+            fields={},
+        )
+        second = TaskNode(
+            raw_index=2,
+            indent=0,
+            done=False,
+            title='Another task',
+            fields={},
+            children=[below],
+        )
+        t.td.tasks = [first, second]
+
+        ret = t.td.ancestries
+
+        # Each top-level task's ancestries, joined in file order.
+        t.assertEqual(ret, [[first], [second], [second, below]])
 
     def test_text(t) -> None:
         with t.subTest('the source, byte for byte, until a method writes'):

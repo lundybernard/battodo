@@ -212,6 +212,36 @@ class TodoDocumentTests(TestCase):
             titles = [task.title for task in ret]
             t.assertNotIn('Task outside the open section', titles)
 
+    def test_ancestries(t) -> None:
+        ret = t.td.ancestries
+
+        with t.subTest('every open task at any depth, in file order'):
+            paths = [' > '.join(task.title for task in found) for found in ret]
+            t.assertEqual(
+                paths,
+                [
+                    'Overdue task',
+                    'Due today task',
+                    'Legacy priority task',
+                    'Legacy priority task > Open checklist item',
+                    'Legacy priority task > Open subtask',
+                    'Legacy priority task > Completed checklist item',
+                    (
+                        'A very long task title that the task column '
+                        'has to clip to fit'
+                    ),
+                    'Placeholder due date task',
+                    'Lowest ranked task',
+                    'Completed task',
+                    'Future recurring task',
+                ],
+            )
+
+        with t.subTest('each one holds the nodes of the task tree'):
+            parent = t.td.tasks[2]
+            t.assertIs(ret[2][0], parent)
+            t.assertIs(ret[3][1], parent.children[0])
+
     def test_text(t) -> None:
         with t.subTest('the source, byte for byte, until a method writes'):
             ret = t.td.text
