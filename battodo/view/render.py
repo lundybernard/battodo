@@ -33,16 +33,86 @@ ELLIPSIS = '…'
 MIN_TASK_WIDTH = 20
 
 
+class View:
+    """A selection rendered for a terminal: a header, then a table each."""
+
+    def __init__(self, selection: Selection) -> None:
+        self.selection = selection
+
+    @property
+    def today(self) -> date:
+        return self.selection.today
+
+    @property
+    def header(self) -> str:
+        now = self.selection.now
+        return (
+            f'{now.strftime("%A")} {self.today} {now.strftime("%H:%M")} '
+            f'— active: {", ".join(sorted(self.selection.active))}'
+        )
+
+    @cached_property
+    def categories(self) -> list[Category]:
+        """The categories this view lays out, in display order."""
+        return self.selection.categories
+
+    @cached_property
+    def rows(self) -> list[Row]:
+        """Every row the view shows, across all of its categories."""
+        return [row for category in self.categories for row in category.shown]
+
+    @cached_property
+    def columns(self) -> int:
+        """The width to lay out in: the terminal's, or 80 if it has none."""
+        return get_terminal_size().columns
+
+    @cached_property
+    def widths(self) -> list[int]:
+        """Each column's width: its widest cell, TASK fitted to the rest.
+
+        Sized against every row in the view at once, so one set of
+        widths serves all of its tables and the columns line up down the
+        whole page.
+        """
+        widths = [
+            max([len(name), *(len(row.cells[index]) for row in self.rows)])
+            for index, name in enumerate(COLUMNS)
+        ]
+        room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
+        widths[TASK_COLUMN] = max(
+            MIN_TASK_WIDTH,
+            min(widths[TASK_COLUMN], room),
+        )
+        return widths
+
+    @cached_property
+    def tables(self) -> list['Table']:
+        return [
+            Table(
+                category.name,
+                category.shown,
+                self.widths,
+                category.hidden,
+            )
+            for category in self.categories
+        ]
+
+    @cached_property
+    def text(self) -> str:
+        out = [self.header]
+        for table in self.tables:
+            out.append('')
+            out.append(table.heading)
+            out.extend(table.lines)
+        return '\n'.join(out)
+
+    def __str__(self) -> str:
+        return self.text
+
+
 def table_width(widths: list[int]) -> int:
     """How wide a table laid out to `widths` comes out."""
     return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
-
-
-def clip(text: str, width: int) -> str:
-    """`text` cut to `width`, the cut marked where it happened."""
-    if len(text) <= width:
-        return text
-    return text[: width - 1] + ELLIPSIS
 
 
 class Table:
@@ -99,78 +169,8 @@ class Table:
         return out
 
 
-class View:
-    """A selection rendered for a terminal: a header, then a table each."""
-
-    def __init__(self, selection: Selection) -> None:
-        self.selection = selection
-
-    @property
-    def today(self) -> date:
-        return self.selection.today
-
-    @property
-    def header(self) -> str:
-        now = self.selection.now
-        return (
-            f'{now.strftime("%A")} {self.today} {now.strftime("%H:%M")} '
-            f'— active: {", ".join(sorted(self.selection.active))}'
-        )
-
-    @cached_property
-    def categories(self) -> list[Category]:
-        """The categories this view lays out, in display order."""
-        return self.selection.categories
-
-    @cached_property
-    def rows(self) -> list[Row]:
-        """Every row the view shows, across all of its categories."""
-        return [row for category in self.categories for row in category.shown]
-
-    @cached_property
-    def columns(self) -> int:
-        """The width to lay out in: the terminal's, or 80 if it has none."""
-        return get_terminal_size().columns
-
-    @cached_property
-    def widths(self) -> list[int]:
-        """Each column's width: its widest cell, TASK fitted to the rest.
-
-        Sized against every row in the view at once, so one set of
-        widths serves all of its tables and the columns line up down the
-        whole page.
-        """
-        widths = [
-            max([len(name), *(len(row.cells[index]) for row in self.rows)])
-            for index, name in enumerate(COLUMNS)
-        ]
-        room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
-        widths[TASK_COLUMN] = max(
-            MIN_TASK_WIDTH,
-            min(widths[TASK_COLUMN], room),
-        )
-        return widths
-
-    @cached_property
-    def tables(self) -> list[Table]:
-        return [
-            Table(
-                category.name,
-                category.shown,
-                self.widths,
-                category.hidden,
-            )
-            for category in self.categories
-        ]
-
-    @cached_property
-    def text(self) -> str:
-        out = [self.header]
-        for table in self.tables:
-            out.append('')
-            out.append(table.heading)
-            out.extend(table.lines)
-        return '\n'.join(out)
-
-    def __str__(self) -> str:
-        return self.text
+def clip(text: str, width: int) -> str:
+    """`text` cut to `width`, the cut marked where it happened."""
+    if len(text) <= width:
+        return text
+    return text[: width - 1] + ELLIPSIS
