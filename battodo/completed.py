@@ -91,7 +91,7 @@ class Digest:
         """Build the digest of `period` from a resolved configuration."""
         return cls(Path(conf.view.source_dir), now, period=period)
 
-    @cached_property
+    @property
     def today(self) -> date:
         return self.now.date()
 
