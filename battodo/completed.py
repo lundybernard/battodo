@@ -145,9 +145,9 @@ class Digest:
         found = [
             record
             for line in self.text.split('\n')
-            if (record := read_record(line)) is not None
-            if self.start <= record.day <= self.end
-        ]
+                if (record := read_record(line)) is not None
+                if self.start <= record.day <= self.end
+        ]  # fmt: skip
         return sorted(found, key=lambda record: record.day)
 
     @cached_property
@@ -160,10 +160,14 @@ class Digest:
         return [
             Group(
                 name,
-                [record for record in self.records if record.category == name],
+                [
+                    record
+                    for record in self.records
+                        if record.category == name
+                ],
             )
             for name in names
-        ]
+        ]  # fmt: skip
 
 
 @dataclass(frozen=True)
