@@ -356,7 +356,7 @@ def update_item(
         The new title.
     priority, due, repeat, tags : str or None
         The new values of the `P`, `DUE`, `REPEAT` and `TAGS` fields. A
-        `repeat` of `None`, the word, removes the `REPEAT` field.
+        `due`, `repeat` or `tags` of `None`, the word, removes its field.
     description : str or None
         The new description, one description line per line. An empty
         one, or `None`, the word, clears the description.

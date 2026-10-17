@@ -41,23 +41,35 @@ the read path.
 ## Options
 
 ### Option 1 — Flip: journal authoritative, markdown a projection (chosen)
+
 - [pro] The time series becomes gap-free, which is the reason the journal exists
-- [pro] Deletes the round-trip guarantee, lazy id allocation, and `backfill` outright — machinery whose only job was tolerating hand edits
-- [pro] Matches how the tool is actually driven: an agent through the CLI, a TUI later
-- [con] Hand-editing stops working; a mistake in the projection can only be corrected through btd
-- [con] The projection must stay complete enough to stand alone if btd is removed
+- [pro] Deletes the round-trip guarantee, lazy id allocation, and `backfill`
+  outright — machinery whose only job was tolerating hand edits
+- [pro] Matches how the tool is actually driven: an agent through the CLI, a TUI
+  later
+- [con] Hand-editing stops working; a mistake in the projection can only be
+  corrected through btd
+- [con] The projection must stay complete enough to stand alone if btd is
+  removed
 
 ### Option 2 — Status quo: markdown authoritative, journal derived
+
 - [pro] Zero work, and hand-editing keeps working
-- [con] The time series stays permanently incomplete, so analysis over it is unsound
-- [con] The tolerance machinery is a permanent tax on every feature that touches storage
+- [con] The time series stays permanently incomplete, so analysis over it is
+  unsound
+- [con] The tolerance machinery is a permanent tax on every feature that touches
+  storage
 
 ### Option 3 — Middle ground: editable projection reconciled back
+
 Keep the projection hand-editable, detect divergence with a content
 hash, and add a `reconcile` command that imports the diff as events.
+
 - [pro] Keeps hand-editing and still closes the time-series gap
-- [con] More machinery than the status quo, not less — a differ and an event synthesizer on top of everything already there
-- [con] Only worth building if hand-editing is actually missed, which is not yet known
+- [con] More machinery than the status quo, not less — a differ and an event
+  synthesizer on top of everything already there
+- [con] Only worth building if hand-editing is actually missed, which is not yet
+  known
 
 ## Rationale
 

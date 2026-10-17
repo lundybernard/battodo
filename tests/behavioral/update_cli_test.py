@@ -96,6 +96,43 @@ class UpdateCommandTests(TestCase):
             t.assertIsNotNone(after['id'])
             t.assertEqual(by_id, after)
 
+    def test_update_clear(t) -> None:
+        t.run_ok(
+            'update', SELECTOR, '--due', '2026-09-01', '--tags', 'yard,summer'
+        )
+        _, due_err, _ = run_cli(['update', SELECTOR, '--due', 'None'], t.env)
+        _, tags_err, _ = run_cli(['update', SELECTOR, '--tags', 'None'], t.env)
+        after = t.show(SELECTOR)
+        work = (t.source / 'work.md').read_text(encoding='utf-8')
+        cleared = Journal(t.source).events[1:]
+        _, refusal, code = run_cli(
+            ['update', SELECTOR, '--due', 'None', '--tags', 'None'], t.env
+        )
+
+        with t.subTest('None removes the due date'):
+            t.assertEqual(due_err, '')
+            t.assertIsNone(after['due'])
+
+        with t.subTest('None removes the tags, field and all'):
+            t.assertEqual(tags_err, '')
+            t.assertEqual(after['tags'], [])
+            t.assertNotIn('[TAGS:', work)
+
+        with t.subTest('each event records its clear against the old value'):
+            t.assertEqual(
+                [event['payload']['delta'] for event in cleared],
+                [
+                    {'DUE': ['2026-09-01', None]},
+                    {'TAGS': ['yard,summer', None]},
+                ],
+            )
+
+        with t.subTest(
+            'a clear of fields the task does not carry is no change'
+        ):
+            t.assertEqual(code, 1)
+            t.assertIn('nothing to update', refusal)
+
     def test_update_with_attributes(t) -> None:
         t.run_ok(
             'update',

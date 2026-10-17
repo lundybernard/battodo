@@ -82,10 +82,10 @@ MESSAGES = {
     'update.selector.metavar': 'selector',
     'update.selector.help': "the task's [ID:] value, or part of its title",
     'update.priority.help': 'new priority multiplier, 0 and up',
-    'update.due.help': 'new due date, YYYY-MM-DD',
+    'update.due.help': 'new due date, YYYY-MM-DD; None removes it',
     'update.repeat.help': 'new recurrence: Nd, Nw, weekly:DAY or monthly:N;'
     ' None removes it',
-    'update.tags.help': 'replacement comma-separated tags',
+    'update.tags.help': 'replacement comma-separated tags; None removes them',
     'update.title.help': 'new title, without any [FIELD:] markup',
     'update.description.help': 'new description, one description line per'
     ' line; None or an empty one clears it',

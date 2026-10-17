@@ -48,13 +48,14 @@ btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
 ```
 
-`None` is the clear token of `update`: `--repeat None` removes the
-repeat and `--description None` the description
-([ADR 0028](docs/decisions/0028-update-repeat.md)). A new repeat leaves
-the due date alone and applies from the next completion. An option that
-names what the task already holds changes nothing, and the journal
-records only what changed. An update of an open task with nothing left
-to change exits 1; a reopen still opens the task.
+`None` is the clear token of `update`: `--due None`, `--repeat None` and
+`--tags None` remove that field, and `--description None` the
+description ([ADR 0028](docs/decisions/0028-update-repeat.md)). `-p` has
+no clear form. A new repeat leaves the due date alone and applies from
+the next completion. An option that names what the task already holds
+changes nothing, and the journal records only what changed. An update of
+an open task with nothing left to change exits 1; a reopen still opens
+the task.
 
 A subtask can repeat as well. Its `done` moves its due date on and
 leaves it open, so its parent stays open too. `done` on the parent

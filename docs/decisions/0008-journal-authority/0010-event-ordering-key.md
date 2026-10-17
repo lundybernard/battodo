@@ -42,20 +42,30 @@ reviews this sub-choice in the PR.
 ## Options
 
 ### Option 1 — `(occurred_at, event_id)` composite key (chosen)
-- [pro] Order travels with the event, so merged logs sort without knowing which file they came from
-- [pro] Total and deterministic — the uuid tiebreak means no two events ever compare equal
+
+- [pro] Order travels with the event, so merged logs sort without knowing which
+  file they came from
+- [pro] Total and deterministic — the uuid tiebreak means no two events ever
+  compare equal
 - [pro] Both fields already exist in the envelope; nothing new is written
-- [con] Order now depends on device clocks, so a badly skewed clock misplaces events
+- [con] Order now depends on device clocks, so a badly skewed clock misplaces
+  events
 
 ### Option 2 — Keep line-number `seq` as the order
+
 - [pro] Status quo; costs nothing and is trivially total within one file
-- [con] Two devices appending offline assign identical numbers to different events, with no way to resolve the collision
+- [con] Two devices appending offline assign identical numbers to different
+  events, with no way to resolve the collision
 - [con] Ties the order to file position, which rewrite-on-reconcile invalidates
 
 ### Option 3 — Hybrid logical clocks
-- [pro] Preserves causal order even under clock skew — the correct answer for a real distributed system
-- [con] Overkill at human todo volume: a handful of events a day, from devices whose clocks are NTP-synced anyway
-- [con] Adds a clock to maintain and reason about, for a failure mode a uuid tiebreak already handles well enough
+
+- [pro] Preserves causal order even under clock skew — the correct answer for a
+  real distributed system
+- [con] Overkill at human todo volume: a handful of events a day, from devices
+  whose clocks are NTP-synced anyway
+- [con] Adds a clock to maintain and reason about, for a failure mode a uuid
+  tiebreak already handles well enough
 
 ## Rationale
 

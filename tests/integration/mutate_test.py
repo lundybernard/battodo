@@ -117,6 +117,8 @@ OWNER_SNAPSHOT = {
         },
     ],
 }
+# The fields the recurring task rr01ab gains at its completion on TODAY.
+RR01AB_GAINED = {'DUE': '2026-08-15', 'ADDED': '2026-08-08'}
 
 
 # A list of chores with repeating steps. The titles name the role each
@@ -1731,6 +1733,30 @@ class CompletionTests(TestCase):
                 ],
             )
 
+        with t.subTest('a recurrence records its next due date and ADDED'):
+            completed = completion_of(t.source, 'A subtask that does not')
+
+            _, ret = completed.events
+
+            t.assertEqual(
+                ret.payload['delta'],
+                {
+                    'done': [False, True],
+                    'DUE': ['2026-08-05', '2026-08-15'],
+                    'ADDED': [None, '2026-08-08'],
+                },
+            )
+
+        with t.subTest('a repeating subtask records its next due date alone'):
+            completed = completion_of(a_stepped_source(t), 'rs01ab')
+
+            (ret,) = completed.events
+
+            t.assertEqual(
+                ret.payload['delta'],
+                {'done': [False, True], 'DUE': ['2026-08-05', '2026-08-15']},
+            )
+
         with t.subTest('a checklist item lands on its owner stream'):
             completed = completion_of(t.source, 'A checklist item')
 
@@ -2156,6 +2182,11 @@ class SuppliedEditTests(TestCase):
             ret = t.se.changed
             t.assertEqual(ret, {'P': '5', 'REPEAT': None})
 
+        with t.subTest('a due date and tags of None clear each field'):
+            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
+            ret = t.se.changed
+            t.assertEqual(ret, {'P': '5', 'DUE': None, 'TAGS': None})
+
         refused = {
             'a value that does not read': (
                 {'DUE': 'x'},
@@ -2167,15 +2198,36 @@ class SuppliedEditTests(TestCase):
                 RepeatError,
                 "unrecognised REPEAT value: ''",
             ),
+            'a priority of None, which is no clear': (
+                {'P': 'None'},
+                ValueError,
+                "P must be a whole number, not 'None'",
+            ),
         }
         for name, (fields, error, message) in refused.items():
             with t.subTest(name), t.assertRaisesRegex(error, message):
                 t.se.fields = fields
                 _ = t.se.changed
 
+    def test_cleared(t) -> None:
+        with t.subTest('none, where no field names the clear token'):
+            ret = t.se.cleared
+            t.assertEqual(ret, [])
+
+        with t.subTest('each due date, repeat and tags it names'):
+            t.se.fields = {'DUE': 'None', 'REPEAT': 'None', 'TAGS': 'None'}
+            ret = t.se.cleared
+            t.assertEqual(ret, ['DUE', 'REPEAT', 'TAGS'])
+
     def test_supplied(t) -> None:
-        ret = t.se.supplied
-        t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+        with t.subTest('the named fields, read'):
+            ret = t.se.supplied
+            t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
+
+        with t.subTest('a cleared field is left out'):
+            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
+            ret = t.se.supplied
+            t.assertEqual(ret.ordered, {'P': '5'})
 
     def test_checked_title(t) -> None:
         with t.subTest('the named title'):
@@ -2234,6 +2286,16 @@ class SuppliedEditTests(TestCase):
             'a clear of a field the task does not carry is not': (
                 t.bare,
                 {'REPEAT': 'None'},
+                {},
+            ),
+            'a clear of a due date and tags the task carries is a change': (
+                t.node,
+                {'DUE': 'None', 'TAGS': 'None'},
+                {'DUE': None, 'TAGS': None},
+            ),
+            'a clear of a due date and tags it does not carry is not': (
+                t.bare,
+                {'DUE': 'None', 'TAGS': 'None'},
                 {},
             ),
         }
@@ -2367,6 +2429,26 @@ class CompletionLinesTests(TestCase):
         for name, (lines, expected) in cases.items():
             with t.subTest(name):
                 ret = lines.stamps
+                t.assertEqual(ret, expected)
+
+    def test_recurrence_fields(t) -> None:
+        cases = {
+            'a top-level recurrence: its next due date, the day as ADDED': (
+                lines_of(t.source, 'A subtask that does not'),
+                {'DUE': '2026-08-15', 'ADDED': '2026-08-08'},
+            ),
+            'a repeating subtask: its next due date alone': (
+                lines_of(t.stepped, 'rs01ab'),
+                {'DUE': '2026-08-15'},
+            ),
+            'none without a recurrence': (
+                lines_of(t.source, 'A subtask of it'),
+                {},
+            ),
+        }
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                ret = lines.recurrence_fields
                 t.assertEqual(ret, expected)
 
     def test_checked_off(t) -> None:
@@ -2554,16 +2636,18 @@ class TaskCompletionTests(TestCase):
                 record_of(t.source, '9o71lx'),
                 {'done': [False, True]},
             ),
-            'a top-level recurrence: its new due date and ADDED': (
-                record_of(t.source, 'rr01ab', date(2026, 8, 15)),
+            'a recurrence: each field it gains, against its own': (
+                record_of(t.source, 'rr01ab', RR01AB_GAINED),
                 {
                     'done': [False, True],
                     'DUE': ['2026-08-05', '2026-08-15'],
                     'ADDED': [None, '2026-08-08'],
                 },
             ),
-            'a rescheduled subtask: its new due date alone': (
-                record_of(a_stepped_source(t), 'os01ab', date(2026, 9, 5)),
+            'a rescheduled subtask: the one field it gains': (
+                record_of(
+                    a_stepped_source(t), 'os01ab', {'DUE': '2026-09-05'}
+                ),
                 {
                     'done': [False, True],
                     'DUE': ['2026-08-05', '2026-09-05'],
@@ -2581,7 +2665,7 @@ class TaskCompletionTests(TestCase):
 
     def test_payload(t) -> None:
         with t.subTest('the delta, the task as it was, its path, its day'):
-            record = record_of(t.source, 'rr01ab', date(2026, 8, 15))
+            record = record_of(t.source, 'rr01ab', RR01AB_GAINED)
 
             ret = record.payload
 
@@ -2705,13 +2789,14 @@ def lines_of(
 def record_of(
     source: Path,
     selector: str,
-    rescheduled: date | None = None,
+    recurrence_fields: dict[str, str] | None = None,
     scratched: bool = False,
 ) -> TaskCompletion:
     """The record of a close of the task `selector` names, on TODAY."""
     ancestry = Ancestry(Task(source, selector, TODAY).ancestry)
+    gained = recurrence_fields or {}
     return TaskCompletion(
-        ancestry, rescheduled, TODAY, 'a-list', scratched=scratched
+        ancestry, gained, TODAY, 'a-list', scratched=scratched
     )
 
 

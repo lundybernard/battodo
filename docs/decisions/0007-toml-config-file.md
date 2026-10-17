@@ -23,23 +23,34 @@ battodo's config file is TOML, read through batconf's `TomlSource`.
 ## Options
 
 ### Option 1 — TOML via `TomlSource` (chosen)
-- [pro] Stdlib `tomllib` on Python 3.11+ — no runtime dependency on the interpreters battodo mostly runs on
-- [pro] The repo already speaks TOML (`pyproject.toml`), so contributors need no second config dialect
+
+- [pro] Stdlib `tomllib` on Python 3.11+ — no runtime dependency on the
+  interpreters battodo mostly runs on
+- [pro] The repo already speaks TOML (`pyproject.toml`), so contributors need no
+  second config dialect
 - [pro] ADR 0006 named `TomlSource` specifically as the thing being waited on
-- [con] `tomllib` is 3.11+; battodo's floor is 3.10, where `TomlSource` falls back to the third-party `toml` package via the `batconf[toml]` extra
+- [con] `tomllib` is 3.11+; battodo's floor is 3.10, where `TomlSource` falls
+  back to the third-party `toml` package via the `batconf[toml]` extra
 
 ### Option 2 — YAML via `YamlSource`
-- [pro] batconf's historic default was `config.yaml`, so it is the path of least surprise for batconf users
-- [con] Needs `pyyaml` as a new runtime dependency on *every* supported interpreter, not just the floor
+
+- [pro] batconf's historic default was `config.yaml`, so it is the path of least
+  surprise for batconf users
+- [con] Needs `pyyaml` as a new runtime dependency on *every* supported
+  interpreter, not just the floor
 - [con] Adds a third config dialect to a repo that already writes TOML
 
 ### Option 3 — INI via `IniSource`
+
 - [pro] Stdlib `configparser` everywhere, no extra and no version condition
-- [con] Weak nesting, and every value arrives as a string — the layered config would have to hand-parse its own types
+- [con] Weak nesting, and every value arrives as a string — the layered config
+  would have to hand-parse its own types
 
 ### Option 4 — Stay env-var-only
+
 - [pro] Simplest; no new source, no dependency question at all
-- [con] Leaves ADR 0006's configuration ergonomics permanently on env vars, which is the friction that ADR deferred rather than accepted
+- [con] Leaves ADR 0006's configuration ergonomics permanently on env vars,
+  which is the friction that ADR deferred rather than accepted
 
 ## Rationale
 

@@ -96,21 +96,32 @@ lists. It correctly excludes `SCHEMA.md`, `CLAUDE.md`, `completed.md`
 ## Options
 
 ### Option 1 — Hybrid: markdown authoritative, journal recorded alongside (chosen)
-- [pro] Zero migration risk; hand-editing, Syncthing, and the live SessionStart hook keep working unchanged
-- [pro] Starts accumulating real event data immediately, which is what makes a later flip evaluable rather than theoretical
-- [con] Two representations to keep consistent; btodo must be round-trip-safe or it corrupts hand-edited files, and the journal is knowingly incomplete meanwhile
+
+- [pro] Zero migration risk; hand-editing, Syncthing, and the live SessionStart
+  hook keep working unchanged
+- [pro] Starts accumulating real event data immediately, which is what makes a
+  later flip evaluable rather than theoretical
+- [con] Two representations to keep consistent; btodo must be round-trip-safe or
+  it corrupts hand-edited files, and the journal is knowingly incomplete
+  meanwhile
 
 ### Option 2 — Markdown files in place, no journal
+
 - [pro] Simplest possible; nothing new to maintain
-- [con] Produces no event data and no audit trail, so the event-log question stays permanently theoretical
+- [con] Produces no event data and no audit trail, so the event-log question
+  stays permanently theoretical
 
 ### Option 3 — Immutable event log authoritative from day one
+
 - [pro] The end-state design, reached directly with no hybrid era
-- [con] Breaks hand-editing and the live hook on day one — unacceptable for a system in daily use — and is the biggest build before any usable feature ships
+- [con] Breaks hand-editing and the live hook on day one — unacceptable for a
+  system in daily use — and is the biggest build before any usable feature ships
 
 ### Option 4 — SQLite
+
 - [pro] Real query and transaction semantics
-- [con] Breaks hand-editing and clean file sync; binary blobs conflict badly under Syncthing
+- [con] Breaks hand-editing and clean file sync; binary blobs conflict badly
+  under Syncthing
 
 ## Rationale
 

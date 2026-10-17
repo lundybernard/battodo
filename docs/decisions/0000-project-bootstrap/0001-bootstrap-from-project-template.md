@@ -20,17 +20,22 @@ Every generalizable fix is upstreamed to the template.
 ## Options
 
 ### Option 1 — lundybernard/project_template
+
 - [pro] The author owns it; every fix upstreams directly, which is the point
 - [pro] Pinned-snapshot import makes later template diffs easy
 - [con] Stale: poetry, old Python floor, dead CI — modernization is real work
 
 ### Option 2 — scientific-python/cookie via copier
+
 - [pro] Modern, maintained, reproducible scaffold (used for batconf-tui)
-- [con] Upstreaming goes through external review; doesn't serve the template-improvement goal
+- [con] Upstreaming goes through external review; doesn't serve the
+  template-improvement goal
 
 ### Option 3 — monorepo fork (minimal CLI template)
+
 - [pro] Structurally closest to a CLI app (src layout, typer, ruff ALL)
-- [con] Upstream isn't the author's; conflicts with the argparse decision (ADR 0003)
+- [con] Upstream isn't the author's; conflicts with the argparse decision (ADR
+  0003)
 
 ## Rationale
 
