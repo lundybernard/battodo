@@ -298,52 +298,25 @@ class TodoDocument:
 
     @cached_property
     def tasks(self) -> list[TaskNode]:
-        """The open-section task tree, in file order."""
+        """The open-section task tree, in file order.
+
+        Each node goes under the nearest earlier node of its section
+        with a lower indent. A node with none is a top-level task.
+        """
         tasks: list[TaskNode] = []
-        in_open = False
-        # stack of (indent, task) for the current ancestry
-        stack: list[tuple[int, TaskNode]] = []
-
-        for index, raw in enumerate(self.lines):
-            stripped = raw.strip()
-
-            if stripped == OPEN_HEADING:
-                in_open = True
-                stack = []
-                continue
-            if stripped.startswith('## '):
-                in_open = False
-                stack = []
-                continue
-            if not in_open:
-                continue
-
-            match = CHECKBOX_RE.match(raw)
-            if match is None:
-                if stripped and not stripped.startswith('<!--') and stack:
-                    stack[-1][1].note_indices.append(index)
-                    stack[-1][1].description_lines.append(stripped)
-                continue
-
-            indent = len(match.group(1))
-            body = match.group(3)
-            task = TaskNode(
-                raw_index=index,
-                indent=indent,
-                done=match.group(2) in 'xX',
-                title=_clean_title(body),
-                fields=_parse_fields(body),
-                raw=raw,
-            )
-
-            while stack and stack[-1][0] >= indent:
-                stack.pop()
-            if stack:
-                stack[-1][1].children.append(task)
-            else:
-                tasks.append(task)
-            stack.append((indent, task))
-
+        for nodes in self.section_nodes:
+            for position, node in enumerate(nodes):
+                above = reversed(nodes[:position])
+                parent = next(
+                    (
+                        earlier
+                        for earlier in above
+                            if earlier.indent < node.indent
+                    ),
+                    None,
+                )  # fmt: skip
+                siblings = tasks if parent is None else parent.children
+                siblings.append(node)
         return tasks
 
     @property
