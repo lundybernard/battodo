@@ -41,6 +41,288 @@ DESCRIPTION_INDENT = len('- [ ] ')
 ANCESTRY_SEPARATOR = ' > '
 
 
+class TodoDocument:
+    """One SCHEMA.md-format todo list, held as the text it was read from.
+
+    Tasks record only indices into `lines`, the document's editable
+    state, so `text` gives the source back byte for byte until a write.
+    The document performs every edit of a list itself: `set_fields`,
+    `set_field`, `set_title` and `mark_done` rewrite one raw line where
+    it stands, `append_open` and `insert` add a line,
+    `insert_description` adds description lines, `set_description`
+    replaces them, and `drop` removes lines. An edit leaves `tasks` as it
+    was read.
+    """
+
+    def __init__(self, source: str) -> None:
+        self.source = source
+
+    @cached_property
+    def lines(self) -> list[str]:
+        """The source text, split into verbatim lines."""
+        return self.source.split('\n')
+
+    @cached_property
+    def tasks(self) -> list['TaskNode']:
+        """The open-section task tree, in file order.
+
+        Each node goes under the nearest earlier node of its section
+        with a lower indent. A node with none is a top-level task.
+        """
+        tasks: list[TaskNode] = []
+        for nodes in self.section_nodes:
+            for position, node in enumerate(nodes):
+                above = reversed(nodes[:position])
+                parent = next(
+                    (
+                        earlier
+                        for earlier in above
+                            if earlier.indent < node.indent
+                    ),
+                    None,
+                )  # fmt: skip
+                siblings = tasks if parent is None else parent.children
+                siblings.append(node)
+        return tasks
+
+    @property
+    def section_nodes(self) -> list[list['TaskNode']]:
+        """A node per task line, one list per `## Open` section.
+
+        Each list is flat and in file order. A note line goes on the
+        nearest task line above it in its section; a note line with no
+        task above it is dropped.
+        """
+        return [section.nodes for section in self.sections]
+
+    @property
+    def sections(self) -> list['Section']:
+        """A `Section` per `## Open` heading, in file order."""
+        return [Section(self.lines, indices) for indices in self.open_sections]
+
+    @property
+    def open_sections(self) -> list[list[int]]:
+        """The line indices under each `## Open` heading, in file order.
+
+        A section ends at the next `## ` heading or at the end of the
+        file.
+        """
+        bounds = [*self.heading_indices, len(self.lines)]
+        return [
+            list(range(start + 1, stop))
+            for start, stop in pairwise(bounds)
+                if self.lines[start].strip() == OPEN_HEADING
+        ]  # fmt: skip
+
+    @property
+    def heading_indices(self) -> list[int]:
+        """The index of every `## ` heading line, in file order."""
+        return [
+            index
+            for index, line in enumerate(self.lines)
+                if line.strip().startswith('## ')
+        ]  # fmt: skip
+
+    @property
+    def ancestries(self) -> list[list['TaskNode']]:
+        """Every open task at any depth, each with its ancestry.
+
+        In file order. Each ancestry runs from a top-level task down.
+        """
+        return [
+            ancestry
+            for task in self.tasks
+            for ancestry in task.ancestries
+        ]  # fmt: skip
+
+    @property
+    def text(self) -> str:
+        """The list as it stands; the source until a method writes."""
+        return '\n'.join(self.lines)
+
+    def set_fields(self, index: int, fields: Mapping[str, str | None]) -> str:
+        """Set each of `fields` on the line at `index`, in order.
+
+        Returns
+        -------
+        str
+            The edited line.
+        """
+        for name, value in fields.items():
+            self.set_field(index, name, value)
+        return self.lines[index]
+
+    def set_field(self, index: int, name: str, value: str | None) -> str:
+        """Set `name` to `value` on the line at `index`.
+
+        An existing field is replaced where it stands; a new one is
+        appended after the last field. Either way every other field
+        keeps its position, which is what the round-trip guarantee
+        rests on -- field order varies line to line in hand-edited
+        files. A None value removes each copy of the field and the space
+        before it.
+
+        Returns
+        -------
+        str
+            The edited line.
+        """
+        raw = self.lines[index]
+        field = rf'\[{name}:[^\]]*\]'
+        if value is None:
+            edited = re.sub(f' ?{field}', '', raw)
+        else:
+            written = f'[{name}:{value}]'
+            found = re.search(field, raw)
+            if found:
+                edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
+            else:
+                edited = f'{raw.rstrip()} {written}'
+        self.lines[index] = edited
+        return edited
+
+    def set_title(self, index: int, title: str) -> str:
+        """Replace the title of the task line at `index`.
+
+        Only the text before the first field changes.
+
+        Returns
+        -------
+        str
+            The edited line.
+
+        Raises
+        ------
+        ValueError
+            The line is not a task line. A note or a heading carries no
+            title to set.
+        """
+        raw = self.lines[index]
+        match = CHECKBOX_RE.match(raw)
+        if match is None:
+            raise ValueError(f'not a task line: {raw!r}')
+        indent, mark, body = match.groups()
+        found = FIELD_RE.search(body)
+        tail = body[found.start() :] if found else ''
+        edited = f'{indent}- [{mark}] {f"{title} {tail}".rstrip()}'
+        self.lines[index] = edited
+        return edited
+
+    def append_open(self, entry: str) -> int:
+        """Insert `entry` as the last entry of the `## Open` section.
+
+        Returns
+        -------
+        int
+            The index `entry` now occupies.
+
+        Raises
+        ------
+        StopIteration
+            There is no `## Open` heading. Carrying one is what makes a
+            file a todo list at all, so `discover_lists` has already
+            ruled this out for every caller that goes through it.
+        """
+        index = self.open_end
+        self.insert(index, entry)
+        return index
+
+    @property
+    def open_end(self) -> int:
+        """Where an entry appended to the `## Open` section goes.
+
+        After the last non-blank line of the section, so the entry
+        follows whatever the previous item ended with -- its notes, its
+        children -- and the blank run before the next heading stays
+        where it is.
+
+        Raises
+        ------
+        StopIteration
+            There is no `## Open` heading.
+        """
+        start = next(
+            index
+            for index, line in enumerate(self.lines)
+                if line.strip() == OPEN_HEADING
+        )  # fmt: skip
+        stop = len(self.lines)
+        end = next(
+            (
+                index
+                for index in range(start + 1, stop)
+                    if self.lines[index].strip().startswith('## ')
+            ),
+            stop,
+        )  # fmt: skip
+        # `start` is itself non-blank, so an empty section appends
+        # directly under the heading rather than falling off the front
+        # of the file.
+        last = max(
+            index
+            for index in range(start, end)
+                if self.lines[index].strip()
+        )  # fmt: skip
+        return last + 1
+
+    def insert(self, index: int, line: str) -> None:
+        """Insert `line` at `index`. Every later line moves down one."""
+        self.lines.insert(index, line)
+
+    def insert_description(self, index: int, lines: list[str]) -> None:
+        """Insert `lines` as description lines of the task line at `index`.
+
+        They go directly under the task line, in order, each indented
+        DESCRIPTION_INDENT past the task line's own indent.
+        """
+        raw = self.lines[index]
+        indent = raw[: len(raw) - len(raw.lstrip())]
+        lead = indent + ' ' * DESCRIPTION_INDENT
+        for offset, line in enumerate(lines, start=1):
+            self.insert(index + offset, f'{lead}{line}')
+
+    def set_description(self, node: 'TaskNode', lines: list[str]) -> None:
+        """Replace the description lines of `node` with `lines`.
+
+        `node` is a task as this document read it.
+        """
+        self.drop(set(node.note_indices))
+        self.insert_description(node.raw_index, lines)
+
+    def drop(self, indices: set[int]) -> None:
+        """Remove the lines at `indices`.
+
+        Items are separated by a blank line in some lists and not in
+        others, so only when the removal would leave two blank lines
+        together does the one after the removed span go too.
+        """
+        if not indices:
+            return
+        before, after = min(indices) - 1, max(indices) + 1
+        blank_pair = (
+            before >= 0
+            and after < len(self.lines)
+            and not self.lines[before].strip()
+            and not self.lines[after].strip()
+        )
+        gone = indices | {after} if blank_pair else indices
+        self.lines[:] = [
+            line
+            for index, line in enumerate(self.lines)
+                if index not in gone
+        ]  # fmt: skip
+
+    def mark_done(self, index: int) -> None:
+        """Check the box of the task line at `index`."""
+        self.lines[index] = self.lines[index].replace('- [ ]', '- [x]', 1)
+
+    def mark_open(self, index: int) -> None:
+        """Clear the box of the task line at `index`, either case of x."""
+        self.lines[index] = re.sub(
+            r'^(\s*- \[)[xX]\]', r'\1 ]', self.lines[index]
+        )
+
+
 @dataclass
 class TaskNode:
     """One `- [ ]` line, plus its children and note lines.
@@ -239,322 +521,24 @@ class TaskNode:
             raise ValueError('a checklist item takes no attributes')
 
 
-class Ancestry:
-    """A task and every task above it, outermost first."""
-
-    def __init__(self, tasks: list[TaskNode]) -> None:
-        self.tasks = tasks
-
-    @property
-    def node(self) -> TaskNode:
-        """The task the ancestry ends at."""
-        return self.tasks[-1]
-
-    @property
-    def nested(self) -> bool:
-        """Whether the task sits below another task, at any depth."""
-        return len(self.tasks) > 1
-
-    @property
-    def path(self) -> str:
-        """The `Parent > Child` path SCHEMA.md logs a nested task under."""
-        return ANCESTRY_SEPARATOR.join(task.title for task in self.tasks)
-
-    @property
-    def stream(self) -> TaskNode:
-        """The task whose event stream owns a write to the last task.
-
-        Usually that task itself. A checklist item cannot hold an
-        `[ID:]`, so its events are recorded against the nearest ancestor
-        that can -- at worst the top-level task, which never is one.
-        """
-        return next(
-            task
-            for task in reversed(self.tasks)
-                if not task.is_checklist_item
-        )  # fmt: skip
+def join_description(lines: list[str]) -> str | None:
+    """The description `lines` hold, joined by newlines, or None if none."""
+    return '\n'.join(lines) or None
 
 
-class TodoDocument:
-    """One SCHEMA.md-format todo list, held as the text it was read from.
+def parse_date(value: str | None) -> date | None:
+    """Parse an ISO date field, tolerating placeholders.
 
-    Tasks record only indices into `lines`, the document's editable
-    state, so `text` gives the source back byte for byte until a write.
-    The document performs every edit of a list itself: `set_fields`,
-    `set_field`, `set_title` and `mark_done` rewrite one raw line where
-    it stands, `append_open` and `insert` add a line,
-    `insert_description` adds description lines, `set_description`
-    replaces them, and `drop` removes lines. An edit leaves `tasks` as it
-    was read.
+    Hand-edited files and templates carry literal placeholder text such
+    as `[DUE:YYYY-MM-DD]`. Reading one must never raise: btodo operates
+    on files people type into by hand.
     """
-
-    def __init__(self, source: str) -> None:
-        self.source = source
-
-    @cached_property
-    def lines(self) -> list[str]:
-        """The source text, split into verbatim lines."""
-        return self.source.split('\n')
-
-    @cached_property
-    def tasks(self) -> list[TaskNode]:
-        """The open-section task tree, in file order.
-
-        Each node goes under the nearest earlier node of its section
-        with a lower indent. A node with none is a top-level task.
-        """
-        tasks: list[TaskNode] = []
-        for nodes in self.section_nodes:
-            for position, node in enumerate(nodes):
-                above = reversed(nodes[:position])
-                parent = next(
-                    (
-                        earlier
-                        for earlier in above
-                            if earlier.indent < node.indent
-                    ),
-                    None,
-                )  # fmt: skip
-                siblings = tasks if parent is None else parent.children
-                siblings.append(node)
-        return tasks
-
-    @property
-    def section_nodes(self) -> list[list[TaskNode]]:
-        """A node per task line, one list per `## Open` section.
-
-        Each list is flat and in file order. A note line goes on the
-        nearest task line above it in its section; a note line with no
-        task above it is dropped.
-        """
-        return [section.nodes for section in self.sections]
-
-    @property
-    def sections(self) -> list['Section']:
-        """A `Section` per `## Open` heading, in file order."""
-        return [Section(self.lines, indices) for indices in self.open_sections]
-
-    @property
-    def open_sections(self) -> list[list[int]]:
-        """The line indices under each `## Open` heading, in file order.
-
-        A section ends at the next `## ` heading or at the end of the
-        file.
-        """
-        bounds = [*self.heading_indices, len(self.lines)]
-        return [
-            list(range(start + 1, stop))
-            for start, stop in pairwise(bounds)
-                if self.lines[start].strip() == OPEN_HEADING
-        ]  # fmt: skip
-
-    @property
-    def heading_indices(self) -> list[int]:
-        """The index of every `## ` heading line, in file order."""
-        return [
-            index
-            for index, line in enumerate(self.lines)
-                if line.strip().startswith('## ')
-        ]  # fmt: skip
-
-    @property
-    def ancestries(self) -> list[list[TaskNode]]:
-        """Every open task at any depth, each with its ancestry.
-
-        In file order. Each ancestry runs from a top-level task down.
-        """
-        return [
-            ancestry
-            for task in self.tasks
-            for ancestry in task.ancestries
-        ]  # fmt: skip
-
-    @property
-    def text(self) -> str:
-        """The list as it stands; the source until a method writes."""
-        return '\n'.join(self.lines)
-
-    def set_fields(self, index: int, fields: Mapping[str, str | None]) -> str:
-        """Set each of `fields` on the line at `index`, in order.
-
-        Returns
-        -------
-        str
-            The edited line.
-        """
-        for name, value in fields.items():
-            self.set_field(index, name, value)
-        return self.lines[index]
-
-    def set_field(self, index: int, name: str, value: str | None) -> str:
-        """Set `name` to `value` on the line at `index`.
-
-        An existing field is replaced where it stands; a new one is
-        appended after the last field. Either way every other field
-        keeps its position, which is what the round-trip guarantee
-        rests on -- field order varies line to line in hand-edited
-        files. A None value removes each copy of the field and the space
-        before it.
-
-        Returns
-        -------
-        str
-            The edited line.
-        """
-        raw = self.lines[index]
-        field = rf'\[{name}:[^\]]*\]'
-        if value is None:
-            edited = re.sub(f' ?{field}', '', raw)
-        else:
-            written = f'[{name}:{value}]'
-            found = re.search(field, raw)
-            if found:
-                edited = f'{raw[: found.start()]}{written}{raw[found.end() :]}'
-            else:
-                edited = f'{raw.rstrip()} {written}'
-        self.lines[index] = edited
-        return edited
-
-    def set_title(self, index: int, title: str) -> str:
-        """Replace the title of the task line at `index`.
-
-        Only the text before the first field changes.
-
-        Returns
-        -------
-        str
-            The edited line.
-
-        Raises
-        ------
-        ValueError
-            The line is not a task line. A note or a heading carries no
-            title to set.
-        """
-        raw = self.lines[index]
-        match = CHECKBOX_RE.match(raw)
-        if match is None:
-            raise ValueError(f'not a task line: {raw!r}')
-        indent, mark, body = match.groups()
-        found = FIELD_RE.search(body)
-        tail = body[found.start() :] if found else ''
-        edited = f'{indent}- [{mark}] {f"{title} {tail}".rstrip()}'
-        self.lines[index] = edited
-        return edited
-
-    def append_open(self, entry: str) -> int:
-        """Insert `entry` as the last entry of the `## Open` section.
-
-        Returns
-        -------
-        int
-            The index `entry` now occupies.
-
-        Raises
-        ------
-        StopIteration
-            There is no `## Open` heading. Carrying one is what makes a
-            file a todo list at all, so `discover_lists` has already
-            ruled this out for every caller that goes through it.
-        """
-        index = self.open_end
-        self.insert(index, entry)
-        return index
-
-    @property
-    def open_end(self) -> int:
-        """Where an entry appended to the `## Open` section goes.
-
-        After the last non-blank line of the section, so the entry
-        follows whatever the previous item ended with -- its notes, its
-        children -- and the blank run before the next heading stays
-        where it is.
-
-        Raises
-        ------
-        StopIteration
-            There is no `## Open` heading.
-        """
-        start = next(
-            index
-            for index, line in enumerate(self.lines)
-                if line.strip() == OPEN_HEADING
-        )  # fmt: skip
-        stop = len(self.lines)
-        end = next(
-            (
-                index
-                for index in range(start + 1, stop)
-                    if self.lines[index].strip().startswith('## ')
-            ),
-            stop,
-        )  # fmt: skip
-        # `start` is itself non-blank, so an empty section appends
-        # directly under the heading rather than falling off the front
-        # of the file.
-        last = max(
-            index
-            for index in range(start, end)
-                if self.lines[index].strip()
-        )  # fmt: skip
-        return last + 1
-
-    def insert(self, index: int, line: str) -> None:
-        """Insert `line` at `index`. Every later line moves down one."""
-        self.lines.insert(index, line)
-
-    def insert_description(self, index: int, lines: list[str]) -> None:
-        """Insert `lines` as description lines of the task line at `index`.
-
-        They go directly under the task line, in order, each indented
-        DESCRIPTION_INDENT past the task line's own indent.
-        """
-        raw = self.lines[index]
-        indent = raw[: len(raw) - len(raw.lstrip())]
-        lead = indent + ' ' * DESCRIPTION_INDENT
-        for offset, line in enumerate(lines, start=1):
-            self.insert(index + offset, f'{lead}{line}')
-
-    def set_description(self, node: TaskNode, lines: list[str]) -> None:
-        """Replace the description lines of `node` with `lines`.
-
-        `node` is a task as this document read it.
-        """
-        self.drop(set(node.note_indices))
-        self.insert_description(node.raw_index, lines)
-
-    def drop(self, indices: set[int]) -> None:
-        """Remove the lines at `indices`.
-
-        Items are separated by a blank line in some lists and not in
-        others, so only when the removal would leave two blank lines
-        together does the one after the removed span go too.
-        """
-        if not indices:
-            return
-        before, after = min(indices) - 1, max(indices) + 1
-        blank_pair = (
-            before >= 0
-            and after < len(self.lines)
-            and not self.lines[before].strip()
-            and not self.lines[after].strip()
-        )
-        gone = indices | {after} if blank_pair else indices
-        self.lines[:] = [
-            line
-            for index, line in enumerate(self.lines)
-                if index not in gone
-        ]  # fmt: skip
-
-    def mark_done(self, index: int) -> None:
-        """Check the box of the task line at `index`."""
-        self.lines[index] = self.lines[index].replace('- [ ]', '- [x]', 1)
-
-    def mark_open(self, index: int) -> None:
-        """Clear the box of the task line at `index`, either case of x."""
-        self.lines[index] = re.sub(
-            r'^(\s*- \[)[xX]\]', r'\1 ]', self.lines[index]
-        )
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -699,29 +683,45 @@ class TaskLine:
         return _parse_fields(self.body)
 
 
-def parse_date(value: str | None) -> date | None:
-    """Parse an ISO date field, tolerating placeholders.
-
-    Hand-edited files and templates carry literal placeholder text such
-    as `[DUE:YYYY-MM-DD]`. Reading one must never raise: btodo operates
-    on files people type into by hand.
-    """
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def join_description(lines: list[str]) -> str | None:
-    """The description `lines` hold, joined by newlines, or None if none."""
-    return '\n'.join(lines) or None
+def _clean_title(body: str) -> str:
+    return FIELD_RE.sub('', body).strip()
 
 
 def _parse_fields(text: str) -> dict[str, str]:
     return {m.group(1): m.group(2) for m in FIELD_RE.finditer(text)}
 
 
-def _clean_title(body: str) -> str:
-    return FIELD_RE.sub('', body).strip()
+class Ancestry:
+    """A task and every task above it, outermost first."""
+
+    def __init__(self, tasks: list[TaskNode]) -> None:
+        self.tasks = tasks
+
+    @property
+    def node(self) -> TaskNode:
+        """The task the ancestry ends at."""
+        return self.tasks[-1]
+
+    @property
+    def nested(self) -> bool:
+        """Whether the task sits below another task, at any depth."""
+        return len(self.tasks) > 1
+
+    @property
+    def path(self) -> str:
+        """The `Parent > Child` path SCHEMA.md logs a nested task under."""
+        return ANCESTRY_SEPARATOR.join(task.title for task in self.tasks)
+
+    @property
+    def stream(self) -> TaskNode:
+        """The task whose event stream owns a write to the last task.
+
+        Usually that task itself. A checklist item cannot hold an
+        `[ID:]`, so its events are recorded against the nearest ancestor
+        that can -- at worst the top-level task, which never is one.
+        """
+        return next(
+            task
+            for task in reversed(self.tasks)
+                if not task.is_checklist_item
+        )  # fmt: skip
