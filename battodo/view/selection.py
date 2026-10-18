@@ -90,7 +90,7 @@ class Selection:
             rank_due_curve=conf.view.rank_due_curve,
         )
 
-    @cached_property
+    @property
     def today(self) -> date:
         return self.now.date()
 
@@ -125,17 +125,17 @@ class Selection:
             names.add('chores')
         return names
 
-    @cached_property
+    @property
     def weekday(self) -> bool:
         """Whether the clock falls on a working day of the week."""
         return self.day < 5
 
-    @cached_property
+    @property
     def day(self) -> int:
         """Which day of the week the clock falls on. Monday is 0."""
         return self.now.weekday()
 
-    @cached_property
+    @property
     def hour(self) -> int:
         """The hour of the day the clock reads."""
         return self.now.hour

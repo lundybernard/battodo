@@ -117,11 +117,9 @@ class SelectionTests(TestCase):
             t.assertTrue(ret)
 
         with t.subTest('and one it does not'):
-            t.s.__dict__.pop('weekday', None)
-            t.s.day = 5
-
+            # 2026-08-08 is a Saturday.
+            t.s.now = at('2026-08-08T10:30')
             ret = t.s.weekday
-
             t.assertFalse(ret)
 
     def test_day(t) -> None:
