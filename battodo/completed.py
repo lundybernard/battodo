@@ -319,12 +319,16 @@ class RecordView:
 
         The attributes follow the title in its cell.
         """
-        raise NotImplementedError
+        title = self.record.title
+        attributes = self.attributes
+        task = f'{title} {attributes}' if attributes else title
+        return (self.record.day.isoformat(), task)
 
     @property
     def attributes(self) -> str:
         """Each attribute as `key=value`, in the order logged."""
-        raise NotImplementedError
+        pairs = (f'{key}={value}' for key, value in self.record.attrs.items())
+        return ', '.join(pairs)
 
 
 class DigestJsonView:
