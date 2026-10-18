@@ -283,7 +283,7 @@ class DigestView:
         Sized against every record at once, so one set of widths serves
         all of the tables and the columns line up down the whole page.
         """
-        cells = [record.cells for record in self.digest.records]
+        cells = [RecordView(record).cells for record in self.digest.records]
         return column_widths(COLUMNS, cells)
 
     @cached_property
@@ -293,7 +293,7 @@ class DigestView:
                 group.name,
                 COLUMNS,
                 ALIGN,
-                [record.cells for record in group.records],
+                [RecordView(record).cells for record in group.records],
                 self.widths,
             )
             for group in self.digest.groups

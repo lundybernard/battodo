@@ -389,13 +389,21 @@ class DigestViewTests(TestCase):
             'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
         )
 
-    def test_widths(t) -> None:
+    @patch(f'{SRC}.RecordView', autospec=True)
+    def test_widths(t, record_view: MagicMock) -> None:
         with t.subTest('each column as wide as its widest cell'):
+            record_view.return_value.cells = ('2026-08-02', 'A record cell')
             ret = t.v.widths
-            t.assertEqual(ret, [10, len('A record of another category')])
+            t.assertEqual(ret, [10, len('A record cell')])
+
+        with t.subTest('the cells of each record come from its view'):
+            t.assertEqual(
+                record_view.call_args_list,
+                [call(record) for record in t.records],
+            )
 
         with t.subTest('the column name counts too'):
-            t.digest.records = [Record(date(2026, 8, 5), 'work', 'Go')]
+            record_view.return_value.cells = ('2026-08-05', 'Go')
             ret = DigestView(t.digest).widths
             t.assertEqual(ret, [10, len('TASK')])
 
@@ -405,7 +413,9 @@ class DigestViewTests(TestCase):
             t.assertEqual(ret, [len('DATE'), len('TASK')])
 
     @patch(f'{SRC}.Table', autospec=True)
-    def test_tables(t, table: MagicMock) -> None:
+    @patch(f'{SRC}.RecordView', autospec=True)
+    def test_tables(t, record_view: MagicMock, table: MagicMock) -> None:
+        record_view.return_value.cells = ('2026-08-02', 'A record cell')
         t.v.widths = [10, 28]
 
         ret = t.v.tables
@@ -414,20 +424,24 @@ class DigestViewTests(TestCase):
         # of each record it holds.
         t.assertEqual(ret, [table.return_value] * 2)
         t.assertEqual(
+            record_view.call_args_list,
+            [call(record) for record in t.records],
+        )
+        t.assertEqual(
             table.call_args_list,
             [
                 call(
                     'work',
                     ('DATE', 'TASK'),
                     ('<', '<'),
-                    [('2026-07-30', 'A record of the week')],
+                    [('2026-08-02', 'A record cell')],
                     [10, 28],
                 ),
                 call(
                     'unlisted',
                     ('DATE', 'TASK'),
                     ('<', '<'),
-                    [('2026-08-02', 'A record of another category')],
+                    [('2026-08-02', 'A record cell')],
                     [10, 28],
                 ),
             ],
