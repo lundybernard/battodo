@@ -119,7 +119,14 @@ class RowView:
     @property
     def cells(self) -> tuple[str, ...]:
         """The five values a table shows, in the order its columns run."""
-        raise NotImplementedError
+        task = self.row.task
+        return (
+            f'{self.row.rank:.1f}',
+            f'{self.row.priority:.1f}',
+            '' if task.loe is None else str(task.loe),
+            f'{task.title}{self.badge}',
+            self.due_label,
+        )
 
     @property
     def badge(self) -> str:
@@ -128,7 +135,8 @@ class RowView:
         `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
         the count needs no plural.
         """
-        raise NotImplementedError
+        subtasks = self.row.subtasks
+        return f' (+{subtasks})' if subtasks else ''
 
     @property
     def due_label(self) -> str:
@@ -137,4 +145,15 @@ class RowView:
         Named apart from the stored `due` field, which `RowJsonView`
         publishes verbatim.
         """
-        raise NotImplementedError
+        due = self.row.task.due
+        if due is None:
+            return ''
+        parsed = self.row.parsed_due
+        if parsed is None:
+            # a placeholder such as YYYY-MM-DD: show it verbatim
+            return due
+        if parsed < self.row.today:
+            return 'OVERDUE'
+        if parsed == self.row.today:
+            return 'TODAY'
+        return due
