@@ -178,47 +178,6 @@ class DigestFromConfigTests(TestCase):
             t.assertEqual(digest.period, 'month')
 
 
-class RecordTests(TestCase):
-    """Unit tests for battodo.completed.Record."""
-
-    def setUp(t) -> None:
-        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
-
-    @patch.object(Record, 'attributes', new_callable=PropertyMock)
-    def test_cells(t, attributes: PropertyMock) -> None:
-        with t.subTest('the date and the title'):
-            attributes.return_value = ''
-            ret = t.r.cells
-            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
-
-        with t.subTest('the attributes follow the title'):
-            attributes.return_value = 'cost=45.00'
-
-            ret = t.r.cells
-
-            t.assertEqual(
-                ret,
-                ('2026-08-04', 'A parent > A record cost=45.00'),
-            )
-
-    def test_attributes(t) -> None:
-        with t.subTest('none'):
-            ret = t.r.attributes
-            t.assertEqual(ret, '')
-
-        with t.subTest('each as key=value, in the order logged'):
-            t.r = Record(
-                date(2026, 8, 4),
-                'chores',
-                'A parent > A record',
-                {'place': 'Main St, Suite 4', 'cost': '45.00'},
-            )
-
-            ret = t.r.attributes
-
-            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
-
-
 class ReadRecordTests(TestCase):
     """Unit tests for battodo.completed.read_record."""
 

@@ -178,22 +178,6 @@ class Record:
     title: str
     attrs: dict[str, str] = field(default_factory=dict)
 
-    @property
-    def cells(self) -> tuple[str, ...]:
-        """The record's two values, in COLUMNS order.
-
-        The attributes follow the title in its cell.
-        """
-        attributes = self.attributes
-        task = f'{self.title} {attributes}' if attributes else self.title
-        return (self.day.isoformat(), task)
-
-    @property
-    def attributes(self) -> str:
-        """Each attribute as `key=value`, in the order logged."""
-        pairs = (f'{key}={value}' for key, value in self.attrs.items())
-        return ', '.join(pairs)
-
 
 def read_record(line: str) -> Record | None:
     """One log line as a record, or None where it is not one.
