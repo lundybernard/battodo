@@ -5,6 +5,8 @@ from unittest.mock import Mock, PropertyMock, patch, sentinel
 
 from ..parser import (
     Ancestry,
+    Section,
+    TaskLine,
     TaskNode,
     TodoDocument,
     join_description,
@@ -610,6 +612,76 @@ class TodoDocumentTests(TestCase):
 
             t.assertEqual(outside_tasks, [])
 
+    @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
+    def test_section_nodes(t, open_sections: PropertyMock) -> None:
+        t.td.lines = [
+            '## Open',
+            '- [ ] First task [P:1]',
+            '      A note line.',
+            '<!-- A comment. -->',
+            '  - [x] A done child',
+            '',
+            '## Open',
+            'A note line before any task.',
+            '- [ ] Second task',
+        ]
+        open_sections.return_value = [[1, 2, 3, 4, 5], [7, 8]]
+
+        ret = t.td.section_nodes
+
+        with t.subTest('a node per task line, one list per section'):
+            first, child = ret[0]
+            (second,) = ret[1]
+            t.assertEqual(
+                first,
+                TaskNode(
+                    raw_index=1,
+                    indent=0,
+                    done=False,
+                    title='First task',
+                    fields={'P': '1'},
+                    raw='- [ ] First task [P:1]',
+                    # Default: children=[],
+                    note_indices=[2],
+                    description_lines=['A note line.'],
+                ),
+            )
+            t.assertEqual(
+                child,
+                TaskNode(
+                    raw_index=4,
+                    indent=2,
+                    done=True,
+                    title='A done child',
+                    fields={},
+                    raw='  - [x] A done child',
+                ),
+            )
+            t.assertEqual(second.raw_index, 8)
+
+        with t.subTest('a blank line or a comment is no note line'):
+            t.assertEqual(first.note_indices, [2])
+            t.assertEqual(child.note_indices, [])
+
+        with t.subTest('a note line before any task in a section is dropped'):
+            t.assertEqual(second.note_indices, [])
+            t.assertEqual(second.description_lines, [])
+
+    @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
+    def test_sections(t, open_sections: PropertyMock) -> None:
+        open_sections.return_value = [[1, 2], [5]]
+
+        ret = t.td.sections
+
+        with t.subTest('a section per list of Open line indices'):
+            t.assertEqual(
+                ret,
+                [Section(t.td.lines, [1, 2]), Section(t.td.lines, [5])],
+            )
+
+        with t.subTest('each one reads the lines of the document'):
+            t.assertIs(ret[0].lines, t.td.lines)
+
     def test_open_sections(t) -> None:
         with t.subTest('the line indices under the Open heading'):
             ret = t.td.open_sections
@@ -948,3 +1020,175 @@ class TodoDocumentTests(TestCase):
                 t.td.mark_open(1)
 
                 t.assertEqual(t.td.lines[1], expected)
+
+
+# A section that holds every kind of line a task note range meets.
+SECTION_LINES = [
+    '## Open',
+    'A note line before any task.',
+    '- [ ] A task [P:1]',
+    '      A note line.',
+    '<!-- A comment. -->',
+    '',
+    '      Another note line.',
+    '  - [x] A done subtask [LOE:2]',
+    '      A note of the subtask.',
+    '## Done',
+]
+SECTION_INDICES = list(range(1, 9))
+
+
+class SectionTests(TestCase):
+    """Unit tests for battodo.parser.Section."""
+
+    maxDiff = None
+
+    def setUp(t) -> None:
+        t.sn = Section(SECTION_LINES, SECTION_INDICES)
+
+    def test_nodes(t) -> None:
+        ret = t.sn.nodes
+
+        t.assertEqual(
+            ret,
+            [
+                TaskNode(
+                    raw_index=2,
+                    indent=0,
+                    done=False,
+                    title='A task',
+                    fields={'P': '1'},
+                    raw='- [ ] A task [P:1]',
+                    # Default: children=[],
+                    note_indices=[3, 6],
+                    description_lines=['A note line.', 'Another note line.'],
+                ),
+                TaskNode(
+                    raw_index=7,
+                    indent=2,
+                    done=True,
+                    title='A done subtask',
+                    fields={'LOE': '2'},
+                    raw='  - [x] A done subtask [LOE:2]',
+                    note_indices=[8],
+                    description_lines=['A note of the subtask.'],
+                ),
+            ],
+        )
+
+    def test_task_lines(t) -> None:
+        ret = t.sn.task_lines
+
+        t.assertEqual(
+            ret,
+            [
+                TaskLine(2, '- [ ] A task [P:1]'),
+                TaskLine(7, '  - [x] A done subtask [LOE:2]'),
+            ],
+        )
+
+    def test_notes(t) -> None:
+        ret = t.sn.notes
+        # The note before the first task line falls in no range.
+        t.assertEqual(ret, [[3, 6], [8]])
+
+    def test_stops(t) -> None:
+        with t.subTest('the next task line, then the end of the section'):
+            ret = t.sn.stops
+            t.assertEqual(ret, [7, 9])
+
+        with t.subTest('none, where the section is empty'):
+            t.sn.indices = []
+            ret = t.sn.stops
+            t.assertEqual(ret, [])
+
+    def test_end(t) -> None:
+        with t.subTest('the index after the last line of the section'):
+            ret = t.sn.end
+            t.assertEqual(ret, 9)
+
+        with t.subTest('0, where the section is empty'):
+            t.sn.indices = []
+            ret = t.sn.end
+            t.assertEqual(ret, 0)
+
+    def test_texts(t) -> None:
+        ret = t.sn.texts
+
+        # A blank line and a comment hold no text.
+        t.assertEqual(
+            ret,
+            {
+                1: 'A note line before any task.',
+                2: '- [ ] A task [P:1]',
+                3: 'A note line.',
+                6: 'Another note line.',
+                7: '- [x] A done subtask [LOE:2]',
+                8: 'A note of the subtask.',
+            },
+        )
+
+    def test_descriptions(t) -> None:
+        ret = t.sn.descriptions
+
+        t.assertEqual(
+            ret,
+            [
+                ['A note line.', 'Another note line.'],
+                ['A note of the subtask.'],
+            ],
+        )
+
+
+class TaskLineTests(TestCase):
+    """Unit tests for battodo.parser.TaskLine."""
+
+    def setUp(t) -> None:
+        t.tl = TaskLine(index=7, raw='  - [x] A done subtask [LOE:2] [P:1]')
+
+    def test_checkbox(t) -> None:
+        with t.subTest('the checkbox match of the task line'):
+            ret = t.tl.checkbox
+            t.assertEqual(
+                ret.groups(), ('  ', 'x', 'A done subtask [LOE:2] [P:1]')
+            )
+
+        with t.subTest('a line that is not a task line is refused'):
+            t.tl.raw = '      A note line.'
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.tl.checkbox
+
+            t.assertEqual(
+                str(caught.exception),
+                "not a task line: '      A note line.'",
+            )
+
+    def test_indent(t) -> None:
+        ret = t.tl.indent
+        t.assertEqual(ret, 2)
+
+    def test_done(t) -> None:
+        cases = {
+            'a lowercase x is done': ('- [x] A task', True),
+            'an uppercase X is done': ('- [X] A task', True),
+            'an empty box is open': ('- [ ] A task', False),
+        }
+
+        for name, (raw, expected) in cases.items():
+            with t.subTest(name):
+                t.tl.raw = raw
+                ret = t.tl.done
+                t.assertIs(ret, expected)
+
+    def test_body(t) -> None:
+        ret = t.tl.body
+        t.assertEqual(ret, 'A done subtask [LOE:2] [P:1]')
+
+    def test_title(t) -> None:
+        ret = t.tl.title
+        t.assertEqual(ret, 'A done subtask')
+
+    def test_fields(t) -> None:
+        ret = t.tl.fields
+        t.assertEqual(ret, {'LOE': '2', 'P': '1'})

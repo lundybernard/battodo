@@ -347,6 +347,21 @@ class TodoDocument:
         return tasks
 
     @property
+    def section_nodes(self) -> list[list[TaskNode]]:
+        """A node per task line, one list per `## Open` section.
+
+        Each list is flat and in file order. A note line goes on the
+        nearest task line above it in its section; a note line with no
+        task above it is dropped.
+        """
+        return [section.nodes for section in self.sections]
+
+    @property
+    def sections(self) -> list['Section']:
+        """A `Section` per `## Open` heading, in file order."""
+        return [Section(self.lines, indices) for indices in self.open_sections]
+
+    @property
     def open_sections(self) -> list[list[int]]:
         """The line indices under each `## Open` heading, in file order.
 
@@ -567,6 +582,148 @@ class TodoDocument:
         self.lines[index] = re.sub(
             r'^(\s*- \[)[xX]\]', r'\1 ]', self.lines[index]
         )
+
+
+@dataclass
+class Section:
+    """The lines under one `## Open` heading.
+
+    `lines` holds every line of the document, and `indices` addresses
+    the lines of the section.
+    """
+
+    lines: list[str]
+    indices: list[int]
+
+    @property
+    def nodes(self) -> list[TaskNode]:
+        """A node per task line, with the note lines below it.
+
+        In file order. A note line before the first task line of the
+        section belongs to no node.
+        """
+        return [
+            TaskNode(
+                raw_index=line.index,
+                indent=line.indent,
+                done=line.done,
+                title=line.title,
+                fields=line.fields,
+                raw=line.raw,
+                note_indices=notes,
+                description_lines=description,
+            )
+            for line, notes, description in zip(
+                self.task_lines, self.notes, self.descriptions
+            )
+        ]
+
+    @property
+    def task_lines(self) -> list['TaskLine']:
+        """A `TaskLine` per checkbox line of the section, in file order."""
+        return [
+            TaskLine(index, self.lines[index])
+            for index in self.indices
+                if CHECKBOX_RE.match(self.lines[index])
+        ]  # fmt: skip
+
+    @property
+    def notes(self) -> list[list[int]]:
+        """The note line indices below each task line, in file order.
+
+        The notes of a task line run up to its stop. A line with text
+        there is a note.
+        """
+        texts = self.texts
+        return [
+            [
+                index
+                for index in range(line.index + 1, stop)
+                    if index in texts
+            ]
+            for line, stop in zip(self.task_lines, self.stops)
+        ]  # fmt: skip
+
+    @property
+    def texts(self) -> dict[int, str]:
+        """The stripped text of each section line, by index.
+
+        A blank line and a `<!--` comment line hold no text.
+        """
+        stripped = {index: self.lines[index].strip() for index in self.indices}
+        return {
+            index: text
+            for index, text in stripped.items()
+                if text and not text.startswith('<!--')
+        }  # fmt: skip
+
+    @property
+    def stops(self) -> list[int]:
+        """Where the note range of each task line stops.
+
+        At the next task line, or at the end of the section for the last
+        one.
+        """
+        starts = [line.index for line in self.task_lines]
+        return [stop for _, stop in pairwise([*starts, self.end])]
+
+    @property
+    def end(self) -> int:
+        """The index after the last line of the section, 0 if it is empty."""
+        return max(self.indices, default=-1) + 1
+
+    @property
+    def descriptions(self) -> list[list[str]]:
+        """The text of the notes of each task line, in file order."""
+        texts = self.texts
+        return [[texts[index] for index in notes] for notes in self.notes]
+
+
+@dataclass
+class TaskLine:
+    """One checkbox line: its index in the document and its raw text."""
+
+    index: int
+    raw: str
+
+    @property
+    def checkbox(self) -> re.Match[str]:
+        """The `CHECKBOX_RE` match of the line.
+
+        Raises
+        ------
+        ValueError
+            The line is not a task line.
+        """
+        found = CHECKBOX_RE.match(self.raw)
+        if found is None:
+            raise ValueError(f'not a task line: {self.raw!r}')
+        return found
+
+    @property
+    def indent(self) -> int:
+        """The width of the indent before the checkbox."""
+        return len(self.checkbox.group(1))
+
+    @property
+    def done(self) -> bool:
+        """Whether the box carries an x, in either case."""
+        return self.checkbox.group(2) in 'xX'
+
+    @property
+    def body(self) -> str:
+        """The text after the checkbox: the title and the fields."""
+        return self.checkbox.group(3)
+
+    @property
+    def title(self) -> str:
+        """The body without its fields."""
+        return _clean_title(self.body)
+
+    @property
+    def fields(self) -> dict[str, str]:
+        """The fields of the body, by name."""
+        return _parse_fields(self.body)
 
 
 def parse_date(value: str | None) -> date | None:
