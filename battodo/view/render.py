@@ -104,3 +104,37 @@ class View:
 
     def __str__(self) -> str:
         return self.text
+
+
+class RowView:
+    """One row of a selection laid out as the cells of a table line.
+
+    `RowJsonView` publishes the same row's stored fields verbatim. This
+    view labels the due date and marks the open children.
+    """
+
+    def __init__(self, row: Row) -> None:
+        self.row = row
+
+    @property
+    def cells(self) -> tuple[str, ...]:
+        """The five values a table shows, in the order its columns run."""
+        raise NotImplementedError
+
+    @property
+    def badge(self) -> str:
+        """The outstanding-children mark, if the task has any.
+
+        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
+        the count needs no plural.
+        """
+        raise NotImplementedError
+
+    @property
+    def due_label(self) -> str:
+        """How the due date reads in a table: a label, or the date.
+
+        Named apart from the stored `due` field, which `RowJsonView`
+        publishes verbatim.
+        """
+        raise NotImplementedError

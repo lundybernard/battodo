@@ -1,8 +1,8 @@
 from datetime import UTC, date, datetime
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
 
-from ..render import MIN_TASK_WIDTH, Row, Table, View
+from ..render import MIN_TASK_WIDTH, Row, RowView, Table, View
 
 SRC = 'battodo.view.render'
 TODAY = date(2026, 8, 5)
@@ -168,3 +168,98 @@ class ViewTests(TestCase):
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
+
+
+class RowViewTests(TestCase):
+    """Unit tests for battodo.view.render.RowView."""
+
+    def setUp(t) -> None:
+        t.task = Mock(spec=['title', 'loe', 'due'])
+        t.task.title = 'A task'
+        t.task.loe = 2
+        t.task.due = None
+
+        t.row = Mock(spec=Row)
+        t.row.task = t.task
+        t.row.today = TODAY
+        t.row.rank = 4.25
+        t.row.priority = 3.0
+        t.row.subtasks = 0
+        t.row.parsed_due = None
+
+        t.rv = RowView(t.row)
+
+    @patch.object(RowView, 'due_label', new_callable=PropertyMock)
+    @patch.object(RowView, 'badge', new_callable=PropertyMock)
+    def test_cells(t, badge: PropertyMock, due_label: PropertyMock) -> None:
+        badge.return_value = ''
+        due_label.return_value = ''
+
+        with t.subTest('rank and priority are shown to one decimal'):
+            ret = t.rv.cells
+            t.assertEqual(ret[:2], ('4.2', '3.0'))
+
+        with t.subTest('a level of effort is shown when there is one'):
+            ret = t.rv.cells
+            t.assertEqual(ret[2], '2')
+
+        with t.subTest('an unestimated task leaves its column empty'):
+            t.task.loe = None
+            ret = t.rv.cells
+            t.assertEqual(ret[2], '')
+
+        with t.subTest('the title carries its badge'):
+            badge.return_value = ' (+1)'
+            ret = t.rv.cells
+            t.assertEqual(ret[3], 'A task (+1)')
+
+        with t.subTest('and the due column carries its label'):
+            due_label.return_value = 'OVERDUE'
+            ret = t.rv.cells
+            t.assertEqual(ret[4], 'OVERDUE')
+
+        with t.subTest('there is one cell for each of the five columns'):
+            ret = t.rv.cells
+            t.assertEqual(len(ret), 5)
+
+    def test_badge(t) -> None:
+        with t.subTest('a task with nothing outstanding wears no badge'):
+            ret = t.rv.badge
+            t.assertEqual(ret, '')
+
+        with t.subTest('otherwise the badge carries the count'):
+            t.row.subtasks = 2
+            ret = t.rv.badge
+            t.assertEqual(ret, ' (+2)')
+
+    def test_due_label(t) -> None:
+        cases = {
+            'no due date reads as nothing at all': (None, None, ''),
+            'a date already past is called out': (
+                '2026-08-04',
+                date(2026, 8, 4),
+                'OVERDUE',
+            ),
+            'so is the day itself': ('2026-08-05', TODAY, 'TODAY'),
+            'a date still ahead shows as written': (
+                '2026-08-20',
+                date(2026, 8, 20),
+                '2026-08-20',
+            ),
+            'and a date the parser cannot read shows verbatim': (
+                'YYYY-MM-DD',
+                None,
+                'YYYY-MM-DD',
+            ),
+        }
+
+        for name, (due, parsed, expected) in cases.items():
+            with t.subTest(name):
+                t.task.due = due
+                t.row.parsed_due = parsed
+                ret = t.rv.due_label
+                t.assertEqual(ret, expected)
+
+    def test_row(t) -> None:
+        ret = t.rv.row
+        t.assertIs(ret, t.row)
