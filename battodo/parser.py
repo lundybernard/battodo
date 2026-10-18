@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
+from itertools import pairwise
 from typing import Any
 
 FIELD_NAMES: tuple[str, ...] = (
@@ -344,6 +345,29 @@ class TodoDocument:
             stack.append((indent, task))
 
         return tasks
+
+    @property
+    def open_sections(self) -> list[list[int]]:
+        """The line indices under each `## Open` heading, in file order.
+
+        A section ends at the next `## ` heading or at the end of the
+        file.
+        """
+        bounds = [*self.heading_indices, len(self.lines)]
+        return [
+            list(range(start + 1, stop))
+            for start, stop in pairwise(bounds)
+                if self.lines[start].strip() == OPEN_HEADING
+        ]  # fmt: skip
+
+    @property
+    def heading_indices(self) -> list[int]:
+        """The index of every `## ` heading line, in file order."""
+        return [
+            index
+            for index, line in enumerate(self.lines)
+                if line.strip().startswith('## ')
+        ]  # fmt: skip
 
     @property
     def ancestries(self) -> list[list[TaskNode]]:

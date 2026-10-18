@@ -610,6 +610,48 @@ class TodoDocumentTests(TestCase):
 
             t.assertEqual(outside_tasks, [])
 
+    def test_open_sections(t) -> None:
+        with t.subTest('the line indices under the Open heading'):
+            ret = t.td.open_sections
+            t.assertEqual(ret, [list(range(5, APPEND_INDEX + 1))])
+
+        with t.subTest('one list per Open section, each up to the next one'):
+            t.td.lines = [
+                '## Open',
+                '- [ ] First task',
+                '## Done',
+                '- [ ] Closed-section task',
+                '  ## Open  ',
+                '- [ ] Second task',
+            ]
+
+            ret = t.td.open_sections
+
+            t.assertEqual(ret, [[1], [5]])
+
+        with t.subTest('none, where no Open heading stands'):
+            t.td.lines = ['# A heading', '- [ ] Loose task']
+            ret = t.td.open_sections
+            t.assertEqual(ret, [])
+
+    def test_heading_indices(t) -> None:
+        with t.subTest('every level-two heading, in file order'):
+            ret = t.td.heading_indices
+            t.assertEqual(ret, [4, 16])
+
+        with t.subTest('a deeper heading or a bare ## is none'):
+            t.td.lines = [
+                '# A title',
+                '## Open',
+                '### A sub-heading',
+                '  ## Done  ',
+                '##No-space',
+            ]
+
+            ret = t.td.heading_indices
+
+            t.assertEqual(ret, [1, 3])
+
     def test_ancestries(t) -> None:
         below = TaskNode(
             raw_index=3,
