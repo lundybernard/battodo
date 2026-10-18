@@ -9,8 +9,9 @@ Terminal width is read here rather than at the CLI boundary, because
 the width is an input to the layout. The probe reads COLUMNS first, so
 a caller that needs a fixed width pins it in the environment.
 
-A row is built by the selection, and the published form reads the
-same row, so the two never derive a task apart.
+A row is built by the selection. `RowView` lays it out as a table
+line, and the published form reads the same row, so the two never
+derive a task apart.
 """
 
 from datetime import date
@@ -75,7 +76,7 @@ class View:
         widths serves all of its tables and the columns line up down the
         whole page.
         """
-        cells = [row.cells for row in self.rows]
+        cells = [RowView(row).cells for row in self.rows]
         widths = column_widths(COLUMNS, cells)
         room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
         widths[TASK_COLUMN] = max(
@@ -91,7 +92,7 @@ class View:
                 category.name,
                 COLUMNS,
                 ALIGN,
-                [row.cells for row in category.shown],
+                [RowView(row).cells for row in category.shown],
                 self.widths,
                 category.hidden,
             )

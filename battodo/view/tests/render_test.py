@@ -12,18 +12,11 @@ ALIGN = ('>', '>', '>', '<', '<')
 CELLS = ('4.2', '3.0', '2', 'A task', 'OVERDUE')
 
 
-def row(*cells: str) -> Row:
-    """A stand-in row, holding only the cells a table lays out."""
-    stub = Mock(spec=['cells'])
-    stub.cells = cells
-    return stub
-
-
 def category(name: str, hidden: int = 0, rows: int = 1) -> Mock:
     """A stand-in category, holding what a view reads off one."""
     stub = Mock(spec=['name', 'shown', 'hidden'])
     stub.name = name
-    stub.shown = [row(*CELLS)] * rows
+    stub.shown = [Mock(spec=Row) for _ in range(rows)]
     stub.hidden = hidden
     return stub
 
@@ -100,11 +93,20 @@ class ViewTests(TestCase):
             t.v.__dict__.pop(cached, None)
         return t.v.widths
 
-    def test_widths(t) -> None:
+    @patch(f'{SRC}.RowView', autospec=True)
+    def test_widths(t, row_view: MagicMock) -> None:
+        row_view.return_value.cells = CELLS
+
         with t.subTest('a column is as wide as its widest cell or name'):
             ret = t.v.widths
             # RANK is held open by its own name, P and LOE by theirs.
             t.assertEqual(ret[:3], [4, 3, 3])
+
+        with t.subTest('the cells of each row come from its view'):
+            t.assertEqual(
+                row_view.call_args_list,
+                [call(row) for row in t.v.rows],
+            )
 
         with t.subTest('a table claims no more of the terminal than it needs'):
             ret = t.v.widths
@@ -113,7 +115,13 @@ class ViewTests(TestCase):
         # The other columns take 27 of the line between them, so what is
         # left for titles is the terminal less that.
         long_title = 'A' * 60
-        t.v.rows = [row('4.2', '3.0', '2', long_title, 'OVERDUE')]
+        row_view.return_value.cells = (
+            '4.2',
+            '3.0',
+            '2',
+            long_title,
+            'OVERDUE',
+        )
 
         with t.subTest('titles take the room left over when they need it'):
             ret = t.resize(80)
@@ -128,7 +136,9 @@ class ViewTests(TestCase):
             t.assertEqual(ret[3], MIN_TASK_WIDTH)
 
     @patch(f'{SRC}.Table', autospec=True)
-    def test_tables(t, table: MagicMock) -> None:
+    @patch(f'{SRC}.RowView', autospec=True)
+    def test_tables(t, row_view: MagicMock, table: MagicMock) -> None:
+        row_view.return_value.cells = CELLS
         t.v.categories = [
             category('work'),
             category('another-list', hidden=4, rows=2),
@@ -140,6 +150,14 @@ class ViewTests(TestCase):
         # A table per category, at the widths of the view, with the
         # cells of each row it shows and the count it holds back.
         t.assertEqual(ret, [table.return_value] * 2)
+        t.assertEqual(
+            row_view.call_args_list,
+            [
+                call(row)
+                for category in t.v.categories
+                for row in category.shown
+            ],
+        )  # fmt: skip
         t.assertEqual(
             table.call_args_list,
             [
@@ -166,8 +184,9 @@ class ViewTests(TestCase):
         t.assertIs(ret, page_text.return_value)
 
     def test___str__(t) -> None:
+        t.v.text = 'a-text'
         ret = str(t.v)
-        t.assertEqual(ret, t.v.text)
+        t.assertEqual(ret, 'a-text')
 
 
 class RowViewTests(TestCase):
