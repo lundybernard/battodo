@@ -307,6 +307,26 @@ class DigestView:
         return self.text
 
 
+class RecordView:
+    """One record of a digest laid out as the cells of a table line."""
+
+    def __init__(self, record: Record) -> None:
+        self.record = record
+
+    @property
+    def cells(self) -> tuple[str, ...]:
+        """The record's two values, in COLUMNS order.
+
+        The attributes follow the title in its cell.
+        """
+        raise NotImplementedError
+
+    @property
+    def attributes(self) -> str:
+        """Each attribute as `key=value`, in the order logged."""
+        raise NotImplementedError
+
+
 class DigestJsonView:
     """A digest laid out as JSON, for an agent to read."""
 

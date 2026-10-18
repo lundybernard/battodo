@@ -12,6 +12,7 @@ from ..completed import (
     GroupJsonView,
     Record,
     RecordJsonView,
+    RecordView,
     Table,
     read_attributes,
     read_record,
@@ -445,6 +446,52 @@ class DigestViewTests(TestCase):
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
+
+
+class RecordViewTests(TestCase):
+    """Unit tests for battodo.completed.RecordView."""
+
+    def setUp(t) -> None:
+        t.record = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
+        t.rv = RecordView(t.record)
+
+    @patch.object(RecordView, 'attributes', new_callable=PropertyMock)
+    def test_cells(t, attributes: PropertyMock) -> None:
+        with t.subTest('the date and the title'):
+            attributes.return_value = ''
+            ret = t.rv.cells
+            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+
+        with t.subTest('the attributes follow the title'):
+            attributes.return_value = 'cost=45.00'
+
+            ret = t.rv.cells
+
+            t.assertEqual(
+                ret,
+                ('2026-08-04', 'A parent > A record cost=45.00'),
+            )
+
+    def test_attributes(t) -> None:
+        with t.subTest('none'):
+            ret = t.rv.attributes
+            t.assertEqual(ret, '')
+
+        with t.subTest('each as key=value, in the order logged'):
+            t.rv.record = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'place': 'Main St, Suite 4', 'cost': '45.00'},
+            )
+
+            ret = t.rv.attributes
+
+            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
+
+    def test_record(t) -> None:
+        ret = t.rv.record
+        t.assertIs(ret, t.record)
 
 
 class DigestJsonViewTests(TestCase):
