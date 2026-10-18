@@ -212,6 +212,57 @@ class TodoDocumentTests(TestCase):
             titles = [task.title for task in ret]
             t.assertNotIn('Task outside the open section', titles)
 
+        with t.subTest('two Open sections give the tasks of both, in order'):
+            tasks = TodoDocument(
+                '## Open\n\n- [ ] First task [P:1]\n\n## Done\n\n'
+                '- [ ] Closed-section task\n\n## Open\n\n'
+                '- [ ] Second task [P:2]\n'
+            ).tasks
+
+            titles = [task.title for task in tasks]
+            t.assertEqual(titles, ['First task', 'Second task'])
+
+        with t.subTest('a ### heading in Open is a line of the task above'):
+            # Suspect: #126 decides this edge.
+            parent, after = TodoDocument(
+                '## Open\n\n- [ ] Parent task [P:1]\n### Sub heading\n'
+                '- [ ] Next task [P:2]\n'
+            ).tasks
+
+            t.assertEqual(parent.description_lines, ['### Sub heading'])
+            t.assertEqual(after.title, 'Next task')
+
+        with t.subTest('a comment tail on its own line is a description'):
+            # Suspect: #126 decides this edge.
+            (parent,) = TodoDocument(
+                '## Open\n\n- [ ] Parent task [P:1]\n<!-- one\ntwo -->\n'
+            ).tasks
+            t.assertEqual(parent.description_lines, ['two -->'])
+
+        with t.subTest('a note line before any task is dropped'):
+            (first,) = TodoDocument(
+                '## Open\n\nA note line before any task.\n'
+                '- [ ] First task [P:1]\n'
+            ).tasks
+            t.assertEqual(first.description_lines, [])
+
+        with t.subTest('indents 0, 4, 2 make the 4 and the 2 children of 0'):
+            (parent,) = TodoDocument(
+                '## Open\n\n- [ ] Parent task [P:1]\n'
+                '    - [ ] Deep child\n  - [ ] Shallow child\n'
+            ).tasks
+
+            titles = [task.title for task in parent.children]
+            t.assertEqual(titles, ['Deep child', 'Shallow child'])
+
+        with t.subTest('a tab indent is a child, one column deep'):
+            (parent,) = TodoDocument(
+                '## Open\n\n- [ ] Parent task [P:1]\n\t- [ ] Tab child\n'
+            ).tasks
+
+            (child,) = parent.children
+            t.assertEqual(child.indent, 1)
+
     def test_ancestries(t) -> None:
         ret = t.td.ancestries
 
