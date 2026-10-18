@@ -28,7 +28,11 @@ WINDOWS = (
     ('chores', range(5, 7), range(10, 20)),
 )
 # Every hour of one week. A sweep over it names the day and the hour.
-HOURS = [(day, hour) for day in range(7) for hour in range(24)]
+HOURS = [
+    (day, hour)
+    for day in range(7)
+    for hour in range(24)
+]  # fmt: skip
 
 
 class SelectionTests(TestCase):

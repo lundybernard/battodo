@@ -59,7 +59,11 @@ class View:
     @cached_property
     def rows(self) -> list[Row]:
         """Every row the view shows, across all of its categories."""
-        return [row for category in self.categories for row in category.shown]
+        return [
+            row
+            for category in self.categories
+            for row in category.shown
+        ]  # fmt: skip
 
     @cached_property
     def columns(self) -> int:
