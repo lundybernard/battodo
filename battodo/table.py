@@ -14,7 +14,12 @@ ELLIPSIS = '…'
 
 def page_text(header: str, tables: list['Table']) -> str:
     """The header, then each table under a blank line and its heading."""
-    raise NotImplementedError
+    out = [header]
+    for table in tables:
+        out.append('')
+        out.append(table.heading)
+        out.extend(table.lines)
+    return '\n'.join(out)
 
 
 class Table:
@@ -42,7 +47,7 @@ class Table:
 
     @property
     def title(self) -> str:
-        raise NotImplementedError
+        return self.name.replace('-', ' ').capitalize()
 
     @property
     def heading(self) -> str:
@@ -51,26 +56,37 @@ class Table:
         Ruled to the table's own width, not the terminal's: a divider
         that wraps looks worse than a row that does.
         """
-        raise NotImplementedError
+        prefix = f'{RULE * 2} {self.title} '
+        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
 
     @property
     def lines(self) -> list[str]:
         """Everything under the heading: the column names, then the rows."""
-        raise NotImplementedError
+        out = [self.line(self.columns)]
+        out.extend(self.line(cells) for cells in self.rows)
+        if self.hidden:
+            out.append(f'{INDENT}{ELLIPSIS} and {self.hidden} more')
+        return out
 
     def line(self, cells: tuple[str, ...]) -> str:
         """Clip, pad and align one row's cells. Trailing space is stripped."""
-        raise NotImplementedError
+        laid = (
+            f'{clip(cell, size):{align}{size}}'
+            for cell, align, size in zip(cells, self.align, self.widths)
+        )
+        return f'{INDENT}{GAP.join(laid)}'.rstrip()
 
 
 def table_width(widths: list[int]) -> int:
     """How wide a table laid out to `widths` comes out."""
-    raise NotImplementedError
+    return len(INDENT) + sum(widths) + len(GAP) * (len(widths) - 1)
 
 
 def clip(text: str, width: int) -> str:
     """`text` cut to `width`, the cut marked where it happened."""
-    raise NotImplementedError
+    if len(text) <= width:
+        return text
+    return text[: width - 1] + ELLIPSIS
 
 
 def column_widths(
@@ -78,4 +94,6 @@ def column_widths(
     rows: list[tuple[str, ...]],
 ) -> list[int]:
     """Each column's width: its widest cell, the name included."""
-    raise NotImplementedError
+    return [
+        max(len(cell) for cell in column) for column in zip(columns, *rows)
+    ]
