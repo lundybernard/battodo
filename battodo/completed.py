@@ -37,6 +37,7 @@ from batconf import Configuration
 from .lists import category_order
 from .mutate import ATTRIBUTES_MARK, COMPLETED_LOG, DONE_STATUS
 from .parser import FIELD_RE, parse_date
+from .table import Table, column_widths, page_text
 
 # The field separator a completion is written with. The log's name and
 # its statuses come from `mutate`, which writes them.
@@ -58,9 +59,7 @@ DEFAULT_PERIOD = 'week'
 # Layout. Both columns are as wide as their widest value; the titles
 # come last, so nothing is ever clipped away from an ancestry.
 COLUMNS = ('DATE', 'TASK')
-INDENT = '  '
-GAP = '  '
-RULE = '─'
+ALIGN = ('<', '<')
 
 
 class CompletedError(Exception):
@@ -255,10 +254,6 @@ class Group:
         self.name = name
         self.records = records
 
-    @property
-    def title(self) -> str:
-        return self.name.replace('-', ' ').capitalize()
-
 
 class DigestView:
     """A digest rendered for a terminal: a header, then a table each."""
@@ -288,60 +283,28 @@ class DigestView:
         Sized against every record at once, so one set of widths serves
         all of the tables and the columns line up down the whole page.
         """
-        records = self.digest.records
-        widths = []
-        for index, name in enumerate(COLUMNS):
-            cells = [len(record.cells[index]) for record in records]
-            width = max([len(name), *cells])
-            widths.append(width)
-        return widths
+        cells = [record.cells for record in self.digest.records]
+        return column_widths(COLUMNS, cells)
 
     @cached_property
-    def tables(self) -> list['Table']:
-        return [Table(group, self.widths) for group in self.digest.groups]
+    def tables(self) -> list[Table]:
+        return [
+            Table(
+                group.name,
+                COLUMNS,
+                ALIGN,
+                [record.cells for record in group.records],
+                self.widths,
+            )
+            for group in self.digest.groups
+        ]
 
     @cached_property
     def text(self) -> str:
-        out = [self.header]
-        for table in self.tables:
-            out.append('')
-            out.append(table.heading)
-            out.extend(table.lines)
-        return '\n'.join(out)
+        return page_text(self.header, self.tables)
 
     def __str__(self) -> str:
         return self.text
-
-
-class Table:
-    """One group's records, at a width the whole digest shares."""
-
-    def __init__(self, group: Group, widths: list[int]) -> None:
-        self.group = group
-        self.widths = widths
-
-    @property
-    def heading(self) -> str:
-        """A titled rule spanning the table, e.g. `── Work ────`."""
-        prefix = f'{RULE * 2} {self.group.title} '
-        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
-
-    def line(self, cells: tuple[str, ...]) -> str:
-        """Pad one row's cells. Trailing space is stripped."""
-        laid = (f'{cell:<{size}}' for cell, size in zip(cells, self.widths))
-        return f'{INDENT}{GAP.join(laid)}'.rstrip()
-
-    @property
-    def lines(self) -> list[str]:
-        """Everything under the heading: the column names, then the rows."""
-        out = [self.line(COLUMNS)]
-        out.extend(self.line(record.cells) for record in self.group.records)
-        return out
-
-
-def table_width(widths: list[int]) -> int:
-    """How wide a table laid out to `widths` comes out."""
-    return len(INDENT) + sum(widths) + len(GAP) * (len(COLUMNS) - 1)
 
 
 class DigestJsonView:
