@@ -69,7 +69,13 @@ class TaskSelectionTests(TestCase):
             fields={},
         )
         t.doc = create_autospec(TodoDocument, instance=True)
-        t.doc.tasks = [t.parent, t.sibling, t.quoting]
+        t.doc.ancestries = [
+            [t.parent],
+            [t.parent, t.child],
+            [t.parent, t.checked],
+            [t.sibling],
+            [t.quoting],
+        ]
 
         t.ts = TaskSelection(t.dir, 'b')
 
@@ -99,6 +105,24 @@ class TaskSelectionTests(TestCase):
                 t.path.read_text.return_value
             )
             t.assertEqual(lists, [(t.path, t.TodoDocument.return_value)])
+
+    def test_selects(t) -> None:
+        cases = {
+            'a task whose id is the selector': ('9o71lx', t.parent, True),
+            'a task whose title holds it, in any case': (
+                'BRANCH ta',
+                t.parent,
+                True,
+            ),
+            'a title that quotes an id': ('9o71lx', t.quoting, True),
+            'a task that holds neither': ('Branch', t.sibling, False),
+        }
+
+        for name, (selector, task, expected) in cases.items():
+            with t.subTest(name):
+                t.ts.selector = selector
+                ret = t.ts.selects(task)
+                t.assertIs(ret, expected)
 
     def test_records(t) -> None:
         with t.subTest('every open task the selector reaches, any depth'):

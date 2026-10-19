@@ -7,7 +7,6 @@ land on exactly one open task; anything else is a `SelectionError`, and
 the fix is always a longer selector or the task's `[ID:]`.
 """
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -22,38 +21,6 @@ class SelectionError(Exception):
     Carries the record titles when more than one task answers: the
     fix is always a longer selector or the task's `[ID:]`.
     """
-
-
-@dataclass
-class TaskRecord:
-    """One open task, the list it lives in, and its ancestry.
-
-    Internal to this module: `battodo.task.Task` gives callers the same
-    fields.
-    """
-
-    path: Path
-    doc: TodoDocument
-    ancestry: list[TaskNode]
-
-    @property
-    def task(self) -> TaskNode:
-        return self.ancestry[-1]
-
-
-def _descend(
-    tasks: list[TaskNode],
-    ancestry: list[TaskNode],
-) -> Iterator[list[TaskNode]]:
-    """Every task at any depth, each with its ancestry."""
-    for task in tasks:
-        found = [*ancestry, task]
-        yield found
-        yield from _descend(task.children, found)
-
-
-def _selects(task: TaskNode, selector: str) -> bool:
-    return task.task_id == selector or selector.lower() in task.title.lower()
 
 
 class TaskSelection:
@@ -76,7 +43,7 @@ class TaskSelection:
         ]
 
     @cached_property
-    def records(self) -> list[TaskRecord]:
+    def records(self) -> list['TaskRecord']:
         """Every open task the selector reaches, at any depth.
 
         An `[ID:]` record narrows out the title records, so a
@@ -86,16 +53,27 @@ class TaskSelection:
         found = [
             TaskRecord(path, doc, ancestry)
             for path, doc in self.lists
-            for ancestry in _descend(doc.tasks, [])
-            if not ancestry[-1].done and _selects(ancestry[-1], self.selector)
-        ]
+            for ancestry in doc.ancestries
+                if not ancestry[-1].done and self.selects(ancestry[-1])
+        ]  # fmt: skip
         by_id = [
-            record for record in found if record.task.task_id == self.selector
-        ]
+            record
+            for record in found
+                if record.task.task_id == self.selector
+        ]  # fmt: skip
         return by_id or found
 
+    def selects(self, task: TaskNode) -> bool:
+        """Whether the selector names `task`, done or not.
+
+        An `[ID:]` equal to the selector names it, and so does a title
+        that holds the selector in any case.
+        """
+        part = self.selector.lower()
+        return task.task_id == self.selector or part in task.title.lower()
+
     @cached_property
-    def record(self) -> TaskRecord:
+    def record(self) -> 'TaskRecord':
         """The one open task the selector names.
 
         Raises
@@ -113,3 +91,20 @@ class TaskSelection:
                 f'{titles}'
             )
         return records[0]
+
+
+@dataclass
+class TaskRecord:
+    """One open task, the list it lives in, and its ancestry.
+
+    Internal to this module: `battodo.task.Task` gives callers the same
+    fields.
+    """
+
+    path: Path
+    doc: TodoDocument
+    ancestry: list[TaskNode]
+
+    @property
+    def task(self) -> TaskNode:
+        return self.ancestry[-1]
