@@ -1,51 +1,15 @@
 from datetime import UTC, date, datetime
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
-from ..render import (
-    COLUMNS,
-    MIN_TASK_WIDTH,
-    Row,
-    Table,
-    View,
-    clip,
-    table_width,
-)
+from ..render import MIN_TASK_WIDTH, Row, Table, View
 
 SRC = 'battodo.view.render'
 TODAY = date(2026, 8, 5)
-# Five columns wide enough to lay a short row out without clipping.
-WIDTHS = [4, 3, 3, 20, 10]
+COLUMNS = ('RANK', 'P', 'LOE', 'TASK', 'DUE')
+ALIGN = ('>', '>', '>', '<', '<')
 # One short row's cells, in the order the columns run.
 CELLS = ('4.2', '3.0', '2', 'A task', 'OVERDUE')
-
-
-class TableWidthTests(TestCase):
-    """Unit tests for battodo.view.render.table_width."""
-
-    def test_columns(t) -> None:
-        ret = table_width([1, 1, 1, 1, 1])
-
-        # Two of indent, the cells themselves, and a gap between each
-        # neighbouring pair.
-        t.assertEqual(ret, 2 + 5 + 8)
-
-
-class ClipTests(TestCase):
-    """Unit tests for battodo.view.render.clip."""
-
-    def test_fits(t) -> None:
-        ret = clip('abc', 3)
-        t.assertEqual(ret, 'abc')
-
-    def test_cut(t) -> None:
-        ret = clip('abcdef', 3)
-
-        with t.subTest('text too long is cut, and says so'):
-            t.assertEqual(ret, 'ab…')
-
-        with t.subTest('the mark counts towards the width'):
-            t.assertEqual(len(ret), 3)
 
 
 def row(*cells: str) -> Row:
@@ -53,102 +17,6 @@ def row(*cells: str) -> Row:
     stub = Mock(spec=['cells'])
     stub.cells = cells
     return stub
-
-
-class TableTests(TestCase):
-    """Unit tests for battodo.view.render.Table."""
-
-    def setUp(t) -> None:
-        t.rows = [row(*CELLS)]
-        t.tb = Table(
-            'work',
-            t.rows,
-            WIDTHS,
-            # Default: hidden=0,
-        )
-
-    def test_title(t) -> None:
-        with t.subTest('a plain name is capitalized'):
-            ret = t.tb.title
-            t.assertEqual(ret, 'Work')
-
-        with t.subTest('a hyphen reads as the space it stands in for'):
-            t.tb.name = 'side-quests'
-            ret = t.tb.title
-            t.assertEqual(ret, 'Side quests')
-
-    def test_heading(t) -> None:
-        with t.subTest('the title sits in a rule spanning the table'):
-            ret = t.tb.heading
-            t.assertEqual(ret, '── Work ' + '─' * 42)
-
-        with t.subTest('which is as wide as the table itself'):
-            ret = t.tb.heading
-            t.assertEqual(len(ret), table_width(WIDTHS))
-
-        with t.subTest('a table too narrow for the title is not padded'):
-            # The rule would have to run backwards to fit. A heading
-            # that overruns its own narrow table beats one that wraps,
-            # and a negative count must not eat the title.
-            t.tb.name = 'a-very-long-category-name-indeed'
-            t.tb.widths = [1, 1, 1, 1, 1]
-
-            ret = t.tb.heading
-
-            t.assertEqual(ret, '── A very long category name indeed ')
-
-    def test_line(t) -> None:
-        with t.subTest('cells are padded and aligned to the widths'):
-            ret = t.tb.line(('4.2', '3.0', '2', 'A task', 'OVERDUE'))
-
-            t.assertEqual(
-                ret, '   4.2  3.0    2  A task                OVERDUE'
-            )
-
-        with t.subTest('trailing space is not left on the line'):
-            ret = t.tb.line(('4.2', '3.0', '2', 'A task', ''))
-            t.assertEqual(ret, '   4.2  3.0    2  A task')
-
-        with t.subTest('a title too wide for its column is clipped'):
-            ret = t.tb.line(('4.2', '3.0', '2', 'A' * 40, ''))
-            t.assertTrue(ret.endswith('…'))
-
-    def test_lines(t) -> None:
-        with t.subTest('the column names lead, then a line per row'):
-            ret = t.tb.lines
-
-            t.assertEqual(
-                ret,
-                [
-                    t.tb.line(COLUMNS),
-                    '   4.2  3.0    2  A task                OVERDUE',
-                ],
-            )
-
-        with t.subTest('a complete table says nothing about hiding'):
-            ret = t.tb.lines
-            t.assertNotIn('more', '\n'.join(ret))
-
-        with t.subTest('an abridged one says how much it holds back'):
-            t.tb.hidden = 3
-            ret = t.tb.lines
-            t.assertEqual(ret[-1], '  … and 3 more')
-
-    def test_rows(t) -> None:
-        ret = t.tb.rows
-        t.assertEqual(ret, t.rows)
-
-    def test_name(t) -> None:
-        ret = t.tb.name
-        t.assertEqual(ret, 'work')
-
-    def test_widths(t) -> None:
-        ret = t.tb.widths
-        t.assertEqual(ret, WIDTHS)
-
-    def test_hidden(t) -> None:
-        ret = t.tb.hidden
-        t.assertEqual(ret, 0)
 
 
 def category(name: str, hidden: int = 0, rows: int = 1) -> Mock:
@@ -259,35 +127,43 @@ class ViewTests(TestCase):
             ret = t.resize(10)
             t.assertEqual(ret[3], MIN_TASK_WIDTH)
 
-    def test_tables(t) -> None:
-        with t.subTest('one table per category, sharing the view widths'):
-            (table,) = t.v.tables
-            t.assertEqual(table.name, 'work')
-            t.assertEqual(table.widths, t.v.widths)
+    @patch(f'{SRC}.Table', autospec=True)
+    def test_tables(t, table: MagicMock) -> None:
+        t.v.categories = [
+            category('work'),
+            category('another-list', hidden=4, rows=2),
+        ]
+        t.v.widths = [4, 3, 3, 20, 7]
 
-        with t.subTest('each carries the rows its category shows'):
-            t.assertEqual(table.rows, t.selection.categories[0].shown)
+        ret = t.v.tables
 
-        with t.subTest('and is told what that category held back'):
-            t.v.categories = [category('work', hidden=4)]
-            t.v.__dict__.pop('tables')
+        # A table per category, at the widths of the view, with the
+        # cells of each row it shows and the count it holds back.
+        t.assertEqual(ret, [table.return_value] * 2)
+        t.assertEqual(
+            table.call_args_list,
+            [
+                call('work', COLUMNS, ALIGN, [CELLS], [4, 3, 3, 20, 7], 0),
+                call(
+                    'another-list',
+                    COLUMNS,
+                    ALIGN,
+                    [CELLS, CELLS],
+                    [4, 3, 3, 20, 7],
+                    4,
+                ),
+            ],
+        )
 
-            ret = t.v.tables
+    @patch(f'{SRC}.page_text', autospec=True)
+    def test_text(t, page_text: MagicMock) -> None:
+        t.v.tables = [Mock(spec=Table)]
 
-            t.assertEqual(ret[0].hidden, 4)
+        ret = t.v.text
 
-    def test_text(t) -> None:
-        lines = t.v.text.split('\n')
-
-        with t.subTest('the header leads'):
-            t.assertEqual(lines[0], t.v.header)
-
-        with t.subTest('a blank line then a heading opens each table'):
-            t.assertEqual(lines[1], '')
-            t.assertEqual(lines[2], t.v.tables[0].heading)
-
-        with t.subTest('and the table follows it'):
-            t.assertEqual(lines[3:], t.v.tables[0].lines)
+        # The header, then the tables, laid out as one page.
+        page_text.assert_called_once_with(t.v.header, t.v.tables)
+        t.assertIs(ret, page_text.return_value)
 
     def test___str__(t) -> None:
         ret = str(t.v)

@@ -31,8 +31,6 @@ LOG = """\
 2026-08-02 | unlisted | DONE | In the other category
 2026-08-03 | work | SCRATCHED | Abandoned, not completed
 """
-# Wide enough to lay a short record out.
-WIDTHS = [10, 20]
 
 
 class DigestTests(TestCase):
@@ -348,17 +346,6 @@ class ReadAttributesTests(TestCase):
                 t.assertIsNone(ret)
 
 
-class GroupTests(TestCase):
-    """Unit tests for battodo.completed.Group."""
-
-    def setUp(t) -> None:
-        t.g = Group('side-quests', [])
-
-    def test_title(t) -> None:
-        ret = t.g.title
-        t.assertEqual(ret, 'Side quests')
-
-
 class DigestViewTests(TestCase):
     """Unit tests for battodo.completed.DigestView."""
 
@@ -416,72 +403,48 @@ class DigestViewTests(TestCase):
             ret = DigestView(t.digest).widths
             t.assertEqual(ret, [len('DATE'), len('TASK')])
 
-    def test_tables(t) -> None:
-        ret = t.v.tables
-        t.assertEqual([table.group for table in ret], t.digest.groups)
-        t.assertEqual([table.widths for table in ret], [t.v.widths] * 2)
+    @patch(f'{SRC}.Table', autospec=True)
+    def test_tables(t, table: MagicMock) -> None:
+        t.v.widths = [10, 28]
 
-    def test_text(t) -> None:
+        ret = t.v.tables
+
+        # A table per group, at the widths of the digest, with the cells
+        # of each record it holds.
+        t.assertEqual(ret, [table.return_value] * 2)
+        t.assertEqual(
+            table.call_args_list,
+            [
+                call(
+                    'work',
+                    ('DATE', 'TASK'),
+                    ('<', '<'),
+                    [('2026-07-30', 'A record of the week')],
+                    [10, 28],
+                ),
+                call(
+                    'unlisted',
+                    ('DATE', 'TASK'),
+                    ('<', '<'),
+                    [('2026-08-02', 'A record of another category')],
+                    [10, 28],
+                ),
+            ],
+        )
+
+    @patch(f'{SRC}.page_text', autospec=True)
+    def test_text(t, page_text: MagicMock) -> None:
+        t.v.tables = [Mock(spec=Table)]
+
         ret = t.v.text
 
-        t.assertEqual(
-            ret,
-            '\n'.join(
-                (
-                    'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
-                    '',
-                    '── Work ' + '─' * 34,
-                    '  DATE        TASK',
-                    '  2026-07-30  A record of the week',
-                    '',
-                    '── Unlisted ' + '─' * 30,
-                    '  DATE        TASK',
-                    '  2026-08-02  A record of another category',
-                )
-            ),
-        )
+        # The header, then the tables, laid out as one page.
+        page_text.assert_called_once_with(t.v.header, t.v.tables)
+        t.assertIs(ret, page_text.return_value)
 
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
-
-
-class TableTests(TestCase):
-    """Unit tests for battodo.completed.Table."""
-
-    def setUp(t) -> None:
-        t.group = Group('work', [Record(date(2026, 8, 5), 'work', 'Ship it')])
-        t.table = Table(t.group, WIDTHS)
-
-    def test_heading(t) -> None:
-        with t.subTest('a titled rule spanning the table'):
-            ret = t.table.heading
-            t.assertEqual(ret, '── Work ' + '─' * 26)
-
-        with t.subTest('a title of its own length rules no further'):
-            wide = Table(Group('a' * 40, []), WIDTHS)
-            ret = wide.heading
-            t.assertEqual(ret, f'── {"A" + "a" * 39} ')
-
-    def test_line(t) -> None:
-        with t.subTest('each cell padded to its column'):
-            ret = t.table.line(('a', 'b'))
-            t.assertEqual(ret, '  a' + ' ' * 11 + 'b')
-
-        with t.subTest('trailing space is stripped'):
-            ret = t.table.line(('', ''))
-            t.assertEqual(ret, '')
-
-    def test_lines(t) -> None:
-        ret = t.table.lines
-
-        t.assertEqual(
-            ret,
-            [
-                '  DATE        TASK',
-                '  2026-08-05  Ship it',
-            ],
-        )
 
 
 class DigestJsonViewTests(TestCase):
