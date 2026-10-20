@@ -144,17 +144,6 @@ class SelectionTests(TestCase):
             ret = t.s.schedule
             t.assertEqual(ret, {'a-list': [Window(0, 0, 9, 10)]})
 
-    def test_weekday(t) -> None:
-        with t.subTest('a day the working week covers'):
-            ret = t.s.weekday
-            t.assertTrue(ret)
-
-        with t.subTest('and one it does not'):
-            # 2026-08-08 is a Saturday.
-            t.s.now = at('2026-08-08T10:30')
-            ret = t.s.weekday
-            t.assertFalse(ret)
-
     def test_day(t) -> None:
         # 2026-08-05 is a Wednesday, the third day of the week.
         ret = t.s.day

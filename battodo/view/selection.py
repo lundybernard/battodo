@@ -39,7 +39,6 @@ class SourceError(Exception):
     """
 
 
-ALWAYS_ACTIVE = frozenset({'study', 'career', 'events'})
 NO_DUE_SORTS_LAST = 'zzzz'
 # A list carrying this marker anywhere is parked: still discovered, so
 # mutations reach it, but never surfaced in a view (ADR 0005).
@@ -168,11 +167,6 @@ class Selection:
             The configured windows do not read.
         """
         return parse_windows(self.windows)
-
-    @property
-    def weekday(self) -> bool:
-        """Whether the clock falls on a working day of the week."""
-        return self.day < 5
 
     @property
     def day(self) -> int:
