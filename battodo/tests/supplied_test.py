@@ -8,6 +8,7 @@ from unittest.mock import (
 
 from ..supplied import (
     AttributePair,
+    AttributeSegment,
     DescriptionLine,
     SuppliedAttributes,
     SuppliedDescription,
@@ -877,3 +878,36 @@ class AttributePairTests(TestCase):
                     _ = t.ap.checked
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class AttributeSegmentTests(TestCase):
+    """Unit tests for battodo.supplied.AttributeSegment."""
+
+    def setUp(t) -> None:
+        t.as_ = AttributeSegment('a_key=a value')
+
+    def test_pair(t) -> None:
+        split = {
+            'the key against its value': (
+                'a_key=a value',
+                ('a_key', 'a value'),
+            ),
+            'split at the first =': ('sum=1+1=2', ('sum', '1+1=2')),
+            'an empty value': ('cost=', ('cost', '')),
+        }
+        for name, (text, expected) in split.items():
+            with t.subTest(name):
+                t.as_.text = text
+                ret = t.as_.pair
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a segment with no = is refused'):
+            t.as_.text = 'a value'
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.as_.pair
+
+            t.assertEqual(
+                str(caught.exception),
+                "attribute must read key=value, not 'a value'",
+            )
