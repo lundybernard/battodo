@@ -4,12 +4,11 @@ from datetime import datetime
 from logging import getLogger
 from logging.config import dictConfig
 
-from battodo.conf import CONFIG_ROOT, get_config
+from battodo.conf import CONFIG_ROOT, get_config, time_zone
 from battodo.lib import (
     DEFAULT_PERIOD,
     FORMATS,
     PERIODS,
-    TZ,
     add_item,
     annotate_item,
     backfill_items,
@@ -381,7 +380,7 @@ class Commands:
         print(
             add_item(
                 conf,
-                datetime.now(TZ),
+                datetime.now(time_zone(conf)),
                 list_name=args.list_name,
                 title=args.title,
                 parent=args.parent,
@@ -398,12 +397,12 @@ class Commands:
 
     @staticmethod
     def show(conf, args):
-        now = datetime.now(TZ)
+        now = datetime.now(time_zone(conf))
         print(get_item(conf, now, selector=args.selector))
 
     @staticmethod
     def history(conf, args):
-        now = datetime.now(TZ)
+        now = datetime.now(time_zone(conf))
         print(get_history(conf, now, selector=args.selector))
 
     @staticmethod
@@ -411,7 +410,7 @@ class Commands:
         print(
             update_item(
                 conf,
-                datetime.now(TZ),
+                datetime.now(time_zone(conf)),
                 selector=args.selector,
                 title=args.title,
                 priority=args.priority,
@@ -431,7 +430,7 @@ class Commands:
         print(
             complete_item(
                 conf,
-                datetime.now(TZ),
+                datetime.now(time_zone(conf)),
                 selector=args.selector,
                 date=args.date,
                 scratch=args.scratch,
@@ -445,7 +444,7 @@ class Commands:
         print(
             annotate_item(
                 conf,
-                datetime.now(TZ),
+                datetime.now(time_zone(conf)),
                 selector=args.selector,
                 text=args.text,
                 attrs=args.attrs,
@@ -454,17 +453,17 @@ class Commands:
 
     @staticmethod
     def backfill(conf, args):
-        now = datetime.now(TZ)
+        now = datetime.now(time_zone(conf))
         print(backfill_items(conf, now))
 
     @staticmethod
     def view(conf, args):
-        now = datetime.now(TZ)
+        now = datetime.now(time_zone(conf))
         print(get_view(conf, now, show_all=args.show_all))
 
     @staticmethod
     def completed(conf, args):
-        now = datetime.now(TZ)
+        now = datetime.now(time_zone(conf))
         print(get_completed(conf, now, period=args.period))
 
     @staticmethod

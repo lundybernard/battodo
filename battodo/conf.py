@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from datetime import tzinfo
+from datetime import UTC, datetime, tzinfo
 from functools import cached_property
 from os import environ
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from typing import cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from batconf import (
     Configuration,
@@ -171,4 +172,11 @@ def time_zone(conf: Configuration) -> tzinfo:
     ValueError
         The configured name is not a zone the system knows.
     """
-    raise NotImplementedError
+    name = getattr(conf.view, 'time_zone', '')
+    if not name:
+        local = datetime.now(UTC).astimezone()
+        return cast('tzinfo', local.tzinfo)
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as exp:
+        raise ValueError(f'{ZONE_ERROR}: {name!r}') from exp
