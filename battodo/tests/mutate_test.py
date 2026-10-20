@@ -4072,61 +4072,93 @@ class CompletionLinesTests(TestCase):
         t.assertIs(ret, t.parent)
 
     @patch(f'{SRC}.Ancestry', autospec=True)
-    def test_ancestries(t, ancestry: MagicMock) -> None:
+    @patch.object(CompletionLines, '_still_open', new_callable=PropertyMock)
+    def test_ancestries(
+        t,
+        still_open: PropertyMock,
+        ancestry: MagicMock,
+    ) -> None:
+        below = grandchild_node()
+        t.cl.ancestry = [t.parent, t.child, below]
         # Each ancestry stands in as the tuple of the tasks it holds.
         ancestry.side_effect = tuple
 
-        with t.subTest('an open sibling stops the cascade'):
-            t.parent.children[1].done = False
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child)])
-
-        with t.subTest('the last open child completes its parent'):
-            t.parent.children[1].done = True
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child), (t.parent,)])
-
-        with t.subTest('and that may complete its own parent, deepest first'):
-            below = grandchild_node()
-            t.child.children = [below]
-            t.cl.ancestry = [t.parent, t.child, below]
-
-            ret = t.cl.ancestries
-
-            t.assertEqual(
-                ret,
+        cases = {
+            'each task above open: the named task alone': (
+                2,
+                [(t.parent, t.child, below)],
+            ),
+            'its parent finished too': (
+                1,
+                [(t.parent, t.child, below), (t.parent, t.child)],
+            ),
+            'every task finished, deepest first': (
+                0,
                 [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
-            )
+            ),
+        }
+        for name, (count, expected) in cases.items():
+            with t.subTest(name):
+                still_open.return_value = count
+                ret = t.cl.ancestries
+                t.assertEqual(ret, expected)
 
-        with t.subTest('a scratch: the named task alone, nothing cascades'):
+    @patch.object(CompletionLines, '_stops', new_callable=PropertyMock)
+    def test_still_open(t, stops: PropertyMock) -> None:
+        cases = {
+            'no stop: every task above finishes': ([], 0),
+            'a stop at the top task: it stays open': ([0], 1),
+            'the deepest stop: it and each task above stay open': ([0, 1], 2),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                stops.return_value = found
+                ret = t.cl._still_open
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a scratch: each task above stays open, unread'):
+            stops.reset_mock()
             t.cl.scratched = True
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+            ret = t.cl._still_open
+
+            stops.assert_not_called()
+            t.assertEqual(ret, 1)
+
+    def test_stops(t) -> None:
+        below = grandchild_node()
+        t.child.children = [below]
+        t.cl.ancestry = [t.parent, t.child, below]
+
+        with t.subTest('every parent finished: no stop'):
+            ret = t.cl._stops
+            t.assertEqual(ret, [])
+
+        with t.subTest('an open sibling stops the cascade at its parent'):
+            t.parent.children[1].done = False
+            ret = t.cl._stops
+            t.assertEqual(ret, [0])
 
         with t.subTest('a repeating task finishes no parent'):
-            t.cl.scratched = False
+            t.parent.children[1].done = True
             below.fields = {'REPEAT': '7d'}
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
+            ret = t.cl._stops
+            t.assertEqual(ret, [1])
 
         with t.subTest('and a cascade ends at a repeating parent'):
             below.fields = {'LOE': '1'}
             t.child.fields = {'REPEAT': '7d'}
+            ret = t.cl._stops
+            t.assertEqual(ret, [0])
 
-            ret = t.cl.ancestries
-
-            t.assertEqual(
-                ret, [(t.parent, t.child, below), (t.parent, t.child)]
-            )
-
-        with t.subTest('two open siblings: the deepest ends the cascade'):
+        with t.subTest('two open siblings: a stop at each parent'):
             t.child.fields = {'LOE': '1'}
             t.child.children = [below, grandchild_node()]
             t.parent.children[1].done = False
 
-            ret = t.cl.ancestries
+            ret = t.cl._stops
 
-            t.assertEqual(ret, [(t.parent, t.child, below)])
+            t.assertEqual(ret, [0, 1])
 
 
 class TaskCompletionTests(TestCase):

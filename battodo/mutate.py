@@ -35,6 +35,7 @@ import re
 from collections.abc import Mapping, Sequence
 from datetime import date, tzinfo
 from functools import cached_property
+from itertools import pairwise
 from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -2357,17 +2358,27 @@ class CompletionLines:
         scratch finishes no ancestor, and a repeating task stays open,
         so it finishes no ancestor either.
         """
-        ancestry = self.ancestry
-        found = [Ancestry(ancestry)]
+        return [
+            Ancestry(self.ancestry[:size])
+            for size in range(len(self.ancestry), self._still_open, -1)
+        ]
+
+    @property
+    def _still_open(self) -> int:
+        """How many tasks at the top of the ancestry the close leaves open."""
         if self.scratched:
-            return found
-        for depth in reversed(range(len(ancestry) - 1)):
-            parent, child = ancestry[depth], ancestry[depth + 1]
-            finished = all(c.done or c is child for c in parent.children)
-            if child.repeat or not finished:
-                break
-            found.append(Ancestry(ancestry[: depth + 1]))
-        return found
+            return len(self.ancestry) - 1
+        return max(self._stops, default=-1) + 1
+
+    @property
+    def _stops(self) -> list[int]:
+        """The depth of each parent that its child's close leaves open."""
+        return [
+            depth
+            for depth, (parent, child) in enumerate(pairwise(self.ancestry))
+                if child.repeat
+                or not all(c.done or c is child for c in parent.children)
+        ]  # fmt: skip
 
 
 class TaskCompletion:
