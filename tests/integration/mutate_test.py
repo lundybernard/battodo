@@ -375,6 +375,10 @@ class AdditionTests(TestCase):
         t.assertEqual(written, t.ad.text)
         t.assertEqual(journaled(t.source), as_journaled(t.ad.events))
 
+    def test_lists(t) -> None:
+        ret = t.ad.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.ad.text})
+
     def test_path(t) -> None:
         with t.subTest('the list whose file the name stems'):
             ret = t.ad.path
