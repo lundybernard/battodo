@@ -136,9 +136,11 @@ an `[ID:]`, or a case-insensitive part of a title, matching exactly one
 **What `show` publishes.** Derived values, not stored ones: `P` reads as
 the 0–5 multiplier and a rank accompanies it, so one task reads the same
 here as in a `view` row. `subtasks` is the nested list of children, done
-ones included, where a view row carries only their count. Notes are not
-published. `--format json` serializes the document `--format text` lays
-out.
+ones included, where a view row carries only their count. `show`
+publishes the description lines
+([ADR 0021](../0019-event-attributes/0021-task-description-field.md)),
+but not yet the notes that `note` events record. `--format json`
+serializes the document `--format text` lays out.
 
 **What `update` writes.** The fields named on the command line — `P`,
 `DUE`, `TAGS` — and, with `--title`, the text before the first field.
@@ -208,12 +210,12 @@ projects share one event vocabulary:
 | `type` | see below |
 | `schema_version` | `1` |
 | `occurred_at` / `recorded_at` | timestamps |
-| `prev_hash` / `hash` | both `null`, reserved |
 | `metadata` | actor (`user` \| `agent`), source file |
 | `payload` | field deltas **plus a full task snapshot** |
 
 Event types: `TaskAdded`, `TaskUpdated`, `TaskCompleted`,
-`TaskScratched`. (`TaskBumped`
+`TaskScratched`, `TaskAnnotated` (a note,
+[0019 DESIGN](../0019-event-attributes/DESIGN.md#note-event)). (`TaskBumped`
 was emitted by the retired `bump` command; readers must still tolerate
 the type — see ADR 0005.)
 
@@ -282,14 +284,21 @@ Envelope fields not shown are as tabled above.
 other stamp. A rename adds a `title` key, a pseudo-key on the same
 footing as `TaskCompleted`'s `done` and `TaskScratched`'s `removed`: a
 title is not a field, but a reverse-applier needs the text it replaced.
-`update` reaches top-level tasks only, so the payload carries no
-`ancestry`.
+When the target is a subtask, the payload also carries `ancestry`, the
+`Parent > Child` path of titles to it.
 
-Deferred from OFK's envelope: the hash chain (null, as OFK also does in
-v1) and the `correlation_id` / `commit_len` / `commit_index`
-commit-boundary machinery. BatTodo emits single-event commits only, so
-there is no partial-commit hazard to detect yet. Both are additive when
-added, needing no `schema_version` bump.
+An id stamped on a task that had none, such as the parent of a new
+subtask, is a `TaskUpdated` on the stream of the new id, with the delta
+`{"ID": [null, id]}`
+([ADR 0014](../0014-subtask-journal-events.md)).
+
+Omitted from OFK's envelope: the hash chain, which
+[ADR 0011](../0008-journal-authority/0011-union-merge-and-no-hash-chain.md)
+drops, and the `correlation_id` / `commit_len` / `commit_index`
+commit-boundary machinery. A command can append several events, such as
+a completion cascade, and nothing marks them as one commit, so a partial
+write goes undetected. The commit-boundary fields are additive, and do
+not need a `schema_version` bump.
 
 ### Durability and concurrency
 
@@ -297,10 +306,9 @@ added, needing no `schema_version` bump.
   (OFK's durability rules 1–2).
 - Syncthing conflict files are accepted as manual cleanup. No merge
   logic.
-- **If per-device splitting becomes necessary** (trigger and reasoning
-  in ADR 0004): one log file per device, `log.<device>.jsonl`, merged on
-  read. The envelope already supports it — ordering is reconstructable
-  from `occurred_at` plus `stream_seq`.
+- Per-device log splitting is retired
+  ([ADR 0011](../0008-journal-authority/0011-union-merge-and-no-hash-chain.md)):
+  union merge replaces it when the journal becomes authoritative.
 
 ## Rank
 
