@@ -288,34 +288,26 @@ class SuppliedFields:
             A `P`, `LOE`, `DUE` or `REPEAT` does not read, checked in
             that order. `RepeatError`, a ValueError, covers `REPEAT`.
         """
-        checked = dict(self.fields)
-        priority = checked.get('P')
-        if priority is not None and not priority.isdigit():
-            raise ValueError(f'P must be a whole number, not {priority!r}')
+        return {**self.fields, **self._given}
 
-        loe = checked.get('LOE')
-        if loe is not None and loe not in LOE_VALUES:
-            raise ValueError(
-                f'LOE must be one of {", ".join(LOE_VALUES)}, not {loe!r}'
-            )
+    @property
+    def _given(self) -> dict[str, str]:
+        """Each checked field that is given, as read."""
+        return {
+            name: value
+            for name, value in self._read.items()
+                if value is not None
+        }  # fmt: skip
 
-        due = checked.get('DUE')
-        if due is not None:
-            parsed = parse_date(due)
-            if parsed is None:
-                raise ValueError(f'DUE must be an ISO date, not {due!r}')
-            # Normalised, not passed through: `date.fromisoformat` accepts
-            # more spellings on newer interpreters, and a line's meaning
-            # must not depend on which one wrote it.
-            checked['DUE'] = parsed.isoformat()
-
-        repeat = checked.get('REPEAT')
-        if repeat is not None:
-            # Validated by scheduling it and throwing the answer away: the
-            # repeat parser is the only definition of a readable spec, and
-            # an unreadable one must fail before a task carries it.
-            next_due(repeat, self.today)
-        return checked
+    @property
+    def _read(self) -> dict[str, str | None]:
+        """Each checked field as read, None where none is given."""
+        return {
+            'P': self.priority,
+            'LOE': self.loe,
+            'DUE': self.due,
+            'REPEAT': self.repeat,
+        }
 
     @property
     def priority(self) -> str | None:
@@ -326,7 +318,10 @@ class SuppliedFields:
         ValueError
             The value is not a whole number.
         """
-        raise NotImplementedError
+        priority = self.fields.get('P')
+        if priority is not None and not priority.isdigit():
+            raise ValueError(f'P must be a whole number, not {priority!r}')
+        return priority
 
     @property
     def loe(self) -> str | None:
@@ -337,7 +332,12 @@ class SuppliedFields:
         ValueError
             The value is not on the scale.
         """
-        raise NotImplementedError
+        loe = self.fields.get('LOE')
+        if loe is not None and loe not in LOE_VALUES:
+            raise ValueError(
+                f'LOE must be one of {", ".join(LOE_VALUES)}, not {loe!r}'
+            )
+        return loe
 
     @property
     def due(self) -> str | None:
@@ -348,7 +348,16 @@ class SuppliedFields:
         ValueError
             The value does not read as a date.
         """
-        raise NotImplementedError
+        due = self.fields.get('DUE')
+        if due is None:
+            return None
+        parsed = parse_date(due)
+        if parsed is None:
+            raise ValueError(f'DUE must be an ISO date, not {due!r}')
+        # Normalised, not passed through: `date.fromisoformat` accepts
+        # more spellings on newer interpreters, and a line's meaning
+        # must not depend on which one wrote it.
+        return parsed.isoformat()
 
     @property
     def repeat(self) -> str | None:
@@ -359,7 +368,13 @@ class SuppliedFields:
         RepeatError
             The value does not read as a recurrence.
         """
-        raise NotImplementedError
+        repeat = self.fields.get('REPEAT')
+        if repeat is not None:
+            # Validated by scheduling it and throwing the answer away: the
+            # repeat parser is the only definition of a readable spec, and
+            # an unreadable one must fail before a task carries it.
+            next_due(repeat, self.today)
+        return repeat
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
