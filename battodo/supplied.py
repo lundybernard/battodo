@@ -516,3 +516,21 @@ class AttributePair:
                 f'not {self.value!r}'
             )
         return self.key, self.value
+
+
+class AttributeSegment:
+    """One `key=value` segment of the attributes a caller supplies."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def pair(self) -> tuple[str, str]:
+        """The key against its value: the segment split at its first `=`.
+
+        Raises
+        ------
+        ValueError
+            The segment holds no `=`.
+        """
+        raise NotImplementedError
