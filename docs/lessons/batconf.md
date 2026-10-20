@@ -1,206 +1,84 @@
 # batconf lessons
 
-Found during the dev-environment cycle (first real install of batconf as
-a dependency):
+Findings from battodo's use of batconf, grouped by status. Upstream state
+read 2026-10-19 at batconf `main` 5431c24 (0.4.1 docs). battodo locks
+0.4.0.
 
-- `FileConfig` emitted a `UserWarning` on construction in released
-  0.3.1, and `get_config` built one unconditionally, so every `btodo`
-  invocation printed a deprecation warning to stderr before doing any
-  work. Resolved: FileConfig removed upstream in 0.4, issue #162 closed.
-- `pyyaml` is an optional extra and the file source imports its YAML
-  support lazily, so a project that never loads a YAML file needs no
-  yaml dependency. Resolved: kept upstream, yaml.py imports lazily,
-  extra still declared.
+## Open asks
 
-Found during the computed-rank cycle:
+- The quickstart omits the rule that derives an environment variable
+  name from the package, the config path, and capitals
+  (`BATTODO_VIEW_SOURCE_DIR`). The `EnvSource` docstring
+  (`env.py:23-27`) and `migration.rst:307-340` state it. Why: a consumer
+  reads the quickstart first, and without the rule reverse-engineers the
+  name from source.
+- An exemplar pass: docstrings on every descriptor, and annotations in
+  the example project (`tests/example/project/`). Why: batconf does not
+  yet exemplify its own property-chain pattern. #227 covers only the
+  shared Toml/Yaml walk.
 
-- `EnvConfig` is a win: `BATTODO_VIEW_SOURCE_DIR` overrides the `view`
-  config section's `source_dir` with no code at all. The gap is
-  discoverability — the variable name is *derived* (package, config
-  path, caps), and the derivation rule appears in neither the README nor
-  the quickstart, so a consumer reverse-engineers it from the source
-  list.
-- Nothing let a running program report the derived name or the resolved
-  source list. Resolved: `EnvSource.env_name` is public and
-  `Configuration`/`SourceList` reprs landed, upstream issue #123 closed.
-- Migration off the deprecated file source was deferred here, because
-  choosing its replacement also chooses the config-file format.
-  Resolved: migration landed; battodo chose TOML via `NamespaceSource` +
-  `TomlSource` + `EnvSource`, ADRs 0007 and 0015.
+## Filed upstream
 
-Found during the batconf-0.4 migration cycle (2026-08-11). This cycle
-was run deliberately docs-first by AI agents, logging every place the
-documentation failed them — each item names the failure mode an agent
-actually hit, since that is what upstream wants to fix:
+Issues #254, #255 and #256 date from 2026-10-19.
 
-- **A deprecated class was removed one release after its first
-  warning.** `FileConfig` and `ConfigProtocol` carried 0.3.1's "will be
-  removed a future release" warning and were gone in 0.4, so
-  `import battodo.conf` died with `ImportError` before any migration
-  work started. Resolved: batconf 0.4 released; battodo migrated (ADRs
-  0007, 0015). The upstream ask stands: a deprecated class should
-  survive one full release cycle between its first warning and its
-  removal, and the `Did you mean: 'Configuration'?` hint Python offers
-  once it is gone points a migrator at the wrong replacement.
-- **Deprecation messages name identifiers that don't match the docs.**
-  0.3.1's `FileConfig` warning points at `batconf.sources.yaml.
-  YamlConfig`; 0.4 ships `YamlSource`. `CliArgsConfig`'s warning says
-  "Use NamespaceConfig from batconf.sources.argparse" while README and
-  migration.rst say `NamespaceSource` from `batconf`. Runtime makes it
-  worse: `NamespaceSource.__qualname__` prints `NamespaceConfig`,
-  `EnvSource.__qualname__` prints `EnvConfig`, and the docstring
-  examples still use the old names. An agent cross-checking names
-  against the live package concludes the docs are wrong.
-- **migration.rst misdescribes its own renames.** It calls the removed
-  names `Proto`-suffixed (line 138) when the 0.3 export in the traceback
-  is `ConfigProtocol` — *Protocol*-suffixed. The old→new table below it
-  is correct; only the prose heading misleads a reader grepping for the
-  name they crashed on.
-- **`DataclassConfig` is silently obsolete, and only the changelog says
-  so.** migration.rst mentions the class solely under the deprecated
-  `module=` kwarg, and never tells the migrator that the 0.3
-  `DataclassConfig(config_class)` line is dead. That belongs in the
-  migration guide, where someone porting a source list will read it.
-- **`NamespaceSource`'s lookup rule is documented nowhere** — the
-  highest-value gap; it forced a source dive. `get` does
-  `attr = '.'.join((path, key)) if path else key` then a *flat*
-  `getattr` on the dotted string: nested namespaces resolve to nothing
-  and there is no bare-key fallback, while 0.3's `CliArgsConfig`
-  ignored the path entirely, so plain argparse dests that worked for
-  years silently stop resolving. In battodo this surfaced as a real
-  regression (commands raising, flags no-oping) caught only by TDD;
-  fix was renaming every dest to the dotted form
-  (`battodo.<field>`). The docstring example (`dest='root.host'`)
-  implies the rule but never states it.
-- **The `[toml]` extra is a lazy trap on Python ≤3.10.** `TomlSource`
-  imports fine and mocked suites stay green; the first real parse raises
-  `ImportError: ... install the optional extra batconf[toml]`.
-  migration.rst documents the extra; quickstart.rst recommends
-  `TomlSource` with no caveat. The fallback also targets the
-  unmaintained `toml` package rather than `tomli`, the actual `tomllib`
-  backport (batconf's `pyproject.toml:43`). Our guard: a real-parse test
-  (tmpdir `config.toml` through `get_config`, no mocks) across the
-  version matrix — our own py310 suite was green before the extra was
-  declared, because every test mocked `TomlSource`.
-  2026-10-12: battodo is past the trap, a win. #110 raised the floor to
-  CPython 3.11, where `TomlSource` imports the stdlib `tomllib` first,
-  and dropped the extra. The 0.4.0 metadata declares
-  `toml; python_version <= '3.10'`, so the extra installs nothing at
-  that floor, and the 0.4.0 README already scopes the extra to
-  "python<=3.10". The `[toml]` loss in the global-install entry below
-  no longer applies. The upstream asks above stand for a consumer on
-  3.10.
-- **Config-file conventions are thin.** Quickstart shows only an
-  app-level constant (`CONFIG_FILE_NAME = str(Path.cwd() /
-  "config.ini")`), and no search-order or env-var-override convention
-  exists anywhere, so a CLI that runs from any directory has to write
-  its own (battodo's ADR 0015).
-- **Smaller gaps:** no null/empty source ships for tests, so consumers
-  write ad-hoc doubles just like batconf's own suite does; and bad
-  inputs give raw `TypeError`/`IsADirectoryError`, not batconf errors.
-- **Two of the three `missing_file_option` policies surprised us.**
-  `'warn'` routes through `logging`, not `warnings` — the right call for
-  warning-gates, but the message reaches stderr only if the host app's
-  logging lets it through, and a host `dictConfig` can eat it silently.
-  `'error'` raises a bare `FileNotFoundError` — no batconf exception
-  type — *lazily at first `.get()`* rather than at construction, so a
-  CLI accepting `--conf /bad/path` launches fine and dies later with a
-  message carrying no config context. A contextual `ConfigFileNotFound`
-  raised eagerly would fix every consumer at once.
-- A message in 0.3.1 misspelled "specify" as "speicfy". Resolved:
-  upstream issue #122 closed.
+- #225: `Configuration` has no optional-key access, so each
+  `from_config` reads an absent option as
+  `getattr(conf, 'name', default)`. The maintainer chooses between a
+  falsy missing-sentinel and an explicit `.get`.
+- #226: a non-`str` schema default is dropped silently
+  (`_default_values` keeps `str` only), and the read raises
+  `AttributeError` as though no default existed. battodo keeps every
+  config value a string (CLAUDE.md; ADR 0007 amendment). Why: the error
+  sends a reader hunting for a missing source.
+- #254: an empty TOML file raises `KeyError: 'batconf'`, not a clear
+  error. `_config_env` reads `['batconf']['default_env']`, and `_data`
+  reads `_config_env` again in its error message, so the second
+  `KeyError` escapes (`toml.py:89-95,101-107`; `YamlSource` has the same
+  shape, `yaml.py:78,93`).
+- #255: `SourceList.get` returns the first truthy value (`source.py:44`)
+  where its docstring says the first non-`None` one (`source.py:24`). An
+  argparse option with a truthy `default=` shadows the env and file
+  sources for good, so battodo leaves such a default unset and lets the
+  schema default answer (`--top`).
+- #256: file-source errors are raw stdlib exceptions.
+  `missing_file_option='error'` raises a bare `FileNotFoundError` at the
+  first `.get()`, not at construction, and bad inputs raise `TypeError`
+  or `IsADirectoryError`. `'warn'` goes through `logging`, so a host
+  `dictConfig` can drop it. No empty source ships for tests. Why: a CLI
+  that takes `--conf /bad/path` starts, then fails later with no config
+  context.
+- #208 (conda-forge package): with no conda package, battodo declares
+  batconf as a pixi path source dependency. That costs a filesystem path
+  in the dependent's manifest, the `pixi-build` preview in batconf's
+  manifest, and a built recipe whose unbounded `batconf` drops the
+  `>=0.4.0` bound and the `[toml]` extra. battodo's data point is not
+  posted.
+- #196 (config file search order): batconf has no search-order or
+  env-override convention for a config file, so battodo wrote its own
+  (ADR 0015). battodo's data point is not posted.
+- #240 (drop Python 3.10): removes the `[toml]` lazy trap, where
+  `TomlSource` imports fine and the first real parse on 3.10 raises
+  `ImportError`. battodo's floor is 3.11 since battodo #110. The
+  fallback still names `toml`, not `tomli` (`pyproject.toml:43`).
 
-Wins worth keeping: the source-list composition survived the migration
-untouched — priority order (CLI > env > file > defaults) is still the
-model an agent guesses correctly on the first try. And pixi's 3-day
-`exclude-newer` cooldown did its job: installing a 2-day-old release of
-our own upstream needed a deliberate per-package override
-(`[tool.pixi.pypi-exclude-newer]`), so the supply-chain delay held for
-everything else while a first-party dependency was exempted on purpose.
+## Resolved upstream
 
-Found during the view `--top` cycle:
-
-- **`SourceList.get` returns the first *truthy* value, not the first
-  non-`None` one**, though its docstring says non-`None`. An argparse
-  option with a non-falsy `default=` fills its namespace key on every
-  run, so it shadows the env and file sources under it for good:
-  `BATTODO_VIEW_TOP=99` leaves the view at 5, while
-  `BATTODO_SHOW_ALL=1` works, because `store_true` defaults to `False`
-  and a falsy value falls through. An option that is also a config
-  value must therefore leave its argparse default unset and let the
-  schema default answer, which is what `--top` does.
-- **Config values are strings by design, and the schema enforces it.**
-  `_default_values` keeps a field default only when
-  `isinstance(f.default, str)`, so `top: int = 5` on a config schema
-  never reaches a lookup: the read raises `AttributeError`, as though
-  the field carried no default. The rule is right — the environment
-  source carries strings and nothing else — and decoding a value to
-  the type its consumer needs is the consumer's job, conventionally a
-  `from_config` method on the class that requires it. The gap is that
-  neither the rule nor this failure mode is documented: the
-  `AttributeError` reports a missing value rather than a rejected
-  default, which sends a reader hunting for a missing source.
-
-Found during the backdate-completion cycle:
-
-- **`Configuration` has no optional-key access.** `__getattr__` raises
-  on a missing key and there is no public `.get`, so an option the user
-  left off is read as `getattr(conf, 'name', default)`. Every consumer
-  carries the idiom at the point it decodes configuration:
-  `Selection.from_config`, `Digest.from_config`, and now
-  `Task.from_config`. Convention keeps it contained — decoding lives
-  only in `from_config` classmethods, and typed attributes flow out of
-  them — but the idiom is the dict workaround, not an API. Two shapes
-  are worth weighing against each other: a falsy missing-sentinel,
-  which would read as `conf.x or DEFAULT` and therefore needs access
-  that does not raise before any operator syntax can help, since a
-  plain `or` never calls `__or__`; and an explicit `.get`. The choice
-  is the upstream maintainer's, so nothing was routed upstream this
-  cycle.
-
-Found during the global-install cycle, packaging battodo as a conda
-package:
-
-- **No conda package means every dependent builds batconf itself.**
-  `pixi global install` resolves runtime dependencies from conda
-  channels, and batconf is on none of them, so battodo declares it as
-  a path source dependency and pixi builds it alongside. The bridge
-  works — the global environment imports batconf — and it costs three
-  things. The dependent's manifest gains a filesystem path, so the
-  install is tied to a layout instead of a channel. batconf's own
-  manifest has to opt into the `pixi-build` preview feature for a
-  consumer's benefit. And the translation drops metadata: the built
-  recipe depends on unbounded `batconf`, losing both the `>=0.4.0`
-  bound and the `[toml]` extra that `[project.dependencies]` states.
-  A conda-forge package (batconf#208) removes all three at once.
-
-Found during the property-refactor cycle, looking for exemplars of the
-cached_property state-machine pattern:
-
-- **batconf does not yet exemplify its own target pattern cleanly.**
-  The clearest chain, `TomlSource` in `sources/toml.py`, stores its
-  inputs in `__init__`, does I/O in `_raw_data`, and derives `_data`,
-  but the chain routes through `_config_env`, a hand-rolled
-  property-with-setter fired from `__init__`, and none of the
-  descriptors carries a docstring. `manager.py`, `sources/ini.py`, and
-  `sources/yaml.py` construct eagerly and recursively in `__init__`
-  and thread state through free functions. The layered application
-  (boundary module, application objects, tools) appears only in the
-  test fixture `tests/example/project/`, whose CLI module is
-  unannotated throughout. Upstream candidates: a property-chain pass
-  over the sources, docstrings on every descriptor, annotations in the
-  example project. Until then the cleaner in-repo exemplars are
-  battodo's own `Digest` and `ConfigFile`.
-
-Found during the snapshot-list migration cycle (2026-10-12):
-
-- **An empty config file fails with `KeyError: 'batconf'`.** batconf
-  0.4.0 (pixi.lock) parses an empty TOML file to `{}`, not to its empty
-  sentinel. battodo builds the `TomlSource` in `ConfigFile.source`
-  (`battodo/conf.py:122`), and the first read is `conf.loglevel` in
-  `Commands.set_log_level` (`battodo/cli.py:489`). With no `--env`,
-  `TomlSource._config_env` reads `['batconf']['default_env']` and raises
-  `KeyError`. `_data` catches it to raise its "Config Environment not
-  found" `ValueError`, but that message reads `_config_env` again, so
-  the second `KeyError` escapes instead. Upstream issue candidate: name
-  the missing `[batconf] default_env` table in a clear error.
+- 0.3.1 `FileConfig` printed a deprecation warning on every `btodo`
+  run. Removed in 0.4 (#162).
+- `pyyaml` stays an optional extra, and `yaml.py` imports it lazily.
+- No API reported a derived env name or the resolved source list.
+  `EnvSource.env_name` and the reprs landed (#123).
+- A deprecated class was removed one release after its first warning.
+  0.4.1 deprecates the 0.5.0 removals in advance (#230).
+- Deprecation messages and `__qualname__` named the old classes.
+  `NamespaceSource` is the class name (`argparse.py:10`), old names
+  resolve through `_compat`, and #237 covers the BAT prefix text.
+- `migration.rst` called the removed names `Proto`-suffixed. The heading
+  is gone from `docs/source`.
+- `DataclassConfig` was obsolete, and only the changelog said so.
+  `migration.rst:174` says so now.
+- `NamespaceSource`'s flat dotted-`getattr` lookup was undocumented. The
+  0.4.1 docs state it (`migration.rst:143-172`).
+- A 0.3.1 message misspelled "specify". Fixed (#122).
+- The migration off the deprecated file source landed: `NamespaceSource`,
+  `TomlSource` and `EnvSource` (battodo ADRs 0007, 0015).
