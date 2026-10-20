@@ -396,49 +396,61 @@ class SuppliedFieldsTests(TestCase):
             ],
         )
 
-    @patch(f'{SRC}.parse_date', autospec=True)
-    @patch(f'{SRC}.next_due', autospec=True)
-    def test_checked(t, next_due: MagicMock, parse_date: MagicMock) -> None:
-        with t.subTest('the supplied fields, each value read'):
+    @patch.object(SuppliedFields, '_given', new_callable=PropertyMock)
+    def test_checked(t, given: PropertyMock) -> None:
+        with t.subTest('the supplied fields, each value as read'):
+            given.return_value = {'P': '3'}
             ret = t.sf.checked
             t.assertEqual(ret, {'TAGS': 'a-tag', 'P': '3'})
 
-        with t.subTest('a due date is written as the parser reads it'):
+        with t.subTest('a value read in another form replaces the given one'):
+            t.sf.fields = {'DUE': 'a due date', 'TAGS': 'a-tag'}
+            given.return_value = {'DUE': '2026-09-01'}
+
+            ret = t.sf.checked
+
+            t.assertEqual(
+                list(ret.items()),
+                [('DUE', '2026-09-01'), ('TAGS', 'a-tag')],
+            )
+
+    @patch.object(SuppliedFields, '_read', new_callable=PropertyMock)
+    def test_given(t, read: PropertyMock) -> None:
+        cases = {
+            'each value read, none where none is given': (
+                {'P': '3', 'LOE': None, 'DUE': '2026-09-01', 'REPEAT': None},
+                {'P': '3', 'DUE': '2026-09-01'},
+            ),
+            'nothing given: nothing': (
+                {'P': None, 'LOE': None, 'DUE': None, 'REPEAT': None},
+                {},
+            ),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                read.return_value = found
+                ret = t.sf._given
+                t.assertEqual(ret, expected)
+
+    @patch(f'{SRC}.parse_date', autospec=True)
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_read(t, next_due: MagicMock, parse_date: MagicMock) -> None:
+        with t.subTest('each field in order, None where none is given'):
+            ret = t.sf._read
+            t.assertEqual(
+                list(ret.items()),
+                [('P', '3'), ('LOE', None), ('DUE', None), ('REPEAT', None)],
+            )
+
+        with t.subTest('a due date as the parser reads it'):
             t.sf.fields = {'DUE': 'a due date'}
             parse_date.return_value = date(2026, 9, 1)
-
-            ret = t.sf.checked
-
-            parse_date.assert_called_once_with('a due date')
-            t.assertEqual(ret, {'DUE': '2026-09-01'})
-
-        with t.subTest('a recurrence is read against the day'):
-            t.sf.fields = {'REPEAT': 'a recurrence'}
-
-            ret = t.sf.checked
-
-            next_due.assert_called_once_with('a recurrence', TODAY)
-            t.assertEqual(ret, {'REPEAT': 'a recurrence'})
-
-        with t.subTest('a recurrence the scheduler cannot read'):
-            next_due.side_effect = ValueError('unrecognised REPEAT value')
-            with t.assertRaisesRegex(ValueError, 'unrecognised REPEAT'):
-                _ = t.sf.checked
+            ret = t.sf._read
+            t.assertEqual(ret['DUE'], '2026-09-01')
 
         parse_date.return_value = None
+        next_due.side_effect = ValueError('unrecognised REPEAT value')
         refused = {
-            'a priority that is not a number': (
-                {'P': 'high'},
-                "P must be a whole number, not 'high'",
-            ),
-            'a level of effort off the scale': (
-                {'LOE': '4'},
-                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
-            ),
-            'a due date that does not read': (
-                {'DUE': 'someday'},
-                "DUE must be an ISO date, not 'someday'",
-            ),
             'a priority is read first, a recurrence last': (
                 {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4', 'P': 'high'},
                 "P must be a whole number, not 'high'",
@@ -457,7 +469,7 @@ class SuppliedFieldsTests(TestCase):
                 t.sf.fields = fields
 
                 with t.assertRaises(ValueError) as caught:
-                    _ = t.sf.checked
+                    _ = t.sf._read
 
                 t.assertEqual(str(caught.exception), message)
 
