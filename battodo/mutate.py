@@ -1451,15 +1451,17 @@ class Completion:
         recurrence, gained = lines.recurrence, lines.recurrence_fields
         day, ancestries = self.completed_on, lines.ancestries
         list_name = self.path.stem
-        completions = []
-        for ancestry in ancestries:
-            fields = gained if ancestry.node is recurrence else {}
-            attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(
-                ancestry, fields, day, list_name, attrs, self.scratched
+        return [
+            TaskCompletion(
+                ancestry,
+                gained if ancestry.node is recurrence else {},
+                day,
+                list_name,
+                self.attrs if ancestry is ancestries[0] else None,
+                self.scratched,
             )
-            completions.append(completion)
-        return completions
+            for ancestry in ancestries
+        ]
 
     @property
     def assignments(self) -> list['Event']:
