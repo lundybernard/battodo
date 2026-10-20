@@ -450,18 +450,8 @@ class SuppliedAttributes:
             line break, or a key is given twice.
         """
         checked: dict[str, str] = {}
-        for key, value in self.pairs:
-            if not ATTRIBUTE_KEY.fullmatch(key):
-                raise ValueError(
-                    f'attribute key must be a lowercase identifier, '
-                    f'not {key!r}'
-                )
-            if not value:
-                raise ValueError(f'attribute {key!r} must hold a value')
-            if '\n' in value or '\r' in value:
-                raise ValueError(
-                    f'attribute {key!r} must hold no line break, not {value!r}'
-                )
+        for pair in self.pairs:
+            key, value = AttributePair(*pair).checked
             if key in checked:
                 raise ValueError(f'attribute {key!r} is given twice')
             checked[key] = value
@@ -513,4 +503,16 @@ class AttributePair:
             The key is outside the grammar, or the value is empty or
             holds a line break, checked in that order.
         """
-        raise NotImplementedError
+        if not ATTRIBUTE_KEY.fullmatch(self.key):
+            raise ValueError(
+                'attribute key must be a lowercase identifier, '
+                f'not {self.key!r}'
+            )
+        if not self.value:
+            raise ValueError(f'attribute {self.key!r} must hold a value')
+        if '\n' in self.value or '\r' in self.value:
+            raise ValueError(
+                f'attribute {self.key!r} must hold no line break, '
+                f'not {self.value!r}'
+            )
+        return self.key, self.value
