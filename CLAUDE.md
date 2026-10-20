@@ -54,8 +54,8 @@ work for:
 2. **batconf findings** — friction, gaps, and wins to file as upstream
    issues against batconf.
 3. **Dev-process lessons** — agent and workflow findings.
-4. **Publicizable wins** — post candidates; log privately in
-   CLAUDE.local.md.
+4. **Publicizable wins** — post candidates; record significant ones in
+   careerkb.
 
 Record findings 1–3 in docs/lessons/ (informal log, parallel to
 docs/decisions/) as they occur; route upstream at cycle boundaries.
