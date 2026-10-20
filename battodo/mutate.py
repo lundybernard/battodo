@@ -2721,14 +2721,30 @@ class ListBackfill:
         The date is the migration's, not the task's, so the payload says
         so: a replay must not read it as an observed fact.
         """
-        delta = {'ADDED': [None, self.today.isoformat()]}
-        events = []
-        for task in self.tasks:
-            payload = {
-                'delta': delta,
-                'snapshot': task.listed_snapshot(self.path.stem),
-                'backfilled': True,
-            }
-            stream = f'task/{self.ids[task.raw_index]}'
-            events.append(Event(ADDED_EVENT, stream, payload))
-        return events
+        return [
+            Event(
+                ADDED_EVENT,
+                stream,
+                {
+                    'delta': self._delta,
+                    'snapshot': snapshot,
+                    'backfilled': True,
+                },
+            )
+            for stream, snapshot in zip(self._streams, self._snapshots)
+        ]
+
+    @property
+    def _delta(self) -> dict[str, list[str | None]]:
+        """The delta of each stamp: no add date, then the migration's."""
+        return {'ADDED': [None, self.today.isoformat()]}
+
+    @property
+    def _streams(self) -> list[str]:
+        """The stream of each task to stamp, in file order."""
+        return [f'task/{self.ids[task.raw_index]}' for task in self.tasks]
+
+    @property
+    def _snapshots(self) -> list[dict[str, Any]]:
+        """The snapshot of each task to stamp, in file order."""
+        return [task.listed_snapshot(self.path.stem) for task in self.tasks]

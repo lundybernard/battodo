@@ -4692,19 +4692,16 @@ class ListBackfillTests(TestCase):
         # A backfill logs no completed-log record.
         t.assertEqual(ret, [])
 
-    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
-    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
-    def test_events(t, tasks: PropertyMock, snapshot: MagicMock) -> None:
-        tasks.return_value = [bare_node()]
-        snapshot.return_value = sentinel.snapshot
-        t.lb.ids = {1: 'zz01ab'}
-        t.path.stem = 'a-list'
+    @patch.object(ListBackfill, '_snapshots', new_callable=PropertyMock)
+    @patch.object(ListBackfill, '_streams', new_callable=PropertyMock)
+    def test_events(t, streams: PropertyMock, snapshots: PropertyMock) -> None:
+        streams.return_value = ['task/zz01ab']
+        snapshots.return_value = [sentinel.snapshot]
 
         ret = t.lb.events
 
         # The date is the migration's: a replay must not read it as an
         # observed fact.
-        snapshot.assert_called_once_with(tasks.return_value[0], 'a-list')
         t.assertEqual(
             ret,
             [
@@ -4719,6 +4716,32 @@ class ListBackfillTests(TestCase):
                 )
             ],
         )
+
+    def test_delta(t) -> None:
+        ret = t.lb._delta
+        # No add date before, the migration's after.
+        t.assertEqual(ret, {'ADDED': [None, '2026-08-08']})
+
+    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
+    def test_streams(t, tasks: PropertyMock) -> None:
+        tasks.return_value = [bare_node(), undated_due_node()]
+        t.lb.ids = {1: 'zz01ab', 6: 'ud05ef'}
+
+        ret = t.lb._streams
+
+        t.assertEqual(ret, ['task/zz01ab', 'task/ud05ef'])
+
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
+    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
+    def test_snapshots(t, tasks: PropertyMock, snapshot: MagicMock) -> None:
+        tasks.return_value = [bare_node()]
+        snapshot.return_value = sentinel.snapshot
+        t.path.stem = 'a-list'
+
+        ret = t.lb._snapshots
+
+        snapshot.assert_called_once_with(tasks.return_value[0], 'a-list')
+        t.assertEqual(ret, [sentinel.snapshot])
 
 
 def named_task(*ancestry: TaskNode) -> Mock:
