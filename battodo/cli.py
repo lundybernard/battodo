@@ -26,6 +26,8 @@ from battodo.messages import MESSAGES
 dictConfig(logging_config)
 log = getLogger('root')
 
+LOG_LEVELS = ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG')
+
 
 def BATCLI(ARGS=None):
     p = argparser()
@@ -37,9 +39,12 @@ def BATCLI(ARGS=None):
         config_file_name=args.config_file,
         config_env=args.config_env,
     )
-    Commands.set_log_level(conf)
     # execute function set for parsed command
     try:
+        # A bad log level is a config error like any other, so it is set
+        # inside the boundary: it must reach the report below, not
+        # escape it as a traceback.
+        Commands.set_log_level(conf)
         args.func(conf, args)
     # Top-level CLI boundary: any command failure becomes a message on
     # stderr, never a traceback. stdout carries the command's output and
@@ -468,4 +473,17 @@ class Commands:
 
     @staticmethod
     def set_log_level(conf):
-        log.setLevel(conf.loglevel)
+        """Set the level the config names on the root logger.
+
+        Raises
+        ------
+        ValueError
+            logging does not know the configured level.
+        """
+        try:
+            log.setLevel(conf.loglevel)
+        except ValueError:
+            raise ValueError(
+                f'unknown log level {conf.loglevel!r}; '
+                f'choose one of {", ".join(LOG_LEVELS)}'
+            ) from None
