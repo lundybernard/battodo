@@ -633,7 +633,16 @@ class Section:
         The parent is the nearest earlier task line of the section with
         a lower indent. A task line with none has None.
         """
-        raise NotImplementedError
+        indents = [line.indent for line in self.task_lines]
+        shallower = [
+            [
+                above
+                for above in range(position)
+                    if indents[above] < indent
+            ]
+            for position, indent in enumerate(indents)
+        ]  # fmt: skip
+        return [max(above, default=None) for above in shallower]
 
 
 @dataclass
