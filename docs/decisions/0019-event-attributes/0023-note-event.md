@@ -1,6 +1,6 @@
 # 0023 — A note event annotates an open task
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-11
 
 ## Context

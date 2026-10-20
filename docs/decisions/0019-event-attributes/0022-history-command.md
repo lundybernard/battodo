@@ -1,6 +1,6 @@
 # 0022 — A history command reads the journal
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-01
 
 ## Context

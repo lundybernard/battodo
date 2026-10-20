@@ -1,6 +1,6 @@
 # 0020 — Every journal event carries an open attribute map
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-01
 
 ## Context

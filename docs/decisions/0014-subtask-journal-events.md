@@ -1,6 +1,6 @@
 # 0014 — Subtask journal events
 
-Status: Proposed
+Status: Accepted (merged 2026-08-18, PR #21)
 Date: 2026-08-17
 
 ## Context

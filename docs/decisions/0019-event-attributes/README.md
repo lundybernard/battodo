@@ -13,7 +13,7 @@ note event.
 
 Branch: `adr-event-attributes` — Issue: #79
 
-**Status: active.** The group lands before the journal-authority flip
+**Status: Accepted.** The group lands before the journal-authority flip
 ([ADR group 0008](../0008-journal-authority/README.md)).
 [After the flip](#after-the-flip) lists the two items that wait for it.
 S4, the notes in `show` ([ADR 0022](0022-history-command.md),
@@ -80,10 +80,10 @@ an open task without a change to that task.
 
 | # | Title | Status |
 | - | ----- | ------ |
-| [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Proposed |
-| [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
-| [0022](0022-history-command.md) | A history command reads the journal | Proposed |
-| [0023](0023-note-event.md) | A note event annotates an open task | Proposed |
+| [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Accepted |
+| [0021](0021-task-description-field.md) | A task description is a journaled item field | Accepted |
+| [0022](0022-history-command.md) | A history command reads the journal | Accepted |
+| [0023](0023-note-event.md) | A note event annotates an open task | Accepted |
 
 ## After the flip
 

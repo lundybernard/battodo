@@ -1,6 +1,6 @@
 # 0025 — A closed task reopens through update
 
-Status: Proposed
+Status: Accepted (merged 2026-10-12, PR #111)
 Date: 2026-10-12
 
 ## Context

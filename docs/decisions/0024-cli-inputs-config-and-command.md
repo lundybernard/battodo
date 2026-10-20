@@ -1,6 +1,6 @@
 # 0024 — Command inputs pass beside the configuration
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #91)
 Date: 2026-10-11
 
 ## Context

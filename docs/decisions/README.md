@@ -14,13 +14,13 @@ stands for; its component ADRs take the following numbers.
 | [0007](0007-toml-config-file.md) | TOML config file | Accepted |
 | [0008](0008-journal-authority/) | Journal authority (components 0009–0012) | Accepted |
 | 0013 | Cutover requirements (retired; cutover complete) | Deprecated |
-| [0014](0014-subtask-journal-events.md) | Subtask journal events | Proposed |
+| [0014](0014-subtask-journal-events.md) | Subtask journal events | Accepted |
 | [0015](0015-config-file-location.md) | Config file location | Accepted |
 | [0016](0016-property-refactor/) | Property refactor (components 0017–0018) | Accepted |
-| [0019](0019-event-attributes/) | Event attributes (components 0020–0023) | Active |
-| [0024](0024-cli-inputs-config-and-command.md) | Command inputs beside the configuration | Proposed |
-| [0025](0025-reopen-by-update.md) | A closed task reopens through update | Proposed |
-| [0026](0026-due-date-factor.md) | A due-date factor on the priority | Proposed |
-| [0027](0027-scratch-through-done.md) | A scratch closes a task through done | Proposed |
-| [0028](0028-update-repeat.md) | update sets, changes and clears a repeat | Proposed |
-| [0029](0029-subtask-repeat.md) | A subtask may repeat, and keeps its parent open | Proposed |
+| [0019](0019-event-attributes/) | Event attributes (components 0020–0023) | Accepted |
+| [0024](0024-cli-inputs-config-and-command.md) | Command inputs beside the configuration | Accepted |
+| [0025](0025-reopen-by-update.md) | A closed task reopens through update | Accepted |
+| [0026](0026-due-date-factor.md) | A due-date factor on the priority | Accepted |
+| [0027](0027-scratch-through-done.md) | A scratch closes a task through done | Accepted |
+| [0028](0028-update-repeat.md) | update sets, changes and clears a repeat | Accepted |
+| [0029](0029-subtask-repeat.md) | A subtask may repeat, and keeps its parent open | Accepted |

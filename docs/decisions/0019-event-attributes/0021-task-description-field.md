@@ -1,6 +1,6 @@
 # 0021 — A task description is a journaled item field
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-01
 
 ## Context
