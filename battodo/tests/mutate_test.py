@@ -4119,6 +4119,15 @@ class CompletionLinesTests(TestCase):
                 ret, [(t.parent, t.child, below), (t.parent, t.child)]
             )
 
+        with t.subTest('two open siblings: the deepest ends the cascade'):
+            t.child.fields = {'LOE': '1'}
+            t.child.children = [below, grandchild_node()]
+            t.parent.children[1].done = False
+
+            ret = t.cl.ancestries
+
+            t.assertEqual(ret, [(t.parent, t.child, below)])
+
 
 class TaskCompletionTests(TestCase):
     """Unit tests for battodo.mutate.TaskCompletion."""
