@@ -1199,6 +1199,10 @@ class ReopenTests(TestCase):
             # The text is read before the list it goes to.
             t.assertEqual(journaled(t.source), before)
 
+    def test_lists(t) -> None:
+        ret = t.ro.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.ro.text})
+
     def test_text(t) -> None:
         opened = [
             FINISHED_BLOCK[0].replace('[x]', '[ ]').replace('[P:2]', '[P:5]'),

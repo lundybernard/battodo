@@ -833,20 +833,17 @@ class Reopen:
         self.with_subtasks = with_subtasks
 
     def write(self) -> None:
-        """Write the list and its events.
+        """Write the list and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
