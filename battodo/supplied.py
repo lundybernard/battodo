@@ -317,6 +317,50 @@ class SuppliedFields:
             next_due(repeat, self.today)
         return checked
 
+    @property
+    def priority(self) -> str | None:
+        """The `P` value, or None without one.
+
+        Raises
+        ------
+        ValueError
+            The value is not a whole number.
+        """
+        raise NotImplementedError
+
+    @property
+    def loe(self) -> str | None:
+        """The `LOE` value, or None without one.
+
+        Raises
+        ------
+        ValueError
+            The value is not on the scale.
+        """
+        raise NotImplementedError
+
+    @property
+    def due(self) -> str | None:
+        """The `DUE` date in ISO form, or None without one.
+
+        Raises
+        ------
+        ValueError
+            The value does not read as a date.
+        """
+        raise NotImplementedError
+
+    @property
+    def repeat(self) -> str | None:
+        """The `REPEAT` value, or None without one.
+
+        Raises
+        ------
+        RepeatError
+            The value does not read as a recurrence.
+        """
+        raise NotImplementedError
+
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
 

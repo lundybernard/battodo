@@ -461,6 +461,112 @@ class SuppliedFieldsTests(TestCase):
 
                 t.assertEqual(str(caught.exception), message)
 
+    def test_priority(t) -> None:
+        with t.subTest('the priority, as given'):
+            ret = t.sf.priority
+            t.assertEqual(ret, '3')
+
+        with t.subTest('none given: none'):
+            t.sf.fields = {}
+            ret = t.sf.priority
+            t.assertIsNone(ret)
+
+        refused = {
+            'a priority that is not a number': (
+                'high',
+                "P must be a whole number, not 'high'",
+            ),
+            'an empty priority': ('', "P must be a whole number, not ''"),
+        }
+        for name, (value, message) in refused.items():
+            with t.subTest(name):
+                t.sf.fields = {'P': value}
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sf.priority
+
+                t.assertEqual(str(caught.exception), message)
+
+    def test_loe(t) -> None:
+        for value in ('1', '2', '3', '5', '8'):
+            with t.subTest('a level of effort on the scale', value=value):
+                t.sf.fields = {'LOE': value}
+                ret = t.sf.loe
+                t.assertEqual(ret, value)
+
+        with t.subTest('none given: none'):
+            t.sf.fields = {}
+            ret = t.sf.loe
+            t.assertIsNone(ret)
+
+        with t.subTest('a level of effort off the scale'):
+            t.sf.fields = {'LOE': '4'}
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sf.loe
+
+            t.assertEqual(
+                str(caught.exception),
+                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+            )
+
+    @patch(f'{SRC}.parse_date', autospec=True)
+    def test_due(t, parse_date: MagicMock) -> None:
+        with t.subTest('a due date, as the parser reads it'):
+            t.sf.fields = {'DUE': 'a due date'}
+            parse_date.return_value = date(2026, 9, 1)
+
+            ret = t.sf.due
+
+            parse_date.assert_called_once_with('a due date')
+            t.assertEqual(ret, '2026-09-01')
+
+        with t.subTest('none given: none, and nothing is read'):
+            parse_date.reset_mock()
+            t.sf.fields = {}
+
+            ret = t.sf.due
+
+            parse_date.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('a due date that does not read'):
+            t.sf.fields = {'DUE': 'someday'}
+            parse_date.return_value = None
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sf.due
+
+            t.assertEqual(
+                str(caught.exception), "DUE must be an ISO date, not 'someday'"
+            )
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_repeat(t, next_due: MagicMock) -> None:
+        with t.subTest('a recurrence, read against the day'):
+            t.sf.fields = {'REPEAT': 'a recurrence'}
+
+            ret = t.sf.repeat
+
+            next_due.assert_called_once_with('a recurrence', TODAY)
+            t.assertEqual(ret, 'a recurrence')
+
+        with t.subTest('none given: none, and nothing is read'):
+            next_due.reset_mock()
+            t.sf.fields = {}
+
+            ret = t.sf.repeat
+
+            next_due.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('a recurrence the scheduler cannot read'):
+            t.sf.fields = {'REPEAT': 'often'}
+            next_due.side_effect = ValueError('unrecognised REPEAT value')
+
+            with t.assertRaisesRegex(ValueError, 'unrecognised REPEAT'):
+                _ = t.sf.repeat
+
     def test_refuse_root_fields(t) -> None:
         with t.subTest('the fields a subtask carries, a repeat among them'):
             # Nothing to refuse: the call returns.
