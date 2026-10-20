@@ -12,6 +12,11 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from os import environ
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
+# The zone of every fixture clock. A named zone, not a fixed offset, so
+# a fixture date keeps its local day across a daylight-saving change.
+TZ = ZoneInfo('America/Los_Angeles')
 
 # The variables a run reads its configuration from: the environment
 # source of the configuration, and the user config directory.

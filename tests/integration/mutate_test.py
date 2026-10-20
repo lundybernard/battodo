@@ -13,7 +13,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest import TestCase
 
-from battodo.conf import TZ
 from battodo.journal import Journal
 from battodo.mutate import (
     Addition,
@@ -35,6 +34,7 @@ from battodo.parser import Ancestry, TodoDocument
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
 from battodo.task import Task
+from tests.environment import TZ
 
 TODAY = date(2026, 8, 8)
 # A completion day the user gives, earlier than TODAY.

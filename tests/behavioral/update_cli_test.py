@@ -18,8 +18,8 @@ from typing import Any
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import TZ
 from battodo.journal import Journal
+from tests.environment import TZ
 
 from .cli_runner import run_cli
 
