@@ -503,20 +503,8 @@ class Update:
         self.with_subtasks = with_subtasks
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
-
-        Every value is read before the first write, so a refused write
-        writes nothing.
-        """
-        lists = self.lists
-        changes = Changeset(
-            lists,
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
     @property
     def lists(self) -> dict[Path, str]:

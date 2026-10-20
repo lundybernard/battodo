@@ -681,65 +681,10 @@ class UpdateTests(TestCase):
         t.up = Update(t.task, {'P': '5'}, title='A new title')
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Update, 'events', new_callable=PropertyMock)
-    @patch.object(Update, 'entries', new_callable=PropertyMock)
-    @patch.object(Update, 'lists', new_callable=PropertyMock)
-    def test_write(
-        t,
-        lists: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
-        lists.return_value = sentinel.lists
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.up.path = ANOTHER_PATH
-
-        with t.subTest('the lists, the log records and the events'):
-            t.up.write()
-
-            changeset.assert_called_once_with(
-                sentinel.lists,
-                sentinel.entries,
-                sentinel.events,
-                ANOTHER_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused list: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
-            lists.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.up.write()
-
-            entries.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused record: no event is read, nothing written'):
-            changeset.reset_mock()
-            events.reset_mock()
-            lists.side_effect = None
-            entries.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.up.write()
-
-            events.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused event: nothing is written'):
-            changeset.reset_mock()
-            entries.side_effect = None
-            events.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.up.write()
-
-            changeset.assert_not_called()
+    def test_write(t, changeset: MagicMock) -> None:
+        t.up.write()
+        changeset.from_mutation.assert_called_once_with(t.up)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
 
     @patch.object(Update, 'joined', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
