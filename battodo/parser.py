@@ -66,34 +66,16 @@ class TodoDocument:
     def tasks(self) -> list['TaskNode']:
         """The open-section task tree, in file order.
 
-        Each node goes under the nearest earlier node of its section
-        with a lower indent. A node with none is a top-level task.
+        Each node goes under the node that `Section.parents` names. A
+        node with none is a top-level task.
         """
         tasks: list[TaskNode] = []
-        for nodes in self.section_nodes:
-            for position, node in enumerate(nodes):
-                above = reversed(nodes[:position])
-                parent = next(
-                    (
-                        earlier
-                        for earlier in above
-                            if earlier.indent < node.indent
-                    ),
-                    None,
-                )  # fmt: skip
-                siblings = tasks if parent is None else parent.children
+        for section in self.sections:
+            nodes = section.nodes
+            for node, parent in zip(nodes, section.parents):
+                siblings = tasks if parent is None else nodes[parent].children
                 siblings.append(node)
         return tasks
-
-    @property
-    def section_nodes(self) -> list[list['TaskNode']]:
-        """A node per task line, one list per `## Open` section.
-
-        Each list is flat and in file order. A note line goes on the
-        nearest task line above it in its section; a note line with no
-        task above it is dropped.
-        """
-        return [section.nodes for section in self.sections]
 
     @property
     def sections(self) -> list['Section']:

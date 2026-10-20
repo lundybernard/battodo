@@ -613,61 +613,6 @@ class TodoDocumentTests(TestCase):
             t.assertEqual(outside_tasks, [])
 
     @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
-    def test_section_nodes(t, open_sections: PropertyMock) -> None:
-        t.td.lines = [
-            '## Open',
-            '- [ ] First task [P:1]',
-            '      A note line.',
-            '<!-- A comment. -->',
-            '  - [x] A done child',
-            '',
-            '## Open',
-            'A note line before any task.',
-            '- [ ] Second task',
-        ]
-        open_sections.return_value = [[1, 2, 3, 4, 5], [7, 8]]
-
-        ret = t.td.section_nodes
-
-        with t.subTest('a node per task line, one list per section'):
-            first, child = ret[0]
-            (second,) = ret[1]
-            t.assertEqual(
-                first,
-                TaskNode(
-                    raw_index=1,
-                    indent=0,
-                    done=False,
-                    title='First task',
-                    fields={'P': '1'},
-                    raw='- [ ] First task [P:1]',
-                    # Default: children=[],
-                    note_indices=[2],
-                    description_lines=['A note line.'],
-                ),
-            )
-            t.assertEqual(
-                child,
-                TaskNode(
-                    raw_index=4,
-                    indent=2,
-                    done=True,
-                    title='A done child',
-                    fields={},
-                    raw='  - [x] A done child',
-                ),
-            )
-            t.assertEqual(second.raw_index, 8)
-
-        with t.subTest('a blank line or a comment is no note line'):
-            t.assertEqual(first.note_indices, [2])
-            t.assertEqual(child.note_indices, [])
-
-        with t.subTest('a note line before any task in a section is dropped'):
-            t.assertEqual(second.note_indices, [])
-            t.assertEqual(second.description_lines, [])
-
-    @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
     def test_sections(t, open_sections: PropertyMock) -> None:
         open_sections.return_value = [[1, 2], [5]]
 
