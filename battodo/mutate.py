@@ -1143,12 +1143,16 @@ class Reopen:
     def chains(self) -> dict[int, list[TaskNode]]:
         """Each task of the restored list and every task above it.
 
-        By the line of the task, outermost first.
+        By the line of the task, outermost first. Shallowest first, in
+        file order at each depth, so `ancestry` takes the shallowest of
+        two tasks with one id.
         """
-        found = [[task] for task in self.restored.tasks]
-        for chain in found:
-            found.extend([*chain, child] for child in chain[-1].children)
-        return {chain[-1].raw_index: chain for chain in found}
+        return {chain[-1].raw_index: chain for chain in self._breadth_first}
+
+    @property
+    def _breadth_first(self) -> list[list[TaskNode]]:
+        """Each ancestry of the restored list, shallowest first."""
+        return sorted(self.restored.ancestries, key=len)
 
     @property
     def opened(self) -> list[TaskNode]:

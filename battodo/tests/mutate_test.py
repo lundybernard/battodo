@@ -1858,33 +1858,47 @@ class ReopenTests(TestCase):
                 ret = t.ro.ancestry
                 t.assertEqual(ret, expected)
 
-    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
-    def test_chains(t, restored: PropertyMock) -> None:
+    @patch.object(Reopen, '_breadth_first', new_callable=PropertyMock)
+    def test_chains(t, breadth_first: PropertyMock) -> None:
         parent = parent_node()
         child = child_node()
-        grandchild = grandchild_node()
-        child.children = [grandchild]
-        parent.children = [child]
         bare = bare_node()
         bare.raw_index = 6
-        restored.return_value = Mock(spec=['tasks'])
-        restored.return_value.tasks = [parent, bare]
+        breadth_first.return_value = [[parent], [bare], [parent, child]]
 
         ret = t.ro.chains
 
-        # Each task of the list, below every task above it.
+        # Each task by its line, below every task above it, in the order
+        # read.
+        t.assertEqual(
+            list(ret.items()),
+            [(1, [parent]), (6, [bare]), (3, [parent, child])],
+        )
+
+    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
+    def test_breadth_first(t, restored: PropertyMock) -> None:
+        parent = parent_node()
+        child = child_node()
+        grandchild = grandchild_node()
+        bare = bare_node()
+        bare.raw_index = 6
+        # Every task of the list with its ancestry, in file order.
+        restored.return_value = Mock(spec=['ancestries'])
+        restored.return_value.ancestries = [
+            [parent],
+            [parent, child],
+            [parent, child, grandchild],
+            [bare],
+        ]
+
+        ret = t.ro._breadth_first
+
+        # Pins the current match; a ruling may change it. Shallowest
+        # first: `ancestry` takes the first task with the id.
         t.assertEqual(
             ret,
-            {
-                1: [parent],
-                6: [bare],
-                3: [parent, child],
-                5: [parent, child, grandchild],
-            },
+            [[parent], [bare], [parent, child], [parent, child, grandchild]],
         )
-        # Pins the current match; a ruling may change it. Breadth first:
-        # `ancestry` takes the first task with the id.
-        t.assertEqual(list(ret), [1, 6, 3, 5])
 
     @patch.object(Reopen, 'subtasks', new_callable=PropertyMock)
     @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
