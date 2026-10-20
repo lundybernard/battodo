@@ -1,7 +1,7 @@
 # mutmut lessons
 
 Findings from battodo's use of mutmut 3, grouped by status. Upstream state
-read 2026-10-19 at mutmut 3.8.0 (`HISTORY.rst`). battodo locks 3.7.0
+read 2026-10-19 at mutmut 3.8.0 (`HISTORY.rst`). battodo locks 3.8.0
 (`pixi.lock`).
 
 ## Open
@@ -30,10 +30,9 @@ read 2026-10-19 at mutmut 3.8.0 (`HISTORY.rst`). battodo locks 3.7.0
   `# pragma: no mutate` for a line, a block, and a start/end region;
   3.8.0 fixes its edge cases (#554, #559).
 - Decorated classes were skipped whole (`TaskNode`, a `@dataclass`).
-  Fixed in 3.8.0 (#480, #539). The fix takes effect when the lock moves
-  to 3.8.0.
+  Fixed in 3.8.0 (#480, #539). Resolved by mutmut 3.8.0 (PR #133).
 - A test under `patch.dict(os.environ, ..., clear=True)` removed
   `MUTANT_UNDER_TEST`, so it ran the original code against every
   mutant. Fixed in 3.8.0 (#511, #552). battodo's fixtures remove only
-  the battodo variables (`tests/environment.py`, #123). Until the lock
-  moves, `rg -n "clear=True"` over the test trees detects a regression.
+  the battodo variables (`tests/environment.py`, #123). Resolved by
+  mutmut 3.8.0 (PR #133).
