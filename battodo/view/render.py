@@ -44,10 +44,11 @@ class View:
     @property
     def header(self) -> str:
         now = self.selection.now
-        return (
-            f'{now.strftime("%A")} {self.today} {now.strftime("%H:%M")} '
-            f'— active: {", ".join(sorted(self.selection.active))}'
-        )
+        stamp = f'{now.strftime("%A")} {self.today} {now.strftime("%H:%M")}'
+        active = self.selection.active
+        if not active:
+            return stamp
+        return f'{stamp} — active: {", ".join(sorted(active))}'
 
     @cached_property
     def categories(self) -> list[Category]:

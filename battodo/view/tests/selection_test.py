@@ -4,7 +4,6 @@ from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..selection import (
-    CATEGORY_ORDER,
     TOP_N,
     Category,
     CategoryJsonView,
@@ -263,6 +262,7 @@ class SelectionTests(TestCase):
                 t.assertEqual(ret, expected)
 
     def test_categories(t) -> None:
+        t.s.windows = 'chores=sun 9-10'
         t.s.active = {'work', 'study'}
         shown, shut, empty = (
             t.todo('work'),
@@ -434,12 +434,12 @@ class TodoListTests(TestCase):
     def test_order(t) -> None:
         with t.subTest('a named category sorts by its place in the order'):
             ret = t.tl.order
-            t.assertEqual(ret, (CATEGORY_ORDER.index('work'), 'work'))
+            t.assertEqual(ret, (0, 'work'))
 
         with t.subTest('an unknown name sorts after every named one'):
             t.tl.category = 'side-quests'
             ret = t.tl.order
-            t.assertEqual(ret, (len(CATEGORY_ORDER), 'side-quests'))
+            t.assertEqual(ret, (5, 'side-quests'))
 
         with t.subTest('and unknown names sort among themselves by name'):
             t.tl.category = 'backlog'

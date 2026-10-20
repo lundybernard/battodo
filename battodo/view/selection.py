@@ -24,7 +24,7 @@ from typing import NamedTuple
 
 from batconf import Configuration
 
-from ..lists import CATEGORY_ORDER, category_order, discover_lists, item_count
+from ..lists import category_order, discover_lists, item_count
 from ..parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from ..rank import DEFAULT_DUE_CURVE, Curve, multiplier, parse_curve, rank
 from ..repeat import WEEKDAYS
@@ -55,6 +55,8 @@ WINDOW_RE = re.compile(
     r'\s+(?P<start>\d{1,2})\s*-\s*(?P<end>\d{1,2})',
     re.IGNORECASE,
 )
+# A window's end hour can reach the end of the day, and no further.
+DAY_HOURS = 24
 # What the windows of a view report when they do not read.
 ENTRY_ERROR = 'a view.windows entry must read <category>=<window>'
 WINDOW_ERROR = 'a view.windows window must read <days> <start>-<end>'
@@ -94,7 +96,8 @@ class Selection:
         """Build a selection from a resolved configuration.
 
         Every configuration value is a string, so the item count is
-        decoded here. The due-date curve is decoded once, by `curve`.
+        decoded here. The due-date curve is decoded once, by `curve`,
+        and the schedule by `schedule` and `always_open`.
 
         Raises
         ------
@@ -107,6 +110,10 @@ class Selection:
             show_all=show_all,
             top_n=item_count(conf.view.top),
             rank_due_curve=conf.view.rank_due_curve,
+            # The lookup reads an empty value as absent, so each read
+            # supplies the empty default itself.
+            windows=getattr(conf.view, 'windows', ''),
+            always_active=getattr(conf.view, 'always_active', ''),
         )
 
     @property
@@ -134,20 +141,22 @@ class Selection:
 
     @cached_property
     def active(self) -> set[str]:
-        """The categories whose time window is open at `now`."""
-        names = set(ALWAYS_ACTIVE)
-        if self.weekday and 9 <= self.hour < 17:
-            names.add('work')
-        if self.weekday and 17 <= self.hour < 21:
-            names.add('chores')
-        if not self.weekday and 10 <= self.hour < 20:
-            names.add('chores')
+        """The categories open at `now`: the always-open names, and each
+        category with a window that holds now.
+        """
+        names = set(self.always_open)
+        names.update(
+            name
+            for name, windows in self.schedule.items()
+                if any(window.holds(self.day, self.hour) for window in windows)
+        )  # fmt: skip
         return names
 
     @property
     def always_open(self) -> frozenset[str]:
         """The categories no window shuts."""
-        raise NotImplementedError
+        names = {part.strip() for part in self.always_active.split(',')}
+        return frozenset(names - {''})
 
     @property
     def schedule(self) -> dict[str, list['Window']]:
@@ -158,7 +167,7 @@ class Selection:
         ValueError
             The configured windows do not read.
         """
-        raise NotImplementedError
+        return parse_windows(self.windows)
 
     @property
     def weekday(self) -> bool:
@@ -207,16 +216,16 @@ class Selection:
     def shows(self, todo: 'TodoList') -> bool:
         """Whether `todo` has any place in this view.
 
-        A named category is shown while its window is open, or whenever
+        A category with windows is shown while it is active, or whenever
         everything has been asked for -- a shut window is the view being
-        selective, and asking for all of it says not to be. A name the
-        display order does not know has no window to be outside of.
+        selective, and asking for all of it says not to be. A category
+        with no window has no window to be outside of.
 
         Opting out is not a window, and nothing reopens it: a parked
         list stays out of every view.
         """
-        named = todo.category in CATEGORY_ORDER
-        shut = named and todo.category not in self.active
+        scheduled = todo.category in self.schedule
+        shut = scheduled and todo.category not in self.active
         if shut and not self.show_all:
             return False
         return not todo.parked
@@ -246,7 +255,16 @@ def parse_windows(text: str) -> dict[str, list['Window']]:
         An entry or a window does not read, or two entries name the
         same category.
     """
-    raise NotImplementedError
+    schedule: dict[str, list[Window]] = {}
+    entries = text.split(';') if text.strip() else []
+    for entry in entries:
+        name, mark, spans = (part.strip() for part in entry.partition('='))
+        if not (name and mark and spans):
+            raise ValueError(f'{ENTRY_ERROR}: {entry.strip()!r}')
+        if name in schedule:
+            raise ValueError(f'{NAME_ERROR}: {name!r}')
+        schedule[name] = [parse_window(span) for span in spans.split(',')]
+    return schedule
 
 
 def parse_window(text: str) -> 'Window':
@@ -258,7 +276,17 @@ def parse_window(text: str) -> 'Window':
         The window does not read, its days run backwards, or its hours
         do not fall inside one day.
     """
-    raise NotImplementedError
+    token = text.strip()
+    found = WINDOW_RE.fullmatch(token)
+    if found is None:
+        raise ValueError(f'{WINDOW_ERROR}: {token!r}')
+    last_day = found['last'] or found['first']
+    first = WEEKDAYS.index(found['first'].lower())
+    last = WEEKDAYS.index(last_day.lower())
+    start, end = int(found['start']), int(found['end'])
+    if first > last or not start < end <= DAY_HOURS:
+        raise ValueError(f'{WINDOW_ERROR}: {token!r}')
+    return Window(first, last, start, end)
 
 
 class Window(NamedTuple):
@@ -274,7 +302,7 @@ class Window(NamedTuple):
 
     def holds(self, day: int, hour: int) -> bool:
         """Whether the window is open on `day` at `hour`."""
-        raise NotImplementedError
+        return self.first <= day <= self.last and self.start <= hour < self.end
 
 
 class TodoList:
