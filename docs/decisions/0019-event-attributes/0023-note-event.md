@@ -10,7 +10,7 @@ an open attribute map, and the key `note` carries a note. A note can
 therefore ride on an add, an update, a completion or a scratch.
 
 A user also records a note on an open task between those writes: a step
-taken toward the task, or a reason it waits ([R6](REQUIREMENTS.md)).
+taken toward the task, or a reason it waits ([R6](README.md#r6--facts-on-any-write)).
 Such a note belongs to no change of task state, so no existing event
 fits it. An `update` that carries only a note would write a
 `TaskUpdated` event that changes nothing.

@@ -18,12 +18,13 @@ supplies.
 Users need to record a fact about one completion, such as the
 confirmation number of an order. A repeating task must keep one such
 fact per cycle, and a later cycle must not overwrite an earlier one
-([R1](REQUIREMENTS.md)). Other facts of the same shape appear across
-lists: a technician's name on a support call, an appointment date, a
-cost or an estimate on a purchase, time spent on a chore. A fixed
-schema for these grows with every new kind of fact
-([R5](REQUIREMENTS.md)). A fact can also arise at a write other than a
-completion: an add, an update, or a scratch ([R6](REQUIREMENTS.md)).
+([R1](README.md#r1--facts-per-completion)). Other facts of the same
+shape appear across lists: a technician's name on a support call, an
+appointment date, a cost or an estimate on a purchase, time spent on a
+chore. A fixed schema for these grows with every new kind of fact
+([R5](README.md#r5--open-vocabulary)). A fact can also arise at a write
+other than a completion: an add, an update, or a scratch
+([R6](README.md#r6--facts-on-any-write)).
 
 ## Decision
 

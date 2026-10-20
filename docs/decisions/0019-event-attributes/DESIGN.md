@@ -19,8 +19,7 @@ for it.
 ```text
 btodo add <list> <title> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
 btodo update <selector> [--description TEXT] [--attrs ATTRS] [--note TEXT] ...
-btodo done <selector> [--attrs ATTRS] [--note TEXT] [--date DATE]
-btodo scratch <selector> [--attrs ATTRS] [--note TEXT]
+btodo done <selector> [--attrs ATTRS] [--note TEXT] [--date DATE] [--scratch]
 btodo note <selector> [TEXT] [--attrs ATTRS]
 btodo history <selector> [--format text|json]
 ```
