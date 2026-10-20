@@ -2048,28 +2048,25 @@ class ReopenTests(TestCase):
         t.assertEqual(ret, [])
 
     @patch(f'{SRC}.OpenedTask', autospec=True)
-    @patch(f'{SRC}.Ancestry', autospec=True)
+    @patch.object(Reopen, '_paths', new_callable=PropertyMock)
     @patch.object(Reopen, 'delta', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
-    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
     @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
     def test_events(
         t,
         ancestry: PropertyMock,
-        chains: PropertyMock,
         list_left: PropertyMock,
         delta: PropertyMock,
-        ancestry_class: MagicMock,
+        paths: PropertyMock,
         opened_task: MagicMock,
     ) -> None:
         parent, child = parent_node(), done_child_node()
         parent.done = True
         ancestry.return_value = [parent, child]
-        chains.return_value = {1: [parent], 4: [parent, child]}
         list_left.return_value = 'a-list'
         delta.return_value = {'P': ['4', '5']}
+        paths.return_value = [sentinel.top, sentinel.below]
         t.ro.ids = {1: '9o71lx', 4: 'cc03ef'}
-        ancestry_class.side_effect = [sentinel.top, sentinel.below]
         opened_task.side_effect = [
             Mock(spec=['event'], event=sentinel.top_event),
             Mock(spec=['event'], event=sentinel.named_event),
@@ -2080,10 +2077,6 @@ class ReopenTests(TestCase):
 
         # One opening a closed task, outermost first. The named task
         # carries the changes and the attributes.
-        t.assertEqual(
-            ancestry_class.call_args_list,
-            [call([parent]), call([parent, child])],
-        )
         t.assertEqual(
             opened_task.call_args_list,
             [
@@ -2098,6 +2091,29 @@ class ReopenTests(TestCase):
             ],
         )
         t.assertEqual(ret, [sentinel.top_event, sentinel.named_event])
+
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
+    @patch.object(Reopen, 'opened', new_callable=PropertyMock)
+    def test_paths(
+        t,
+        opened: PropertyMock,
+        chains: PropertyMock,
+        ancestry_class: MagicMock,
+    ) -> None:
+        parent, child = parent_node(), done_child_node()
+        opened.return_value = [parent, child]
+        chains.return_value = {1: [parent], 4: [parent, child]}
+        ancestry_class.side_effect = [sentinel.top, sentinel.below]
+
+        ret = t.ro._paths
+
+        # The ancestry of each task the reopen opens, outermost first.
+        t.assertEqual(
+            ancestry_class.call_args_list,
+            [call([parent]), call([parent, child])],
+        )
+        t.assertEqual(ret, [sentinel.top, sentinel.below])
 
     @patch.object(Reopen, 'path', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)

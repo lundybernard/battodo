@@ -1254,20 +1254,21 @@ class Reopen:
         The event of the task the reopen names carries its changes and
         its attributes.
         """
-        named, list_left = self.node.raw_index, self.list_left
-        events = []
-        for task in self.opened:
-            path = Ancestry(self.chains[task.raw_index])
-            changed = task.raw_index == named
-            opened = OpenedTask(
+        return [
+            OpenedTask(
                 path,
                 self.ids[task.raw_index],
-                list_left,
-                self.delta if changed else None,
-                self.attrs if changed else None,
-            )
-            events.append(opened.event)
-        return events
+                self.list_left,
+                self.delta if task.raw_index == self.node.raw_index else None,
+                self.attrs if task.raw_index == self.node.raw_index else None,
+            ).event
+            for task, path in zip(self.opened, self._paths)
+        ]
+
+    @property
+    def _paths(self) -> list[Ancestry]:
+        """The ancestry of each task the reopen opens, outermost first."""
+        return [Ancestry(self.chains[task.raw_index]) for task in self.opened]
 
     @property
     def delta(self) -> dict[str, list[Any]]:
