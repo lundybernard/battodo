@@ -1946,6 +1946,10 @@ class AnnotationTests(TestCase):
             t.assertEqual(path.stat().st_mtime_ns, 0)
             t.assertEqual(journaled(source), as_journaled(noted.events))
 
+    def test_lists(t) -> None:
+        ret = t.an.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.an.text})
+
     def test_text(t) -> None:
         with t.subTest('a task with an id: the list as read'):
             ret = t.an.text
