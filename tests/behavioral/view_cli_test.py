@@ -36,6 +36,8 @@ from .cli_runner import run_cli
 DATA = Path(__file__).parent / 'data'
 TODO_DIR = DATA / 'todo'
 GOLDEN_DIR = DATA / 'golden'
+# The config file that sets the schedule of the goldens.
+SCHEDULE_FILE = DATA / 'battodo.toml'
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut. All fixture dates are relative to this instant.
@@ -47,6 +49,7 @@ SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
 FORMAT_VAR = 'BATTODO_FORMAT'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
+CONFIG_VAR = 'BATTODO_CONFIG_FILE'
 
 
 def golden(name: str) -> str:
@@ -64,11 +67,12 @@ class ViewCommandTests(TestCase):
     maxDiff = None
 
     def setUp(t) -> None:
-        # Pin the clock: the rendered output depends on it.
+        # Pin the clock: the rendered output depends on it. The instant
+        # is fixed, and the configured zone decides its local time.
         patcher = patch('battodo.cli.datetime', autospec=True)
         t.datetime = patcher.start()
         t.addCleanup(patcher.stop)
-        t.datetime.now.return_value = FROZEN
+        t.datetime.now.side_effect = FROZEN.astimezone
 
     def cli(
         t,
@@ -76,7 +80,11 @@ class ViewCommandTests(TestCase):
         env: dict[str, str] | None = None,
     ) -> tuple[str, str, object]:
         """Run `view` with `args`, and `env` over the pinned variables."""
-        pinned = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
+        pinned = {
+            'COLUMNS': WIDTH,
+            SOURCE_VAR: str(TODO_DIR),
+            CONFIG_VAR: str(SCHEDULE_FILE),
+        }
         return run_cli(['view', *args], pinned | (env or {}))
 
     def render(t, *args: str, env: dict[str, str] | None = None) -> str:
