@@ -9,10 +9,8 @@ directory:
 
 | File | Answers |
 | ---- | ------- |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | What the tool must do |
 | ADRs [0001](0001-bootstrap-from-project-template.md)–[0006](0006-parked-lists.md) | What was decided, and why that option |
 | **DESIGN.md** | How the decided design actually works |
-| [PLAN.md](PLAN.md) | The order the work lands in |
 
 Where a fact lives here, the ADRs link to it rather than restate it.
 
@@ -51,7 +49,7 @@ signals. Reconciling them would be a bug:
 | Distinction | Signal present |
 | ----------- | ------ |
 | note / continuation line **vs** subtask | a `- [ ]` / `- [x]` checkbox |
-| subtask **vs** checklist item (R2) | at least one `[FIELD:…]` |
+| subtask **vs** checklist item | at least one `[FIELD:…]` |
 
 Indent width is *not* the first discriminator, though it correlates:
 notes and continuation lines are indented 6 spaces and subtasks 2. A

@@ -40,8 +40,9 @@ TZ = ZoneInfo('America/Los_Angeles')
 class ViewConfig:
     """What a view reads, and how much of it a view shows.
 
-    One source for now; R6 turns `source_dir` into a list of sources
-    once the discovery/merge semantics in ADR 0004 are settled.
+    One source for now; `source_dir` becomes a list of sources once
+    ADR 0004 settles the discovery/merge semantics of composable
+    sources.
 
     Every value is a string: the environment source carries nothing
     else, so a consumer decodes what it needs. `top` is read as an
