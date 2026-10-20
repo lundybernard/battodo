@@ -1,21 +1,12 @@
 # Dev-process lessons
 
-- 2026-08-07: a subagent's permission classifier refused a delegated
-  agent-config write, then next day refused a compound bash script whose
-  individual commands were all permitted. Rehomed: agent memory
-  permission-classifier-denials (operation-denied vs
-  presentation-denied).
-- 2026-08-08: bootstrap was committed directly on main, which made
-  pre-push manual review impossible. Resolved: feature-branch rule is
-  project law in CLAUDE.md.
-- 2026-08-08: `git add -A` in a planned commit series swept build
-  artifacts into the packaging commit before the ignore rules existed,
-  and pulled in a test fix staged for a later commit. Rehomed:
-  pr-crafting skill (stage by explicit path).
-- 2026-08-08: an API permissions block reporting `permissions.push:
-  true` does not mean the active token can push, and the later
-  review-loop cycle added its own REST-vs-GraphQL notes. Rehomed: agent
-  memory github-api-write-verification.
+Agent and workflow findings, grouped by status.
+
+## Pending skill promotion
+
+Each entry waits on the owner's ruling on the skill edit that would hold
+it. The text stays as recorded until that ruling lands.
+
 - 2026-08-08: a 48-test suite at 100% coverage still shipped a crash.
   `btodo view` raised `ValueError: Invalid isoformat string:
   'YYYY-MM-DD'` the first time it was pointed at the real source
@@ -25,15 +16,6 @@
   human-authored files, run it against the real corpus (read-only)
   before claiming it works — that single run found what the whole suite
   missed.
-- 2026-08-08: a sandbox copy that was really a link to the live data let
-  a write command mutate real records. The recovery is what is worth
-  keeping: it was exact rather than best-effort only because ADR 0004's
-  journal had landed the day before — every event carries the field
-  delta plus a full task snapshot, so the affected records were walked
-  back field by field instead of restored wholesale from a backup that
-  did not exist. An audit trail justified as a *migration asset* paid
-  for itself against a class of bug it was not designed for. Rehomed
-  (the `cp -rL` rule): agent memory.
 - 2026-08-08: a silent empty view. Run by a second user with no
   configured source directory, `btodo view` printed its header and
   exited 0 — `discover_lists` returned `[]` for the missing path, and
@@ -43,63 +25,6 @@
   had the wrong behavior *encoded* ("empty directory still renders a
   header"), so 100% coverage actively defended the bug. Second real-user
   run in two days to find something the tests could not.
-- 2026-08-08: widening a discovery predicate is only half a fix. Trading
-  five hard-coded category filenames for "any `.md` with a `## Open`
-  heading" fixed the silent-skip bug and immediately over-corrected: it
-  bumped a parked list file whose header has always read "Not surfaced
-  in daily views, not bumped", and it listed a template file as though a
-  template were a category. A structural predicate finds every list,
-  including the ones a human knew to leave alone — intent that
-  lives in prose needs a machine-readable form (hence the
-  `<!-- battodo:parked -->` marker in ADR 0006). When a net gets wider,
-  audit what else it caught.
-- 2026-08-08: the spec and the implementation of the *same* system
-  disagree, and nobody had noticed. The source system's `SCHEMA.md` —
-  its template of record — says to surface open items where `DUE` is
-  absent or `DUE <= today`, which would hide every future-dated item.
-  Both `view_todos.py` and R3 hide only *future-recurring* items. btodo
-  follows the script and R3, because that is the behaviour people
-  actually rely on. Lesson: when reimplementing a system, the written
-  spec is a third opinion, not the tiebreaker — reconcile it against
-  observed behaviour before encoding either. The inconsistency is in the
-  live system and is its owner's to reconcile; it is recorded here
-  rather than silently resolved in BatTodo's ADRs.
-- 2026-08-10: an ADR mirrors the altitude of its work order. The same
-  agent produced a 46-line ADR from one order and a 202-line one from
-  an order carrying a design-specifics block, which it transcribed
-  faithfully; a later order that said "create ADR group 0003" for what
-  turned out to be a single decision duly produced a group. So hand ADR
-  writers a decision summary, never the spec, and count the decisions
-  before choosing group-vs-flat. Resolved: length band and "when not to
-  use" landed in the adr-write and adr-directory skills.
-- 2026-08-11: a measured comparison upheld the incumbent. Compact JSON's
-  48% character saving over the pretty-printed form is only 21% in
-  tokens, because tokenizers merge indentation, so the intuitive win
-  evaporated and the format stayed as it was. The audit still paid for
-  itself: it surfaced three real defects plus the stderr gap (issue #6,
-  closed). Challenging a default is worth the cost even when the default
-  survives.
-- 2026-08-11: when an agent's written finding and a live run disagree,
-  the delta is a third bug, not noise. The migration report claimed a
-  missing config file warns on stderr; the real CLI run was silent.
-  Neither was wrong: the warning exists, and battodo's own
-  schema-version-1 `dictConfig` (`disable_existing_loggers=True` by
-  default, run after batconf's import) was eating it — a latent bug
-  that had silently disabled every third-party logger since bootstrap.
-  Resolving the contradiction before shipping the findings document
-  was the whole game: publishing the unverified claim upstream would
-  have cost the credibility the dogfooding cycle exists to build.
-- 2026-08-11: experiment design for docs dogfooding. The brief was
-  "find where batconf's docs fail agents", so the coordinator's job
-  was to not contaminate the sample: facts the coordinator verified
-  itself (TomlSource exists; the extra's version marker) informed the
-  decisions, but the implementing agent got a goal-altitude order with
-  no API names and an explicit reframe — "every fallback to reading
-  batconf source is itself a finding, not a failure; take it freely
-  but log it." That reframe matters: an agent graded on success hides
-  its workarounds, and the workarounds were the data. Yield: 13
-  documented findings in one cycle, including one (the `[toml]` lazy
-  trap) the project then reproduced in its own suite the same day.
 - 2026-08-14: an observed default is not a requirement. A live probe
   of a dependency's config resolution saw the lookup namespace derive
   from the schema class's `__module__` and recorded that as a hard
@@ -112,109 +37,12 @@
   docs, source), never inferred from a default-configuration
   experiment — the probe can only ever confirm behavior, not
   necessity.
-- 2026-08-14: work orders must carry the test-style rules — import
-  isolation and mock discipline lived in a style skill the implementing
-  agent never sees, so the order is the only enforcement point.
-  Resolved: integrated into the work-orders skill and two memories.
-- 2026-08-14: durable prose leaks local context — a commit body
-  described the dev arrangement and named an unrelated project as its
-  pattern source, and a test docstring depended on the host's local
-  timezone. Resolved: carried in full by agent memory.
-- 2026-08-14: verify outcomes, not work orders — round two. The
-  implementing agent reported a green per-commit gate, but its gate
-  had omitted the format check; the orchestrator's own rerun found an
-  unformatted file at the tip. The cheap full-gate rerun by the
-  orchestrator stays mandatory no matter what the report says.
-- 2026-08-15: improvised history rewrites slip; planned ones do not.
-  Two slips in two sessions came from typing rebase/cherry-pick
-  sequences ad hoc. Before touching HEAD, write the plan of record —
-  every target parent hash, every branch tip, in order — then execute
-  against it; the next multi-branch restack under that rule ran clean
-  on the first pass. Resolved: required by the work-orders skill.
-- 2026-08-15: code prose drifts into dev-process narration unless a
-  register is named. A review rejected a whole PR's prose — module
-  docstrings narrating fixture design, commit bodies walking through
-  reasoning — as "the agent thinking through the problem and writing
-  notes to itself." Adopted ASD-STE100 as the named register for all
-  code prose (short declarative sentences, active voice, present
-  tense), plus a commit-specific rule set: Conventional Commits 1.0.0
-  for the header, Chris Beams' seven rules for mechanics, and a house
-  rule — the body says only what the commit adds, and never repeats
-  what a comment or docstring in the diff already says. Naming an
-  external standard beats adjectives ("be concise") in a work order:
-  it is checkable, and the rewrite under it was accepted first pass.
-- 2026-08-15: worked examples in instruction files leak their
-  payload. Concrete example content (invented issue numbers, scopes,
-  rationale sentences) reappears in real output — the model treats
-  demonstration content as the value space to draw from. Fix pattern:
-  keep examples for what prose states badly (whitespace assembly,
-  layout), but make them schematic — angle-bracket placeholders for
-  every per-use value, one leak-guard line declaring them layout-only
-  — and keep at most one concrete phrase where a rule (imperative
-  mood) needs demonstrating. Rules stay in prose; examples carry
-  layout only.
-- 2026-08-25: two pixi-build sharp edges, from packaging the CLI as a
-  globally installable tool. The python build backend cannot read a
-  PEP 621 dynamic version — the metadata hook would have to run
-  before the recipe renders — so a project that keeps its version in
-  the source tree must repeat it as a literal in the pixi manifest
-  and keep the two in step (pixi-build-backends#61); a static
-  `[project]` version is read without help. And build errors
-  name no file: "A [package] section is missing in the manifest"
-  fired for a source *dependency's* manifest, in the same words the
-  root package's own missing section produces, which sent the first
-  diagnosis to the wrong file. With a source dependency in the graph,
-  read a manifest error as "some manifest in this build" and check
-  the dependency's first.
-- 2026-08-27: pushing `fixup!` commits fast-forward for human review,
-  and autosquashing only after approval, kept the human gate on
-  history without blocking agent progress. The reviewer reads a small
-  diff against a named target commit instead of a rewritten branch,
-  and the squash that follows has to move no content: an empty
-  `git diff <fixup-tip> HEAD` is the proof. Keep it as the default
-  shape for review-then-rewrite.
 - 2026-08-27: a docs-gap finding names the upstream ref it was read at,
   and gets re-checked against upstream main before it is routed.
   Findings written 2026-08-11 against a dependency's documentation were
   refuted by an upstream commit dated three days earlier — the report
   described a docs state that had already stopped existing, and routing
   it would have spent credibility on a fixed problem.
-- 2026-08-28: a history rewrite that edits file content in every
-  commit runs as a scripted tree rebuild, not a rebase; when the
-  final state must not move, the proof is an empty
-  `git diff <old-tip> HEAD`. Extends 2026-08-15 (plan of record) and
-  2026-08-27 (fixup-review). Rehomed: The Engineer's agent memory,
-  which carries the full procedure.
-- 2026-08-28: a noun/verb-ambiguous class name cost two renames in one
-  PR (Match → Candidate → TaskRecord), and both surfaced as reviewer
-  parse trouble rather than design review. Rehomed: software-engineering
-  naming rule (domain nouns; no noun/verb-ambiguous names) plus agent
-  memory.
-- 2026-08-28: a review comment names one instance; the follow-up
-  extracts the rule and sweeps. One comment on a single passive mock
-  yielded two durable rules — a mock must assert its calls or block a
-  side effect, and fixture values are breadcrumbs that name their role
-  in the test rather than imitate real data — an 11-site sweep in the
-  same PR, and a queued full-codebase pass (issue #48). Rehomed: agent
-  memories no-passive-mocks and breadcrumb-test-values.
-- 2026-08-28: oracle tests bracketed a conversion — pin the old
-  lookup's behavior before the rewrite, then assert the new lookup
-  answers as the old one after it. The bracket let an 11-commit
-  refactor land with the equivalence proof in-history. Rehomed: the
-  test-driven-refactor skill, which now owns the oracle-bracket process.
-- 2026-09-04: a work-order scope bullet that restates a rider in
-  other words can contradict it, and the agent follows the concrete
-  bullet. "Convert `test_<fn>_<behavior>` methods to subtests" folded
-  every solo-function class into the grouped shape while the rider
-  beside it said one method per behavior; the PR was rewritten before
-  review. Scope bullets name the target shape per case and never
-  paraphrase a rider. Rehomed: memory function-test-class-convention.
-- 2026-09-04: a pre-refactor audit split by lens list — code lenses to
-  one agent, test lenses to another, run in parallel — returned a
-  plan-ready inventory in one round: import graph, per-module
-  classification, misplaced suites, baseline gate exits, and
-  open-issue reconciliation. The plan (ADR group 0016) was drafted
-  from the two reports without a second reading pass.
 - 2026-09-04: a retire commit deleted durable tests along with the
   oracle. The oracle had pinned a type that survived the conversion
   unchanged, so it had no old code to die with, and the durable
@@ -226,134 +54,99 @@
   surface; the retire diff is read for durable-suite deletions; a
   recorded bug's pin lives in a durable suite, never only in the
   oracle.
-- 2026-09-08: mutation testing becomes an informational gate. The five
-  blocking gates hold a 100% coverage floor that still admits weak
-  assertions; the test-cleanup PR (#53) had to prove its rewritten
-  assertions with fourteen hand-placed mutants. `pixi run mutate` now
-  runs once at each PR tip (ADR group 0016 REQUIREMENTS R3, PR #56),
-  the verification line reports surviving mutants, and a survivor is a
-  test-improvement finding rather than a block. First measurements: 96
-  survivors on the pre-cleanup main, 87 after the test cleanup,
-  unchanged by the in-place rewrite of that PR. The `_mutate` task
-  needed a fix (PR #57) before a second run could succeed: its
-  pre-delete list named test directories one by one and missed a
-  nested package.
-- 2026-09-09: test suites compose, never inherit. Review of the
-  test-cleanup PR (#53) found six shared base TestCases carrying setUp
-  and helper methods, plus `reset` helpers that cleared a shared
-  fixture between subtests. Every TestCase now inherits only TestCase:
-  shared fixtures are module-level functions called from each setUp,
-  shared helpers take the fixture as an argument, and a subtest that
-  needs its own fixture builds it through a context manager. The
-  `reset` helpers disappeared by shape — solo-function classes
-  unfolded to per-behavior methods with a fresh per-method fixture,
-  and subject classes gave each subtest its own directory. Rehomed:
-  the work-order test riders and the python-style unittest idioms.
-  Expectation on record: as production code moves to the
-  property-based style, test complexity falls with it, and each slice
-  looks for that.
-- 2026-10-03: a value object builds no output form. Review of the item
-  slice (#77) found an `Item` member that returned all of its data as
-  one dict for every consumer. The ruling: the value object holds
-  values, and each output form is a view class that reads it through
-  its attributes, `ItemView` for text and `ItemJsonView` for JSON. A new
-  form adds a class, not a member on the value object. The owner also
-  asked for the ruling in an issue before the merge, not only in a
-  review reply: #80 carried it, and #82 applied it to the view and the
-  completed digest. Recorded in ADR 0017.
-- 2026-10-10: the 2026-08-28 tree-rebuild rewrite is now the fold for a
-  reviewed branch whose review renamed classes. The item slice (#77)
-  folded eleven review-fix commits into the commits that introduced
-  their code, so the history reads in the final names, and an empty
-  `git diff <review-tip> <folded-tip>` proved that nothing moved. The
-  mutate slice (#83) also folded two approved content edits, so its
-  proof has two parts: a `--stat` diff that shows only those edits, and
-  a `range-diff` that accounts for every commit it marks as changed.
-  Each red commit was run again at its new position and fails only its
-  declared tests. Rehomed: The Engineer's agent memory.
-- 2026-10-10: a rename folded into a parity bracket can give two test
-  classes one name. In the mutate slice (#83) the new `Scratch` class
-  and the retiring `scratch` function both take the test-class name
-  `ScratchTests`, and from the declare commit to the retire commit both
-  classes sit in one test module. Python keeps the later class, so the
-  earlier one stops running and no test fails. Only ruff F811 reports
-  it, so a scripted fold runs the lint gate on every rebuilt commit. The
-  retiring side takes `ScratchFunctionTests` for the bracket window.
-- 2026-10-10: R7 of the property refactor said a slice records the bugs
-  it finds and fixes none. Practice had already left the rule: at the
-  owner's review, #54 fixed the log-level bug it found, and the item
-  slice fixed a rank bug under the old text (#77). 4e373fc amends R7
-  to match: a slice fixes a bug at once or files an issue, case by
-  case. The last two slices fixed four bugs, each as a red
-  reproduction and then the fix (#77, #83). Resolved: the
-  test-driven-refactor skill now decides case by case, as R7 does.
-- 2026-10-10: review by key question. For the rest of the refactor and
-  the feature that waits on it, the owner reviews by decision, not by
-  line. A report and a PR's reviewer notes lead with the decisions that
-  need a ruling, one line each. Rulings land and fold into their
-  commits before the owner looks again, so one review round ends in a
-  merge: on the mutate slice (#83), one inline comment went to approval
-  the same day. Size is not a concern: more lines with less complexity
-  is a good trade.
-- 2026-10-11: the ADR group 0019 slices split their docs between the
-  two manuals. #93 changed SKILL.md alone, and #94, #95, #97 and #99
-  changed README.md alone. SKILL.md is the whole manual of an agent
-  that runs `btodo`, so four slices of commands stayed invisible to
-  that agent until the catch-up PR, #104. Resolved: the CLAUDE.md rule
-  from #103 puts the SKILL.md change in the PR that changes the
-  command, and #111 applied it.
-- 2026-10-11: a commit subject starts in lowercase after its type
-  prefix, as Conventional Commits and git's own guide write it. The
-  commit-message skill ruled so on this date. The last capitalized
-  subject on main is `84674d4`, and every later subject is lowercase.
-  The skill wins over the older precedent. Rehomed: the commit-message
-  skill.
-- 2026-10-12: red evidence goes in the report, not in the commit. The
-  22 `test(RED)` commits of #93 to #101 carried the failing test names,
-  the failure text and the line "Every other test passes" in their
-  bodies. A message-only rewrite before the merges replaced each body
-  with a short list of the behaviours that its tests cover, and every
-  branch kept its tree. The cause was the work orders, which asked for
-  the red evidence in the commit body. #90 merged before the rewrite
-  and keeps the old shape (`da455c0`). Rule: the hand-back report and
-  the PR reviewer notes carry the failing tests, the failure text and
-  the zero-collateral line. A red body is empty or a short bullet list
-  of the behaviours covered. Rehomed: the tdd, work-orders and
-  commit-message skills.
-- 2026-10-12: `[REVIEW FIX]` commits never merge to main. Each one
-  folds into the commit that introduced its target, or becomes a plain
-  commit when its change stands alone. #95 folded its three
-  `[REVIEW FIX]` commits with the tree unchanged, and main holds none.
-  A stacked dependent rebases from its old fork point,
-  `git rebase --onto <new base> <old fork point>`, never from the tip
-  of its base, so it replays only its own commits. #111 rebased onto
-  main after #106 and #110 merged, and `git range-diff` marked all 24
-  commits `=`.
-- 2026-10-12: stacked PRs keep the slices moving while the owner is
-  away. A dependent slice bases on the branch of the slice before it.
-  When the base merges and someone deletes its branch, GitHub retargets
-  the dependent to main, and the retarget starts no CI run. #110 added
-  the CPython 3.15 legs to the matrix, and #111, retargeted from the
-  #106 branch, had run only on the old matrix. Rule: when the new base
-  changes the workflow, the dependent rebases and pushes, and the push
-  starts a run on the new matrix (#111).
-- 2026-10-12: a task that comes back reopens under its own id and is
-  never added again. One id keeps one history; a second `add` splits
-  that history across two streams. PR #106 told the operating agent to
-  search the journal before `add`, and #109 found two streams under one
-  title that the `history` refusal could not tell apart. The owner
-  ruled in #107: `update <closed id>` reopens the task. Decision: ADR
-  0025 (#111).
-- 2026-10-12: a write probe runs against a copy. A main-thread probe
-  set the wrong environment variable, and `btodo add` wrote a probe
-  task into a real list, which the owner removed. This repeats the
-  2026-08-08 sandbox lesson in a new form. Rule: a write probe runs in
-  a subagent against a `cp -rL` copy, proves its target with a read
-  first, and checks the file path that the command prints. Rehomed:
-  agent memory.
-- 2026-10-12: the package cooldown holds a new interpreter too.
-  `exclude-newer = "3d"` kept CPython 3.15.0 out of the lock until
-  three days after its conda-forge upload, and #110 made the 3.15 lock
-  after that time with the cooldown unchanged. Wait for the cooldown;
-  never pin around it. The cooldown's first record is the win in
-  [batconf.md](batconf.md).
+
+## Open
+
+- 2026-08-25: pixi-build has two sharp edges. The python backend cannot
+  read a PEP 621 dynamic version, so the pixi manifest repeats the
+  version as a literal (`pyproject.toml:44-46`). A manifest error names
+  no file, so with a source dependency in the graph, check the
+  dependency's manifest first. Why: the root package's missing section
+  produces the same words. Next: move to `/pixi-dev-env` or to memory.
+
+## Filed
+
+- 2026-08-08: when a discovery predicate widens, audit what else it
+  caught. Why: intent that lives in prose needs a machine-readable form,
+  such as the `<!-- battodo:parked -->` marker of ADR 0006. Residual:
+  #37.
+- 2026-08-28: a review comment names one instance; the follow-up
+  extracts the rule and sweeps the codebase. Why: a fix to one instance
+  leaves its siblings in place. Home: memories `no-passive-mocks` and
+  `breadcrumb-test-values`. Residual sweep: #48.
+- 2026-10-03: a value object builds no output form. Each output form is
+  a view class that reads the object through its attributes. Why: a new
+  form then adds a class, not a member on the value object. Home: ADR
+  0017. Residual: #81, #87.
+
+## Resolved
+
+Each rule lives in the home that it names.
+
+- 2026-08-08: reconcile a written spec against observed behaviour before
+  you encode either. Why: the spec is a third opinion, not the
+  tiebreaker. Home: memory `schema-md-format-only`.
+- 2026-08-10: an ADR writer gets a decision summary, never the spec, and
+  the decisions are counted before group or flat is chosen. Why: an ADR
+  mirrors the altitude of its order. Home: `/adr-write`,
+  `/adr-directory`.
+- 2026-08-11: when a written finding and a live run disagree, resolve
+  the delta before the finding ships. Why: the delta is a third bug.
+  Home: `battodo/logconf.py:8`; the template side is in
+  [project-template.md](project-template.md).
+- 2026-08-11: an experiment order keeps the coordinator's verified facts
+  out, and counts every workaround as a finding. Why: an agent graded on
+  success hides its workarounds, and the workarounds are the data. Home:
+  `/work-orders` "Experiment integrity".
+- 2026-08-14: a work order carries the test-style rules. Why: the
+  implementing agent never sees the style skill. Home: `/work-orders`.
+- 2026-08-14: the orchestrator reruns the full gate, whatever the report
+  says. Why: a reported green gate had left out the format check. Home:
+  `/work-orders`, universal skill.
+- 2026-08-15: durable prose follows ASD-STE100, and commit messages
+  follow Conventional Commits and Chris Beams. Why: a named standard is
+  checkable, and an adjective is not. Home: universal skill,
+  `/commit-message`.
+- 2026-08-15: examples in instruction files are schematic, with a
+  placeholder for every per-use value. Why: the model draws real output
+  from demonstration content. Home: `/work-orders`.
+- 2026-08-15 to 2026-10-10: a history rewrite runs against a written
+  plan of record. Review changes go up fast-forward and squash only
+  after approval. A rewrite that edits every commit, including the fold
+  of a reviewed branch, runs as a scripted tree rebuild. An empty
+  `git diff <old-tip> HEAD` proves it, or a stat diff plus a range-diff
+  when approved edits fold in. Why: improvised rebase sequences slip,
+  and the reviewer reads a small delta, never a rewritten branch. Home:
+  `/pr-crafting`, `/work-orders`, Engineer memory
+  `scripted-tree-rebuild-rewrite`.
+- 2026-08-28: oracle tests bracket a conversion: pin the old behaviour
+  first, then assert that the new code answers the same. Why: the
+  equivalence proof lands in history. Home: `/test-driven-refactor`.
+- 2026-09-04: a work-order scope bullet names the target shape per case
+  and never paraphrases a rider. Why: the agent follows the concrete
+  bullet when the two disagree. Home: memory
+  `function-test-class-convention`.
+- 2026-09-08: mutation testing runs once at each PR tip as an
+  informational gate, and a survivor is a finding, not a block. Why: a
+  100% coverage floor still admits weak assertions. Home: ADR 0016
+  REQUIREMENTS R3, memory `mutation-gate-informational`.
+- 2026-09-09: test suites compose and never inherit: module-level
+  fixture functions, and helpers that take the fixture. Why: shared base
+  TestCases and reset helpers carry state between tests. Home: the
+  work-order test riders, `/python-style`.
+- 2026-10-10: the owner reviews by key question. A report and the PR
+  reviewer notes lead with the decisions that need a ruling, and the
+  rulings fold before the next look. Why: one review round then ends in
+  a merge. Home: memory `speed-run-review-posture`.
+- 2026-10-11: an agent-facing change lands in `SKILL.md` in the same PR.
+  Why: `SKILL.md` is the whole manual of the operating agent. Home:
+  CLAUDE.md (#103).
+- 2026-10-12: red evidence goes in the report and the PR reviewer notes.
+  A `test(RED)` body is empty or a short list of the behaviours covered.
+  Why: the commit records the change, and the report carries its
+  verification. Home: `/tdd`, `/work-orders`, `/commit-message`.
+- 2026-10-12: `[REVIEW FIX]` commits never merge to main. A stacked
+  dependent rebases from its old fork point, and a dependent whose new
+  base changes the CI workflow pushes to start a run. Why: a rebase from
+  the base tip replays merged commits, and a retarget starts no CI run.
+  Home: `/pr-crafting` step 5.
