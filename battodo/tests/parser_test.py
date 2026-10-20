@@ -1163,6 +1163,25 @@ class SectionTests(TestCase):
             ],
         )
 
+    def test_parents(t) -> None:
+        with t.subTest('the position of each parent, None at the top'):
+            ret = t.sn.parents
+            t.assertEqual(ret, [None, 0])
+
+        with t.subTest('the nearest earlier line with a lower indent'):
+            t.sn.lines = [
+                '- [ ] A task',
+                '    - [ ] A deep subtask',
+                '  - [ ] A shallow subtask',
+                '      - [ ] A checklist item',
+                '- [ ] Another task',
+            ]
+            t.sn.indices = [0, 1, 2, 3, 4]
+
+            ret = t.sn.parents
+
+            t.assertEqual(ret, [None, 0, 0, 2, None])
+
 
 class TaskLineTests(TestCase):
     """Unit tests for battodo.parser.TaskLine."""

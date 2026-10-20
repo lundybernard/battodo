@@ -626,6 +626,15 @@ class Section:
         texts = self.texts
         return [[texts[index] for index in notes] for notes in self.notes]
 
+    @property
+    def parents(self) -> list[int | None]:
+        """The position of the parent of each task line, in file order.
+
+        The parent is the nearest earlier task line of the section with
+        a lower indent. A task line with none has None.
+        """
+        raise NotImplementedError
+
 
 @dataclass
 class TaskLine:
