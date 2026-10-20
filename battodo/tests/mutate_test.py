@@ -112,6 +112,28 @@ class AdditionTests(TestCase):
             entries.assert_not_called()
             changeset.assert_not_called()
 
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.ad.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.ad.write()
+
+            changeset.assert_not_called()
+
     @patch(f'{SRC}.NamedList', autospec=True)
     def test_path(t, named_list: MagicMock) -> None:
         # Two reads: discovery reads every list in the source.
@@ -360,6 +382,28 @@ class SubtaskAdditionTests(TestCase):
                 t.sa.write()
 
             entries.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.sa.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.sa.write()
+
             changeset.assert_not_called()
 
     def test_source(t) -> None:
@@ -745,6 +789,28 @@ class UpdateTests(TestCase):
                 t.up.write()
 
             entries.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            lists.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.up.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.up.write()
+
             changeset.assert_not_called()
 
     @patch.object(Update, 'joined', new_callable=PropertyMock)
@@ -1383,6 +1449,28 @@ class ReopenTests(TestCase):
                 t.ro.write()
 
             entries.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.ro.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.ro.write()
+
             changeset.assert_not_called()
 
     def test_source(t) -> None:
@@ -2222,6 +2310,28 @@ class CompletionTests(TestCase):
             entries.assert_not_called()
             changeset.assert_not_called()
 
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.co.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.co.write()
+
+            changeset.assert_not_called()
+
     def test_source(t) -> None:
         ret = t.co.source
         t.assertIs(ret, t.task.source)
@@ -2682,6 +2792,28 @@ class AnnotationTests(TestCase):
                 t.an.write()
 
             entries.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.an.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.an.write()
+
             changeset.assert_not_called()
 
     def test_source(t) -> None:
@@ -4597,6 +4729,28 @@ class ListBackfillTests(TestCase):
                 t.lb.write()
 
             entries.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused record: no event is read, nothing written'):
+            changeset.reset_mock()
+            events.reset_mock()
+            text.side_effect = None
+            entries.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.lb.write()
+
+            events.assert_not_called()
+            changeset.assert_not_called()
+
+        with t.subTest('a refused event: nothing is written'):
+            changeset.reset_mock()
+            entries.side_effect = None
+            events.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                t.lb.write()
+
             changeset.assert_not_called()
 
     def test_source(t) -> None:

@@ -1166,17 +1166,30 @@ class ReopenTests(TestCase):
         t.ro = reopen_of(t.source, 'ft01ab', {'P': '5'})
 
     def test_write(t) -> None:
-        # Read before the write: once written, the task is open.
-        text, events = t.ro.text, t.ro.events
-        before = journaled(t.source)
+        with t.subTest('the list and the journal take its values'):
+            # Read before the write: once written, the task is open.
+            text, events = t.ro.text, t.ro.events
+            before = journaled(t.source)
 
-        t.ro.write()
+            t.ro.write()
 
-        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
-        # The list holds the text the reopen derives, the journal its
-        # events after the events it read.
-        t.assertEqual(written, text)
-        t.assertEqual(journaled(t.source), before + as_journaled(events))
+            written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+            # The list holds the text the reopen derives, the journal its
+            # events after the events it read.
+            t.assertEqual(written, text)
+            t.assertEqual(journaled(t.source), before + as_journaled(events))
+
+        with t.subTest('a refused value and a missing list: the value first'):
+            refused = reopen_of(
+                t.source, 'sc01ab', {'DUE': 'x'}, list_name='wrk'
+            )
+            before = journaled(t.source)
+
+            with t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'):
+                refused.write()
+
+            # The text is read before the list it goes to.
+            t.assertEqual(journaled(t.source), before)
 
     def test_text(t) -> None:
         opened = [
