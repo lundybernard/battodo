@@ -7,6 +7,7 @@ from unittest.mock import (
 )
 
 from ..supplied import (
+    DescriptionLine,
     SuppliedAttributes,
     SuppliedDescription,
     SuppliedEdit,
@@ -364,6 +365,64 @@ class SuppliedDescriptionTests(TestCase):
                     _ = t.sd.lines
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class DescriptionLineTests(TestCase):
+    """Unit tests for battodo.supplied.DescriptionLine."""
+
+    def setUp(t) -> None:
+        t.dl = DescriptionLine('  An indented line.  ')
+
+    @patch.object(DescriptionLine, '_refusal', new_callable=PropertyMock)
+    def test_text(t, refusal: PropertyMock) -> None:
+        with t.subTest('the line, stripped of its indent'):
+            refusal.return_value = None
+            ret = t.dl.text
+            t.assertEqual(ret, 'An indented line.')
+
+        with t.subTest('a refusal names the line as given'):
+            refusal.return_value = 'reads as a heading'
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.dl.text
+
+            t.assertEqual(
+                str(caught.exception),
+                "description line '  An indented line.  ' reads as a heading",
+            )
+
+    def test_refusal(t) -> None:
+        cases = {
+            'a description line': ('  An indented line.  ', None),
+            'a blank line': ('  ', 'is blank'),
+            'a task line': ('  - [x] A done task', 'reads as a task line'),
+            'a heading': ('## A heading', 'reads as a heading'),
+            'a comment': ('  <!-- A comment -->', 'reads as a comment'),
+            'a carriage return': ('A line.\r', 'holds a carriage return'),
+            'a heading before a carriage return': (
+                '## A heading\r',
+                'reads as a heading',
+            ),
+        }
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                t.dl._raw_text = text
+                ret = t.dl._refusal
+                t.assertEqual(ret, expected)
+
+    def test_stripped(t) -> None:
+        cases = {
+            'the indent and the trailing spaces go': (
+                '  An indented line.  ',
+                'An indented line.',
+            ),
+            'a carriage return goes too': ('A line.\r', 'A line.'),
+        }
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                t.dl._raw_text = text
+                ret = t.dl._stripped
+                t.assertEqual(ret, expected)
 
 
 class SuppliedFieldsTests(TestCase):
