@@ -115,6 +115,15 @@ class TodoDocument:
         ]  # fmt: skip
 
     @property
+    def open_bounds(self) -> list[tuple[int, int]]:
+        """The heading index and the stop index of each `## Open` section.
+
+        In file order. A section stops at the next `## ` heading or at
+        the end of the file.
+        """
+        raise NotImplementedError
+
+    @property
     def heading_indices(self) -> list[int]:
         """The index of every `## ` heading line, in file order."""
         return [

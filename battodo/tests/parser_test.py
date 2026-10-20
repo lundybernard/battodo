@@ -706,6 +706,30 @@ class TodoDocumentTests(TestCase):
             ret = t.td.open_sections
             t.assertEqual(ret, [])
 
+    def test_open_bounds(t) -> None:
+        with t.subTest('the Open heading, then the next heading'):
+            ret = t.td.open_bounds
+            t.assertEqual(ret, [(4, 16)])
+
+        with t.subTest('a pair per Open section, the last up to the end'):
+            t.td.lines = [
+                '## Open',
+                '- [ ] First task',
+                '## Done',
+                '- [ ] Closed-section task',
+                '  ## Open  ',
+                '- [ ] Second task',
+            ]
+
+            ret = t.td.open_bounds
+
+            t.assertEqual(ret, [(0, 2), (4, 6)])
+
+        with t.subTest('none, where no Open heading stands'):
+            t.td.lines = ['# A heading', '- [ ] Loose task']
+            ret = t.td.open_bounds
+            t.assertEqual(ret, [])
+
     def test_heading_indices(t) -> None:
         with t.subTest('every level-two heading, in file order'):
             ret = t.td.heading_indices
