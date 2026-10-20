@@ -1,4 +1,4 @@
-"""Read one item: find it, then describe it (R3).
+"""Read one item: find it, then describe it.
 
 The two forms mirror `view`: text for a terminal, JSON for an agent.
 Both describe a *single* task, so `subtasks` here is the nested list of

@@ -4,7 +4,7 @@ The fixture lists are copied to a temporary directory first: `update`
 writes, and the committed fixtures are read-only inputs to the `view`
 and `show` goldens.
 
-The narrative is the round trip R3 asks of an agent. Read an item that
+The narrative is the round trip an agent runs. Read an item that
 carries no `[ID:]`, change its fields and its title, then read it back
 -- by title, and by the id the update injected.
 """

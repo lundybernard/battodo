@@ -119,6 +119,12 @@ Each rule lives in the home that it names.
   and the reviewer reads a small delta, never a rewritten branch. Home:
   `/pr-crafting`, `/work-orders`, Engineer memory
   `scripted-tree-rebuild-rewrite`.
+- 2026-08-17: two systems that read one stored value differently cut
+  over in one step, with no coexistence window. Why: the legacy bump
+  pushes `P` past 5, and btodo folds `P > 5` on the legacy scale (ADR
+  0005), so one legacy run drops a `P:5` task from 5 to 1.24. Home: this
+  entry; the cutover completed, and its ADR group 0013 retired on
+  2026-10-19.
 - 2026-08-28: oracle tests bracket a conversion: pin the old behaviour
   first, then assert that the new code answers the same. Why: the
   equivalence proof lands in history. Home: `/test-driven-refactor`.
@@ -128,8 +134,8 @@ Each rule lives in the home that it names.
   `function-test-class-convention`.
 - 2026-09-08: mutation testing runs once at each PR tip as an
   informational gate, and a survivor is a finding, not a block. Why: a
-  100% coverage floor still admits weak assertions. Home: ADR 0016
-  REQUIREMENTS R3, memory `mutation-gate-informational`.
+  100% coverage floor still admits weak assertions. Home: memory
+  `mutation-gate-informational`.
 - 2026-09-09: test suites compose and never inherit: module-level
   fixture functions, and helpers that take the fixture. Why: shared base
   TestCases and reset helpers carry state between tests. Home: the
