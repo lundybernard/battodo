@@ -257,6 +257,44 @@ class SuppliedDescription:
         return [line.strip() for line in lines]
 
 
+class DescriptionLine:
+    """One line of a supplied description.
+
+    `_raw_text` holds the line as the caller gave it.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._raw_text = text
+
+    @property
+    def text(self) -> str:
+        """The line, stripped of its indent.
+
+        Raises
+        ------
+        ValueError
+            The line has a refusal. The message names the line as the
+            caller gave it.
+        """
+        raise NotImplementedError
+
+    @property
+    def _refusal(self) -> str | None:
+        """Why the parser reads the line back as no description line.
+
+        A blank line, a task line, a heading or a comment, checked in
+        that order, then a carriage return. None for a description line.
+        The carriage-return check reads the line as given, because the
+        strip removes a trailing one.
+        """
+        raise NotImplementedError
+
+    @property
+    def _stripped(self) -> str:
+        """The line without its indent and its trailing white space."""
+        raise NotImplementedError
+
+
 class SuppliedFields:
     """The fields a caller supplies to a write, read before any write.
 
