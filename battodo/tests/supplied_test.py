@@ -347,6 +347,14 @@ class SuppliedDescriptionTests(TestCase):
                 'A line.\r',
                 "description line 'A line.\\r' holds a carriage return",
             ),
+            'an earlier line is read first': (
+                'A line.\r\n## A heading',
+                "description line 'A line.\\r' holds a carriage return",
+            ),
+            'a heading is read before a carriage return': (
+                '## A heading\r',
+                "description line '## A heading\\r' reads as a heading",
+            ),
         }
         for name, (text, message) in refused.items():
             with t.subTest(name):
@@ -434,6 +442,14 @@ class SuppliedFieldsTests(TestCase):
             'a priority is read first, a recurrence last': (
                 {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4', 'P': 'high'},
                 "P must be a whole number, not 'high'",
+            ),
+            'a level of effort is read before a due date': (
+                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4'},
+                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+            ),
+            'a due date is read before a recurrence': (
+                {'REPEAT': 'often', 'DUE': 'x'},
+                "DUE must be an ISO date, not 'x'",
             ),
         }
         for name, (fields, message) in refused.items():
@@ -523,6 +539,18 @@ class SuppliedAttributesTests(TestCase):
                 [('note', 'a note'), ('cost', '45.00'), ('note', 'another')],
                 "attribute 'note' is given twice",
             ),
+            'a key is read before its value': (
+                [('Place', '')],
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'an earlier pair is read first': (
+                [('cost', ''), ('Place', 'Main St')],
+                "attribute 'cost' must hold a value",
+            ),
+            'a key given twice before a later key outside the grammar': (
+                [('note', 'a note'), ('note', 'another'), ('Place', 'x')],
+                "attribute 'note' is given twice",
+            ),
         }
         for name, (given, message) in refused.items():
             with t.subTest(name):
@@ -568,6 +596,17 @@ class SuppliedAttributesTests(TestCase):
             t.assertEqual(
                 str(caught.exception),
                 "attribute must read key=value, not 'a value'",
+            )
+
+        with t.subTest('an earlier segment is read first'):
+            segments.return_value = ['a_key=a value', 'one value', 'another']
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sa.pairs
+
+            t.assertEqual(
+                str(caught.exception),
+                "attribute must read key=value, not 'one value'",
             )
 
     def test_segments(t) -> None:
