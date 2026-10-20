@@ -8,7 +8,7 @@ code.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import datetime
 from json import loads
 from os import environ
 from pathlib import Path
@@ -16,11 +16,11 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.conf import TZ
 from battodo.parser import TodoDocument
 from battodo.rank import DEFAULT_DUE_CURVE, parse_curve
 from battodo.view import Selection, SelectionJsonView, View
 from battodo.view.selection import Row
+from tests.environment import TZ
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut.
@@ -314,20 +314,3 @@ class RowTests(TestCase):
                 ret = row.rank
 
                 t.assertAlmostEqual(ret, expected)
-
-
-class TimezoneTests(TestCase):
-    """Contract tests for battodo.view.TZ."""
-
-    def test_tz(t) -> None:
-        # A named zone, not a fixed offset: the local day stays
-        # stable across daylight-saving changes.
-        summer = datetime(2026, 8, 5, 0, 30, tzinfo=TZ)
-        winter = datetime(2026, 12, 5, 0, 30, tzinfo=TZ)
-
-        with t.subTest('the offset follows the season'):
-            t.assertNotEqual(summer.utcoffset(), winter.utcoffset())
-
-        with t.subTest('but the local day does not shift'):
-            t.assertEqual(summer.date(), date(2026, 8, 5))
-            t.assertEqual(winter.date(), date(2026, 12, 5))

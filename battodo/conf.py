@@ -33,9 +33,6 @@ USER_FILE_NAME = 'config.toml'
 # The environment variable that names a file.
 CONFIG_FILE_ENV_VAR = EnvSource().env_name('config_file', CONFIG_ROOT)
 
-# Todos are anchored to a local day, so the zone is named rather than
-# a fixed offset.
-TZ = ZoneInfo('America/Los_Angeles')
 # What a configured zone the system does not know reports.
 ZONE_ERROR = 'unknown time zone in view.time_zone'
 
