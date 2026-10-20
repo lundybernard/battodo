@@ -263,6 +263,13 @@ configuration: it comes from the command line only
   `json`. `text`, and `--format` on the command line overrides it.
 - `view.rank_due_curve` — the curve the due date scales a rank by.
   `-30:0.5, -7:1.0, 0:2.0, 14:4.0`.
+- `view.time_zone` — the zone of the clock that sets today and the
+  hour, such as `America/Los_Angeles`. Empty, which reads the zone of
+  the system.
+- `view.windows` — the hours at which each category shows. Empty, so
+  every category shows at every hour.
+- `view.always_active` — the categories that show outside their
+  windows. Empty.
 
 `view.rank_due_curve` is a comma-separated list of `days:factor` points.
 `days` counts like a launch countdown: a negative day is before the due
@@ -274,6 +281,29 @@ factor. Each point names a day of its own, and a factor is a number of
 a task a month or more ahead at half, a week ahead at 1, due today at 2,
 and two weeks late at 4. A value that does not decode stops the command
 with exit 1 and names the bad point.
+
+`view.windows` names categories separated by `;`, each as
+`<category>=<window>`, with more windows after commas. A window is
+`<days> <start>-<end>`: one day or a run of days (`sat`, `mon-fri`,
+`sat-sun`; three letters, in any case), then whole hours on a 24-hour
+clock, the end hour excluded. A category with windows shows while one
+of them is open, and a category with none always shows.
+`view.always_active` is a comma-separated list of categories. The
+header of `view` names the categories open now; with none open, it
+names the day and the time alone. An unknown zone, or a window that
+does not decode, stops the command with exit 1 and names the field and
+the bad value.
+
+btodo carries no schedule of its own
+([ADR 0018](docs/decisions/0016-property-refactor/0018-schedule-and-timezone-config.md)).
+A config file sets one, such as this working week:
+
+```toml
+[personal.battodo.view]
+time_zone = "America/Los_Angeles"
+windows = "work=mon-fri 9-17; chores=mon-fri 17-21, sat-sun 10-20"
+always_active = "study, career, events"
+```
 
 An environment variable is the config path in caps:
 

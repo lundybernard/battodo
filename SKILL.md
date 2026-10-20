@@ -269,6 +269,22 @@ The due-date curve is `view.rank_due_curve`, or
 negative day before the due date. A curve that does not decode makes
 `view` and `show` exit 1 and name the bad point on stderr.
 
+The schedule is three fields, each empty by default:
+
+- `view.time_zone` or `BATTODO_VIEW_TIME_ZONE`: the zone of the clock,
+  such as `America/Los_Angeles`. Empty reads the zone of the system.
+- `view.windows` or `BATTODO_VIEW_WINDOWS`: when each category shows,
+  as `work=mon-fri 9-17; chores=mon-fri 17-21, sat-sun 10-20`. Days are
+  `mon` to `sun`, single or a forward run; hours are whole, 24-hour,
+  end excluded.
+- `view.always_active` or `BATTODO_VIEW_ALWAYS_ACTIVE`: a
+  comma-separated list of categories that show outside their windows.
+
+With no windows, `view` shows every category, and its header names the
+day and the time alone. A category with no window always shows. An
+unknown zone or a window that does not decode makes every command that
+reads the clock exit 1 and name the field and the bad value.
+
 An unquoted `top = 3` reaches the decoder as a TOML integer. `btodo
 view` then exits 1 and prints `'int' object has no attribute
 'isdecimal'` to stderr.

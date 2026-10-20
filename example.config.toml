@@ -11,6 +11,12 @@ default_env = "default"
 source_dir = "~/todo"
 # The due-date curve, as `days:factor` points (ADR 0026).
 # rank_due_curve = "-30:0.5, -7:1.0, 0:2.0, 14:4.0"
+# The schedule (ADR 0018): the zone of the clock, the hours each
+# category shows, and the categories that show at every hour. Empty
+# means the zone of the system, and every category at every hour.
+# time_zone = "America/Los_Angeles"
+# windows = "work=mon-fri 9-17; chores=mon-fri 17-21, sat-sun 10-20"
+# always_active = "study, career, events"
 
 # A second environment: `btodo --env sandbox view` reads this one.
 [sandbox.battodo.view]
