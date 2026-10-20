@@ -1711,7 +1711,13 @@ class Changeset:
         The list texts are read first, then the log records, then the
         events, so a refusal stops every read after it.
         """
-        raise NotImplementedError
+        return cls(
+            mutation.lists,
+            mutation.entries,
+            mutation.events,
+            mutation.path,
+            mutation.source,
+        )
 
     def write(self) -> None:
         """Write each list, then the log records, then the events.
