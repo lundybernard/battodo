@@ -466,17 +466,14 @@ class SuppliedAttributes:
         ValueError
             A segment holds no `=`.
         """
-        pairs = []
-        for segment in self.segments:
-            key, sign, value = segment.partition('=')
-            if not sign:
-                raise ValueError(
-                    f'attribute must read key=value, not {segment!r}'
-                )
-            pairs.append((key, value))
-        if self.note is not None:
-            pairs.append((NOTE_KEY, self.note))
-        return pairs
+        if self.note is None:
+            return self._segment_pairs
+        return [*self._segment_pairs, (NOTE_KEY, self.note)]
+
+    @property
+    def _segment_pairs(self) -> list[tuple[str, str]]:
+        """Each segment split at its first `=`, in the order given."""
+        return [AttributeSegment(segment).pair for segment in self.segments]
 
     @property
     def segments(self) -> list[str]:
@@ -533,4 +530,9 @@ class AttributeSegment:
         ValueError
             The segment holds no `=`.
         """
-        raise NotImplementedError
+        key, sign, value = self.text.partition('=')
+        if not sign:
+            raise ValueError(
+                f'attribute must read key=value, not {self.text!r}'
+            )
+        return key, value

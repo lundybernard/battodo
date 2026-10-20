@@ -740,53 +740,53 @@ class SuppliedAttributesTests(TestCase):
 
                 t.assertEqual(str(caught.exception), message)
 
-    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
-    def test_pairs(t, segments: PropertyMock) -> None:
-        with t.subTest('each segment split at its first =, then the note'):
-            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+    @patch.object(
+        SuppliedAttributes, '_segment_pairs', new_callable=PropertyMock
+    )
+    def test_pairs(t, segment_pairs: PropertyMock) -> None:
+        segment_pairs.return_value = [('a_key', 'a value')]
+
+        with t.subTest('each segment pair, then the note'):
             ret = t.sa.pairs
-            t.assertEqual(
-                ret,
-                [('a_key', 'a value'), ('sum', '1+1=2'), ('note', 'a note')],
-            )
+            t.assertEqual(ret, [('a_key', 'a value'), ('note', 'a note')])
 
         with t.subTest('the note enters whole, never split'):
-            segments.return_value = []
             t.sa.note = 'a note, cost=45.00'
-
             ret = t.sa.pairs
+            t.assertEqual(
+                ret, [('a_key', 'a value'), ('note', 'a note, cost=45.00')]
+            )
 
-            t.assertEqual(ret, [('note', 'a note, cost=45.00')])
-
-        with t.subTest('no note: the segments alone'):
-            segments.return_value = ['a_key=a value']
+        with t.subTest('no note: the segment pairs alone'):
             t.sa.note = None
-
             ret = t.sa.pairs
-
             t.assertEqual(ret, [('a_key', 'a value')])
 
-        with t.subTest('a segment with no = is refused'):
-            segments.return_value = ['a value']
+    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
+    def test_segment_pairs(t, segments: PropertyMock) -> None:
+        with t.subTest('each segment split at its first ='):
+            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+            ret = t.sa._segment_pairs
+            t.assertEqual(ret, [('a_key', 'a value'), ('sum', '1+1=2')])
 
-            with t.assertRaises(ValueError) as caught:
-                _ = t.sa.pairs
-
-            t.assertEqual(
-                str(caught.exception),
+        refused = {
+            'a segment with no = is refused': (
+                ['a value'],
                 "attribute must read key=value, not 'a value'",
-            )
-
-        with t.subTest('an earlier segment is read first'):
-            segments.return_value = ['a_key=a value', 'one value', 'another']
-
-            with t.assertRaises(ValueError) as caught:
-                _ = t.sa.pairs
-
-            t.assertEqual(
-                str(caught.exception),
+            ),
+            'an earlier segment is read first': (
+                ['a_key=a value', 'one value', 'another'],
                 "attribute must read key=value, not 'one value'",
-            )
+            ),
+        }
+        for name, (found, message) in refused.items():
+            with t.subTest(name):
+                segments.return_value = found
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sa._segment_pairs
+
+                t.assertEqual(str(caught.exception), message)
 
     def test_segments(t) -> None:
         with t.subTest('the text the write was given'):
