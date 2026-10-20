@@ -102,17 +102,10 @@ class TodoDocument:
 
     @property
     def open_sections(self) -> list[list[int]]:
-        """The line indices under each `## Open` heading, in file order.
-
-        A section ends at the next `## ` heading or at the end of the
-        file.
-        """
-        bounds = [*self.heading_indices, len(self.lines)]
+        """The line indices under each `## Open` heading, in file order."""
         return [
-            list(range(start + 1, stop))
-            for start, stop in pairwise(bounds)
-                if self.lines[start].strip() == OPEN_HEADING
-        ]  # fmt: skip
+            list(range(start + 1, stop)) for start, stop in self.open_bounds
+        ]
 
     @property
     def open_bounds(self) -> list[tuple[int, int]]:
@@ -121,7 +114,12 @@ class TodoDocument:
         In file order. A section stops at the next `## ` heading or at
         the end of the file.
         """
-        raise NotImplementedError
+        bounds = [*self.heading_indices, len(self.lines)]
+        return [
+            (start, stop)
+            for start, stop in pairwise(bounds)
+                if self.lines[start].strip() == OPEN_HEADING
+        ]  # fmt: skip
 
     @property
     def heading_indices(self) -> list[int]:
@@ -250,26 +248,13 @@ class TodoDocument:
         StopIteration
             There is no `## Open` heading.
         """
-        start = next(
-            index
-            for index, line in enumerate(self.lines)
-                if line.strip() == OPEN_HEADING
-        )  # fmt: skip
-        stop = len(self.lines)
-        end = next(
-            (
-                index
-                for index in range(start + 1, stop)
-                    if self.lines[index].strip().startswith('## ')
-            ),
-            stop,
-        )  # fmt: skip
+        start, stop = next(iter(self.open_bounds))
         # `start` is itself non-blank, so an empty section appends
         # directly under the heading rather than falling off the front
         # of the file.
         last = max(
             index
-            for index in range(start, end)
+            for index in range(start, stop)
                 if self.lines[index].strip()
         )  # fmt: skip
         return last + 1
