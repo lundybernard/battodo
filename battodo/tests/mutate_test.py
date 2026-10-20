@@ -4499,64 +4499,16 @@ class ListBackfillTests(TestCase):
         t.lb = ListBackfill(t.path, TODAY)
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(ListBackfill, 'events', new_callable=PropertyMock)
-    @patch.object(ListBackfill, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.lb.write()
+        changeset.from_mutation.assert_called_once_with(t.lb)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
     @patch.object(ListBackfill, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-
-        with t.subTest('the list, its log records and its events'):
-            t.lb.write()
-
-            changeset.assert_called_once_with(
-                {t.path: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                t.path,
-                t.path.parent,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
-            text.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.lb.write()
-
-            entries.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused record: no event is read, nothing written'):
-            changeset.reset_mock()
-            events.reset_mock()
-            text.side_effect = None
-            entries.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.lb.write()
-
-            events.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused event: nothing is written'):
-            changeset.reset_mock()
-            entries.side_effect = None
-            events.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.lb.write()
-
-            changeset.assert_not_called()
+        ret = t.lb.lists
+        t.assertEqual(ret, {t.path: sentinel.text})
 
     def test_source(t) -> None:
         ret = t.lb.source
