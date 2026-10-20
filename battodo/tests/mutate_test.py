@@ -3167,6 +3167,44 @@ class ChangesetTests(TestCase):
             SOURCE,
         )
 
+    def test_from_mutation(t) -> None:
+        members = ['lists', 'entries', 'events', 'path', 'source']
+        values = [{LIST_PATH: 'the list'}, ['a record'], t.events, LIST_PATH]
+        mutation = MagicMock(spec=members)
+        # Each read of the write object goes on one record, in order.
+        reads = MagicMock(spec=members)
+        for name, value in zip(members, [*values, SOURCE]):
+            read = PropertyMock(return_value=value)
+            setattr(type(mutation), name, read)
+            reads.attach_mock(read, name)
+        every_read = [getattr(call, name)() for name in members]
+
+        with t.subTest('each value, the lists first, the source last'):
+            ret = Changeset.from_mutation(mutation)
+
+            t.assertEqual(reads.mock_calls, every_read)
+            t.assertEqual(
+                [ret.lists, ret.entries, ret.events, ret.path, ret.source],
+                [*values, SOURCE],
+            )
+
+        refused = {
+            'a refused list: nothing else is read': 1,
+            'a refused record: no event is read': 2,
+            'a refused event: nothing after it is read': 3,
+        }
+        for name, count in refused.items():
+            with t.subTest(name):
+                reads.reset_mock()
+                refusal = getattr(reads, members[count - 1])
+                refusal.side_effect = ValueError('refused')
+
+                with t.assertRaises(ValueError):
+                    Changeset.from_mutation(mutation)
+
+                t.assertEqual(reads.mock_calls, every_read[:count])
+                refusal.side_effect = None
+
     @patch(f'{SRC}.Journal', autospec=True)
     @patch(f'{SRC}.CompletedLog', autospec=True)
     def test_write(t, completed_log: MagicMock, journal: MagicMock) -> None:

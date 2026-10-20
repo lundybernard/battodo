@@ -2145,6 +2145,16 @@ class ChangesetTests(TestCase):
             t.source,
         )
 
+    def test_from_mutation(t) -> None:
+        update = Update(Task(t.source, '9o71lx', TODAY), {'P': '5'})
+
+        ret = Changeset.from_mutation(update)
+
+        # The values of the write object, each as it reads it.
+        t.assertEqual(ret.lists, update.lists)
+        t.assertEqual((ret.entries, ret.events), ([], update.events))
+        t.assertEqual((ret.path, ret.source), (t.path, t.source))
+
     def test_write(t) -> None:
         with t.subTest('the list, the log and the journal take its values'):
             t.cs.write()

@@ -38,7 +38,7 @@ from functools import cached_property
 from itertools import pairwise
 from json import dumps
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol
 
 from .history import StreamSelection, TaskStream
 from .journal import (
@@ -1704,6 +1704,15 @@ class Changeset:
         self.path = path
         self.source = source
 
+    @classmethod
+    def from_mutation(cls, mutation: 'Mutation') -> 'Changeset':
+        """The changes of `mutation`, each read before the first write.
+
+        The list texts are read first, then the log records, then the
+        events, so a refusal stops every read after it.
+        """
+        raise NotImplementedError
+
     def write(self) -> None:
         """Write each list, then the log records, then the events.
 
@@ -1723,6 +1732,30 @@ class Changeset:
                 actor=ACTOR,
                 source_file=self.path.name,
             )
+
+
+class Mutation(Protocol):
+    """A write object, as `Changeset` reads it."""
+
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of each list the write changes, by its path."""
+
+    @property
+    def entries(self) -> list[str]:
+        """The completed-log records."""
+
+    @property
+    def events(self) -> list['Event']:
+        """The journal events."""
+
+    @property
+    def path(self) -> Path:
+        """The list each event names as its source file."""
+
+    @property
+    def source(self) -> Path:
+        """The source directory."""
 
 
 class CompletedLog:
