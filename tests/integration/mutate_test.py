@@ -158,6 +158,14 @@ HELD_LIST = (
     '  - [x] A closed step [LOE:1] [ID:ds02cd]\n'
     '    - [x] A closed step below it [LOE:1] [ID:db03ef]\n'
 )
+# A list whose open subtask carries the id of the scratched task sc01ab,
+# so the list restored from its record holds that id twice. The titles
+# name the role each line plays.
+TWIN_ID_LIST = (
+    '## Open\n\n'
+    '- [ ] A task above a twin id [P:2] [ID:tp01ab]\n'
+    '  - [ ] An open subtask with a twin id [LOE:1] [ID:sc01ab]\n'
+)
 # The last snapshot of a finished top-level task with a description, a
 # subtask and a checklist item.
 FINISHED_SNAPSHOT = {
@@ -1338,6 +1346,17 @@ class ReopenTests(TestCase):
                 'no list and no record of a closed task holds its line',
             ):
                 _ = t.ro.record
+
+    def test_ancestry(t) -> None:
+        # Pins the current match; a ruling may change it.
+        twin = t.source / 'a-twin-list.md'
+        twin.write_text(TWIN_ID_LIST, encoding='utf-8')
+        reopen = reopen_of(t.source, 'sc01ab', list_name='a-twin-list')
+
+        ret = reopen.ancestry
+
+        # Two tasks hold the id: the shallowest, the restored line.
+        t.assertEqual([task.title for task in ret], ['A scratched task'])
 
     def test_entry(t) -> None:
         ret = t.ro.entry

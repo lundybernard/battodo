@@ -1881,6 +1881,9 @@ class ReopenTests(TestCase):
                 5: [parent, child, grandchild],
             },
         )
+        # Pins the current match; a ruling may change it. Breadth first:
+        # `ancestry` takes the first task with the id.
+        t.assertEqual(list(ret), [1, 6, 3, 5])
 
     @patch.object(Reopen, 'subtasks', new_callable=PropertyMock)
     @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
