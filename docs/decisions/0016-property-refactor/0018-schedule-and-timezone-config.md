@@ -101,8 +101,6 @@ be exempt from.
 
 ## Amendment — 2026-10-19
 
-No code implements this decision yet. PR #69 deferred the extraction,
-so the values are still hard-coded: the time zone in `conf.py`, and the
-always-active list names and the hour windows in `view/selection.py`.
-Issue [#131](https://github.com/lundybernard/battodo/issues/131) tracks
-the implementation. The two lookup limits under Consequences stand.
+PR #69 deferred the extraction. PR #137 implements this decision and
+resolves issue [#131](https://github.com/lundybernard/battodo/issues/131).
+The two lookup limits under Consequences stand.
