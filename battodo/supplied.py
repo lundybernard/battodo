@@ -238,23 +238,7 @@ class SuppliedDescription:
         """
         if not self.text:
             return []
-        lines = self.text.split('\n')
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                refusal = 'is blank'
-            elif CHECKBOX_RE.match(stripped):
-                refusal = 'reads as a task line'
-            elif stripped.startswith('## '):
-                refusal = 'reads as a heading'
-            elif stripped.startswith('<!--'):
-                refusal = 'reads as a comment'
-            elif '\r' in line:
-                refusal = 'holds a carriage return'
-            else:
-                continue
-            raise ValueError(f'description line {line!r} {refusal}')
-        return [line.strip() for line in lines]
+        return [DescriptionLine(line).text for line in self.text.split('\n')]
 
 
 class DescriptionLine:
@@ -276,7 +260,11 @@ class DescriptionLine:
             The line has a refusal. The message names the line as the
             caller gave it.
         """
-        raise NotImplementedError
+        if self._refusal is not None:
+            raise ValueError(
+                f'description line {self._raw_text!r} {self._refusal}'
+            )
+        return self._stripped
 
     @property
     def _refusal(self) -> str | None:
@@ -287,12 +275,22 @@ class DescriptionLine:
         The carriage-return check reads the line as given, because the
         strip removes a trailing one.
         """
-        raise NotImplementedError
+        if not self._stripped:
+            return 'is blank'
+        if CHECKBOX_RE.match(self._stripped):
+            return 'reads as a task line'
+        if self._stripped.startswith('## '):
+            return 'reads as a heading'
+        if self._stripped.startswith('<!--'):
+            return 'reads as a comment'
+        if '\r' in self._raw_text:
+            return 'holds a carriage return'
+        return None
 
     @property
     def _stripped(self) -> str:
         """The line without its indent and its trailing white space."""
-        raise NotImplementedError
+        return self._raw_text.strip()
 
 
 class SuppliedFields:
