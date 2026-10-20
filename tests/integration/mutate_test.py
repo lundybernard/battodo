@@ -592,6 +592,10 @@ class SubtaskAdditionTests(TestCase):
         t.assertEqual(written, t.sa.text)
         t.assertEqual(journaled(t.source), as_journaled(t.sa.events))
 
+    def test_lists(t) -> None:
+        ret = t.sa.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.sa.text})
+
     def test_path(t) -> None:
         ret = t.sa.path
         t.assertEqual(ret, t.source / 'a-list.md')

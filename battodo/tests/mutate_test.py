@@ -310,65 +310,29 @@ class SubtaskAdditionTests(TestCase):
         t.sa = SubtaskAddition(t.task, 'a-list', 'A new subtask', {'LOE': '2'})
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(SubtaskAddition, 'events', new_callable=PropertyMock)
-    @patch.object(SubtaskAddition, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.sa.write()
+        changeset.from_mutation.assert_called_once_with(t.sa)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(SubtaskAddition, 'path', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.sa.path = LIST_PATH
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.sa.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.sa.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.sa.write()
+                _ = t.sa.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused record: no event is read, nothing written'):
-            changeset.reset_mock()
-            events.reset_mock()
-            text.side_effect = None
-            entries.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.sa.write()
-
-            events.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused event: nothing is written'):
-            changeset.reset_mock()
-            entries.side_effect = None
-            events.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.sa.write()
-
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.sa.source
