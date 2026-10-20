@@ -5,7 +5,7 @@ asserts what `ItemJsonView.json` publishes and what `ItemView.text`
 renders for the task a selector names, or the error text when the
 selector names no open task or several. The expected answer derives
 from the drawn file and the clock, never from the code under test. The
-cases began as the item slice's oracle and outlived it (R4).
+cases began as the item slice's oracle and outlived it.
 """
 
 from json import dumps

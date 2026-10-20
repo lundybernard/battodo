@@ -13,13 +13,6 @@ refactor targets, and the one configuration change it carries.
 
 Branch: `property-refactor-plan` — Issue: #32
 
-## Planning docs
-
-| File | Purpose |
-| ---- | ------- |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | Invariants every slice holds |
-| [PLAN.md](PLAN.md) | Slice sequence, per-slice scope, risks |
-
 Object names and module layouts are chosen per slice, in the
 implementing PRs, not here.
 
@@ -35,6 +28,6 @@ No code implements ADR 0018 yet. PR #69 deferred it, and issue
 
 ## AI assistance disclosure
 
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.
+The ADRs in this directory were drafted with the assistance of Claude
+Code (Anthropic). The author reviewed and takes responsibility for all
+content.

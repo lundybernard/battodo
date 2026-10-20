@@ -5,7 +5,7 @@ entry point of `battodo.lib` on it, and asserts the answer and what the
 source holds after the write: the list files, the completed log and the
 journal. The expected outcome derives from the drawn source and the
 clock, never from the code under test. The cases began as the mutate
-slice's oracle and outlived it (R4).
+slice's oracle and outlived it.
 
 A new task id is random, so each case draws new ids from a stand-in,
 and the two outcomes compare up to a renaming of the new ids.
