@@ -1,0 +1,6 @@
+# A config file that sets no schedule: the view shows every list at
+# every hour.
+[batconf]
+default_env = "fixture"
+
+[fixture.battodo.view]

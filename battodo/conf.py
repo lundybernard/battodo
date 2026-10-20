@@ -50,12 +50,17 @@ class ViewConfig:
     integer by the view command. `rank_due_curve` is read as the
     `days:factor` points of the due-date curve (ADR 0026). `time_zone`
     names the zone of the clock; empty means the system local zone.
+    `windows` is read as the hour windows of each category, and
+    `always_active` as the names no window shuts (ADR 0018). Empty
+    schedules nothing, so every category shows.
     """
 
     source_dir: str = '~/todo'
     top: str = str(TOP_N)
     rank_due_curve: str = DEFAULT_DUE_CURVE
     time_zone: str = ''
+    windows: str = ''
+    always_active: str = ''
 
 
 @dataclass

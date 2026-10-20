@@ -38,6 +38,8 @@ TODO_DIR = DATA / 'todo'
 GOLDEN_DIR = DATA / 'golden'
 # The config file that sets the schedule of the goldens.
 SCHEDULE_FILE = DATA / 'battodo.toml'
+# A config file that sets no schedule.
+UNSCHEDULED_FILE = DATA / 'unscheduled.toml'
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut. All fixture dates are relative to this instant.
@@ -51,6 +53,8 @@ FORMAT_VAR = 'BATTODO_FORMAT'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
 CONFIG_VAR = 'BATTODO_CONFIG_FILE'
 ZONE_VAR = 'BATTODO_VIEW_TIME_ZONE'
+WINDOWS_VAR = 'BATTODO_VIEW_WINDOWS'
+ALWAYS_VAR = 'BATTODO_VIEW_ALWAYS_ACTIVE'
 
 
 def golden(name: str) -> str:
@@ -214,6 +218,43 @@ class ViewCommandTests(TestCase):
             t.assertEqual(
                 err,
                 "unknown time zone in view.time_zone: 'Mars/Olympus'\n",
+            )
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_schedule_is_configured(t) -> None:
+        with t.subTest('no schedule: every list, under the day and time'):
+            out = t.render(env={CONFIG_VAR: str(UNSCHEDULED_FILE)})
+
+            t.assertEqual(out.split('\n')[0], 'Wednesday 2026-08-05 10:30')
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('the environment sets the windows'):
+            out = t.render(env={WINDOWS_VAR: 'chores=wed 10-11'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Wednesday 2026-08-05 10:30 — active: career, chores, events, '
+                'study',
+            )
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('and the names no window shuts'):
+            out = t.render(env={ALWAYS_VAR: 'chores'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Wednesday 2026-08-05 10:30 — active: chores, work',
+            )
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('windows btodo cannot read: reported, exit 1'):
+            out, err, code = t.cli(env={WINDOWS_VAR: 'chores=someday 9-17'})
+
+            t.assertEqual(
+                err,
+                'a view.windows window must read <days> <start>-<end>: '
+                "'someday 9-17'\n",
             )
             t.assertEqual(code, 1)
             t.assertEqual(out, '')

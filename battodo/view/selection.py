@@ -15,16 +15,19 @@ stored priority, which is what lets the table show a rank at all: the
 file states no order of its own.
 """
 
+import re
 from datetime import date, datetime
 from functools import cached_property
 from json import dumps
 from pathlib import Path
+from typing import NamedTuple
 
 from batconf import Configuration
 
 from ..lists import CATEGORY_ORDER, category_order, discover_lists, item_count
 from ..parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from ..rank import DEFAULT_DUE_CURVE, Curve, multiplier, parse_curve, rank
+from ..repeat import WEEKDAYS
 
 
 class SourceError(Exception):
@@ -45,6 +48,17 @@ PARKED_MARKER = 'battodo:parked'
 TOP_N = 5
 # How many decimal places a published rank carries.
 RANK_PLACES = 2
+# One window: a day or a run of days, then a span of whole hours.
+WINDOW_RE = re.compile(
+    rf'(?P<first>{"|".join(WEEKDAYS)})'
+    rf'(?:\s*-\s*(?P<last>{"|".join(WEEKDAYS)}))?'
+    r'\s+(?P<start>\d{1,2})\s*-\s*(?P<end>\d{1,2})',
+    re.IGNORECASE,
+)
+# What the windows of a view report when they do not read.
+ENTRY_ERROR = 'a view.windows entry must read <category>=<window>'
+WINDOW_ERROR = 'a view.windows window must read <days> <start>-<end>'
+NAME_ERROR = 'view.windows names a category twice'
 
 
 class Selection:
@@ -58,12 +72,16 @@ class Selection:
         show_all: bool,
         top_n: int = TOP_N,
         rank_due_curve: str = DEFAULT_DUE_CURVE,
+        windows: str = '',
+        always_active: str = '',
     ) -> None:
         self.directory = directory
         self.now = now
         self.show_all = show_all
         self.top_n = top_n
         self.rank_due_curve = rank_due_curve
+        self.windows = windows
+        self.always_active = always_active
 
     @classmethod
     def from_config(
@@ -125,6 +143,22 @@ class Selection:
         if not self.weekday and 10 <= self.hour < 20:
             names.add('chores')
         return names
+
+    @property
+    def always_open(self) -> frozenset[str]:
+        """The categories no window shuts."""
+        raise NotImplementedError
+
+    @property
+    def schedule(self) -> dict[str, list['Window']]:
+        """The windows of each category the view schedules.
+
+        Raises
+        ------
+        ValueError
+            The configured windows do not read.
+        """
+        raise NotImplementedError
 
     @property
     def weekday(self) -> bool:
@@ -195,6 +229,52 @@ class Selection:
             for todo in self.lists
                 if self.shows(todo) and todo.rows
         ]  # fmt: skip
+
+
+def parse_windows(text: str) -> dict[str, list['Window']]:
+    """Decode the windows of each category from `text`.
+
+    Parameters
+    ----------
+    text : str
+        `<category>=<window>[, <window>]...` entries, separated by `;`.
+        An empty text schedules nothing.
+
+    Raises
+    ------
+    ValueError
+        An entry or a window does not read, or two entries name the
+        same category.
+    """
+    raise NotImplementedError
+
+
+def parse_window(text: str) -> 'Window':
+    """Decode one `<days> <start>-<end>` window.
+
+    Raises
+    ------
+    ValueError
+        The window does not read, its days run backwards, or its hours
+        do not fall inside one day.
+    """
+    raise NotImplementedError
+
+
+class Window(NamedTuple):
+    """The hours a category is open on a run of days of the week.
+
+    Days count from Monday as 0. `end` is the first hour past the window.
+    """
+
+    first: int
+    last: int
+    start: int
+    end: int
+
+    def holds(self, day: int, hour: int) -> bool:
+        """Whether the window is open on `day` at `hour`."""
+        raise NotImplementedError
 
 
 class TodoList:
