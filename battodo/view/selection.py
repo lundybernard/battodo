@@ -1,10 +1,11 @@
 """Decide what a view shows: which lists, which tasks, in what order.
 
 Layout has no say in what is chosen: the table module reads this one,
-and never the other way about. The machine-readable form (R2) lives
-here as `SelectionJsonView`, which reads a selection through its
-attributes. The table's `RowView` and the published form read the
-same row, so the two never derive a task apart.
+and never the other way about. The machine-readable form (README.md,
+"Machine-readable output") lives here as `SelectionJsonView`, which
+reads a selection through its attributes. The table's `RowView` and
+the published form read the same row, so the two never derive a task
+apart.
 
 A view holds every open top-level item. A due date far ahead lowers an
 item's rank instead of hiding it (ADR 0026).
