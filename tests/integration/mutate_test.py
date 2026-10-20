@@ -1561,6 +1561,11 @@ class CompletionTests(TestCase):
                 [('TaskUpdated', stream), ('TaskScratched', stream)],
             )
 
+    def test_lists(t) -> None:
+        completion = completion_of(t.source, 'A subtask that does not')
+        ret = completion.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': completion.text})
+
     def test_text(t) -> None:
         with t.subTest('a finished top-level task loses its line'):
             completed = completion_of(t.source, 'A task with no id')

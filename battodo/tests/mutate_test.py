@@ -2110,64 +2110,29 @@ class CompletionTests(TestCase):
         t.co = Completion(t.task)
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Completion, 'events', new_callable=PropertyMock)
-    @patch.object(Completion, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.co.write()
+        changeset.from_mutation.assert_called_once_with(t.co)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(Completion, 'path', new_callable=PropertyMock)
     @patch.object(Completion, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.co.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.co.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.co.write()
+                _ = t.co.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused record: no event is read, nothing written'):
-            changeset.reset_mock()
-            events.reset_mock()
-            text.side_effect = None
-            entries.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.co.write()
-
-            events.assert_not_called()
-            changeset.assert_not_called()
-
-        with t.subTest('a refused event: nothing is written'):
-            changeset.reset_mock()
-            entries.side_effect = None
-            events.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.co.write()
-
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.co.source
