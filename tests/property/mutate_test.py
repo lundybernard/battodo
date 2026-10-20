@@ -35,7 +35,7 @@ from battodo.lib import (
     complete_item,
     update_item,
 )
-from battodo.mutate import ListError, SuppliedAttributes
+from battodo.mutate import ListError
 from battodo.parser import (
     CHECKBOX_RE,
     OPEN_HEADING,
@@ -45,6 +45,7 @@ from battodo.parser import (
 )
 from battodo.repeat import next_due
 from battodo.selector import SelectionError
+from battodo.supplied import SuppliedAttributes
 from tests.environment import TZ
 
 from .item_test import item_selectors
@@ -434,7 +435,7 @@ class BackfillItemsTests(TestCase):
 
 
 class SuppliedAttributesTests(TestCase):
-    """Property tests for battodo.mutate.SuppliedAttributes."""
+    """Property tests for battodo.supplied.SuppliedAttributes."""
 
     maxDiff = None
 

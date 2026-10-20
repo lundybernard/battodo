@@ -33,9 +33,9 @@ from .mutate import (
     Completion,
     Reopen,
     SubtaskAddition,
-    SuppliedAttributes,
     Update,
 )
+from .supplied import SuppliedAttributes
 from .task import Task
 from .view import Selection, SelectionJsonView, View
 
