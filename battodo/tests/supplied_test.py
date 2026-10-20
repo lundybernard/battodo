@@ -7,6 +7,7 @@ from unittest.mock import (
 )
 
 from ..supplied import (
+    AttributePair,
     DescriptionLine,
     SuppliedAttributes,
     SuppliedDescription,
@@ -833,3 +834,46 @@ class SuppliedAttributesTests(TestCase):
                 t.sa.text = text
                 ret = t.sa.segments
                 t.assertEqual(ret, expected)
+
+
+class AttributePairTests(TestCase):
+    """Unit tests for battodo.supplied.AttributePair."""
+
+    def setUp(t) -> None:
+        t.ap = AttributePair('cost', '45.00')
+
+    def test_checked(t) -> None:
+        with t.subTest('the key against its value'):
+            ret = t.ap.checked
+            t.assertEqual(ret, ('cost', '45.00'))
+
+        refused = {
+            'a key with a capital': (
+                ('Place', 'Main St'),
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'an empty value': (
+                ('cost', ''),
+                "attribute 'cost' must hold a value",
+            ),
+            'a value with a line feed': (
+                ('note', 'a\nnote'),
+                "attribute 'note' must hold no line break, not 'a\\nnote'",
+            ),
+            'a value with a carriage return': (
+                ('note', 'a\rnote'),
+                "attribute 'note' must hold no line break, not 'a\\rnote'",
+            ),
+            'a key is read before its value': (
+                ('Place', ''),
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+        }
+        for name, ((key, value), message) in refused.items():
+            with t.subTest(name):
+                t.ap.key, t.ap.value = key, value
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.ap.checked
+
+                t.assertEqual(str(caught.exception), message)
