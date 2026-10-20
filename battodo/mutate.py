@@ -1432,13 +1432,28 @@ class Completion:
             The named task is a checklist item and attributes are given.
         """
         self.task.node.refuse_attributes(self.attrs)
-        kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
-        events = []
-        for completion in self.completions:
-            stream = self.lines.ids[completion.ancestry.stream.raw_index]
-            payload = completion.payload
-            events.append(Event(kind, f'task/{stream}', payload))
-        return [*self.assignments, *events]
+        return [*self.assignments, *self._closes]
+
+    @property
+    def _closes(self) -> list['Event']:
+        """One event per completion, deepest first."""
+        return [
+            Event(self._kind, stream, completion.payload)
+            for completion, stream in zip(self.completions, self._streams)
+        ]
+
+    @property
+    def _kind(self) -> str:
+        """The event type of each close: a completion or a scratch."""
+        return SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
+
+    @property
+    def _streams(self) -> list[str]:
+        """The stream of each completion, deepest first."""
+        return [
+            f'task/{self.lines.ids[completion.ancestry.stream.raw_index]}'
+            for completion in self.completions
+        ]
 
     @property
     def completions(self) -> list['TaskCompletion']:

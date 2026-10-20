@@ -2444,65 +2444,96 @@ class CompletionTests(TestCase):
             )
 
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Completion, '_closes', new_callable=PropertyMock)
     @patch.object(Completion, 'assignments', new_callable=PropertyMock)
-    @patch.object(Completion, 'completions', new_callable=PropertyMock)
     def test_events(
         t,
-        completions: PropertyMock,
         assignments: PropertyMock,
+        closes: PropertyMock,
         refuse_attributes: MagicMock,
     ) -> None:
-        below = MagicMock(spec=['ancestry', 'payload'])
-        below.ancestry = ancestry_of(t.parent, t.child)
-        below.payload = sentinel.below
-        top = MagicMock(spec=['ancestry', 'payload'])
-        top.ancestry = ancestry_of(t.parent)
-        top.payload = sentinel.top
-        completions.return_value = [below, top]
-        t.co.lines = MagicMock(spec=['ids'])
-        t.co.lines.ids = {3: 'zz01ab', 1: '9o71lx'}
+        assignments.return_value = [sentinel.stamp]
+        closes.return_value = [sentinel.close]
         t.co.attrs = sentinel.attrs
 
-        with t.subTest('one TaskCompleted a completion, deepest first'):
-            assignments.return_value = []
-
+        with t.subTest('each id stamp, then each close'):
             ret = t.co.events
 
-            # The named task checks that it takes the attributes first.
             refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+            t.assertEqual(ret, [sentinel.stamp, sentinel.close])
+
+        with t.subTest('a refused attribute: nothing else is read'):
+            assignments.reset_mock()
+            closes.reset_mock()
+            refuse_attributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                _ = t.co.events
+
+            assignments.assert_not_called()
+            closes.assert_not_called()
+
+    @patch.object(Completion, '_streams', new_callable=PropertyMock)
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_closes(
+        t,
+        completions: PropertyMock,
+        streams: PropertyMock,
+    ) -> None:
+        below = MagicMock(spec=['payload'])
+        below.payload = sentinel.below
+        top = MagicMock(spec=['payload'])
+        top.payload = sentinel.top
+        completions.return_value = [below, top]
+        streams.return_value = ['task/zz01ab', 'task/9o71lx']
+
+        with t.subTest('one TaskCompleted a completion, deepest first'):
+            ret = t.co._closes
             t.assertEqual(
                 ret,
                 [
-                    Event('TaskCompleted', 'task/zz01ab', sentinel.below),
-                    Event('TaskCompleted', 'task/9o71lx', sentinel.top),
-                ],
-            )
-
-        with t.subTest('each id stamp goes before every completion'):
-            assignments.return_value = [sentinel.stamp]
-
-            ret = t.co.events
-
-            t.assertEqual(
-                ret,
-                [
-                    sentinel.stamp,
                     Event('TaskCompleted', 'task/zz01ab', sentinel.below),
                     Event('TaskCompleted', 'task/9o71lx', sentinel.top),
                 ],
             )
 
         with t.subTest('a scratch: one TaskScratched each'):
-            assignments.return_value = []
             completions.return_value = [below]
+            streams.return_value = ['task/zz01ab']
             t.co.scratched = True
 
-            ret = t.co.events
+            ret = t.co._closes
 
             t.assertEqual(
                 ret,
                 [Event('TaskScratched', 'task/zz01ab', sentinel.below)],
             )
+
+    def test_kind(t) -> None:
+        cases = {
+            'a completion': (False, 'TaskCompleted'),
+            'a scratch': (True, 'TaskScratched'),
+        }
+        for name, (scratched, expected) in cases.items():
+            with t.subTest(name):
+                t.co.scratched = scratched
+                ret = t.co._kind
+                t.assertEqual(ret, expected)
+
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_streams(t, completions: PropertyMock) -> None:
+        below = MagicMock(spec=['ancestry'])
+        below.ancestry = ancestry_of(t.parent, t.child)
+        top = MagicMock(spec=['ancestry'])
+        top.ancestry = ancestry_of(t.parent)
+        completions.return_value = [below, top]
+        t.co.lines = MagicMock(spec=['ids'])
+        t.co.lines.ids = {3: 'zz01ab', 1: '9o71lx'}
+
+        ret = t.co._streams
+
+        # The stream of each completion, by the id of its stream task.
+        t.assertEqual(ret, ['task/zz01ab', 'task/9o71lx'])
 
     @patch(f'{SRC}.IdAssignment', autospec=True)
     def test_assignments(t, id_assignment: MagicMock) -> None:
