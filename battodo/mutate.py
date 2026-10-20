@@ -1054,13 +1054,16 @@ class Reopen:
         stream = self.stream
         if not stream.nested:
             return None
-        for path, doc in self.task.selection.lists:
-            tasks = list(doc.tasks)
-            for task in tasks:
-                if task.done and task.task_id == stream.task_id:
-                    return path
-                tasks.extend(task.children)
-        return None
+        return next(
+            (
+                path
+                for path, doc in self.task.selection.lists
+                for ancestry in doc.ancestries
+                    if ancestry[-1].done
+                    and ancestry[-1].task_id == stream.task_id
+            ),
+            None,
+        )  # fmt: skip
 
     @property
     def record(self) -> TaskStream:

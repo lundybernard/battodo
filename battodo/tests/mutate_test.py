@@ -1675,9 +1675,10 @@ class ReopenTests(TestCase):
         parent.children = [done]
         # The lists as the selection read them, each beside its path.
         t.task.selection = Mock(spec=['lists'])
+        held = [[parent], [parent, done]]
         t.task.selection.lists = [
-            (LIST_PATH, Mock(spec=['tasks'], tasks=[])),
-            (ANOTHER_PATH, Mock(spec=['tasks'], tasks=[parent])),
+            (LIST_PATH, Mock(spec=['ancestries'], ancestries=[])),
+            (ANOTHER_PATH, Mock(spec=['ancestries'], ancestries=held)),
         ]
 
         with t.subTest('the list that holds the closed line, at any depth'):
