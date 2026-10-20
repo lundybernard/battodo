@@ -50,6 +50,7 @@ TOP_VAR = 'BATTODO_VIEW_TOP'
 FORMAT_VAR = 'BATTODO_FORMAT'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
 CONFIG_VAR = 'BATTODO_CONFIG_FILE'
+ZONE_VAR = 'BATTODO_VIEW_TIME_ZONE'
 
 
 def golden(name: str) -> str:
@@ -192,6 +193,27 @@ class ViewCommandTests(TestCase):
             t.assertEqual(
                 err,
                 "a rank due curve point must read days:factor: 'soon:1.0'\n",
+            )
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_time_zone_is_configured(t) -> None:
+        with t.subTest('the zone moves the clock to its own day and hour'):
+            # 10:30 in Los Angeles is 02:30 the next day in Tokyo: a
+            # Thursday, before the work window opens.
+            out = t.render(env={ZONE_VAR: 'Asia/Tokyo'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Thursday 2026-08-06 02:30 — active: career, events, study',
+            )
+
+        with t.subTest('a zone btodo does not know: reported, exit 1'):
+            out, err, code = t.cli(env={ZONE_VAR: 'Mars/Olympus'})
+
+            t.assertEqual(
+                err,
+                "unknown time zone in view.time_zone: 'Mars/Olympus'\n",
             )
             t.assertEqual(code, 1)
             t.assertEqual(out, '')

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import tzinfo
 from functools import cached_property
 from os import environ
 from pathlib import Path
@@ -34,6 +35,8 @@ CONFIG_FILE_ENV_VAR = EnvSource().env_name('config_file', CONFIG_ROOT)
 # Todos are anchored to a local day, so the zone is named rather than
 # a fixed offset.
 TZ = ZoneInfo('America/Los_Angeles')
+# What a configured zone the system does not know reports.
+ZONE_ERROR = 'unknown time zone in view.time_zone'
 
 
 @dataclass
@@ -47,12 +50,14 @@ class ViewConfig:
     Every value is a string: the environment source carries nothing
     else, so a consumer decodes what it needs. `top` is read as an
     integer by the view command. `rank_due_curve` is read as the
-    `days:factor` points of the due-date curve (ADR 0026).
+    `days:factor` points of the due-date curve (ADR 0026). `time_zone`
+    names the zone of the clock; empty means the system local zone.
     """
 
     source_dir: str = '~/todo'
     top: str = str(TOP_N)
     rank_due_curve: str = DEFAULT_DUE_CURVE
+    time_zone: str = ''
 
 
 @dataclass
@@ -153,3 +158,17 @@ def get_config(
     source_list = SourceList(config_sources)
 
     return Configuration(source_list, config_class, path=CONFIG_ROOT)
+
+
+def time_zone(conf: Configuration) -> tzinfo:
+    """The zone the clock of a run reads: the configured one, or local.
+
+    The lookup reads an empty value as absent, so the read supplies the
+    empty default itself.
+
+    Raises
+    ------
+    ValueError
+        The configured name is not a zone the system knows.
+    """
+    raise NotImplementedError

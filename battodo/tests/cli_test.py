@@ -10,7 +10,6 @@ from ..cli import (
     DEFAULT_PERIOD,
     MESSAGES,
     PERIODS,
-    TZ,
     ArgumentParser,
     Commands,
     argparser,
@@ -27,6 +26,13 @@ def clock(t: TestCase) -> Mock:
     hours when the host's date and the app timezone's disagree.
     """
     patcher = patch(f'{SRC}.datetime', autospec=True)
+    t.addCleanup(patcher.stop)
+    return patcher.start()
+
+
+def zone(t: TestCase) -> Mock:
+    """A stand-in for the decoder of the configured zone."""
+    patcher = patch(f'{SRC}.time_zone', autospec=True)
     t.addCleanup(patcher.stop)
     return patcher.start()
 
@@ -515,6 +521,7 @@ class CommandsViewTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.get_view', autospec=True)
         t.get_view = patcher.start()
         t.addCleanup(patcher.stop)
@@ -535,8 +542,9 @@ class CommandsViewTests(TestCase):
                 show_all=True,
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.get_view.return_value)
@@ -547,6 +555,7 @@ class CommandsBackfillTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.backfill_items', autospec=True)
         t.backfill_items = patcher.start()
         t.addCleanup(patcher.stop)
@@ -566,8 +575,9 @@ class CommandsBackfillTests(TestCase):
                 t.datetime.now.return_value,
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.backfill_items.return_value)
@@ -578,6 +588,7 @@ class CommandsAddTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.add_item', autospec=True)
         t.add_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -620,8 +631,9 @@ class CommandsAddTests(TestCase):
                 note='a note',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.add_item.return_value)
@@ -632,6 +644,7 @@ class CommandsShowTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.get_item', autospec=True)
         t.get_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -652,8 +665,9 @@ class CommandsShowTests(TestCase):
                 selector='a selector',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.get_item.return_value)
@@ -664,6 +678,7 @@ class CommandsHistoryTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.get_history', autospec=True)
         t.get_history = patcher.start()
         t.addCleanup(patcher.stop)
@@ -684,8 +699,9 @@ class CommandsHistoryTests(TestCase):
                 selector='a selector',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.get_history.return_value)
@@ -696,6 +712,7 @@ class CommandsCompletedTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.get_completed', autospec=True)
         t.get_completed = patcher.start()
         t.addCleanup(patcher.stop)
@@ -716,8 +733,9 @@ class CommandsCompletedTests(TestCase):
                 period='a period',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.get_completed.return_value)
@@ -728,6 +746,7 @@ class CommandsUpdateTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.update_item', autospec=True)
         t.update_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -770,8 +789,9 @@ class CommandsUpdateTests(TestCase):
                 with_subtasks=True,
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.update_item.return_value)
@@ -782,6 +802,7 @@ class CommandsDoneTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.complete_item', autospec=True)
         t.complete_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -812,8 +833,9 @@ class CommandsDoneTests(TestCase):
                 note='a note',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.complete_item.return_value)
@@ -824,6 +846,7 @@ class CommandsNoteTests(TestCase):
 
     def setUp(t):
         t.datetime = clock(t)
+        t.time_zone = zone(t)
         patcher = patch(f'{SRC}.annotate_item', autospec=True)
         t.annotate_item = patcher.start()
         t.addCleanup(patcher.stop)
@@ -850,8 +873,9 @@ class CommandsNoteTests(TestCase):
                 attrs='some attrs',
             )
 
-        with t.subTest('the clock is read in the local zone, not the host'):
-            t.datetime.now.assert_called_with(TZ)
+        with t.subTest('the clock is read in the configured zone'):
+            t.time_zone.assert_called_with(t.conf)
+            t.datetime.now.assert_called_with(t.time_zone.return_value)
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.annotate_item.return_value)
