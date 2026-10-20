@@ -494,3 +494,23 @@ class SuppliedAttributes:
         if self.text is None:
             return []
         return ATTRIBUTE_SEPARATOR.split(self.text)
+
+
+class AttributePair:
+    """One key against its value, as the caller gave them."""
+
+    def __init__(self, key: str, value: str) -> None:
+        self.key = key
+        self.value = value
+
+    @property
+    def checked(self) -> tuple[str, str]:
+        """The key against its value.
+
+        Raises
+        ------
+        ValueError
+            The key is outside the grammar, or the value is empty or
+            holds a line break, checked in that order.
+        """
+        raise NotImplementedError
