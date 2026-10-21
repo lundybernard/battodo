@@ -1,0 +1,23 @@
+name: Good Egg
+
+# pull_request_target runs the workflow from main with a write token, so
+# a fork PR gets its comment without an approval wait. This is safe only
+# while the job never checks out or runs PR code: keep actions/checkout
+# out of this file. Good Egg reads the GitHub API only.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: 2ndSetAI/good-egg@9d3e310471fa5ea76f5f47ec6d917ed41cdc4649  # v2.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment: 'true'
+          skip-known-contributors: 'false'
