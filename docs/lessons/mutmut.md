@@ -1,84 +1,39 @@
-# mutmut findings
+# mutmut lessons
 
-Findings from adopting mutmut 3 (2026-08 mutation-testing cycle) —
-upstream issue candidates against boxed/mutmut.
+Findings from battodo's use of mutmut 3, grouped by status. Upstream state
+read 2026-10-19 at mutmut 3.8.0 (`HISTORY.rst`). battodo locks 3.7.0
+(`pixi.lock`).
 
-- **`do_not_mutate` is file-level only:** the setting is fnmatch
-  against the file path, so there is no way to exempt a region or a
-  single string inside an otherwise-mutated file. The docs' obvious
-  companion, `# pragma: no mutate`, appears in the source as an
-  unimplemented TODO. Consequence here: excluding display strings
-  required moving them into their own module (which turned out to be
-  a better design anyway, but the tool forced the timing).
-- **Copy step breaks on foreign-owned files:** mutated sources are
-  written with a plain `open(..., 'w')`, but files that are copied
-  unmodified (excluded files, `pyproject.toml`) go through
-  `shutil.copy`/`copy2`, whose `copystat` raises
-  `PermissionError: [Errno 1]` when the existing destination file
-  belongs to another user — even with group write on the directory.
-  The tool-side fix is to write copied files the same way mutated ones
-  are written, or to tolerate a failed chmod. Resolved: worked around
-  in battodo's pyproject.toml, with a comment naming the cause.
-- **Incremental cache is mtime-based on the copies:** test-only changes
-  do not reliably invalidate `mutants/`, so stale survivor lists read
-  as real results. Clear the tree before any run whose numbers will be
-  quoted.
-  2026-10-15: deleting `mutants/mutmut-stats.json` alone does not make
-  a cold run. On the next run mutmut reports "Found N new tests,
-  rerunning stats" and maps only the new test ids. A test whose body
-  changed keeps its old mapping, and its mutants keep their cached
-  results. Only `rm -rf mutants/` gives a cold run.
-- **`@property` bodies are never mutated:** converting a module of
-  functions into classes whose computed data lives behind properties
-  dropped the project's mutant count from 1614 to 1482 and removed the
-  converted logic from the oracle entirely — the survivors in that
-  module went to zero partly because the code they lived in stopped
-  being a mutation target. A style the house prefers (classes with
-  properties over free functions) therefore silently shrinks mutation
-  coverage. Compensated locally with 100% line coverage plus a manual
-  defect-injection sweep (43 injected defects, 42 caught, 1 provably
-  equivalent); upstream issue candidate, since property-heavy code is
-  hardly rare. Re-verify before filing: upstream #387 (open) and #480
-  (closed) may already cover it — check against installed mutmut 3.6 or
-  newer.
-  2026-10-10: the property refactor repeats the pattern. After slice
-  7, 76 of the 113 functions in `mutate.py` are `@property` bodies,
-  and the run at the tip reports no survivor in that module (#83).
-  The item slice took the project total from 2000 mutants to 1834
-  (#72, #77). Read a survivor count of zero in a converted module as
-  a smaller target first, and stronger tests second.
-  2026-10-12: re-verified against mutmut 3.7.0, the version in
-  `pixi.lock`. The skip is wider than `@property`.
-  `mutation/file_mutation.py` skips every decorated function except one
-  whose lone decorator is `@staticmethod` or `@classmethod`, so a
-  `@cached_property` body has no mutant either, and its comment gives
-  the reasons. It also skips every decorated class whole: `TaskNode`, a
-  `@dataclass` with 16 methods, is not a target, although #480 is
-  closed. #387 (open) already tracks the function skip, so battodo's
-  case is a data point for #387, not a new issue. In `Reopen` (#111), 27
-  of the 31 functions carry `@property` or `@cached_property`; its
-  constructor and its plain methods are mutated and leave no survivor.
-  Before you trust a "no survivors" line for a module, count its
-  decorated functions and classes: their code has no mutant, so it
-  cannot survive.
-  2026-10-15: the skip also covers `@contextmanager`. A refactor that
-  extracts a step into a decorated member takes that step out of the
-  mutation surface. When the refactor is itself the catch for a
-  survivor, keep the caught line in a plain method. In #123,
-  `Journal.next_seq` is a `@property`, so `len(self.events) + 1` has no
-  mutant, and only its unit test pins it.
-- **A cleared environment hides the active mutant:** the trampoline
-  reads `MUTANT_UNDER_TEST` from `os.environ` on every call. A test
-  under `patch.dict(os.environ, ..., clear=True)` removes it. The stats
-  pass then maps no function to that test, and the kill pass runs the
-  original code. Every test under the patch is blind to every mutant,
-  and mutmut reports nothing about it. In battodo the `ConfigFile` unit
-  fixture, the CLI runner of the behavioral suite and four integration
-  fixtures cleared the environment. mutmut reported
-  `ConfigFile.__init__` as "no tests", and no behavioral test ran
-  against a mutant (#123). The fixtures now remove only the battodo
-  variables, through `tests/environment.py` outside the unit suite. To
-  detect the defect, run `rg -n "clear=True"` over the test trees, and
-  look for the class in `tests_by_mangled_function_name` of
-  `mutants/mutmut-stats.json`. Upstream candidate: the docs do not say
-  that the variable must survive the environment of a test.
+## Open
+
+- Decorated members have no mutant. mutmut skips every decorated
+  function except one whose lone decorator is `@staticmethod` or
+  `@classmethod`, so `@property`, `@cached_property` and
+  `@contextmanager` bodies are not targets. Before you trust a
+  zero-survivor line for a module, count its decorated members. When a
+  refactor is itself the catch for a survivor, keep the caught line in a
+  plain method. Why: a property-heavy style shrinks the mutation surface
+  with no report. Home: upstream #387 (open); battodo's data point is
+  not posted.
+- The copy step fails on a destination file that another user owns.
+  `shutil.copy` runs `copystat`, which raises `PermissionError` even
+  with group write on the directory. battodo works around it in
+  `pyproject.toml:162-171`. An upstream issue is optional.
+- Only `rm -rf mutants/` gives a cold run. The cache is mtime-based on
+  the copies, and a delete of `mutmut-stats.json` alone remaps only the
+  new test ids. Why: a stale survivor list reads as a real result.
+  Re-check on 3.8.0, which drops obsolete test ids (#564).
+
+## Resolved upstream
+
+- `do_not_mutate` was file-level only. mutmut `main` has
+  `# pragma: no mutate` for a line, a block, and a start/end region;
+  3.8.0 fixes its edge cases (#554, #559).
+- Decorated classes were skipped whole (`TaskNode`, a `@dataclass`).
+  Fixed in 3.8.0 (#480, #539). The fix takes effect when the lock moves
+  to 3.8.0.
+- A test under `patch.dict(os.environ, ..., clear=True)` removed
+  `MUTANT_UNDER_TEST`, so it ran the original code against every
+  mutant. Fixed in 3.8.0 (#511, #552). battodo's fixtures remove only
+  the battodo variables (`tests/environment.py`, #123). Until the lock
+  moves, `rg -n "clear=True"` over the test trees detects a regression.
