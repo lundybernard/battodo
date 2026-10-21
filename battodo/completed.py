@@ -178,22 +178,6 @@ class Record:
     title: str
     attrs: dict[str, str] = field(default_factory=dict)
 
-    @property
-    def cells(self) -> tuple[str, ...]:
-        """The record's two values, in COLUMNS order.
-
-        The attributes follow the title in its cell.
-        """
-        attributes = self.attributes
-        task = f'{self.title} {attributes}' if attributes else self.title
-        return (self.day.isoformat(), task)
-
-    @property
-    def attributes(self) -> str:
-        """Each attribute as `key=value`, in the order logged."""
-        pairs = (f'{key}={value}' for key, value in self.attrs.items())
-        return ', '.join(pairs)
-
 
 def read_record(line: str) -> Record | None:
     """One log line as a record, or None where it is not one.
@@ -283,7 +267,7 @@ class DigestView:
         Sized against every record at once, so one set of widths serves
         all of the tables and the columns line up down the whole page.
         """
-        cells = [record.cells for record in self.digest.records]
+        cells = [RecordView(record).cells for record in self.digest.records]
         return column_widths(COLUMNS, cells)
 
     @cached_property
@@ -293,7 +277,7 @@ class DigestView:
                 group.name,
                 COLUMNS,
                 ALIGN,
-                [record.cells for record in group.records],
+                [RecordView(record).cells for record in group.records],
                 self.widths,
             )
             for group in self.digest.groups
@@ -305,6 +289,30 @@ class DigestView:
 
     def __str__(self) -> str:
         return self.text
+
+
+class RecordView:
+    """One record of a digest laid out as the cells of a table line."""
+
+    def __init__(self, record: Record) -> None:
+        self.record = record
+
+    @property
+    def cells(self) -> tuple[str, ...]:
+        """The record's two values, in COLUMNS order.
+
+        The attributes follow the title in its cell.
+        """
+        title = self.record.title
+        attributes = self.attributes
+        task = f'{title} {attributes}' if attributes else title
+        return (self.record.day.isoformat(), task)
+
+    @property
+    def attributes(self) -> str:
+        """Each attribute as `key=value`, in the order logged."""
+        pairs = (f'{key}={value}' for key, value in self.record.attrs.items())
+        return ', '.join(pairs)
 
 
 class DigestJsonView:

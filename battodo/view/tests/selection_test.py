@@ -117,11 +117,9 @@ class SelectionTests(TestCase):
             t.assertTrue(ret)
 
         with t.subTest('and one it does not'):
-            t.s.__dict__.pop('weekday', None)
-            t.s.day = 5
-
+            # 2026-08-08 is a Saturday.
+            t.s.now = at('2026-08-08T10:30')
             ret = t.s.weekday
-
             t.assertFalse(ret)
 
     def test_day(t) -> None:
@@ -448,9 +446,8 @@ class RowTests(TestCase):
         t.multiplier.return_value = 3.0
         t.parse_date.return_value = None
 
-        t.task = Mock(spec=['title', 'loe', 'due', 'children'])
+        t.task = Mock(spec=['title', 'due', 'children'])
         t.task.title = 'A task'
-        t.task.loe = 2
         t.task.due = None
         t.task.children = []
 
@@ -505,91 +502,6 @@ class RowTests(TestCase):
         # Subtasks and checklist items both count; a finished child
         # does not.
         t.assertEqual(ret, [open_child])
-
-    def test_cells(t) -> None:
-        with t.subTest('rank and priority are shown to one decimal'):
-            ret = t.r.cells
-            t.assertEqual(ret[:2], ('4.2', '3.0'))
-
-        with t.subTest('an unestimated task leaves its column empty'):
-            t.r.__dict__.pop('cells', None)
-            t.task.loe = None
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '')
-
-        with t.subTest('a level of effort is shown when there is one'):
-            t.r.__dict__.pop('cells', None)
-            t.task.loe = 2
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[2], '2')
-
-        with t.subTest('the title carries its badge'):
-            t.r.__dict__.pop('cells', None)
-            t.r.badge = ' (+1)'
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[3], 'A task (+1)')
-
-        with t.subTest('and the due column carries its label'):
-            t.r.__dict__.pop('cells', None)
-            t.r.due_label = 'OVERDUE'
-
-            ret = t.r.cells
-
-            t.assertEqual(ret[4], 'OVERDUE')
-
-        with t.subTest('there is one cell for each of the five columns'):
-            ret = t.r.cells
-            t.assertEqual(len(ret), 5)
-
-    def test_badge(t) -> None:
-        with t.subTest('a task with nothing outstanding wears no badge'):
-            ret = t.r.badge
-            t.assertEqual(ret, '')
-
-        with t.subTest('otherwise the badge carries the count'):
-            t.r.__dict__.pop('badge', None)
-            t.r.subtasks = 2
-
-            ret = t.r.badge
-
-            t.assertEqual(ret, ' (+2)')
-
-    def test_due_label(t) -> None:
-        cases = {
-            'no due date reads as nothing at all': (None, None, ''),
-            'a date already past is called out': (
-                '2026-08-04',
-                date(2026, 8, 4),
-                'OVERDUE',
-            ),
-            'so is the day itself': ('2026-08-05', TODAY, 'TODAY'),
-            'a date still ahead shows as written': (
-                '2026-08-20',
-                date(2026, 8, 20),
-                '2026-08-20',
-            ),
-            'and a date the parser cannot read shows verbatim': (
-                'YYYY-MM-DD',
-                None,
-                'YYYY-MM-DD',
-            ),
-        }
-
-        for name, (due, parsed, expected) in cases.items():
-            with t.subTest(name):
-                t.r.__dict__.pop('due_label', None)
-                t.task.due = due
-                t.r.parsed_due = parsed
-
-                ret = t.r.due_label
-
-                t.assertEqual(ret, expected)
 
     def test_parsed_due(t) -> None:
         with t.subTest('a stored date is read through the parser'):
@@ -772,11 +684,8 @@ class RowJsonViewTests(TestCase):
             t.assertEqual(ret['rank'], 1.23)
 
         with t.subTest('the due date keeps its stored form, unlabelled'):
-            t.row.due_label = 'OVERDUE'
             t.task.due = '2026-08-04'
-
             ret = t.rjv.data
-
             t.assertEqual(ret['due'], '2026-08-04')
 
         with t.subTest('and open children are counted, not nested'):

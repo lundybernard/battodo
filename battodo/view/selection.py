@@ -1,10 +1,11 @@
 """Decide what a view shows: which lists, which tasks, in what order.
 
 Layout has no say in what is chosen: the table module reads this one,
-and never the other way about. The machine-readable form (R2) lives
-here as `SelectionJsonView`, which reads a selection through its
-attributes. A row carries the table's cells, and the published form
-reads the same row, so the two never derive a task apart.
+and never the other way about. The machine-readable form (README.md,
+"Machine-readable output") lives here as `SelectionJsonView`, which
+reads a selection through its attributes. The table's `RowView` and
+the published form read the same row, so the two never derive a task
+apart.
 
 A view holds every open top-level item. A due date far ahead lowers an
 item's rank instead of hiding it (ADR 0026).
@@ -90,7 +91,7 @@ class Selection:
             rank_due_curve=conf.view.rank_due_curve,
         )
 
-    @cached_property
+    @property
     def today(self) -> date:
         return self.now.date()
 
@@ -125,17 +126,17 @@ class Selection:
             names.add('chores')
         return names
 
-    @cached_property
+    @property
     def weekday(self) -> bool:
         """Whether the clock falls on a working day of the week."""
         return self.day < 5
 
-    @cached_property
+    @property
     def day(self) -> int:
         """Which day of the week the clock falls on. Monday is 0."""
         return self.now.weekday()
 
-    @cached_property
+    @property
     def hour(self) -> int:
         """The hour of the day the clock reads."""
         return self.now.hour
@@ -269,10 +270,8 @@ class Category:
 class Row:
     """One task as a view carries it: its rank, priority and children.
 
-    The table's line comes from here, and `RowJsonView` publishes the
-    task's record from the same values. The record keeps every stored
-    field verbatim, while the table labels the due date and marks the
-    open children.
+    `RowView` lays the row out as a table line, and `RowJsonView`
+    publishes the task's record from the same values.
     """
 
     def __init__(self, task: TaskNode, today: date, curve: Curve) -> None:
@@ -312,44 +311,6 @@ class Row:
             for child in self.task.children
                 if not child.done
         ]  # fmt: skip
-
-    @cached_property
-    def cells(self) -> tuple[str, ...]:
-        """The five values a table shows, in the order its columns run."""
-        return (
-            f'{self.rank:.1f}',
-            f'{self.priority:.1f}',
-            '' if self.task.loe is None else str(self.task.loe),
-            f'{self.task.title}{self.badge}',
-            self.due_label,
-        )
-
-    @cached_property
-    def badge(self) -> str:
-        """The outstanding-children mark, if the task has any.
-
-        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
-        the count needs no plural.
-        """
-        return f' (+{self.subtasks})' if self.subtasks else ''
-
-    @cached_property
-    def due_label(self) -> str:
-        """How the due date reads in a table: a label, or the date.
-
-        Named apart from the stored `due` field, which `RowJsonView`
-        publishes verbatim.
-        """
-        if self.task.due is None:
-            return ''
-        if self.parsed_due is None:
-            # a placeholder such as YYYY-MM-DD: show it verbatim
-            return self.task.due
-        if self.parsed_due < self.today:
-            return 'OVERDUE'
-        if self.parsed_due == self.today:
-            return 'TODAY'
-        return self.task.due
 
     @cached_property
     def parsed_due(self) -> date | None:

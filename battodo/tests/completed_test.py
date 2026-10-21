@@ -12,6 +12,7 @@ from ..completed import (
     GroupJsonView,
     Record,
     RecordJsonView,
+    RecordView,
     Table,
     read_attributes,
     read_record,
@@ -175,47 +176,6 @@ class DigestFromConfigTests(TestCase):
 
         with t.subTest('and the period is the one given'):
             t.assertEqual(digest.period, 'month')
-
-
-class RecordTests(TestCase):
-    """Unit tests for battodo.completed.Record."""
-
-    def setUp(t) -> None:
-        t.r = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
-
-    @patch.object(Record, 'attributes', new_callable=PropertyMock)
-    def test_cells(t, attributes: PropertyMock) -> None:
-        with t.subTest('the date and the title'):
-            attributes.return_value = ''
-            ret = t.r.cells
-            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
-
-        with t.subTest('the attributes follow the title'):
-            attributes.return_value = 'cost=45.00'
-
-            ret = t.r.cells
-
-            t.assertEqual(
-                ret,
-                ('2026-08-04', 'A parent > A record cost=45.00'),
-            )
-
-    def test_attributes(t) -> None:
-        with t.subTest('none'):
-            ret = t.r.attributes
-            t.assertEqual(ret, '')
-
-        with t.subTest('each as key=value, in the order logged'):
-            t.r = Record(
-                date(2026, 8, 4),
-                'chores',
-                'A parent > A record',
-                {'place': 'Main St, Suite 4', 'cost': '45.00'},
-            )
-
-            ret = t.r.attributes
-
-            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
 
 
 class ReadRecordTests(TestCase):
@@ -388,13 +348,21 @@ class DigestViewTests(TestCase):
             'Completed week: 2026-07-30 to 2026-08-05 — 2 done',
         )
 
-    def test_widths(t) -> None:
+    @patch(f'{SRC}.RecordView', autospec=True)
+    def test_widths(t, record_view: MagicMock) -> None:
         with t.subTest('each column as wide as its widest cell'):
+            record_view.return_value.cells = ('2026-08-02', 'A record cell')
             ret = t.v.widths
-            t.assertEqual(ret, [10, len('A record of another category')])
+            t.assertEqual(ret, [10, len('A record cell')])
+
+        with t.subTest('the cells of each record come from its view'):
+            t.assertEqual(
+                record_view.call_args_list,
+                [call(record) for record in t.records],
+            )
 
         with t.subTest('the column name counts too'):
-            t.digest.records = [Record(date(2026, 8, 5), 'work', 'Go')]
+            record_view.return_value.cells = ('2026-08-05', 'Go')
             ret = DigestView(t.digest).widths
             t.assertEqual(ret, [10, len('TASK')])
 
@@ -404,7 +372,9 @@ class DigestViewTests(TestCase):
             t.assertEqual(ret, [len('DATE'), len('TASK')])
 
     @patch(f'{SRC}.Table', autospec=True)
-    def test_tables(t, table: MagicMock) -> None:
+    @patch(f'{SRC}.RecordView', autospec=True)
+    def test_tables(t, record_view: MagicMock, table: MagicMock) -> None:
+        record_view.return_value.cells = ('2026-08-02', 'A record cell')
         t.v.widths = [10, 28]
 
         ret = t.v.tables
@@ -413,20 +383,24 @@ class DigestViewTests(TestCase):
         # of each record it holds.
         t.assertEqual(ret, [table.return_value] * 2)
         t.assertEqual(
+            record_view.call_args_list,
+            [call(record) for record in t.records],
+        )
+        t.assertEqual(
             table.call_args_list,
             [
                 call(
                     'work',
                     ('DATE', 'TASK'),
                     ('<', '<'),
-                    [('2026-07-30', 'A record of the week')],
+                    [('2026-08-02', 'A record cell')],
                     [10, 28],
                 ),
                 call(
                     'unlisted',
                     ('DATE', 'TASK'),
                     ('<', '<'),
-                    [('2026-08-02', 'A record of another category')],
+                    [('2026-08-02', 'A record cell')],
                     [10, 28],
                 ),
             ],
@@ -445,6 +419,52 @@ class DigestViewTests(TestCase):
     def test___str__(t) -> None:
         ret = str(t.v)
         t.assertEqual(ret, t.v.text)
+
+
+class RecordViewTests(TestCase):
+    """Unit tests for battodo.completed.RecordView."""
+
+    def setUp(t) -> None:
+        t.record = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
+        t.rv = RecordView(t.record)
+
+    @patch.object(RecordView, 'attributes', new_callable=PropertyMock)
+    def test_cells(t, attributes: PropertyMock) -> None:
+        with t.subTest('the date and the title'):
+            attributes.return_value = ''
+            ret = t.rv.cells
+            t.assertEqual(ret, ('2026-08-04', 'A parent > A record'))
+
+        with t.subTest('the attributes follow the title'):
+            attributes.return_value = 'cost=45.00'
+
+            ret = t.rv.cells
+
+            t.assertEqual(
+                ret,
+                ('2026-08-04', 'A parent > A record cost=45.00'),
+            )
+
+    def test_attributes(t) -> None:
+        with t.subTest('none'):
+            ret = t.rv.attributes
+            t.assertEqual(ret, '')
+
+        with t.subTest('each as key=value, in the order logged'):
+            t.rv.record = Record(
+                date(2026, 8, 4),
+                'chores',
+                'A parent > A record',
+                {'place': 'Main St, Suite 4', 'cost': '45.00'},
+            )
+
+            ret = t.rv.attributes
+
+            t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
+
+    def test_record(t) -> None:
+        ret = t.rv.record
+        t.assertIs(ret, t.record)
 
 
 class DigestJsonViewTests(TestCase):

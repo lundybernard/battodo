@@ -9,8 +9,9 @@ Terminal width is read here rather than at the CLI boundary, because
 the width is an input to the layout. The probe reads COLUMNS first, so
 a caller that needs a fixed width pins it in the environment.
 
-A row is built by the selection, and the published form reads the
-same row, so the two never derive a task apart.
+A row is built by the selection. `RowView` lays it out as a table
+line, and the published form reads the same row, so the two never
+derive a task apart.
 """
 
 from datetime import date
@@ -75,7 +76,7 @@ class View:
         widths serves all of its tables and the columns line up down the
         whole page.
         """
-        cells = [row.cells for row in self.rows]
+        cells = [RowView(row).cells for row in self.rows]
         widths = column_widths(COLUMNS, cells)
         room = self.columns - (table_width(widths) - widths[TASK_COLUMN])
         widths[TASK_COLUMN] = max(
@@ -91,7 +92,7 @@ class View:
                 category.name,
                 COLUMNS,
                 ALIGN,
-                [row.cells for row in category.shown],
+                [RowView(row).cells for row in category.shown],
                 self.widths,
                 category.hidden,
             )
@@ -104,3 +105,56 @@ class View:
 
     def __str__(self) -> str:
         return self.text
+
+
+class RowView:
+    """One row of a selection laid out as the cells of a table line.
+
+    `RowJsonView` publishes the same row's stored fields verbatim. This
+    view labels the due date and marks the open children.
+    """
+
+    def __init__(self, row: Row) -> None:
+        self.row = row
+
+    @property
+    def cells(self) -> tuple[str, ...]:
+        """The five values a table shows, in the order its columns run."""
+        task = self.row.task
+        return (
+            f'{self.row.rank:.1f}',
+            f'{self.row.priority:.1f}',
+            '' if task.loe is None else str(task.loe),
+            f'{task.title}{self.badge}',
+            self.due_label,
+        )
+
+    @property
+    def badge(self) -> str:
+        """The outstanding-children mark, if the task has any.
+
+        `(+2)`, not `(2 subtasks)`: it stays out of the title's way, and
+        the count needs no plural.
+        """
+        subtasks = self.row.subtasks
+        return f' (+{subtasks})' if subtasks else ''
+
+    @property
+    def due_label(self) -> str:
+        """How the due date reads in a table: a label, or the date.
+
+        Named apart from the stored `due` field, which `RowJsonView`
+        publishes verbatim.
+        """
+        due = self.row.task.due
+        if due is None:
+            return ''
+        parsed = self.row.parsed_due
+        if parsed is None:
+            # a placeholder such as YYYY-MM-DD: show it verbatim
+            return due
+        if parsed < self.row.today:
+            return 'OVERDUE'
+        if parsed == self.row.today:
+            return 'TODAY'
+        return due

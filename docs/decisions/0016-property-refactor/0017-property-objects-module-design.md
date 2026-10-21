@@ -139,3 +139,14 @@ happens, and their shape is what makes each change expensive.
   beside each conversion.
 - A future module has a rule to apply rather than a precedent to pick:
   steps mean an object, a computed value means a function.
+
+## Amendment — 2026-10-17
+
+The text forms of the view and the completed digest are view objects
+too, so `Row` and `Record` hold values only. `RowView` lays one row of
+a selection out as the cells of a table line, and `RecordView` lays out
+one record of a digest. Both pages lay their cells out through one
+shared `Table`, which takes the column alignment and the count of
+held-back rows as inputs. This amendment supersedes the words "their
+value objects still build the table cells" in the first Consequence
+(#86, #87).
