@@ -1,6 +1,6 @@
 # 0028 — update sets, changes and clears the repeat of a task
 
-Status: Proposed
+Status: Accepted (merged 2026-10-13, PR #117)
 Date: 2026-10-13
 
 ## Context

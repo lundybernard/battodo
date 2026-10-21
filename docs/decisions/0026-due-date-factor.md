@@ -1,6 +1,6 @@
 # 0026 — A due-date factor on the priority
 
-Status: Proposed
+Status: Accepted (merged 2026-10-13, PR #115)
 Date: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # 0014 — Subtask journal events
 
-Status: Proposed
+Status: Accepted (merged 2026-08-18, PR #21)
 Date: 2026-08-17
 
 ## Context
@@ -98,3 +98,12 @@ half. A mandatory backfill pays the same cost in user friction instead.
   promotes a fieldless checklist item stays open.
 - A hand edit that re-indents a line still produces no event. That gap
   closes with the flip, not here.
+
+## Amendment — 2026-10-19
+
+The fourth Consequences bullet no longer holds. `update` reaches a
+subtask, and the `TaskUpdated` of a nested target carries `ancestry`,
+the `Parent > Child` path of titles to it (`battodo/mutate.py:800-801`).
+The bootstrap
+[DESIGN.md](0000-project-bootstrap/DESIGN.md#taskupdated-payloads)
+states the payload.

@@ -1,6 +1,6 @@
 # 0022 — A history command reads the journal
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-01
 
 ## Context
@@ -9,7 +9,7 @@ Event attributes ([ADR 0020](0020-event-attribute-map.md)) and note
 events ([ADR 0023](0023-note-event.md)) leave a history in the
 journal: the completions of a task, and every other event that carries
 attributes. A details view must list that history for one task, and
-the ranked view must not show it ([R2](REQUIREMENTS.md)).
+the ranked view must not show it ([R2](README.md#r2--a-details-view-of-the-history)).
 
 Two existing surfaces read one task or many, and neither reaches the
 history:

@@ -15,9 +15,9 @@ somewhere the list's own repo may not want.
 Two cases make this concrete. Todo lists carried inside project repos
 are meant to be plain files a collaborator can read and edit with no
 tooling. And bootstrap
-[R6](../0000-project-bootstrap/REQUIREMENTS.md) requires views to merge
-lists discovered in the working directory — lists that were never btd's
-and whose owners never agreed to adopt it.
+[R6](../0000-project-bootstrap/README.md#requirement-labels) requires
+views to merge lists discovered in the working directory — lists that
+were never btd's and whose owners never agreed to adopt it.
 
 ## Decision
 

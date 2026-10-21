@@ -13,11 +13,15 @@ note event.
 
 Branch: `adr-event-attributes` — Issue: #79
 
-**Status: active.** The group lands before the journal-authority flip
+**Status: Accepted.** The group lands before the journal-authority flip
 ([ADR group 0008](../0008-journal-authority/README.md)).
 [After the flip](#after-the-flip) lists the two items that wait for it.
+S4, the notes in `show` ([ADR 0022](0022-history-command.md),
+[DESIGN.md](DESIGN.md#show)), is pending. The history command and the
+subtask schedules that it waits on have merged, so S4 is unblocked.
 The property refactor
-([ADR group 0016](../0016-property-refactor/README.md)) is complete.
+([ADR group 0016](../0016-property-refactor/README.md)) is complete,
+apart from ADR 0018.
 
 ## Terms
 
@@ -29,22 +33,57 @@ The group uses one word for each meaning:
 - **note:** a dated annotation in the journal, and the attribute key
   `note` that carries it ([ADR 0023](0023-note-event.md)).
 
+## Requirements
+
+ADRs 0020–0023 answer these requirements, and cite them by label.
+
+### R1 — Facts per completion
+
+A completion records zero or more facts about that completion, once per
+completion. A repeating task accumulates one set of facts per cycle. No
+completion overwrites the facts of an earlier cycle.
+
+### R2 — A details view of the history
+
+A details view lists the per-completion history of one task. The ranked
+view does not show that history.
+
+### R3 — A static description
+
+A task may carry a static description. The description is a fact about
+the task, and its mechanism is separate from R1. No completion appends
+to it.
+
+### R4 — Journal first
+
+Every write is a journal event that carries the whole fact it records,
+so the journal can rebuild each fact when the markdown becomes a render
+of the journal at the flip.
+
+### R5 — Open vocabulary
+
+A new kind of fact does not need a schema change or a code change.
+
+### R6 — Facts on any write
+
+A user records facts on an add, an update, a scratch or a completion,
+on the event of the task the user names. A user also records a note on
+an open task without a change to that task.
+
 ## Planning docs
 
 | File | Purpose |
 | ---- | ------- |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | Testable acceptance criteria |
 | [DESIGN.md](DESIGN.md) | Command surface, payload keys, attribute grammar |
-| [PLAN.md](PLAN.md) | One PR per slice, with dependencies |
 
 ## Component ADRs
 
 | # | Title | Status |
 | - | ----- | ------ |
-| [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Proposed |
-| [0021](0021-task-description-field.md) | A task description is a journaled item field | Proposed |
-| [0022](0022-history-command.md) | A history command reads the journal | Proposed |
-| [0023](0023-note-event.md) | A note event annotates an open task | Proposed |
+| [0020](0020-event-attribute-map.md) | Every journal event carries an open attribute map | Accepted |
+| [0021](0021-task-description-field.md) | A task description is a journaled item field | Accepted |
+| [0022](0022-history-command.md) | A history command reads the journal | Accepted |
+| [0023](0023-note-event.md) | A note event annotates an open task | Accepted |
 
 ## After the flip
 
@@ -55,11 +94,5 @@ it:
 - The importer that writes the genesis events at the flip reads the
   existing description lines into `snapshot.description`. After the
   flip, no command reads a description line back from the markdown.
-- Success criterion for [R4](REQUIREMENTS.md#r4--journal-first): a
+- Success criterion for [R4](#r4--journal-first): a
   render from the journal alone restores every description.
-
-## AI assistance disclosure
-
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.

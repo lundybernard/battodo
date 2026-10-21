@@ -32,9 +32,3 @@ in this directory.
 | [0010](0010-event-ordering-key.md) | Event ordering key | Accepted |
 | [0011](0011-union-merge-and-no-hash-chain.md) | Union merge, no hash chain | Accepted |
 | [0012](0012-optional-per-project-tool.md) | btd is an optional per-project tool | Accepted |
-
-## AI assistance disclosure
-
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.

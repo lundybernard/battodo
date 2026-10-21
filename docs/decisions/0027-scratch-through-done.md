@@ -1,6 +1,6 @@
 # 0027 — A scratch closes a task through done
 
-Status: Proposed
+Status: Accepted (merged 2026-10-13, PR #114)
 Date: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # 0029 — A subtask may repeat, and keeps its parent open
 
-Status: Proposed
+Status: Accepted (merged 2026-10-13, PR #120)
 Date: 2026-10-13
 
 ## Context

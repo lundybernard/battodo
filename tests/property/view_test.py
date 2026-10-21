@@ -7,7 +7,7 @@ coverage and mutation gates.
 Every expectation is derived from the clock or from the generated
 input, never from the code under test, so the assertions state what the
 output holds for any list file rather than what it happened to return.
-The cases began as the selection slice's oracle and outlived it (R4).
+The cases began as the selection slice's oracle and outlived it.
 """
 
 from collections.abc import Callable, Iterator

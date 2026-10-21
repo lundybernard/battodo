@@ -95,6 +95,14 @@ be exempt from.
   limits remain open: the config lookup resolves by truthiness, so an
   empty-string value falls through to the default; and a nested TOML
   table is invisible to the lookup, so the per-category hour windows
-  cannot be nested tables. Both are recorded in [PLAN.md](PLAN.md).
+  cannot be nested tables.
 - The configuration surface grows by three fields, all of which must be
   documented where the existing view settings are documented.
+
+## Amendment — 2026-10-19
+
+No code implements this decision yet. PR #69 deferred the extraction,
+so the values are still hard-coded: the time zone in `conf.py`, and the
+always-active list names and the hour windows in `view/selection.py`.
+Issue [#131](https://github.com/lundybernard/battodo/issues/131) tracks
+the implementation. The two lookup limits under Consequences stand.

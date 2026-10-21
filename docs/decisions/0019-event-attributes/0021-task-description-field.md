@@ -1,12 +1,12 @@
 # 0021 — A task description is a journaled item field
 
-Status: Proposed
+Status: Accepted (merged 2026-10-11, PR #89)
 Date: 2026-10-01
 
 ## Context
 
 Some tasks want a static description: a fact about the task, not about
-any one completion ([R3](REQUIREMENTS.md)).
+any one completion ([R3](README.md#r3--a-static-description)).
 
 The lists already hold text of that kind: the indented lines under a
 task that carry no checkbox. This group calls them description lines;
@@ -20,7 +20,7 @@ After the flip
 ([ADR 0009](../0008-journal-authority/0009-journal-becomes-authoritative.md))
 the markdown is a render of the journal. Description lines are state the
 journal cannot rebuild, so the first render after the flip would drop
-them ([R4](REQUIREMENTS.md)).
+them ([R4](README.md#r4--journal-first)).
 
 ## Decision
 

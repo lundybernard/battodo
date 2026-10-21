@@ -13,13 +13,6 @@ refactor targets, and the one configuration change it carries.
 
 Branch: `property-refactor-plan` — Issue: #32
 
-## Planning docs
-
-| File | Purpose |
-| ---- | ------- |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | Invariants every slice holds |
-| [PLAN.md](PLAN.md) | Slice sequence, per-slice scope, risks |
-
 Object names and module layouts are chosen per slice, in the
 implementing PRs, not here.
 
@@ -30,8 +23,5 @@ implementing PRs, not here.
 | [0017](0017-property-objects-module-design.md) | Property objects as the module design | Accepted |
 | [0018](0018-schedule-and-timezone-config.md) | Schedule and time zone become configuration | Accepted |
 
-## AI assistance disclosure
-
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.
+No code implements ADR 0018 yet. PR #69 deferred it, and issue
+[#131](https://github.com/lundybernard/battodo/issues/131) tracks it.
