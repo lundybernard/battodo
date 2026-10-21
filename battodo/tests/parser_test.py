@@ -613,61 +613,6 @@ class TodoDocumentTests(TestCase):
             t.assertEqual(outside_tasks, [])
 
     @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
-    def test_section_nodes(t, open_sections: PropertyMock) -> None:
-        t.td.lines = [
-            '## Open',
-            '- [ ] First task [P:1]',
-            '      A note line.',
-            '<!-- A comment. -->',
-            '  - [x] A done child',
-            '',
-            '## Open',
-            'A note line before any task.',
-            '- [ ] Second task',
-        ]
-        open_sections.return_value = [[1, 2, 3, 4, 5], [7, 8]]
-
-        ret = t.td.section_nodes
-
-        with t.subTest('a node per task line, one list per section'):
-            first, child = ret[0]
-            (second,) = ret[1]
-            t.assertEqual(
-                first,
-                TaskNode(
-                    raw_index=1,
-                    indent=0,
-                    done=False,
-                    title='First task',
-                    fields={'P': '1'},
-                    raw='- [ ] First task [P:1]',
-                    # Default: children=[],
-                    note_indices=[2],
-                    description_lines=['A note line.'],
-                ),
-            )
-            t.assertEqual(
-                child,
-                TaskNode(
-                    raw_index=4,
-                    indent=2,
-                    done=True,
-                    title='A done child',
-                    fields={},
-                    raw='  - [x] A done child',
-                ),
-            )
-            t.assertEqual(second.raw_index, 8)
-
-        with t.subTest('a blank line or a comment is no note line'):
-            t.assertEqual(first.note_indices, [2])
-            t.assertEqual(child.note_indices, [])
-
-        with t.subTest('a note line before any task in a section is dropped'):
-            t.assertEqual(second.note_indices, [])
-            t.assertEqual(second.description_lines, [])
-
-    @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
     def test_sections(t, open_sections: PropertyMock) -> None:
         open_sections.return_value = [[1, 2], [5]]
 
@@ -704,6 +649,30 @@ class TodoDocumentTests(TestCase):
         with t.subTest('none, where no Open heading stands'):
             t.td.lines = ['# A heading', '- [ ] Loose task']
             ret = t.td.open_sections
+            t.assertEqual(ret, [])
+
+    def test_open_bounds(t) -> None:
+        with t.subTest('the Open heading, then the next heading'):
+            ret = t.td.open_bounds
+            t.assertEqual(ret, [(4, 16)])
+
+        with t.subTest('a pair per Open section, the last up to the end'):
+            t.td.lines = [
+                '## Open',
+                '- [ ] First task',
+                '## Done',
+                '- [ ] Closed-section task',
+                '  ## Open  ',
+                '- [ ] Second task',
+            ]
+
+            ret = t.td.open_bounds
+
+            t.assertEqual(ret, [(0, 2), (4, 6)])
+
+        with t.subTest('none, where no Open heading stands'):
+            t.td.lines = ['# A heading', '- [ ] Loose task']
+            ret = t.td.open_bounds
             t.assertEqual(ret, [])
 
     def test_heading_indices(t) -> None:
@@ -1138,6 +1107,25 @@ class SectionTests(TestCase):
                 ['A note of the subtask.'],
             ],
         )
+
+    def test_parents(t) -> None:
+        with t.subTest('the position of each parent, None at the top'):
+            ret = t.sn.parents
+            t.assertEqual(ret, [None, 0])
+
+        with t.subTest('the nearest earlier line with a lower indent'):
+            t.sn.lines = [
+                '- [ ] A task',
+                '    - [ ] A deep subtask',
+                '  - [ ] A shallow subtask',
+                '      - [ ] A checklist item',
+                '- [ ] Another task',
+            ]
+            t.sn.indices = [0, 1, 2, 3, 4]
+
+            ret = t.sn.parents
+
+            t.assertEqual(ret, [None, 0, 0, 2, None])
 
 
 class TaskLineTests(TestCase):

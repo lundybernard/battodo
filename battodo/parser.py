@@ -66,34 +66,16 @@ class TodoDocument:
     def tasks(self) -> list['TaskNode']:
         """The open-section task tree, in file order.
 
-        Each node goes under the nearest earlier node of its section
-        with a lower indent. A node with none is a top-level task.
+        Each node goes under the node that `Section.parents` names. A
+        node with none is a top-level task.
         """
         tasks: list[TaskNode] = []
-        for nodes in self.section_nodes:
-            for position, node in enumerate(nodes):
-                above = reversed(nodes[:position])
-                parent = next(
-                    (
-                        earlier
-                        for earlier in above
-                            if earlier.indent < node.indent
-                    ),
-                    None,
-                )  # fmt: skip
-                siblings = tasks if parent is None else parent.children
+        for section in self.sections:
+            nodes = section.nodes
+            for node, parent in zip(nodes, section.parents):
+                siblings = tasks if parent is None else nodes[parent].children
                 siblings.append(node)
         return tasks
-
-    @property
-    def section_nodes(self) -> list[list['TaskNode']]:
-        """A node per task line, one list per `## Open` section.
-
-        Each list is flat and in file order. A note line goes on the
-        nearest task line above it in its section; a note line with no
-        task above it is dropped.
-        """
-        return [section.nodes for section in self.sections]
 
     @property
     def sections(self) -> list['Section']:
@@ -102,14 +84,21 @@ class TodoDocument:
 
     @property
     def open_sections(self) -> list[list[int]]:
-        """The line indices under each `## Open` heading, in file order.
+        """The line indices under each `## Open` heading, in file order."""
+        return [
+            list(range(start + 1, stop)) for start, stop in self.open_bounds
+        ]
 
-        A section ends at the next `## ` heading or at the end of the
-        file.
+    @property
+    def open_bounds(self) -> list[tuple[int, int]]:
+        """The heading index and the stop index of each `## Open` section.
+
+        In file order. A section stops at the next `## ` heading or at
+        the end of the file.
         """
         bounds = [*self.heading_indices, len(self.lines)]
         return [
-            list(range(start + 1, stop))
+            (start, stop)
             for start, stop in pairwise(bounds)
                 if self.lines[start].strip() == OPEN_HEADING
         ]  # fmt: skip
@@ -197,11 +186,8 @@ class TodoDocument:
             The line is not a task line. A note or a heading carries no
             title to set.
         """
-        raw = self.lines[index]
-        match = CHECKBOX_RE.match(raw)
-        if match is None:
-            raise ValueError(f'not a task line: {raw!r}')
-        indent, mark, body = match.groups()
+        line = TaskLine(index, self.lines[index])
+        indent, mark, body = line.checkbox.groups()
         found = FIELD_RE.search(body)
         tail = body[found.start() :] if found else ''
         edited = f'{indent}- [{mark}] {f"{title} {tail}".rstrip()}'
@@ -241,26 +227,13 @@ class TodoDocument:
         StopIteration
             There is no `## Open` heading.
         """
-        start = next(
-            index
-            for index, line in enumerate(self.lines)
-                if line.strip() == OPEN_HEADING
-        )  # fmt: skip
-        stop = len(self.lines)
-        end = next(
-            (
-                index
-                for index in range(start + 1, stop)
-                    if self.lines[index].strip().startswith('## ')
-            ),
-            stop,
-        )  # fmt: skip
+        start, stop = next(iter(self.open_bounds))
         # `start` is itself non-blank, so an empty section appends
         # directly under the heading rather than falling off the front
         # of the file.
         last = max(
             index
-            for index in range(start, end)
+            for index in range(start, stop)
                 if self.lines[index].strip()
         )  # fmt: skip
         return last + 1
@@ -634,6 +607,24 @@ class Section:
         """The text of the notes of each task line, in file order."""
         texts = self.texts
         return [[texts[index] for index in notes] for notes in self.notes]
+
+    @property
+    def parents(self) -> list[int | None]:
+        """The position of the parent of each task line, in file order.
+
+        The parent is the nearest earlier task line of the section with
+        a lower indent. A task line with none has None.
+        """
+        indents = [line.indent for line in self.task_lines]
+        shallower = [
+            [
+                above
+                for above in range(position)
+                    if indents[above] < indent
+            ]
+            for position, indent in enumerate(indents)
+        ]  # fmt: skip
+        return [max(above, default=None) for above in shallower]
 
 
 @dataclass
