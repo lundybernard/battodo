@@ -1675,9 +1675,10 @@ class ReopenTests(TestCase):
         parent.children = [done]
         # The lists as the selection read them, each beside its path.
         t.task.selection = Mock(spec=['lists'])
+        held = [[parent], [parent, done]]
         t.task.selection.lists = [
-            (LIST_PATH, Mock(spec=['tasks'], tasks=[])),
-            (ANOTHER_PATH, Mock(spec=['tasks'], tasks=[parent])),
+            (LIST_PATH, Mock(spec=['ancestries'], ancestries=[])),
+            (ANOTHER_PATH, Mock(spec=['ancestries'], ancestries=held)),
         ]
 
         with t.subTest('the list that holds the closed line, at any depth'):
@@ -1857,29 +1858,46 @@ class ReopenTests(TestCase):
                 ret = t.ro.ancestry
                 t.assertEqual(ret, expected)
 
-    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
-    def test_chains(t, restored: PropertyMock) -> None:
+    @patch.object(Reopen, '_breadth_first', new_callable=PropertyMock)
+    def test_chains(t, breadth_first: PropertyMock) -> None:
         parent = parent_node()
         child = child_node()
-        grandchild = grandchild_node()
-        child.children = [grandchild]
-        parent.children = [child]
         bare = bare_node()
         bare.raw_index = 6
-        restored.return_value = Mock(spec=['tasks'])
-        restored.return_value.tasks = [parent, bare]
+        breadth_first.return_value = [[parent], [bare], [parent, child]]
 
         ret = t.ro.chains
 
-        # Each task of the list, below every task above it.
+        # Each task by its line, below every task above it, in the order
+        # read.
+        t.assertEqual(
+            list(ret.items()),
+            [(1, [parent]), (6, [bare]), (3, [parent, child])],
+        )
+
+    @patch.object(Reopen, 'restored', new_callable=PropertyMock)
+    def test_breadth_first(t, restored: PropertyMock) -> None:
+        parent = parent_node()
+        child = child_node()
+        grandchild = grandchild_node()
+        bare = bare_node()
+        bare.raw_index = 6
+        # Every task of the list with its ancestry, in file order.
+        restored.return_value = Mock(spec=['ancestries'])
+        restored.return_value.ancestries = [
+            [parent],
+            [parent, child],
+            [parent, child, grandchild],
+            [bare],
+        ]
+
+        ret = t.ro._breadth_first
+
+        # Pins the current match; a ruling may change it. Shallowest
+        # first: `ancestry` takes the first task with the id.
         t.assertEqual(
             ret,
-            {
-                1: [parent],
-                6: [bare],
-                3: [parent, child],
-                5: [parent, child, grandchild],
-            },
+            [[parent], [bare], [parent, child], [parent, child, grandchild]],
         )
 
     @patch.object(Reopen, 'subtasks', new_callable=PropertyMock)
@@ -2030,28 +2048,25 @@ class ReopenTests(TestCase):
         t.assertEqual(ret, [])
 
     @patch(f'{SRC}.OpenedTask', autospec=True)
-    @patch(f'{SRC}.Ancestry', autospec=True)
+    @patch.object(Reopen, '_paths', new_callable=PropertyMock)
     @patch.object(Reopen, 'delta', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
-    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
     @patch.object(Reopen, 'ancestry', new_callable=PropertyMock)
     def test_events(
         t,
         ancestry: PropertyMock,
-        chains: PropertyMock,
         list_left: PropertyMock,
         delta: PropertyMock,
-        ancestry_class: MagicMock,
+        paths: PropertyMock,
         opened_task: MagicMock,
     ) -> None:
         parent, child = parent_node(), done_child_node()
         parent.done = True
         ancestry.return_value = [parent, child]
-        chains.return_value = {1: [parent], 4: [parent, child]}
         list_left.return_value = 'a-list'
         delta.return_value = {'P': ['4', '5']}
+        paths.return_value = [sentinel.top, sentinel.below]
         t.ro.ids = {1: '9o71lx', 4: 'cc03ef'}
-        ancestry_class.side_effect = [sentinel.top, sentinel.below]
         opened_task.side_effect = [
             Mock(spec=['event'], event=sentinel.top_event),
             Mock(spec=['event'], event=sentinel.named_event),
@@ -2062,10 +2077,6 @@ class ReopenTests(TestCase):
 
         # One opening a closed task, outermost first. The named task
         # carries the changes and the attributes.
-        t.assertEqual(
-            ancestry_class.call_args_list,
-            [call([parent]), call([parent, child])],
-        )
         t.assertEqual(
             opened_task.call_args_list,
             [
@@ -2080,6 +2091,29 @@ class ReopenTests(TestCase):
             ],
         )
         t.assertEqual(ret, [sentinel.top_event, sentinel.named_event])
+
+    @patch(f'{SRC}.Ancestry', autospec=True)
+    @patch.object(Reopen, 'chains', new_callable=PropertyMock)
+    @patch.object(Reopen, 'opened', new_callable=PropertyMock)
+    def test_paths(
+        t,
+        opened: PropertyMock,
+        chains: PropertyMock,
+        ancestry_class: MagicMock,
+    ) -> None:
+        parent, child = parent_node(), done_child_node()
+        opened.return_value = [parent, child]
+        chains.return_value = {1: [parent], 4: [parent, child]}
+        ancestry_class.side_effect = [sentinel.top, sentinel.below]
+
+        ret = t.ro._paths
+
+        # The ancestry of each task the reopen opens, outermost first.
+        t.assertEqual(
+            ancestry_class.call_args_list,
+            [call([parent]), call([parent, child])],
+        )
+        t.assertEqual(ret, [sentinel.top, sentinel.below])
 
     @patch.object(Reopen, 'path', new_callable=PropertyMock)
     @patch.object(Reopen, 'list_left', new_callable=PropertyMock)
@@ -2426,65 +2460,96 @@ class CompletionTests(TestCase):
             )
 
     @patch.object(TaskNode, 'refuse_attributes', autospec=True)
+    @patch.object(Completion, '_closes', new_callable=PropertyMock)
     @patch.object(Completion, 'assignments', new_callable=PropertyMock)
-    @patch.object(Completion, 'completions', new_callable=PropertyMock)
     def test_events(
         t,
-        completions: PropertyMock,
         assignments: PropertyMock,
+        closes: PropertyMock,
         refuse_attributes: MagicMock,
     ) -> None:
-        below = MagicMock(spec=['ancestry', 'payload'])
-        below.ancestry = ancestry_of(t.parent, t.child)
-        below.payload = sentinel.below
-        top = MagicMock(spec=['ancestry', 'payload'])
-        top.ancestry = ancestry_of(t.parent)
-        top.payload = sentinel.top
-        completions.return_value = [below, top]
-        t.co.lines = MagicMock(spec=['ids'])
-        t.co.lines.ids = {3: 'zz01ab', 1: '9o71lx'}
+        assignments.return_value = [sentinel.stamp]
+        closes.return_value = [sentinel.close]
         t.co.attrs = sentinel.attrs
 
-        with t.subTest('one TaskCompleted a completion, deepest first'):
-            assignments.return_value = []
-
+        with t.subTest('each id stamp, then each close'):
             ret = t.co.events
 
-            # The named task checks that it takes the attributes first.
             refuse_attributes.assert_called_once_with(t.child, sentinel.attrs)
+            t.assertEqual(ret, [sentinel.stamp, sentinel.close])
+
+        with t.subTest('a refused attribute: nothing else is read'):
+            assignments.reset_mock()
+            closes.reset_mock()
+            refuse_attributes.side_effect = ValueError('refused')
+
+            with t.assertRaises(ValueError):
+                _ = t.co.events
+
+            assignments.assert_not_called()
+            closes.assert_not_called()
+
+    @patch.object(Completion, '_streams', new_callable=PropertyMock)
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_closes(
+        t,
+        completions: PropertyMock,
+        streams: PropertyMock,
+    ) -> None:
+        below = MagicMock(spec=['payload'])
+        below.payload = sentinel.below
+        top = MagicMock(spec=['payload'])
+        top.payload = sentinel.top
+        completions.return_value = [below, top]
+        streams.return_value = ['task/zz01ab', 'task/9o71lx']
+
+        with t.subTest('one TaskCompleted a completion, deepest first'):
+            ret = t.co._closes
             t.assertEqual(
                 ret,
                 [
-                    Event('TaskCompleted', 'task/zz01ab', sentinel.below),
-                    Event('TaskCompleted', 'task/9o71lx', sentinel.top),
-                ],
-            )
-
-        with t.subTest('each id stamp goes before every completion'):
-            assignments.return_value = [sentinel.stamp]
-
-            ret = t.co.events
-
-            t.assertEqual(
-                ret,
-                [
-                    sentinel.stamp,
                     Event('TaskCompleted', 'task/zz01ab', sentinel.below),
                     Event('TaskCompleted', 'task/9o71lx', sentinel.top),
                 ],
             )
 
         with t.subTest('a scratch: one TaskScratched each'):
-            assignments.return_value = []
             completions.return_value = [below]
+            streams.return_value = ['task/zz01ab']
             t.co.scratched = True
 
-            ret = t.co.events
+            ret = t.co._closes
 
             t.assertEqual(
                 ret,
                 [Event('TaskScratched', 'task/zz01ab', sentinel.below)],
             )
+
+    def test_kind(t) -> None:
+        cases = {
+            'a completion': (False, 'TaskCompleted'),
+            'a scratch': (True, 'TaskScratched'),
+        }
+        for name, (scratched, expected) in cases.items():
+            with t.subTest(name):
+                t.co.scratched = scratched
+                ret = t.co._kind
+                t.assertEqual(ret, expected)
+
+    @patch.object(Completion, 'completions', new_callable=PropertyMock)
+    def test_streams(t, completions: PropertyMock) -> None:
+        below = MagicMock(spec=['ancestry'])
+        below.ancestry = ancestry_of(t.parent, t.child)
+        top = MagicMock(spec=['ancestry'])
+        top.ancestry = ancestry_of(t.parent)
+        completions.return_value = [below, top]
+        t.co.lines = MagicMock(spec=['ids'])
+        t.co.lines.ids = {3: 'zz01ab', 1: '9o71lx'}
+
+        ret = t.co._streams
+
+        # The stream of each completion, by the id of its stream task.
+        t.assertEqual(ret, ['task/zz01ab', 'task/9o71lx'])
 
     @patch(f'{SRC}.IdAssignment', autospec=True)
     def test_assignments(t, id_assignment: MagicMock) -> None:
@@ -4023,52 +4088,93 @@ class CompletionLinesTests(TestCase):
         t.assertIs(ret, t.parent)
 
     @patch(f'{SRC}.Ancestry', autospec=True)
-    def test_ancestries(t, ancestry: MagicMock) -> None:
+    @patch.object(CompletionLines, '_still_open', new_callable=PropertyMock)
+    def test_ancestries(
+        t,
+        still_open: PropertyMock,
+        ancestry: MagicMock,
+    ) -> None:
+        below = grandchild_node()
+        t.cl.ancestry = [t.parent, t.child, below]
         # Each ancestry stands in as the tuple of the tasks it holds.
         ancestry.side_effect = tuple
 
-        with t.subTest('an open sibling stops the cascade'):
-            t.parent.children[1].done = False
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child)])
-
-        with t.subTest('the last open child completes its parent'):
-            t.parent.children[1].done = True
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child), (t.parent,)])
-
-        with t.subTest('and that may complete its own parent, deepest first'):
-            below = grandchild_node()
-            t.child.children = [below]
-            t.cl.ancestry = [t.parent, t.child, below]
-
-            ret = t.cl.ancestries
-
-            t.assertEqual(
-                ret,
+        cases = {
+            'each task above open: the named task alone': (
+                2,
+                [(t.parent, t.child, below)],
+            ),
+            'its parent finished too': (
+                1,
+                [(t.parent, t.child, below), (t.parent, t.child)],
+            ),
+            'every task finished, deepest first': (
+                0,
                 [(t.parent, t.child, below), (t.parent, t.child), (t.parent,)],
-            )
+            ),
+        }
+        for name, (count, expected) in cases.items():
+            with t.subTest(name):
+                still_open.return_value = count
+                ret = t.cl.ancestries
+                t.assertEqual(ret, expected)
 
-        with t.subTest('a scratch: the named task alone, nothing cascades'):
+    @patch.object(CompletionLines, '_stops', new_callable=PropertyMock)
+    def test_still_open(t, stops: PropertyMock) -> None:
+        cases = {
+            'no stop: every task above finishes': ([], 0),
+            'a stop at the top task: it stays open': ([0], 1),
+            'the deepest stop: it and each task above stay open': ([0, 1], 2),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                stops.return_value = found
+                ret = t.cl._still_open
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a scratch: each task above stays open, unread'):
+            stops.reset_mock()
             t.cl.scratched = True
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
+
+            ret = t.cl._still_open
+
+            stops.assert_not_called()
+            t.assertEqual(ret, 1)
+
+    def test_stops(t) -> None:
+        below = grandchild_node()
+        t.child.children = [below]
+        t.cl.ancestry = [t.parent, t.child, below]
+
+        with t.subTest('every parent finished: no stop'):
+            ret = t.cl._stops
+            t.assertEqual(ret, [])
+
+        with t.subTest('an open sibling stops the cascade at its parent'):
+            t.parent.children[1].done = False
+            ret = t.cl._stops
+            t.assertEqual(ret, [0])
 
         with t.subTest('a repeating task finishes no parent'):
-            t.cl.scratched = False
+            t.parent.children[1].done = True
             below.fields = {'REPEAT': '7d'}
-            ret = t.cl.ancestries
-            t.assertEqual(ret, [(t.parent, t.child, below)])
+            ret = t.cl._stops
+            t.assertEqual(ret, [1])
 
         with t.subTest('and a cascade ends at a repeating parent'):
             below.fields = {'LOE': '1'}
             t.child.fields = {'REPEAT': '7d'}
+            ret = t.cl._stops
+            t.assertEqual(ret, [0])
 
-            ret = t.cl.ancestries
+        with t.subTest('two open siblings: a stop at each parent'):
+            t.child.fields = {'LOE': '1'}
+            t.child.children = [below, grandchild_node()]
+            t.parent.children[1].done = False
 
-            t.assertEqual(
-                ret, [(t.parent, t.child, below), (t.parent, t.child)]
-            )
+            ret = t.cl._stops
+
+            t.assertEqual(ret, [0, 1])
 
 
 class TaskCompletionTests(TestCase):
@@ -4586,19 +4692,16 @@ class ListBackfillTests(TestCase):
         # A backfill logs no completed-log record.
         t.assertEqual(ret, [])
 
-    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
-    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
-    def test_events(t, tasks: PropertyMock, snapshot: MagicMock) -> None:
-        tasks.return_value = [bare_node()]
-        snapshot.return_value = sentinel.snapshot
-        t.lb.ids = {1: 'zz01ab'}
-        t.path.stem = 'a-list'
+    @patch.object(ListBackfill, '_snapshots', new_callable=PropertyMock)
+    @patch.object(ListBackfill, '_streams', new_callable=PropertyMock)
+    def test_events(t, streams: PropertyMock, snapshots: PropertyMock) -> None:
+        streams.return_value = ['task/zz01ab']
+        snapshots.return_value = [sentinel.snapshot]
 
         ret = t.lb.events
 
         # The date is the migration's: a replay must not read it as an
         # observed fact.
-        snapshot.assert_called_once_with(tasks.return_value[0], 'a-list')
         t.assertEqual(
             ret,
             [
@@ -4613,6 +4716,32 @@ class ListBackfillTests(TestCase):
                 )
             ],
         )
+
+    def test_delta(t) -> None:
+        ret = t.lb._delta
+        # No add date before, the migration's after.
+        t.assertEqual(ret, {'ADDED': [None, '2026-08-08']})
+
+    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
+    def test_streams(t, tasks: PropertyMock) -> None:
+        tasks.return_value = [bare_node(), undated_due_node()]
+        t.lb.ids = {1: 'zz01ab', 6: 'ud05ef'}
+
+        ret = t.lb._streams
+
+        t.assertEqual(ret, ['task/zz01ab', 'task/ud05ef'])
+
+    @patch.object(TaskNode, 'listed_snapshot', autospec=True)
+    @patch.object(ListBackfill, 'tasks', new_callable=PropertyMock)
+    def test_snapshots(t, tasks: PropertyMock, snapshot: MagicMock) -> None:
+        tasks.return_value = [bare_node()]
+        snapshot.return_value = sentinel.snapshot
+        t.path.stem = 'a-list'
+
+        ret = t.lb._snapshots
+
+        snapshot.assert_called_once_with(tasks.return_value[0], 'a-list')
+        t.assertEqual(ret, [sentinel.snapshot])
 
 
 def named_task(*ancestry: TaskNode) -> Mock:

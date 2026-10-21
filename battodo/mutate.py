@@ -35,6 +35,7 @@ import re
 from collections.abc import Mapping, Sequence
 from datetime import date, tzinfo
 from functools import cached_property
+from itertools import pairwise
 from json import dumps
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -1054,13 +1055,16 @@ class Reopen:
         stream = self.stream
         if not stream.nested:
             return None
-        for path, doc in self.task.selection.lists:
-            tasks = list(doc.tasks)
-            for task in tasks:
-                if task.done and task.task_id == stream.task_id:
-                    return path
-                tasks.extend(task.children)
-        return None
+        return next(
+            (
+                path
+                for path, doc in self.task.selection.lists
+                for ancestry in doc.ancestries
+                    if ancestry[-1].done
+                    and ancestry[-1].task_id == stream.task_id
+            ),
+            None,
+        )  # fmt: skip
 
     @property
     def record(self) -> TaskStream:
@@ -1140,12 +1144,16 @@ class Reopen:
     def chains(self) -> dict[int, list[TaskNode]]:
         """Each task of the restored list and every task above it.
 
-        By the line of the task, outermost first.
+        By the line of the task, outermost first. Shallowest first, in
+        file order at each depth, so `ancestry` takes the shallowest of
+        two tasks with one id.
         """
-        found = [[task] for task in self.restored.tasks]
-        for chain in found:
-            found.extend([*chain, child] for child in chain[-1].children)
-        return {chain[-1].raw_index: chain for chain in found}
+        return {chain[-1].raw_index: chain for chain in self._breadth_first}
+
+    @property
+    def _breadth_first(self) -> list[list[TaskNode]]:
+        """Each ancestry of the restored list, shallowest first."""
+        return sorted(self.restored.ancestries, key=len)
 
     @property
     def opened(self) -> list[TaskNode]:
@@ -1246,20 +1254,21 @@ class Reopen:
         The event of the task the reopen names carries its changes and
         its attributes.
         """
-        named, list_left = self.node.raw_index, self.list_left
-        events = []
-        for task in self.opened:
-            path = Ancestry(self.chains[task.raw_index])
-            changed = task.raw_index == named
-            opened = OpenedTask(
+        return [
+            OpenedTask(
                 path,
                 self.ids[task.raw_index],
-                list_left,
-                self.delta if changed else None,
-                self.attrs if changed else None,
-            )
-            events.append(opened.event)
-        return events
+                self.list_left,
+                self.delta if task.raw_index == self.node.raw_index else None,
+                self.attrs if task.raw_index == self.node.raw_index else None,
+            ).event
+            for task, path in zip(self.opened, self._paths)
+        ]
+
+    @property
+    def _paths(self) -> list[Ancestry]:
+        """The ancestry of each task the reopen opens, outermost first."""
+        return [Ancestry(self.chains[task.raw_index]) for task in self.opened]
 
     @property
     def delta(self) -> dict[str, list[Any]]:
@@ -1425,13 +1434,28 @@ class Completion:
             The named task is a checklist item and attributes are given.
         """
         self.task.node.refuse_attributes(self.attrs)
-        kind = SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
-        events = []
-        for completion in self.completions:
-            stream = self.lines.ids[completion.ancestry.stream.raw_index]
-            payload = completion.payload
-            events.append(Event(kind, f'task/{stream}', payload))
-        return [*self.assignments, *events]
+        return [*self.assignments, *self._closes]
+
+    @property
+    def _closes(self) -> list['Event']:
+        """One event per completion, deepest first."""
+        return [
+            Event(self._kind, stream, completion.payload)
+            for completion, stream in zip(self.completions, self._streams)
+        ]
+
+    @property
+    def _kind(self) -> str:
+        """The event type of each close: a completion or a scratch."""
+        return SCRATCHED_EVENT if self.scratched else COMPLETED_EVENT
+
+    @property
+    def _streams(self) -> list[str]:
+        """The stream of each completion, deepest first."""
+        return [
+            f'task/{self.lines.ids[completion.ancestry.stream.raw_index]}'
+            for completion in self.completions
+        ]
 
     @property
     def completions(self) -> list['TaskCompletion']:
@@ -1444,15 +1468,17 @@ class Completion:
         recurrence, gained = lines.recurrence, lines.recurrence_fields
         day, ancestries = self.completed_on, lines.ancestries
         list_name = self.path.stem
-        completions = []
-        for ancestry in ancestries:
-            fields = gained if ancestry.node is recurrence else {}
-            attrs = self.attrs if ancestry is ancestries[0] else None
-            completion = TaskCompletion(
-                ancestry, fields, day, list_name, attrs, self.scratched
+        return [
+            TaskCompletion(
+                ancestry,
+                gained if ancestry.node is recurrence else {},
+                day,
+                list_name,
+                self.attrs if ancestry is ancestries[0] else None,
+                self.scratched,
             )
-            completions.append(completion)
-        return completions
+            for ancestry in ancestries
+        ]
 
     @property
     def assignments(self) -> list['Event']:
@@ -2333,17 +2359,27 @@ class CompletionLines:
         scratch finishes no ancestor, and a repeating task stays open,
         so it finishes no ancestor either.
         """
-        ancestry = self.ancestry
-        found = [Ancestry(ancestry)]
+        return [
+            Ancestry(self.ancestry[:size])
+            for size in range(len(self.ancestry), self._still_open, -1)
+        ]
+
+    @property
+    def _still_open(self) -> int:
+        """How many tasks at the top of the ancestry the close leaves open."""
         if self.scratched:
-            return found
-        for depth in reversed(range(len(ancestry) - 1)):
-            parent, child = ancestry[depth], ancestry[depth + 1]
-            finished = all(c.done or c is child for c in parent.children)
-            if child.repeat or not finished:
-                break
-            found.append(Ancestry(ancestry[: depth + 1]))
-        return found
+            return len(self.ancestry) - 1
+        return max(self._stops, default=-1) + 1
+
+    @property
+    def _stops(self) -> list[int]:
+        """The depth of each parent that its child's close leaves open."""
+        return [
+            depth
+            for depth, (parent, child) in enumerate(pairwise(self.ancestry))
+                if child.repeat
+                or not all(c.done or c is child for c in parent.children)
+        ]  # fmt: skip
 
 
 class TaskCompletion:
@@ -2430,8 +2466,12 @@ class RecordedTask:
         return [
             self.line,
             *self.description_lines,
-            *(line for child in self.children for line in child.lines),
-        ]
+            *(
+                line
+                for child in self.children
+                for line in child.lines
+            ),
+        ]  # fmt: skip
 
     @property
     def line(self) -> str:
@@ -2685,14 +2725,30 @@ class ListBackfill:
         The date is the migration's, not the task's, so the payload says
         so: a replay must not read it as an observed fact.
         """
-        delta = {'ADDED': [None, self.today.isoformat()]}
-        events = []
-        for task in self.tasks:
-            payload = {
-                'delta': delta,
-                'snapshot': task.listed_snapshot(self.path.stem),
-                'backfilled': True,
-            }
-            stream = f'task/{self.ids[task.raw_index]}'
-            events.append(Event(ADDED_EVENT, stream, payload))
-        return events
+        return [
+            Event(
+                ADDED_EVENT,
+                stream,
+                {
+                    'delta': self._delta,
+                    'snapshot': snapshot,
+                    'backfilled': True,
+                },
+            )
+            for stream, snapshot in zip(self._streams, self._snapshots)
+        ]
+
+    @property
+    def _delta(self) -> dict[str, list[str | None]]:
+        """The delta of each stamp: no add date, then the migration's."""
+        return {'ADDED': [None, self.today.isoformat()]}
+
+    @property
+    def _streams(self) -> list[str]:
+        """The stream of each task to stamp, in file order."""
+        return [f'task/{self.ids[task.raw_index]}' for task in self.tasks]
+
+    @property
+    def _snapshots(self) -> list[dict[str, Any]]:
+        """The snapshot of each task to stamp, in file order."""
+        return [task.listed_snapshot(self.path.stem) for task in self.tasks]
