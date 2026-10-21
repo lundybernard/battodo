@@ -25,9 +25,3 @@ implementing PRs, not here.
 
 No code implements ADR 0018 yet. PR #69 deferred it, and issue
 [#131](https://github.com/lundybernard/battodo/issues/131) tracks it.
-
-## AI assistance disclosure
-
-The ADRs in this directory were drafted with the assistance of Claude
-Code (Anthropic). The author reviewed and takes responsibility for all
-content.

@@ -43,9 +43,3 @@ The ADRs of this group cite three bootstrap requirements by label:
   not wired, and
   [ADR 0012](../0008-journal-authority/0012-optional-per-project-tool.md)
   merges a foreign list into views without a journal.
-
-## AI assistance disclosure
-
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.

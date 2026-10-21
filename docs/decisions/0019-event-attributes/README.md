@@ -96,9 +96,3 @@ it:
   flip, no command reads a description line back from the markdown.
 - Success criterion for [R4](#r4--journal-first): a
   render from the journal alone restores every description.
-
-## AI assistance disclosure
-
-The planning documents and ADRs in this directory were drafted with the
-assistance of Claude Code (Anthropic). The author reviewed and takes
-responsibility for all content.
