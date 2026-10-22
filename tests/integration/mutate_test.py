@@ -26,13 +26,13 @@ from battodo.mutate import (
     ListError,
     Reopen,
     SubtaskAddition,
-    SuppliedEdit,
     TaskCompletion,
     Update,
 )
 from battodo.parser import Ancestry, TodoDocument
 from battodo.repeat import RepeatError
 from battodo.selector import SelectionError
+from battodo.supplied import SuppliedEdit
 from battodo.task import Task
 from tests.environment import TZ
 
@@ -2221,7 +2221,7 @@ class ChangesetTests(TestCase):
 
 
 class SuppliedEditTests(TestCase):
-    """Contract tests for battodo.mutate.SuppliedEdit."""
+    """Contract tests for battodo.supplied.SuppliedEdit."""
 
     def setUp(t) -> None:
         # The task with every field, and a task that carries no repeat
