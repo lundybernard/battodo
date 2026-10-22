@@ -48,6 +48,28 @@ order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
 `battodo/completed.py` do. The message reads
 `unknown <thing> <value!r>; choose one of <list>`.
 
+### A named intermediate is a property
+
+Inside a class, a value that is computed from the object's state and then
+used is its own `@property`. It is `_<name>` when only the class reads it,
+and public when another object reads it. A local name holds only a loop or
+comprehension variable, a value derived from one, or a value that depends
+on a method argument. The code reads `self.<attr>` at each use. A
+module-level function tells a simple story: its body says what happens to
+the objects that it operates on, and the computation lives in their
+methods.
+
+**Why:** each step is auditable and testable alone. A test sets the state
+and reads the step, so it needs fewer mocks and no `assert_called_with`
+check on an intermediate. A traceback names the step, and a debugger reads
+the property.
+
+**How to apply:** split a body when the split simplifies the calling code and
+its tests. The degree is a judgement call. A function that needs a computed
+intermediate marks a missing class or method: move the work behind a method on
+the domain object, `<Entity>.<verb>(<args>)`, and keep its helper classes
+internal.
+
 ## Working rules
 
 - Work on a feature branch, never on `main`. A maintainer reviews each
@@ -60,8 +82,9 @@ order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
 - At the PR tip, run `pixi run mutate` and `pixi run fuz` (the property
   suite). The mutation target is zero surviving mutants; list each
   survivor in the PR notes. CI does not run `mutate` yet.
-- A one-line statement holds at most two nested calls. Bind a deeper
-  inner value to a local name.
+- A one-line statement holds at most two nested calls. A deeper inner
+  value becomes its own `@property`, or a local name in the cases that
+  the named-intermediate rule above keeps.
 - Docstrings use the numpydoc sections `Parameters`, `Returns`, and
   `Raises` with underline headers, as `battodo/lib.py` does.
 - Write docstrings, commit bodies, docs, and ADRs in short sentences,
@@ -80,6 +103,8 @@ order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
   it.
 - An issue reference is a trailer, `Resolves: #N` or `Refs: #N`. Code
   comments and test docstrings name the behaviour.
+- Every commit carries the author's GPG or SSH signature. `main` accepts only
+  signed commits.
 - An AI agent that helps write a commit signs a trailer
   `Assisted-by: <tool>:<model> [<agent name>]`, for example
   `Assisted-by: claude-code:claude-opus-5-5 [The Engineer]`.
