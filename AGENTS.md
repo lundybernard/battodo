@@ -103,6 +103,8 @@ internal.
   it.
 - An issue reference is a trailer, `Resolves: #N` or `Refs: #N`. Code
   comments and test docstrings name the behaviour.
+- Every commit carries the author's GPG or SSH signature. `main` accepts only
+  signed commits.
 - An AI agent that helps write a commit signs a trailer
   `Assisted-by: <tool>:<model> [<agent name>]`, for example
   `Assisted-by: claude-code:claude-opus-5-5 [The Engineer]`.
