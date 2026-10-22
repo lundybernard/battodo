@@ -74,43 +74,29 @@ class AdditionTests(TestCase):
         )
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Addition, 'events', new_callable=PropertyMock)
-    @patch.object(Addition, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.ad.write()
+        changeset.from_mutation.assert_called_once_with(t.ad)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(Addition, 'path', new_callable=PropertyMock)
     @patch.object(Addition, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.ad.path = LIST_PATH
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.ad.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.ad.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.ad.write()
+                _ = t.ad.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     @patch(f'{SRC}.NamedList', autospec=True)
     def test_path(t, named_list: MagicMock) -> None:
@@ -324,43 +310,29 @@ class SubtaskAdditionTests(TestCase):
         t.sa = SubtaskAddition(t.task, 'a-list', 'A new subtask', {'LOE': '2'})
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(SubtaskAddition, 'events', new_callable=PropertyMock)
-    @patch.object(SubtaskAddition, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.sa.write()
+        changeset.from_mutation.assert_called_once_with(t.sa)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(SubtaskAddition, 'path', new_callable=PropertyMock)
     @patch.object(SubtaskAddition, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.sa.path = LIST_PATH
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.sa.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.sa.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.sa.write()
+                _ = t.sa.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.sa.source
@@ -709,43 +681,10 @@ class UpdateTests(TestCase):
         t.up = Update(t.task, {'P': '5'}, title='A new title')
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Update, 'events', new_callable=PropertyMock)
-    @patch.object(Update, 'entries', new_callable=PropertyMock)
-    @patch.object(Update, 'lists', new_callable=PropertyMock)
-    def test_write(
-        t,
-        lists: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
-        lists.return_value = sentinel.lists
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.up.path = ANOTHER_PATH
-
-        with t.subTest('the lists, the log records and the events'):
-            t.up.write()
-
-            changeset.assert_called_once_with(
-                sentinel.lists,
-                sentinel.entries,
-                sentinel.events,
-                ANOTHER_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused list: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
-            lists.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.up.write()
-
-            entries.assert_not_called()
-            changeset.assert_not_called()
+    def test_write(t, changeset: MagicMock) -> None:
+        t.up.write()
+        changeset.from_mutation.assert_called_once_with(t.up)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
 
     @patch.object(Update, 'joined', new_callable=PropertyMock)
     @patch.object(Update, 'moved', new_callable=PropertyMock)
@@ -1347,43 +1286,29 @@ class ReopenTests(TestCase):
         t.ro = Reopen(t.task, sentinel.zone, {'P': '5'}, title='A new title')
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Reopen, 'events', new_callable=PropertyMock)
-    @patch.object(Reopen, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.ro.write()
+        changeset.from_mutation.assert_called_once_with(t.ro)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(Reopen, 'path', new_callable=PropertyMock)
     @patch.object(Reopen, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-        t.ro.path = LIST_PATH
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.ro.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.ro.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.ro.write()
+                _ = t.ro.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.ro.source
@@ -2185,42 +2110,29 @@ class CompletionTests(TestCase):
         t.co = Completion(t.task)
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Completion, 'events', new_callable=PropertyMock)
-    @patch.object(Completion, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.co.write()
+        changeset.from_mutation.assert_called_once_with(t.co)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(Completion, 'path', new_callable=PropertyMock)
     @patch.object(Completion, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.co.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.co.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.co.write()
+                _ = t.co.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.co.source
@@ -2647,42 +2559,29 @@ class AnnotationTests(TestCase):
         t.an = Annotation(t.task, {'note': 'a note'})
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(Annotation, 'events', new_callable=PropertyMock)
-    @patch.object(Annotation, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.an.write()
+        changeset.from_mutation.assert_called_once_with(t.an)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
+    @patch.object(Annotation, 'path', new_callable=PropertyMock)
     @patch.object(Annotation, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock, path: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
+        path.return_value = LIST_PATH
 
-        with t.subTest('the list, its log records and its events'):
-            t.an.write()
+        with t.subTest('the text of the list, by its path'):
+            ret = t.an.lists
+            t.assertEqual(ret, {LIST_PATH: sentinel.text})
 
-            changeset.assert_called_once_with(
-                {LIST_PATH: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                LIST_PATH,
-                SOURCE,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
+        with t.subTest('a refused text: the path is not read'):
+            path.reset_mock()
             text.side_effect = ValueError('refused')
 
             with t.assertRaises(ValueError):
-                t.an.write()
+                _ = t.an.lists
 
-            entries.assert_not_called()
-            changeset.assert_not_called()
+            path.assert_not_called()
 
     def test_source(t) -> None:
         ret = t.an.source
@@ -3034,6 +2933,44 @@ class ChangesetTests(TestCase):
             t.path,
             SOURCE,
         )
+
+    def test_from_mutation(t) -> None:
+        members = ['lists', 'entries', 'events', 'path', 'source']
+        values = [{LIST_PATH: 'the list'}, ['a record'], t.events, LIST_PATH]
+        mutation = MagicMock(spec=members)
+        # Each read of the write object goes on one record, in order.
+        reads = MagicMock(spec=members)
+        for name, value in zip(members, [*values, SOURCE]):
+            read = PropertyMock(return_value=value)
+            setattr(type(mutation), name, read)
+            reads.attach_mock(read, name)
+        every_read = [getattr(call, name)() for name in members]
+
+        with t.subTest('each value, the lists first, the source last'):
+            ret = Changeset.from_mutation(mutation)
+
+            t.assertEqual(reads.mock_calls, every_read)
+            t.assertEqual(
+                [ret.lists, ret.entries, ret.events, ret.path, ret.source],
+                [*values, SOURCE],
+            )
+
+        refused = {
+            'a refused list: nothing else is read': 1,
+            'a refused record: no event is read': 2,
+            'a refused event: nothing after it is read': 3,
+        }
+        for name, count in refused.items():
+            with t.subTest(name):
+                reads.reset_mock()
+                refusal = getattr(reads, members[count - 1])
+                refusal.side_effect = ValueError('refused')
+
+                with t.assertRaises(ValueError):
+                    Changeset.from_mutation(mutation)
+
+                t.assertEqual(reads.mock_calls, every_read[:count])
+                refusal.side_effect = None
 
     @patch(f'{SRC}.Journal', autospec=True)
     @patch(f'{SRC}.CompletedLog', autospec=True)
@@ -4562,42 +4499,16 @@ class ListBackfillTests(TestCase):
         t.lb = ListBackfill(t.path, TODAY)
 
     @patch(f'{SRC}.Changeset', autospec=True)
-    @patch.object(ListBackfill, 'events', new_callable=PropertyMock)
-    @patch.object(ListBackfill, 'entries', new_callable=PropertyMock)
+    def test_write(t, changeset: MagicMock) -> None:
+        t.lb.write()
+        changeset.from_mutation.assert_called_once_with(t.lb)
+        changeset.from_mutation.return_value.write.assert_called_once_with()
+
     @patch.object(ListBackfill, 'text', new_callable=PropertyMock)
-    def test_write(
-        t,
-        text: PropertyMock,
-        entries: PropertyMock,
-        events: PropertyMock,
-        changeset: MagicMock,
-    ) -> None:
+    def test_lists(t, text: PropertyMock) -> None:
         text.return_value = sentinel.text
-        entries.return_value = sentinel.entries
-        events.return_value = sentinel.events
-
-        with t.subTest('the list, its log records and its events'):
-            t.lb.write()
-
-            changeset.assert_called_once_with(
-                {t.path: sentinel.text},
-                sentinel.entries,
-                sentinel.events,
-                t.path,
-                t.path.parent,
-            )
-            changeset.return_value.write.assert_called_once_with()
-
-        with t.subTest('a refused text: nothing else is read or written'):
-            changeset.reset_mock()
-            entries.reset_mock()
-            text.side_effect = ValueError('refused')
-
-            with t.assertRaises(ValueError):
-                t.lb.write()
-
-            entries.assert_not_called()
-            changeset.assert_not_called()
+        ret = t.lb.lists
+        t.assertEqual(ret, {t.path: sentinel.text})
 
     def test_source(t) -> None:
         ret = t.lb.source

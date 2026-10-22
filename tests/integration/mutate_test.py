@@ -375,6 +375,10 @@ class AdditionTests(TestCase):
         t.assertEqual(written, t.ad.text)
         t.assertEqual(journaled(t.source), as_journaled(t.ad.events))
 
+    def test_lists(t) -> None:
+        ret = t.ad.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.ad.text})
+
     def test_path(t) -> None:
         with t.subTest('the list whose file the name stems'):
             ret = t.ad.path
@@ -587,6 +591,10 @@ class SubtaskAdditionTests(TestCase):
         # The list holds the text the add derives, the journal its event.
         t.assertEqual(written, t.sa.text)
         t.assertEqual(journaled(t.source), as_journaled(t.sa.events))
+
+    def test_lists(t) -> None:
+        ret = t.sa.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.sa.text})
 
     def test_path(t) -> None:
         ret = t.sa.path
@@ -1166,17 +1174,34 @@ class ReopenTests(TestCase):
         t.ro = reopen_of(t.source, 'ft01ab', {'P': '5'})
 
     def test_write(t) -> None:
-        # Read before the write: once written, the task is open.
-        text, events = t.ro.text, t.ro.events
-        before = journaled(t.source)
+        with t.subTest('the list and the journal take its values'):
+            # Read before the write: once written, the task is open.
+            text, events = t.ro.text, t.ro.events
+            before = journaled(t.source)
 
-        t.ro.write()
+            t.ro.write()
 
-        written = (t.source / 'a-list.md').read_text(encoding='utf-8')
-        # The list holds the text the reopen derives, the journal its
-        # events after the events it read.
-        t.assertEqual(written, text)
-        t.assertEqual(journaled(t.source), before + as_journaled(events))
+            written = (t.source / 'a-list.md').read_text(encoding='utf-8')
+            # The list holds the text the reopen derives, the journal its
+            # events after the events it read.
+            t.assertEqual(written, text)
+            t.assertEqual(journaled(t.source), before + as_journaled(events))
+
+        with t.subTest('a refused value and a missing list: the value first'):
+            refused = reopen_of(
+                t.source, 'sc01ab', {'DUE': 'x'}, list_name='wrk'
+            )
+            before = journaled(t.source)
+
+            with t.assertRaisesRegex(ValueError, 'DUE must be an ISO date'):
+                refused.write()
+
+            # The text is read before the list it goes to.
+            t.assertEqual(journaled(t.source), before)
+
+    def test_lists(t) -> None:
+        ret = t.ro.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.ro.text})
 
     def test_text(t) -> None:
         opened = [
@@ -1535,6 +1560,11 @@ class CompletionTests(TestCase):
                 journaled(scratched.source),
                 [('TaskUpdated', stream), ('TaskScratched', stream)],
             )
+
+    def test_lists(t) -> None:
+        completion = completion_of(t.source, 'A subtask that does not')
+        ret = completion.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': completion.text})
 
     def test_text(t) -> None:
         with t.subTest('a finished top-level task loses its line'):
@@ -1916,6 +1946,10 @@ class AnnotationTests(TestCase):
             t.assertEqual(path.stat().st_mtime_ns, 0)
             t.assertEqual(journaled(source), as_journaled(noted.events))
 
+    def test_lists(t) -> None:
+        ret = t.an.lists
+        t.assertEqual(ret, {t.source / 'a-list.md': t.an.text})
+
     def test_text(t) -> None:
         with t.subTest('a task with an id: the list as read'):
             ret = t.an.text
@@ -2131,6 +2165,16 @@ class ChangesetTests(TestCase):
             t.path,
             t.source,
         )
+
+    def test_from_mutation(t) -> None:
+        update = Update(Task(t.source, '9o71lx', TODAY), {'P': '5'})
+
+        ret = Changeset.from_mutation(update)
+
+        # The values of the write object, each as it reads it.
+        t.assertEqual(ret.lists, update.lists)
+        t.assertEqual((ret.entries, ret.events), ([], update.events))
+        t.assertEqual((ret.path, ret.source), (t.path, t.source))
 
     def test_write(t) -> None:
         with t.subTest('the list, the log and the journal take its values'):

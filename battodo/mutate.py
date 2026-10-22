@@ -38,7 +38,7 @@ from functools import cached_property
 from itertools import pairwise
 from json import dumps
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Protocol
 
 from .history import StreamSelection, TaskStream
 from .journal import (
@@ -130,20 +130,17 @@ class Addition:
         self.attrs = attrs
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @cached_property
     def path(self) -> Path:
@@ -286,20 +283,17 @@ class SubtaskAddition:
         self.attrs = attrs
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
@@ -509,20 +503,8 @@ class Update:
         self.with_subtasks = with_subtasks
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
-
-        Every value is read before the first write, so a refused write
-        writes nothing.
-        """
-        lists = self.lists
-        changes = Changeset(
-            lists,
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
     @property
     def lists(self) -> dict[Path, str]:
@@ -851,20 +833,17 @@ class Reopen:
         self.with_subtasks = with_subtasks
 
     def write(self) -> None:
-        """Write the list and its events.
+        """Write the list and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
@@ -1315,20 +1294,17 @@ class Completion:
         self.scratched = scratched
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
@@ -1511,20 +1487,17 @@ class Annotation:
         self.attrs = attrs
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
@@ -1704,6 +1677,21 @@ class Changeset:
         self.path = path
         self.source = source
 
+    @classmethod
+    def from_mutation(cls, mutation: 'Mutation') -> 'Changeset':
+        """The changes of `mutation`, each read before the first write.
+
+        The list texts are read first, then the log records, then the
+        events, so a refusal stops every read after it.
+        """
+        return cls(
+            mutation.lists,
+            mutation.entries,
+            mutation.events,
+            mutation.path,
+            mutation.source,
+        )
+
     def write(self) -> None:
         """Write each list, then the log records, then the events.
 
@@ -1723,6 +1711,30 @@ class Changeset:
                 actor=ACTOR,
                 source_file=self.path.name,
             )
+
+
+class Mutation(Protocol):
+    """A write object, as `Changeset` reads it."""
+
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of each list the write changes, by its path."""
+
+    @property
+    def entries(self) -> list[str]:
+        """The completed-log records."""
+
+    @property
+    def events(self) -> list['Event']:
+        """The journal events."""
+
+    @property
+    def path(self) -> Path:
+        """The list each event names as its source file."""
+
+    @property
+    def source(self) -> Path:
+        """The source directory."""
 
 
 class CompletedLog:
@@ -2637,20 +2649,17 @@ class ListBackfill:
         self.today = today
 
     def write(self) -> None:
-        """Write the list, its log records and its events.
+        """Write the list, its log records and its events."""
+        Changeset.from_mutation(self).write()
 
-        Every value is read before the first write, so a refused write
-        writes nothing.
+    @property
+    def lists(self) -> dict[Path, str]:
+        """The text of the list, by its path.
+
+        The text is read first, so its refusals come first.
         """
         text = self.text
-        changes = Changeset(
-            {self.path: text},
-            self.entries,
-            self.events,
-            self.path,
-            self.source,
-        )
-        changes.write()
+        return {self.path: text}
 
     @property
     def source(self) -> Path:
