@@ -443,10 +443,10 @@ class ViewTests(TestCase):
 
         out = ret.split('\n')
         active = ', '.join(publication['active'])
-        t.assertEqual(
-            out[0],
-            f'{NOW:%A} {publication["date"]} {NOW:%H:%M} — active: {active}',
-        )
+        stamp = f'{NOW:%A} {publication["date"]} {NOW:%H:%M}'
+        # The header drops its active clause when nothing is active.
+        header = f'{stamp} — active: {active}' if active else stamp
+        t.assertEqual(out[0], header)
 
         categories = publication['categories']
 

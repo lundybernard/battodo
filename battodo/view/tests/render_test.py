@@ -62,6 +62,11 @@ class ViewTests(TestCase):
             ret = t.v.header
             t.assertTrue(ret.endswith('career, study, work'))
 
+        with t.subTest('with nothing active, the day and the time alone'):
+            t.selection.active = set()
+            ret = t.v.header
+            t.assertEqual(ret, 'Wednesday 2026-08-05 10:30')
+
     def test_categories(t) -> None:
         ret = t.v.categories
         t.assertEqual(ret, t.selection.categories)

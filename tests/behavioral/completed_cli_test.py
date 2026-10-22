@@ -20,7 +20,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import TZ
+from tests.environment import TZ
 
 from .cli_runner import run_cli
 

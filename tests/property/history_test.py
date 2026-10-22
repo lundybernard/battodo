@@ -20,9 +20,9 @@ from unittest.mock import Mock
 from hypothesis import given
 from hypothesis import strategies as st
 
-from battodo.conf import TZ
 from battodo.journal import Journal
 from battodo.lib import get_history
+from tests.environment import TZ
 
 from .mutate_test import refusal
 

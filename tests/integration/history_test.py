@@ -13,7 +13,6 @@ from typing import Any
 from unittest import TestCase
 from unittest.mock import Mock
 
-from battodo.conf import TZ
 from battodo.history import (
     HistoryEntry,
     HistoryJsonView,
@@ -23,6 +22,7 @@ from battodo.history import (
     TaskStream,
 )
 from battodo.journal import Journal
+from tests.environment import TZ
 
 NOW = datetime(2026, 10, 5, 10, 30, tzinfo=TZ)
 # Each event of the history fixture: type, stream, payload, occurred_at.

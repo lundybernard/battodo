@@ -23,7 +23,6 @@ from .completed import (
     DigestJsonView,
     DigestView,
 )
-from .conf import TZ
 from .history import HistoryJsonView, HistoryView, TaskHistory
 from .item import Item, ItemJsonView, ItemView
 from .lists import item_count
@@ -44,7 +43,6 @@ __all__ = [
     'DEFAULT_PERIOD',
     'FORMATS',
     'PERIODS',
-    'TZ',
     'add_item',
     'annotate_item',
     'backfill_items',

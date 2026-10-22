@@ -27,7 +27,6 @@ from unittest.mock import Mock, patch
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from battodo.conf import TZ
 from battodo.journal import Journal
 from battodo.lib import (
     add_item,
@@ -46,6 +45,7 @@ from battodo.parser import (
 )
 from battodo.repeat import next_due
 from battodo.selector import SelectionError
+from tests.environment import TZ
 
 from .item_test import item_selectors
 from .strategies import NEARBY, TODAY, Node, grammar

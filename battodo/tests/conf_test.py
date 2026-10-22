@@ -1,14 +1,17 @@
 from dataclasses import dataclass
+from datetime import UTC
 from os import environ
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
+from zoneinfo import ZoneInfoNotFoundError
 
 from ..conf import (
     CONFIG_FILE_ENV_VAR,
     ConfigFile,
     Namespace,
     get_config,
+    time_zone,
 )
 
 SRC = 'battodo.conf'
@@ -250,3 +253,61 @@ class ConfigFileTests(TestCase):
                 config_env='test',
                 missing_file_option='error',
             )
+
+
+class TimeZoneTests(TestCase):
+    """Unit tests for battodo.conf.time_zone."""
+
+    ZoneInfo: MagicMock
+
+    def setUp(t) -> None:
+        patcher = patch(f'{SRC}.ZoneInfo', autospec=True)
+        t.ZoneInfo = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.conf = Mock(spec=['view'])
+        t.conf.view = Mock(spec=['time_zone'])
+        t.conf.view.time_zone = 'Another/Zone'
+
+    def test_named(t) -> None:
+        ret = time_zone(t.conf)
+
+        t.assertIs(ret, t.ZoneInfo.return_value)
+        t.ZoneInfo.assert_called_once_with('Another/Zone')
+
+    @patch(f'{SRC}.datetime', autospec=True)
+    def test_local(t, datetime: MagicMock) -> None:
+        local = datetime.now.return_value.astimezone.return_value
+
+        with t.subTest('an empty name reads the zone of the system'):
+            t.conf.view.time_zone = ''
+
+            ret = time_zone(t.conf)
+
+            t.assertIs(ret, local.tzinfo)
+            datetime.now.assert_called_once_with(UTC)
+
+        with t.subTest('and so does a name the lookup cannot find'):
+            t.conf.view = Mock(spec=[])
+            ret = time_zone(t.conf)
+            t.assertIs(ret, local.tzinfo)
+
+    def test_unknown(t) -> None:
+        refusals = {
+            'a name the system has no zone for': ZoneInfoNotFoundError(
+                'another-zone'
+            ),
+            'a name that is no zone key at all': ValueError('another-key'),
+        }
+
+        for name, error in refusals.items():
+            with t.subTest(name):
+                t.ZoneInfo.side_effect = error
+
+                with t.assertRaises(ValueError) as caught:
+                    time_zone(t.conf)
+
+                t.assertEqual(
+                    str(caught.exception),
+                    "unknown time zone in view.time_zone: 'Another/Zone'",
+                )

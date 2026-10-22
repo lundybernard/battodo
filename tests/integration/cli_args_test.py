@@ -20,11 +20,11 @@ from unittest.mock import MagicMock, patch
 from batconf import TomlSource
 from batconf.types import SourceInterfaceP
 
-from battodo.cli import TZ, argparser, get_config
+from battodo.cli import argparser, get_config
 from battodo.journal import Journal
 from battodo.repeat import RepeatError
 from battodo.view import TOP_N
-from tests.environment import isolate_environ
+from tests.environment import TZ, isolate_environ
 
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)

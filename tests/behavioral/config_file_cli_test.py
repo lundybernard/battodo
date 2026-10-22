@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import TZ
+from tests.environment import TZ
 
 from .cli_runner import run_cli
 
@@ -36,7 +36,7 @@ class UserConfigFileTests(TestCase):
         patcher = patch('battodo.cli.datetime', autospec=True)
         t.datetime = patcher.start()
         t.addCleanup(patcher.stop)
-        t.datetime.now.return_value = FROZEN
+        t.datetime.now.side_effect = FROZEN.astimezone
 
         home = TemporaryDirectory()
         t.addCleanup(home.cleanup)
@@ -50,6 +50,10 @@ class UserConfigFileTests(TestCase):
             '\n'
             '[test.battodo.view]\n'
             f'source_dir = "{TODO_DIR}"\n'
+            'time_zone = "America/Los_Angeles"\n'
+            'windows = "work=mon-fri 9-17; chores=mon-fri 17-21, '
+            'sat-sun 10-20"\n'
+            'always_active = "study, career, events"\n'
         )
 
     def test_view(t) -> None:

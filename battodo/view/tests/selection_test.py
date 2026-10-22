@@ -4,7 +4,6 @@ from unittest import TestCase
 from unittest.mock import MagicMock, Mock, PropertyMock, call, patch, sentinel
 
 from ..selection import (
-    CATEGORY_ORDER,
     TOP_N,
     Category,
     CategoryJsonView,
@@ -14,18 +13,24 @@ from ..selection import (
     SelectionJsonView,
     SourceError,
     TodoList,
+    Window,
+    parse_window,
+    parse_windows,
 )
 
 SRC = 'battodo.view.selection'
 TODAY = date(2026, 8, 5)
 # A Monday, so a weekday number added to it names that day.
 WEEK_START = date(2026, 8, 3)
-# The windows the clock opens, as a table: the category, the weekday
-# numbers it opens on, and the hours it stays open on them.
+# A schedule as a config file writes it, and the names it keeps open.
+SCHEDULE = 'a-list=mon-fri 9-17; another-list=mon-fri 17-21, sat-sun 10-20'
+ALWAYS = 'a-third-list, a-fourth-list'
+# The windows of SCHEDULE as a table: the category, the weekday numbers
+# it opens on, and the hours it stays open on them.
 WINDOWS = (
-    ('work', range(5), range(9, 17)),
-    ('chores', range(5), range(17, 21)),
-    ('chores', range(5, 7), range(10, 20)),
+    ('a-list', range(5), range(9, 17)),
+    ('another-list', range(5), range(17, 21)),
+    ('another-list', range(5, 7), range(10, 20)),
 )
 # Every hour of one week. A sweep over it names the day and the hour.
 HOURS = [
@@ -103,24 +108,41 @@ class SelectionTests(TestCase):
             t.assertIn(str(t.resolved), str(caught.exception))
 
     def test_active(t) -> None:
+        with t.subTest('with no schedule, no category is active'):
+            ret = t.s.active
+            t.assertEqual(ret, set())
+
         for day, hour in HOURS:
             with t.subTest(day=day, hour=hour):
                 ret = Selection(
-                    t.directory, at_hour(day, hour), show_all=False
+                    t.directory,
+                    at_hour(day, hour),
+                    show_all=False,
+                    windows=SCHEDULE,
+                    always_active=ALWAYS,
                 ).active
 
                 t.assertEqual(ret, opens(day, hour))
 
-    def test_weekday(t) -> None:
-        with t.subTest('a day the working week covers'):
-            ret = t.s.weekday
-            t.assertTrue(ret)
+    def test_always_open(t) -> None:
+        with t.subTest('no name is always open by default'):
+            ret = t.s.always_open
+            t.assertEqual(ret, frozenset())
 
-        with t.subTest('and one it does not'):
-            # 2026-08-08 is a Saturday.
-            t.s.now = at('2026-08-08T10:30')
-            ret = t.s.weekday
-            t.assertFalse(ret)
+        with t.subTest('each name of the list, spaces and empties aside'):
+            t.s.always_active = ' a-list,another-list , '
+            ret = t.s.always_open
+            t.assertEqual(ret, frozenset({'a-list', 'another-list'}))
+
+    def test_schedule(t) -> None:
+        with t.subTest('no category is scheduled by default'):
+            ret = t.s.schedule
+            t.assertEqual(ret, {})
+
+        with t.subTest('the configured windows, read'):
+            t.s.windows = 'a-list=mon 9-10'
+            ret = t.s.schedule
+            t.assertEqual(ret, {'a-list': [Window(0, 0, 9, 10)]})
 
     def test_day(t) -> None:
         # 2026-08-05 is a Wednesday, the third day of the week.
@@ -174,27 +196,32 @@ class SelectionTests(TestCase):
             )
 
     def test_shows(t) -> None:
-        t.s.active = {'work', 'study'}
+        t.s.windows = 'a-list=mon 9-10; another-list=tue 9-10'
+        t.s.active = {'a-list'}
 
         cases = {
-            'a named category inside its window shows': (
-                t.todo('work'),
+            'a scheduled category that is active shows': (
+                t.todo('a-list'),
                 True,
             ),
-            'a named category outside its window does not': (
-                t.todo('chores'),
+            'a scheduled category that is not active does not': (
+                t.todo('another-list'),
                 False,
             ),
-            'a name the order does not know has no window to be outside': (
-                t.todo('side-quests'),
+            'a category with no window has no window to be outside': (
+                t.todo('a-third-list'),
+                True,
+            ),
+            'and neither does a named one': (
+                t.todo('career'),
                 True,
             ),
             'a list that opted out never shows': (
-                t.todo('work', parked=True),
+                t.todo('a-list', parked=True),
                 False,
             ),
-            'and opting out beats having an unknown name': (
-                t.todo('side-quests', parked=True),
+            'and opting out beats having no window': (
+                t.todo('a-third-list', parked=True),
                 False,
             ),
         }
@@ -206,11 +233,11 @@ class SelectionTests(TestCase):
         t.s.show_all = True
         everything = {
             'asking for everything reaches past a shut window': (
-                t.todo('chores'),
+                t.todo('another-list'),
                 True,
             ),
             'an open one is unaffected by the asking': (
-                t.todo('work'),
+                t.todo('a-list'),
                 True,
             ),
             'and a list that opted out is still not shown': (
@@ -224,6 +251,7 @@ class SelectionTests(TestCase):
                 t.assertEqual(ret, expected)
 
     def test_categories(t) -> None:
+        t.s.windows = 'chores=sun 9-10'
         t.s.active = {'work', 'study'}
         shown, shut, empty = (
             t.todo('work'),
@@ -256,10 +284,20 @@ class SelectionFromConfigTests(TestCase):
     def setUp(t) -> None:
         t.now = at('2026-08-05T10:30')
         t.conf = Mock(spec=['view'])
-        t.conf.view = Mock(spec=['source_dir', 'top', 'rank_due_curve'])
+        t.conf.view = Mock(
+            spec=[
+                'source_dir',
+                'top',
+                'rank_due_curve',
+                'windows',
+                'always_active',
+            ]
+        )
         t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
         t.conf.view.rank_due_curve = 'a-curve'
+        t.conf.view.windows = 'some-windows'
+        t.conf.view.always_active = 'some-names'
 
     def test_from_config(t) -> None:
         selection = Selection.from_config(t.conf, t.now, show_all=True)
@@ -276,8 +314,23 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('the flag is the one given'):
             t.assertTrue(selection.show_all)
 
-        with t.subTest('and the curve is carried as written'):
+        with t.subTest('the curve is carried as written'):
             t.assertEqual(selection.rank_due_curve, 'a-curve')
+
+        with t.subTest('and so are the schedule fields'):
+            t.assertEqual(selection.windows, 'some-windows')
+            t.assertEqual(selection.always_active, 'some-names')
+
+        with t.subTest('a schedule field the lookup cannot find is empty'):
+            t.conf.view = Mock(spec=['source_dir', 'top', 'rank_due_curve'])
+            t.conf.view.source_dir = '~/a-source-dir'
+            t.conf.view.top = '2'
+            t.conf.view.rank_due_curve = 'a-curve'
+
+            unset = Selection.from_config(t.conf, t.now, show_all=True)
+
+            t.assertEqual(unset.windows, '')
+            t.assertEqual(unset.always_active, '')
 
         with t.subTest('a count below one is refused'):
             t.conf.view.top = '0'
@@ -370,12 +423,12 @@ class TodoListTests(TestCase):
     def test_order(t) -> None:
         with t.subTest('a named category sorts by its place in the order'):
             ret = t.tl.order
-            t.assertEqual(ret, (CATEGORY_ORDER.index('work'), 'work'))
+            t.assertEqual(ret, (0, 'work'))
 
         with t.subTest('an unknown name sorts after every named one'):
             t.tl.category = 'side-quests'
             ret = t.tl.order
-            t.assertEqual(ret, (len(CATEGORY_ORDER), 'side-quests'))
+            t.assertEqual(ret, (5, 'side-quests'))
 
         with t.subTest('and unknown names sort among themselves by name'):
             t.tl.category = 'backlog'
@@ -696,6 +749,154 @@ class RowJsonViewTests(TestCase):
             t.assertEqual(ret['subtasks'], 2)
 
 
+class ParseWindowsTests(TestCase):
+    """Unit tests for battodo.view.selection.parse_windows."""
+
+    def test_schedule(t) -> None:
+        cases = {
+            'an empty text schedules nothing': ('', {}),
+            'and so does one of spaces alone': ('  ', {}),
+            'one category, one window': (
+                'a-list=mon-fri 9-17',
+                {'a-list': [Window(0, 4, 9, 17)]},
+            ),
+            'spaces around the separators are read past': (
+                ' a-list = mon 9-10 , tue 11-12 ; another-list=sat-sun 10-20',
+                {
+                    'a-list': [Window(0, 0, 9, 10), Window(1, 1, 11, 12)],
+                    'another-list': [Window(5, 6, 10, 20)],
+                },
+            ),
+        }
+
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                ret = parse_windows(text)
+                t.assertEqual(ret, expected)
+
+    def test_refused(t) -> None:
+        cases = {
+            'an entry with no window': (
+                'a-list',
+                (
+                    'a view.windows entry must read <category>=<window>: '
+                    "'a-list'"
+                ),
+            ),
+            'an entry with no category': (
+                '=mon 9-10',
+                (
+                    'a view.windows entry must read <category>=<window>: '
+                    "'=mon 9-10'"
+                ),
+            ),
+            'an entry with nothing after the mark': (
+                'a-list=',
+                (
+                    'a view.windows entry must read <category>=<window>: '
+                    "'a-list='"
+                ),
+            ),
+            'an empty entry after the last separator': (
+                'a-list=mon 9-10;',
+                "a view.windows entry must read <category>=<window>: ''",
+            ),
+            'a category named twice': (
+                'a-list=mon 9-10; a-list=tue 9-10',
+                "view.windows names a category twice: 'a-list'",
+            ),
+            'a second mark belongs to the windows': (
+                'a-list=mon 9-10=x',
+                (
+                    'a view.windows window must read <days> <start>-<end>: '
+                    "'mon 9-10=x'"
+                ),
+            ),
+            'a window that does not read': (
+                'a-list=someday 9-10',
+                (
+                    'a view.windows window must read <days> <start>-<end>: '
+                    "'someday 9-10'"
+                ),
+            ),
+        }
+
+        for name, (text, message) in cases.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    parse_windows(text)
+
+                t.assertEqual(str(caught.exception), message)
+
+
+class ParseWindowTests(TestCase):
+    """Unit tests for battodo.view.selection.parse_window."""
+
+    def test_window(t) -> None:
+        cases = {
+            'one day': ('mon 9-17', Window(0, 0, 9, 17)),
+            'a run of days, in any case': (
+                'MON-Fri 9-17',
+                Window(0, 4, 9, 17),
+            ),
+            'spaces around the separators': (
+                ' sat - sun  10 - 20 ',
+                Window(5, 6, 10, 20),
+            ),
+            'the whole of one day': ('sun 0-24', Window(6, 6, 0, 24)),
+        }
+
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                ret = parse_window(text)
+                t.assertEqual(ret, expected)
+
+    def test_refused(t) -> None:
+        cases = {
+            'a day the week does not have': 'someday 9-10',
+            'no hours': 'mon',
+            'no end hour': 'mon 9',
+            'text after the hours': 'mon 9-10 later',
+            'no space between the days and the hours': 'mon9-10',
+            'days that run backwards': 'fri-mon 9-17',
+            'hours that run past midnight': 'mon 22-2',
+            'an empty span of hours': 'mon 9-9',
+            'an hour past the end of the day': 'mon 0-25',
+        }
+
+        for name, text in cases.items():
+            with t.subTest(name):
+                with t.assertRaises(ValueError) as caught:
+                    parse_window(text)
+
+                t.assertEqual(
+                    str(caught.exception),
+                    'a view.windows window must read <days> <start>-<end>: '
+                    f'{text!r}',
+                )
+
+
+class WindowTests(TestCase):
+    """Unit tests for battodo.view.selection.Window."""
+
+    def setUp(t) -> None:
+        t.w = Window(0, 4, 9, 17)
+
+    def test_holds(t) -> None:
+        cases = {
+            'its first day at its first hour': (0, 9, True),
+            'its last day at its last hour': (4, 16, True),
+            'the end hour is past the window': (0, 17, False),
+            'an hour before it opens': (0, 8, False),
+            'a day after its last': (5, 10, False),
+        }
+
+        for name, (day, hour, expected) in cases.items():
+            with t.subTest(name):
+                ret = t.w.holds(day, hour)
+                t.assertEqual(ret, expected)
+
+
 def at(iso: str) -> datetime:
     return datetime.fromisoformat(iso)
 
@@ -708,10 +909,10 @@ def at_hour(day: int, hour: int) -> datetime:
 def opens(day: int, hour: int) -> set[str]:
     """The categories open on `day` at `hour`.
 
-    Three categories stay open at every hour. The window table adds
+    The names of ALWAYS stay open at every hour. The window table adds
     the rest.
     """
-    names = {'study', 'career', 'events'}
+    names = {'a-third-list', 'a-fourth-list'}
     for name, days, hours in WINDOWS:
         if day in days and hour in hours:
             names.add(name)

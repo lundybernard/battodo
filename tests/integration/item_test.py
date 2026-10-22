@@ -11,9 +11,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from battodo.conf import TZ
 from battodo.item import Item, ItemJsonView, ItemView
 from battodo.task import Task
+from tests.environment import TZ
 
 # Chosen so the rank comes out whole: the task is one month old and one
 # week from due, so the rank is 4 x 1.0 for the due date x 2.0 for age.

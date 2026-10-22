@@ -23,5 +23,5 @@ implementing PRs, not here.
 | [0017](0017-property-objects-module-design.md) | Property objects as the module design | Accepted |
 | [0018](0018-schedule-and-timezone-config.md) | Schedule and time zone become configuration | Accepted |
 
-No code implements ADR 0018 yet. PR #69 deferred it, and issue
-[#131](https://github.com/lundybernard/battodo/issues/131) tracks it.
+PR #69 deferred ADR 0018. PR #137 implements it and resolves issue
+[#131](https://github.com/lundybernard/battodo/issues/131).

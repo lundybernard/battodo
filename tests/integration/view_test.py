@@ -8,7 +8,7 @@ code.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import datetime
 from json import loads
 from os import environ
 from pathlib import Path
@@ -16,14 +16,13 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.conf import TZ
 from battodo.parser import TodoDocument
 from battodo.rank import DEFAULT_DUE_CURVE, parse_curve
 from battodo.view import Selection, SelectionJsonView, View
 from battodo.view.selection import Row
+from tests.environment import TZ
 
-# Wednesday mid-morning: the work window is open, the chores window
-# is shut.
+# Wednesday mid-morning.
 NOW = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
 PARKED = '<!-- battodo:parked -->'
 # The width the layout probes, through the variable the terminal size
@@ -150,36 +149,63 @@ class RenderedViewTests(TestCase):
                 t.assertIn(LONG_TITLE, wide)
 
         with empty_source() as source:
-            write(source, 'chores', '- [ ] An inactive category task [P:3]')
-            write(source, 'career', '- [ ] An active category task [P:2]')
+            write(source, 'another-list', '- [ ] A shut category task [P:3]')
+            write(source, 'a-list', '- [ ] An open category task [P:2]')
+
+            with t.subTest('with no schedule, every list shows'):
+                out = View(Selection(source, NOW, show_all=False)).text
+                t.assertIn('A shut category task', out)
+                t.assertIn('An open category task', out)
+
+            with t.subTest('and the header names the day and the time alone'):
+                out = View(Selection(source, NOW, show_all=False)).text
+                t.assertEqual(out.split('\n')[0], 'Wednesday 2026-08-05 10:30')
 
             with t.subTest('a shut window keeps its category out of view'):
-                out = View(Selection(source, NOW, show_all=False)).text
-                t.assertNotIn('An inactive category task', out)
-                t.assertIn('An active category task', out)
+                out = View(scheduled(source, show_all=False)).text
+                t.assertNotIn('A shut category task', out)
+                t.assertIn('An open category task', out)
 
             with t.subTest('asking for everything reaches past the windows'):
-                out = View(Selection(source, NOW, show_all=True)).text
-                t.assertIn('An inactive category task', out)
-                t.assertIn('An active category task', out)
+                out = View(scheduled(source, show_all=True)).text
+                t.assertIn('A shut category task', out)
+                t.assertIn('An open category task', out)
 
             with t.subTest('though a list that opted out stays out even then'):
                 write(
                     source,
-                    'backlog',
+                    'a-parked-list',
                     '- [ ] A parked task [P:4]',
                     parked=True,
                 )
 
-                out = View(Selection(source, NOW, show_all=True)).text
+                out = View(scheduled(source, show_all=True)).text
 
                 t.assertNotIn('A parked task', out)
 
             with t.subTest('and the header names only what is open now'):
                 # Which categories are active is a fact about the clock.
                 # Asking to see everything does not reopen their windows.
-                out = View(Selection(source, NOW, show_all=True)).text
-                t.assertIn('active: career, events, study, work', out)
+                out = View(scheduled(source, show_all=True)).text
+                t.assertEqual(
+                    out.split('\n')[0],
+                    'Wednesday 2026-08-05 10:30 — active: a-list, a-third-list',
+                )
+
+
+def scheduled(source: Path, *, show_all: bool) -> Selection:
+    """A selection of `source` under a schedule that is shut at NOW.
+
+    At NOW, a Wednesday at 10:30, the window of another-list is shut
+    and the window of a-list is open.
+    """
+    return Selection(
+        source,
+        NOW,
+        show_all=show_all,
+        windows='a-list=wed 10-11; another-list=mon-fri 17-21',
+        always_active='a-third-list',
+    )
 
 
 class SelectionJsonViewTests(TestCase):
@@ -314,20 +340,3 @@ class RowTests(TestCase):
                 ret = row.rank
 
                 t.assertAlmostEqual(ret, expected)
-
-
-class TimezoneTests(TestCase):
-    """Contract tests for battodo.view.TZ."""
-
-    def test_tz(t) -> None:
-        # A named zone, not a fixed offset: the local day stays
-        # stable across daylight-saving changes.
-        summer = datetime(2026, 8, 5, 0, 30, tzinfo=TZ)
-        winter = datetime(2026, 12, 5, 0, 30, tzinfo=TZ)
-
-        with t.subTest('the offset follows the season'):
-            t.assertNotEqual(summer.utcoffset(), winter.utcoffset())
-
-        with t.subTest('but the local day does not shift'):
-            t.assertEqual(summer.date(), date(2026, 8, 5))
-            t.assertEqual(winter.date(), date(2026, 12, 5))

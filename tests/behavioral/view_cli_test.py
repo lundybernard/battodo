@@ -29,13 +29,17 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from battodo.cli import TZ
+from tests.environment import TZ
 
 from .cli_runner import run_cli
 
 DATA = Path(__file__).parent / 'data'
 TODO_DIR = DATA / 'todo'
 GOLDEN_DIR = DATA / 'golden'
+# The config file that sets the schedule of the goldens.
+SCHEDULE_FILE = DATA / 'battodo.toml'
+# A config file that sets no schedule.
+UNSCHEDULED_FILE = DATA / 'unscheduled.toml'
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut. All fixture dates are relative to this instant.
@@ -47,6 +51,10 @@ SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
 FORMAT_VAR = 'BATTODO_FORMAT'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
+CONFIG_VAR = 'BATTODO_CONFIG_FILE'
+ZONE_VAR = 'BATTODO_VIEW_TIME_ZONE'
+WINDOWS_VAR = 'BATTODO_VIEW_WINDOWS'
+ALWAYS_VAR = 'BATTODO_VIEW_ALWAYS_ACTIVE'
 
 
 def golden(name: str) -> str:
@@ -64,11 +72,12 @@ class ViewCommandTests(TestCase):
     maxDiff = None
 
     def setUp(t) -> None:
-        # Pin the clock: the rendered output depends on it.
+        # Pin the clock: the rendered output depends on it. The instant
+        # is fixed, and the configured zone decides its local time.
         patcher = patch('battodo.cli.datetime', autospec=True)
         t.datetime = patcher.start()
         t.addCleanup(patcher.stop)
-        t.datetime.now.return_value = FROZEN
+        t.datetime.now.side_effect = FROZEN.astimezone
 
     def cli(
         t,
@@ -76,7 +85,11 @@ class ViewCommandTests(TestCase):
         env: dict[str, str] | None = None,
     ) -> tuple[str, str, object]:
         """Run `view` with `args`, and `env` over the pinned variables."""
-        pinned = {'COLUMNS': WIDTH, SOURCE_VAR: str(TODO_DIR)}
+        pinned = {
+            'COLUMNS': WIDTH,
+            SOURCE_VAR: str(TODO_DIR),
+            CONFIG_VAR: str(SCHEDULE_FILE),
+        }
         return run_cli(['view', *args], pinned | (env or {}))
 
     def render(t, *args: str, env: dict[str, str] | None = None) -> str:
@@ -184,6 +197,64 @@ class ViewCommandTests(TestCase):
             t.assertEqual(
                 err,
                 "a rank due curve point must read days:factor: 'soon:1.0'\n",
+            )
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_time_zone_is_configured(t) -> None:
+        with t.subTest('the zone moves the clock to its own day and hour'):
+            # 10:30 in Los Angeles is 02:30 the next day in Tokyo: a
+            # Thursday, before the work window opens.
+            out = t.render(env={ZONE_VAR: 'Asia/Tokyo'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Thursday 2026-08-06 02:30 — active: career, events, study',
+            )
+
+        with t.subTest('a zone btodo does not know: reported, exit 1'):
+            out, err, code = t.cli(env={ZONE_VAR: 'Mars/Olympus'})
+
+            t.assertEqual(
+                err,
+                "unknown time zone in view.time_zone: 'Mars/Olympus'\n",
+            )
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_schedule_is_configured(t) -> None:
+        with t.subTest('no schedule: every list, under the day and time'):
+            out = t.render(env={CONFIG_VAR: str(UNSCHEDULED_FILE)})
+
+            t.assertEqual(out.split('\n')[0], 'Wednesday 2026-08-05 10:30')
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('the environment sets the windows'):
+            out = t.render(env={WINDOWS_VAR: 'chores=wed 10-11'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Wednesday 2026-08-05 10:30 — active: career, chores, events, '
+                'study',
+            )
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('and the names no window shuts'):
+            out = t.render(env={ALWAYS_VAR: 'chores'})
+
+            t.assertEqual(
+                out.split('\n')[0],
+                'Wednesday 2026-08-05 10:30 — active: chores, work',
+            )
+            t.assertIn('── Chores ', out)
+
+        with t.subTest('windows btodo cannot read: reported, exit 1'):
+            out, err, code = t.cli(env={WINDOWS_VAR: 'chores=someday 9-17'})
+
+            t.assertEqual(
+                err,
+                'a view.windows window must read <days> <start>-<end>: '
+                "'someday 9-17'\n",
             )
             t.assertEqual(code, 1)
             t.assertEqual(out, '')
