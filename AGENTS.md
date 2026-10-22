@@ -56,7 +56,9 @@ order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
 
 Inside a class, a value that is computed from the object's state and then
 used is its own `@property`. It is `_<name>` when only the class reads it,
-and public when another object reads it. A local name holds only a loop or
+and public when another object reads it. The public name is the plain noun for
+the value the consumer reads, and a raw input that readers use only in a
+derived form is stored as `_raw_<name>`. A local name holds only a loop or
 comprehension variable, a value derived from one, or a value that depends
 on a method argument. The code reads `self.<attr>` at each use. A
 module-level function tells a simple story: its body says what happens to
@@ -72,7 +74,7 @@ the property.
 its tests. The degree is a judgement call. A function that needs a computed
 intermediate marks a missing class or method: move the work behind a method on
 the domain object, `<Entity>.<verb>(<args>)`, and keep its helper classes
-internal.
+internal. Read the consumer first: the names it reads are the interface.
 
 ## Working rules
 
