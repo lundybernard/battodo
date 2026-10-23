@@ -238,23 +238,59 @@ class SuppliedDescription:
         """
         if not self.text:
             return []
-        lines = self.text.split('\n')
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                refusal = 'is blank'
-            elif CHECKBOX_RE.match(stripped):
-                refusal = 'reads as a task line'
-            elif stripped.startswith('## '):
-                refusal = 'reads as a heading'
-            elif stripped.startswith('<!--'):
-                refusal = 'reads as a comment'
-            elif '\r' in line:
-                refusal = 'holds a carriage return'
-            else:
-                continue
-            raise ValueError(f'description line {line!r} {refusal}')
-        return [line.strip() for line in lines]
+        return [DescriptionLine(line).text for line in self.text.split('\n')]
+
+
+class DescriptionLine:
+    """One line of a supplied description.
+
+    `_raw_text` holds the line as the caller gave it.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._raw_text = text
+
+    @property
+    def text(self) -> str:
+        """The line, stripped of its indent.
+
+        Raises
+        ------
+        ValueError
+            The line has a refusal. The message names the line as the
+            caller gave it.
+        """
+        if self._refusal is not None:
+            raise ValueError(
+                f'description line {self._raw_text!r} {self._refusal}'
+            )
+        return self._stripped
+
+    @property
+    def _refusal(self) -> str | None:
+        """Why the parser reads the line back as no description line.
+
+        A blank line, a task line, a heading or a comment, checked in
+        that order, then a carriage return. None for a description line.
+        The carriage-return check reads the line as given, because the
+        strip removes a trailing one.
+        """
+        if not self._stripped:
+            return 'is blank'
+        if CHECKBOX_RE.match(self._stripped):
+            return 'reads as a task line'
+        if self._stripped.startswith('## '):
+            return 'reads as a heading'
+        if self._stripped.startswith('<!--'):
+            return 'reads as a comment'
+        if '\r' in self._raw_text:
+            return 'holds a carriage return'
+        return None
+
+    @property
+    def _stripped(self) -> str:
+        """The line without its indent and its trailing white space."""
+        return self._raw_text.strip()
 
 
 class SuppliedFields:
@@ -288,34 +324,93 @@ class SuppliedFields:
             A `P`, `LOE`, `DUE` or `REPEAT` does not read, checked in
             that order. `RepeatError`, a ValueError, covers `REPEAT`.
         """
-        checked = dict(self.fields)
-        priority = checked.get('P')
+        return {**self.fields, **self._given}
+
+    @property
+    def _given(self) -> dict[str, str]:
+        """Each checked field that is given, as read."""
+        return {
+            name: value
+            for name, value in self._read.items()
+                if value is not None
+        }  # fmt: skip
+
+    @property
+    def _read(self) -> dict[str, str | None]:
+        """Each checked field as read, None where none is given."""
+        return {
+            'P': self.priority,
+            'LOE': self.loe,
+            'DUE': self.due,
+            'REPEAT': self.repeat,
+        }
+
+    @property
+    def priority(self) -> str | None:
+        """The `P` value, or None without one.
+
+        Raises
+        ------
+        ValueError
+            The value is not a whole number.
+        """
+        priority = self.fields.get('P')
         if priority is not None and not priority.isdigit():
             raise ValueError(f'P must be a whole number, not {priority!r}')
+        return priority
 
-        loe = checked.get('LOE')
+    @property
+    def loe(self) -> str | None:
+        """The `LOE` value, or None without one.
+
+        Raises
+        ------
+        ValueError
+            The value is not on the scale.
+        """
+        loe = self.fields.get('LOE')
         if loe is not None and loe not in LOE_VALUES:
             raise ValueError(
                 f'LOE must be one of {", ".join(LOE_VALUES)}, not {loe!r}'
             )
+        return loe
 
-        due = checked.get('DUE')
-        if due is not None:
-            parsed = parse_date(due)
-            if parsed is None:
-                raise ValueError(f'DUE must be an ISO date, not {due!r}')
-            # Normalised, not passed through: `date.fromisoformat` accepts
-            # more spellings on newer interpreters, and a line's meaning
-            # must not depend on which one wrote it.
-            checked['DUE'] = parsed.isoformat()
+    @property
+    def due(self) -> str | None:
+        """The `DUE` date in ISO form, or None without one.
 
-        repeat = checked.get('REPEAT')
+        Raises
+        ------
+        ValueError
+            The value does not read as a date.
+        """
+        due = self.fields.get('DUE')
+        if due is None:
+            return None
+        parsed = parse_date(due)
+        if parsed is None:
+            raise ValueError(f'DUE must be an ISO date, not {due!r}')
+        # Normalised, not passed through: `date.fromisoformat` accepts
+        # more spellings on newer interpreters, and a line's meaning
+        # must not depend on which one wrote it.
+        return parsed.isoformat()
+
+    @property
+    def repeat(self) -> str | None:
+        """The `REPEAT` value, or None without one.
+
+        Raises
+        ------
+        RepeatError
+            The value does not read as a recurrence.
+        """
+        repeat = self.fields.get('REPEAT')
         if repeat is not None:
             # Validated by scheduling it and throwing the answer away: the
             # repeat parser is the only definition of a readable spec, and
             # an unreadable one must fail before a task carries it.
             next_due(repeat, self.today)
-        return checked
+        return repeat
 
     def refuse_root_fields(self) -> None:
         """Refuse a field that only the top-level task carries.
@@ -355,18 +450,8 @@ class SuppliedAttributes:
             line break, or a key is given twice.
         """
         checked: dict[str, str] = {}
-        for key, value in self.pairs:
-            if not ATTRIBUTE_KEY.fullmatch(key):
-                raise ValueError(
-                    f'attribute key must be a lowercase identifier, '
-                    f'not {key!r}'
-                )
-            if not value:
-                raise ValueError(f'attribute {key!r} must hold a value')
-            if '\n' in value or '\r' in value:
-                raise ValueError(
-                    f'attribute {key!r} must hold no line break, not {value!r}'
-                )
+        for pair in self.pairs:
+            key, value = AttributePair(*pair).checked
             if key in checked:
                 raise ValueError(f'attribute {key!r} is given twice')
             checked[key] = value
@@ -381,17 +466,14 @@ class SuppliedAttributes:
         ValueError
             A segment holds no `=`.
         """
-        pairs = []
-        for segment in self.segments:
-            key, sign, value = segment.partition('=')
-            if not sign:
-                raise ValueError(
-                    f'attribute must read key=value, not {segment!r}'
-                )
-            pairs.append((key, value))
-        if self.note is not None:
-            pairs.append((NOTE_KEY, self.note))
-        return pairs
+        if self.note is None:
+            return self._segment_pairs
+        return [*self._segment_pairs, (NOTE_KEY, self.note)]
+
+    @property
+    def _segment_pairs(self) -> list[tuple[str, str]]:
+        """Each segment split at its first `=`, in the order given."""
+        return [AttributeSegment(segment).pair for segment in self.segments]
 
     @property
     def segments(self) -> list[str]:
@@ -399,3 +481,58 @@ class SuppliedAttributes:
         if self.text is None:
             return []
         return ATTRIBUTE_SEPARATOR.split(self.text)
+
+
+class AttributePair:
+    """One key against its value, as the caller gave them."""
+
+    def __init__(self, key: str, value: str) -> None:
+        self.key = key
+        self.value = value
+
+    @property
+    def checked(self) -> tuple[str, str]:
+        """The key against its value.
+
+        Raises
+        ------
+        ValueError
+            The key is outside the grammar, or the value is empty or
+            holds a line break, checked in that order.
+        """
+        if not ATTRIBUTE_KEY.fullmatch(self.key):
+            raise ValueError(
+                'attribute key must be a lowercase identifier, '
+                f'not {self.key!r}'
+            )
+        if not self.value:
+            raise ValueError(f'attribute {self.key!r} must hold a value')
+        if '\n' in self.value or '\r' in self.value:
+            raise ValueError(
+                f'attribute {self.key!r} must hold no line break, '
+                f'not {self.value!r}'
+            )
+        return self.key, self.value
+
+
+class AttributeSegment:
+    """One `key=value` segment of the attributes a caller supplies."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @property
+    def pair(self) -> tuple[str, str]:
+        """The key against its value: the segment split at its first `=`.
+
+        Raises
+        ------
+        ValueError
+            The segment holds no `=`.
+        """
+        key, sign, value = self.text.partition('=')
+        if not sign:
+            raise ValueError(
+                f'attribute must read key=value, not {self.text!r}'
+            )
+        return key, value

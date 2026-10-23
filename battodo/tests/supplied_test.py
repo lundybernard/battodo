@@ -7,6 +7,9 @@ from unittest.mock import (
 )
 
 from ..supplied import (
+    AttributePair,
+    AttributeSegment,
+    DescriptionLine,
     SuppliedAttributes,
     SuppliedDescription,
     SuppliedEdit,
@@ -347,6 +350,14 @@ class SuppliedDescriptionTests(TestCase):
                 'A line.\r',
                 "description line 'A line.\\r' holds a carriage return",
             ),
+            'an earlier line is read first': (
+                'A line.\r\n## A heading',
+                "description line 'A line.\\r' holds a carriage return",
+            ),
+            'a heading is read before a carriage return': (
+                '## A heading\r',
+                "description line '## A heading\\r' reads as a heading",
+            ),
         }
         for name, (text, message) in refused.items():
             with t.subTest(name):
@@ -356,6 +367,64 @@ class SuppliedDescriptionTests(TestCase):
                     _ = t.sd.lines
 
                 t.assertEqual(str(caught.exception), message)
+
+
+class DescriptionLineTests(TestCase):
+    """Unit tests for battodo.supplied.DescriptionLine."""
+
+    def setUp(t) -> None:
+        t.dl = DescriptionLine('  An indented line.  ')
+
+    @patch.object(DescriptionLine, '_refusal', new_callable=PropertyMock)
+    def test_text(t, refusal: PropertyMock) -> None:
+        with t.subTest('the line, stripped of its indent'):
+            refusal.return_value = None
+            ret = t.dl.text
+            t.assertEqual(ret, 'An indented line.')
+
+        with t.subTest('a refusal names the line as given'):
+            refusal.return_value = 'reads as a heading'
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.dl.text
+
+            t.assertEqual(
+                str(caught.exception),
+                "description line '  An indented line.  ' reads as a heading",
+            )
+
+    def test_refusal(t) -> None:
+        cases = {
+            'a description line': ('  An indented line.  ', None),
+            'a blank line': ('  ', 'is blank'),
+            'a task line': ('  - [x] A done task', 'reads as a task line'),
+            'a heading': ('## A heading', 'reads as a heading'),
+            'a comment': ('  <!-- A comment -->', 'reads as a comment'),
+            'a carriage return': ('A line.\r', 'holds a carriage return'),
+            'a heading before a carriage return': (
+                '## A heading\r',
+                'reads as a heading',
+            ),
+        }
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                t.dl._raw_text = text
+                ret = t.dl._refusal
+                t.assertEqual(ret, expected)
+
+    def test_stripped(t) -> None:
+        cases = {
+            'the indent and the trailing spaces go': (
+                '  An indented line.  ',
+                'An indented line.',
+            ),
+            'a carriage return goes too': ('A line.\r', 'A line.'),
+        }
+        for name, (text, expected) in cases.items():
+            with t.subTest(name):
+                t.dl._raw_text = text
+                ret = t.dl._stripped
+                t.assertEqual(ret, expected)
 
 
 class SuppliedFieldsTests(TestCase):
@@ -388,52 +457,72 @@ class SuppliedFieldsTests(TestCase):
             ],
         )
 
-    @patch(f'{SRC}.parse_date', autospec=True)
-    @patch(f'{SRC}.next_due', autospec=True)
-    def test_checked(t, next_due: MagicMock, parse_date: MagicMock) -> None:
-        with t.subTest('the supplied fields, each value read'):
+    @patch.object(SuppliedFields, '_given', new_callable=PropertyMock)
+    def test_checked(t, given: PropertyMock) -> None:
+        with t.subTest('the supplied fields, each value as read'):
+            given.return_value = {'P': '3'}
             ret = t.sf.checked
             t.assertEqual(ret, {'TAGS': 'a-tag', 'P': '3'})
 
-        with t.subTest('a due date is written as the parser reads it'):
+        with t.subTest('a value read in another form replaces the given one'):
+            t.sf.fields = {'DUE': 'a due date', 'TAGS': 'a-tag'}
+            given.return_value = {'DUE': '2026-09-01'}
+
+            ret = t.sf.checked
+
+            t.assertEqual(
+                list(ret.items()),
+                [('DUE', '2026-09-01'), ('TAGS', 'a-tag')],
+            )
+
+    @patch.object(SuppliedFields, '_read', new_callable=PropertyMock)
+    def test_given(t, read: PropertyMock) -> None:
+        cases = {
+            'each value read, none where none is given': (
+                {'P': '3', 'LOE': None, 'DUE': '2026-09-01', 'REPEAT': None},
+                {'P': '3', 'DUE': '2026-09-01'},
+            ),
+            'nothing given: nothing': (
+                {'P': None, 'LOE': None, 'DUE': None, 'REPEAT': None},
+                {},
+            ),
+        }
+        for name, (found, expected) in cases.items():
+            with t.subTest(name):
+                read.return_value = found
+                ret = t.sf._given
+                t.assertEqual(ret, expected)
+
+    @patch(f'{SRC}.parse_date', autospec=True)
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_read(t, next_due: MagicMock, parse_date: MagicMock) -> None:
+        with t.subTest('each field in order, None where none is given'):
+            ret = t.sf._read
+            t.assertEqual(
+                list(ret.items()),
+                [('P', '3'), ('LOE', None), ('DUE', None), ('REPEAT', None)],
+            )
+
+        with t.subTest('a due date as the parser reads it'):
             t.sf.fields = {'DUE': 'a due date'}
             parse_date.return_value = date(2026, 9, 1)
-
-            ret = t.sf.checked
-
-            parse_date.assert_called_once_with('a due date')
-            t.assertEqual(ret, {'DUE': '2026-09-01'})
-
-        with t.subTest('a recurrence is read against the day'):
-            t.sf.fields = {'REPEAT': 'a recurrence'}
-
-            ret = t.sf.checked
-
-            next_due.assert_called_once_with('a recurrence', TODAY)
-            t.assertEqual(ret, {'REPEAT': 'a recurrence'})
-
-        with t.subTest('a recurrence the scheduler cannot read'):
-            next_due.side_effect = ValueError('unrecognised REPEAT value')
-            with t.assertRaisesRegex(ValueError, 'unrecognised REPEAT'):
-                _ = t.sf.checked
+            ret = t.sf._read
+            t.assertEqual(ret['DUE'], '2026-09-01')
 
         parse_date.return_value = None
+        next_due.side_effect = ValueError('unrecognised REPEAT value')
         refused = {
-            'a priority that is not a number': (
-                {'P': 'high'},
-                "P must be a whole number, not 'high'",
-            ),
-            'a level of effort off the scale': (
-                {'LOE': '4'},
-                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
-            ),
-            'a due date that does not read': (
-                {'DUE': 'someday'},
-                "DUE must be an ISO date, not 'someday'",
-            ),
             'a priority is read first, a recurrence last': (
                 {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4', 'P': 'high'},
                 "P must be a whole number, not 'high'",
+            ),
+            'a level of effort is read before a due date': (
+                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4'},
+                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+            ),
+            'a due date is read before a recurrence': (
+                {'REPEAT': 'often', 'DUE': 'x'},
+                "DUE must be an ISO date, not 'x'",
             ),
         }
         for name, (fields, message) in refused.items():
@@ -441,9 +530,115 @@ class SuppliedFieldsTests(TestCase):
                 t.sf.fields = fields
 
                 with t.assertRaises(ValueError) as caught:
-                    _ = t.sf.checked
+                    _ = t.sf._read
 
                 t.assertEqual(str(caught.exception), message)
+
+    def test_priority(t) -> None:
+        with t.subTest('the priority, as given'):
+            ret = t.sf.priority
+            t.assertEqual(ret, '3')
+
+        with t.subTest('none given: none'):
+            t.sf.fields = {}
+            ret = t.sf.priority
+            t.assertIsNone(ret)
+
+        refused = {
+            'a priority that is not a number': (
+                'high',
+                "P must be a whole number, not 'high'",
+            ),
+            'an empty priority': ('', "P must be a whole number, not ''"),
+        }
+        for name, (value, message) in refused.items():
+            with t.subTest(name):
+                t.sf.fields = {'P': value}
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sf.priority
+
+                t.assertEqual(str(caught.exception), message)
+
+    def test_loe(t) -> None:
+        for value in ('1', '2', '3', '5', '8'):
+            with t.subTest('a level of effort on the scale', value=value):
+                t.sf.fields = {'LOE': value}
+                ret = t.sf.loe
+                t.assertEqual(ret, value)
+
+        with t.subTest('none given: none'):
+            t.sf.fields = {}
+            ret = t.sf.loe
+            t.assertIsNone(ret)
+
+        with t.subTest('a level of effort off the scale'):
+            t.sf.fields = {'LOE': '4'}
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sf.loe
+
+            t.assertEqual(
+                str(caught.exception),
+                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+            )
+
+    @patch(f'{SRC}.parse_date', autospec=True)
+    def test_due(t, parse_date: MagicMock) -> None:
+        with t.subTest('a due date, as the parser reads it'):
+            t.sf.fields = {'DUE': 'a due date'}
+            parse_date.return_value = date(2026, 9, 1)
+
+            ret = t.sf.due
+
+            parse_date.assert_called_once_with('a due date')
+            t.assertEqual(ret, '2026-09-01')
+
+        with t.subTest('none given: none, and nothing is read'):
+            parse_date.reset_mock()
+            t.sf.fields = {}
+
+            ret = t.sf.due
+
+            parse_date.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('a due date that does not read'):
+            t.sf.fields = {'DUE': 'someday'}
+            parse_date.return_value = None
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.sf.due
+
+            t.assertEqual(
+                str(caught.exception), "DUE must be an ISO date, not 'someday'"
+            )
+
+    @patch(f'{SRC}.next_due', autospec=True)
+    def test_repeat(t, next_due: MagicMock) -> None:
+        with t.subTest('a recurrence, read against the day'):
+            t.sf.fields = {'REPEAT': 'a recurrence'}
+
+            ret = t.sf.repeat
+
+            next_due.assert_called_once_with('a recurrence', TODAY)
+            t.assertEqual(ret, 'a recurrence')
+
+        with t.subTest('none given: none, and nothing is read'):
+            next_due.reset_mock()
+            t.sf.fields = {}
+
+            ret = t.sf.repeat
+
+            next_due.assert_not_called()
+            t.assertIsNone(ret)
+
+        with t.subTest('a recurrence the scheduler cannot read'):
+            t.sf.fields = {'REPEAT': 'often'}
+            next_due.side_effect = ValueError('unrecognised REPEAT value')
+
+            with t.assertRaisesRegex(ValueError, 'unrecognised REPEAT'):
+                _ = t.sf.repeat
 
     def test_refuse_root_fields(t) -> None:
         with t.subTest('the fields a subtask carries, a repeat among them'):
@@ -523,6 +718,18 @@ class SuppliedAttributesTests(TestCase):
                 [('note', 'a note'), ('cost', '45.00'), ('note', 'another')],
                 "attribute 'note' is given twice",
             ),
+            'a key is read before its value': (
+                [('Place', '')],
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'an earlier pair is read first': (
+                [('cost', ''), ('Place', 'Main St')],
+                "attribute 'cost' must hold a value",
+            ),
+            'a key given twice before a later key outside the grammar': (
+                [('note', 'a note'), ('note', 'another'), ('Place', 'x')],
+                "attribute 'note' is given twice",
+            ),
         }
         for name, (given, message) in refused.items():
             with t.subTest(name):
@@ -533,42 +740,53 @@ class SuppliedAttributesTests(TestCase):
 
                 t.assertEqual(str(caught.exception), message)
 
-    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
-    def test_pairs(t, segments: PropertyMock) -> None:
-        with t.subTest('each segment split at its first =, then the note'):
-            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+    @patch.object(
+        SuppliedAttributes, '_segment_pairs', new_callable=PropertyMock
+    )
+    def test_pairs(t, segment_pairs: PropertyMock) -> None:
+        segment_pairs.return_value = [('a_key', 'a value')]
+
+        with t.subTest('each segment pair, then the note'):
             ret = t.sa.pairs
-            t.assertEqual(
-                ret,
-                [('a_key', 'a value'), ('sum', '1+1=2'), ('note', 'a note')],
-            )
+            t.assertEqual(ret, [('a_key', 'a value'), ('note', 'a note')])
 
         with t.subTest('the note enters whole, never split'):
-            segments.return_value = []
             t.sa.note = 'a note, cost=45.00'
-
             ret = t.sa.pairs
+            t.assertEqual(
+                ret, [('a_key', 'a value'), ('note', 'a note, cost=45.00')]
+            )
 
-            t.assertEqual(ret, [('note', 'a note, cost=45.00')])
-
-        with t.subTest('no note: the segments alone'):
-            segments.return_value = ['a_key=a value']
+        with t.subTest('no note: the segment pairs alone'):
             t.sa.note = None
-
             ret = t.sa.pairs
-
             t.assertEqual(ret, [('a_key', 'a value')])
 
-        with t.subTest('a segment with no = is refused'):
-            segments.return_value = ['a value']
+    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
+    def test_segment_pairs(t, segments: PropertyMock) -> None:
+        with t.subTest('each segment split at its first ='):
+            segments.return_value = ['a_key=a value', 'sum=1+1=2']
+            ret = t.sa._segment_pairs
+            t.assertEqual(ret, [('a_key', 'a value'), ('sum', '1+1=2')])
 
-            with t.assertRaises(ValueError) as caught:
-                _ = t.sa.pairs
-
-            t.assertEqual(
-                str(caught.exception),
+        refused = {
+            'a segment with no = is refused': (
+                ['a value'],
                 "attribute must read key=value, not 'a value'",
-            )
+            ),
+            'an earlier segment is read first': (
+                ['a_key=a value', 'one value', 'another'],
+                "attribute must read key=value, not 'one value'",
+            ),
+        }
+        for name, (found, message) in refused.items():
+            with t.subTest(name):
+                segments.return_value = found
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sa._segment_pairs
+
+                t.assertEqual(str(caught.exception), message)
 
     def test_segments(t) -> None:
         with t.subTest('the text the write was given'):
@@ -617,3 +835,79 @@ class SuppliedAttributesTests(TestCase):
                 t.sa.text = text
                 ret = t.sa.segments
                 t.assertEqual(ret, expected)
+
+
+class AttributePairTests(TestCase):
+    """Unit tests for battodo.supplied.AttributePair."""
+
+    def setUp(t) -> None:
+        t.ap = AttributePair('cost', '45.00')
+
+    def test_checked(t) -> None:
+        with t.subTest('the key against its value'):
+            ret = t.ap.checked
+            t.assertEqual(ret, ('cost', '45.00'))
+
+        refused = {
+            'a key with a capital': (
+                ('Place', 'Main St'),
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+            'an empty value': (
+                ('cost', ''),
+                "attribute 'cost' must hold a value",
+            ),
+            'a value with a line feed': (
+                ('note', 'a\nnote'),
+                "attribute 'note' must hold no line break, not 'a\\nnote'",
+            ),
+            'a value with a carriage return': (
+                ('note', 'a\rnote'),
+                "attribute 'note' must hold no line break, not 'a\\rnote'",
+            ),
+            'a key is read before its value': (
+                ('Place', ''),
+                "attribute key must be a lowercase identifier, not 'Place'",
+            ),
+        }
+        for name, ((key, value), message) in refused.items():
+            with t.subTest(name):
+                t.ap.key, t.ap.value = key, value
+
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.ap.checked
+
+                t.assertEqual(str(caught.exception), message)
+
+
+class AttributeSegmentTests(TestCase):
+    """Unit tests for battodo.supplied.AttributeSegment."""
+
+    def setUp(t) -> None:
+        t.as_ = AttributeSegment('a_key=a value')
+
+    def test_pair(t) -> None:
+        split = {
+            'the key against its value': (
+                'a_key=a value',
+                ('a_key', 'a value'),
+            ),
+            'split at the first =': ('sum=1+1=2', ('sum', '1+1=2')),
+            'an empty value': ('cost=', ('cost', '')),
+        }
+        for name, (text, expected) in split.items():
+            with t.subTest(name):
+                t.as_.text = text
+                ret = t.as_.pair
+                t.assertEqual(ret, expected)
+
+        with t.subTest('a segment with no = is refused'):
+            t.as_.text = 'a value'
+
+            with t.assertRaises(ValueError) as caught:
+                _ = t.as_.pair
+
+            t.assertEqual(
+                str(caught.exception),
+                "attribute must read key=value, not 'a value'",
+            )
