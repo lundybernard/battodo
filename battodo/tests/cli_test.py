@@ -8,7 +8,6 @@ from unittest.mock import Mock, call, patch, sentinel
 from ..cli import (
     BATCLI,
     DEFAULT_PERIOD,
-    LOG_LEVELS,
     MESSAGES,
     PERIODS,
     ArgumentParser,
