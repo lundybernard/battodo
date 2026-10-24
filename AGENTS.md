@@ -13,6 +13,10 @@ project template, so its design rules are stricter than its size suggests.
   with the project.
 - `docs/decisions/`: the ADRs.
 - `docs/lessons/`: the informal findings log.
+- `battodo/cli.py`: the argparse parser and the `BATCLI` boundary.
+- `battodo/lib.py`: the boundary layer that every UI imports.
+- `battodo/logconf.py`: the logging wiring that `cli.py` applies at import.
+- `battodo/conf.py`: the batconf configuration dataclasses and `get_config`.
 
 ## Design rules
 
@@ -87,6 +91,9 @@ internal.
   the named-intermediate rule above keeps.
 - Docstrings use the numpydoc sections `Parameters`, `Returns`, and
   `Raises` with underline headers, as `battodo/lib.py` does.
+- A code comment states the one constraint that the code cannot show, in
+  one or two active-voice sentences. It says only what the code and the
+  neighbouring comments leave unsaid.
 - Write docstrings, commit bodies, docs, and ADRs in short sentences,
   active voice, and present tense (ASD-STE100).
 - Diagnose before you fix: show the failure point before you change the
@@ -97,8 +104,14 @@ internal.
 - Subject: `<type>: <summary>`, 50 characters as the target and 72 as the
   cap. The summary is lowercase and names the symbol or file changed. The
   scope slot stays empty; `(RED)` is the one marker it carries.
-- Every commit keeps `pixi run tests` green. A `test(RED): <summary>`
-  commit adds a failing test, and the next commit turns it green.
+- Type: `feat`, `fix`, `refactor`, `test`, `lint`, `docs`, or `chore`.
+  A linter-driven change uses `lint`, never `style`.
+- Every commit passes `pixi run lint` and `pixi run tests`, not only the
+  tip. A `test(RED): <summary>` commit adds a failing test, and the next
+  commit turns it green.
+- A fix to an earlier commit of the same PR squashes into that commit, so
+  each hunk lands once, in its final form. The PR never carries a hunk and
+  its later revert.
 - Body: the why, in present tense, only when the subject does not carry
   it.
 - An issue reference is a trailer, `Resolves: #N` or `Refs: #N`. Code
@@ -107,14 +120,20 @@ internal.
   signed commits.
 - An AI agent that helps write a commit signs a trailer
   `Assisted-by: <tool>:<model> [<agent name>]`, for example
-  `Assisted-by: claude-code:claude-opus-5-5 [The Engineer]`.
-  `Co-authored-by` names a person.
+  `Assisted-by: claude-code:claude-opus-5-5 [The Engineer]`. The
+  `[<agent name>]` part is optional. `Co-authored-by` names a person.
+- The trailers (`Resolves:` or `Refs:`, `Assisted-by:`, `Co-authored-by:`)
+  form one contiguous block at the end of the message, with no blank line
+  inside the block, so that `git interpret-trailers` reads every line.
 
 ## Tests
 
 - Unit tests live in `battodo/**/tests/`. They touch no disk, mock all
   I/O, and carry a 100% coverage gate. The root `tests/` holds the
   integration, behavioral, and property suites.
+- A bug fix starts with a test that reproduces the reported behaviour at
+  the highest layer that shows it, usually `tests/behavioral/`. The unit
+  tests follow.
 - One test method per function under test, `test_<fn>`. Each code path is
   a `subTest` inside it, as in `CommandsNoteTests.test_note` in
   `battodo/tests/cli_test.py`.
@@ -131,10 +150,15 @@ internal.
 - A test has three phases: setup, execute, assert. From four statements
   up, blank lines separate them. Call the code under test in the execute
   phase and bind its result; the assert phase reads that name.
+- Each `subTest` block repeats the three phases, under the same
+  blank-line rule. A mock reused across `subTest` blocks gets
+  `reset_mock()` as the first statement of each later block.
 
 ## PR notes
 
 - Write about five bullets, decisions first.
 - Name the `SKILL.md` hunk, or state that the change is internal.
+- The body carries one verification line that names each gate that ran
+  and its exit code. It restates no diff hunk.
 - Start agent-written GitHub prose with the line
   `:robot: _AI text below_ :robot:`.
