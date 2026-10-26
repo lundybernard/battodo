@@ -107,22 +107,14 @@ class SelectionTests(TestCase):
 
             t.assertIn(str(t.resolved), str(caught.exception))
 
-    def test_active(t) -> None:
-        with t.subTest('with no schedule, no category is active'):
-            ret = t.s.active
-            t.assertEqual(ret, set())
+    @patch.object(Selection, '_scheduled', new_callable=PropertyMock)
+    def test_active(t, scheduled: PropertyMock) -> None:
+        t.s.always_active = ALWAYS
+        scheduled.return_value = {'a-list'}
 
-        for day, hour in HOURS:
-            with t.subTest(day=day, hour=hour):
-                ret = Selection(
-                    t.directory,
-                    at_hour(day, hour),
-                    show_all=False,
-                    windows=SCHEDULE,
-                    always_active=ALWAYS,
-                ).active
+        ret = t.s.active
 
-                t.assertEqual(ret, opens(day, hour))
+        t.assertEqual(ret, {'a-list', 'a-third-list', 'a-fourth-list'})
 
     def test_always_open(t) -> None:
         with t.subTest('no name is always open by default'):
@@ -918,19 +910,6 @@ def at(iso: str) -> datetime:
 def at_hour(day: int, hour: int) -> datetime:
     """The instant `hour` o'clock falls on, `day` days into the week."""
     return datetime.combine(WEEK_START + timedelta(days=day), time(hour))
-
-
-def opens(day: int, hour: int) -> set[str]:
-    """The categories open on `day` at `hour`.
-
-    The names of ALWAYS stay open at every hour. The window table adds
-    the rest.
-    """
-    names = {'a-third-list', 'a-fourth-list'}
-    for name, days, hours in WINDOWS:
-        if day in days and hour in hours:
-            names.add(name)
-    return names
 
 
 def scheduled_at(day: int, hour: int) -> set[str]:

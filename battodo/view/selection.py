@@ -143,13 +143,7 @@ class Selection:
         """The categories open at `now`: the always-open names, and each
         category with a window that holds now.
         """
-        names = set(self.always_open)
-        names.update(
-            name
-            for name, windows in self.schedule.items()
-                if any(window.holds(self.day, self.hour) for window in windows)
-        )  # fmt: skip
-        return names
+        return set(self.always_open) | self._scheduled
 
     @property
     def always_open(self) -> frozenset[str]:
@@ -160,7 +154,11 @@ class Selection:
     @property
     def _scheduled(self) -> set[str]:
         """The schedule categories with a window that holds now."""
-        raise NotImplementedError
+        return {
+            name
+            for name, windows in self.schedule.items()
+                if any(window.holds(self.day, self.hour) for window in windows)
+        }  # fmt: skip
 
     @property
     def schedule(self) -> dict[str, list['Window']]:
