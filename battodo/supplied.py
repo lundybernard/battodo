@@ -21,7 +21,6 @@ from .parser import (
 )
 from .repeat import next_due
 
-LOE_VALUES = ('1', '2', '3', '5', '8')
 # The fields a top-level task owns. SCHEMA.md gives a subtask no `P` of
 # its own, because only a top-level task is ranked.
 ROOT_ONLY_FIELDS = ('P',)
@@ -366,12 +365,13 @@ class SuppliedFields:
         Raises
         ------
         ValueError
-            The value is not on the scale.
+            The value is not a whole number of 1 or more.
         """
         loe = self.fields.get('LOE')
-        if loe is not None and loe not in LOE_VALUES:
+        # `isdecimal`, not `isdigit`: `int` cannot read a superscript digit.
+        if loe is not None and not (loe.isdecimal() and int(loe) >= 1):
             raise ValueError(
-                f'LOE must be one of {", ".join(LOE_VALUES)}, not {loe!r}'
+                f'LOE must be a whole number of 1 or more, not {loe!r}'
             )
         return loe
 

@@ -49,7 +49,7 @@ MESSAGES = {
     'add.title.metavar': 'title',
     'add.title.help': 'the task title, without any [FIELD:] markup',
     'add.priority.help': 'priority multiplier, 0 and up; absent reads as 0',
-    'add.loe.help': 'level of effort: 1, 2, 3, 5 or 8',
+    'add.loe.help': 'level of effort, a whole number of 1 or more',
     'add.due.help': 'due date, YYYY-MM-DD',
     'add.repeat.help': 'recurrence: Nd, Nw, weekly:DAY or monthly:N',
     'add.tags.help': 'comma-separated tags',
