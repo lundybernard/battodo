@@ -142,10 +142,23 @@ interface.
 ## Tests
 
 - Unit tests live in `battodo/**/tests/`. They touch no disk, mock all
-  I/O, and carry a 100% coverage gate. The root `tests/` holds the
-  integration, behavioral, and property suites.
+  I/O, and carry a 100% coverage gate.
+- The root `tests/` holds three suites, one per purpose, beside the
+  property suite in `tests/property/`:
+  - `tests/cli/`: the tests that drive the CLI, and their harness.
+  - `tests/behavioral/`: the BDD suite. It covers the behaviour of the
+    public API, its edge cases, its error handling, and its refusals. A
+    solo class, which exposes one public property such as `.text`, gets
+    one test method per behaviour here.
+  - `tests/integration/`: the happy path where the parts meet. One test
+    method per property, with a `subTest` per code path. An integration
+    test may read a private attribute whose value depends on an
+    integration.
+- A rising `subTest` count on one property means that the property
+  splits, never the test.
 - A bug fix starts with a test that reproduces the reported behaviour at
-  the highest layer that shows it, usually `tests/behavioral/`. The unit
+  the highest layer that shows it: `tests/cli/` for a bug that the CLI
+  shows, and `tests/behavioral/` for a bug that the API shows. The unit
   tests follow.
 - One test method per function under test, `test_<fn>`. Each code path is
   a `subTest` inside it, as in `CommandsNoteTests.test_note` in
