@@ -513,12 +513,12 @@ class SuppliedFieldsTests(TestCase):
         next_due.side_effect = ValueError('unrecognised REPEAT value')
         refused = {
             'a priority is read first, a recurrence last': (
-                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4', 'P': 'high'},
+                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '0', 'P': 'high'},
                 "P must be a whole number, not 'high'",
             ),
             'a level of effort is read before a due date': (
-                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '4'},
-                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+                {'REPEAT': 'often', 'DUE': 'x', 'LOE': '0'},
+                "LOE must be a whole number of 1 or more, not '0'",
             ),
             'a due date is read before a recurrence': (
                 {'REPEAT': 'often', 'DUE': 'x'},
@@ -561,8 +561,8 @@ class SuppliedFieldsTests(TestCase):
                 t.assertEqual(str(caught.exception), message)
 
     def test_loe(t) -> None:
-        for value in ('1', '2', '3', '5', '8'):
-            with t.subTest('a level of effort on the scale', value=value):
+        for value in ('1', '4', '13'):
+            with t.subTest('a whole number of 1 or more', value=value):
                 t.sf.fields = {'LOE': value}
                 ret = t.sf.loe
                 t.assertEqual(ret, value)
@@ -572,16 +572,36 @@ class SuppliedFieldsTests(TestCase):
             ret = t.sf.loe
             t.assertIsNone(ret)
 
-        with t.subTest('a level of effort off the scale'):
-            t.sf.fields = {'LOE': '4'}
+        refused = {
+            'zero, under the bound': (
+                '0',
+                "LOE must be a whole number of 1 or more, not '0'",
+            ),
+            'a negative number': (
+                '-1',
+                "LOE must be a whole number of 1 or more, not '-1'",
+            ),
+            'a number that is not whole': (
+                '2.5',
+                "LOE must be a whole number of 1 or more, not '2.5'",
+            ),
+            'a digit that int() does not read': (
+                '²',
+                "LOE must be a whole number of 1 or more, not '²'",
+            ),
+            'an empty level of effort': (
+                '',
+                "LOE must be a whole number of 1 or more, not ''",
+            ),
+        }
+        for name, (value, message) in refused.items():
+            with t.subTest(name):
+                t.sf.fields = {'LOE': value}
 
-            with t.assertRaises(ValueError) as caught:
-                _ = t.sf.loe
+                with t.assertRaises(ValueError) as caught:
+                    _ = t.sf.loe
 
-            t.assertEqual(
-                str(caught.exception),
-                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
-            )
+                t.assertEqual(str(caught.exception), message)
 
     @patch(f'{SRC}.parse_date', autospec=True)
     def test_due(t, parse_date: MagicMock) -> None:
