@@ -1,7 +1,7 @@
 from unittest import TestCase
 from unittest.mock import Mock
 
-from ..table import Table, clip, column_widths, page_text, table_width
+from ..table import Table, _clip, column_widths, page_text, table_width
 
 COLUMNS = ('NUM', 'TEXT')
 ALIGN = ('>', '<')
@@ -62,13 +62,13 @@ class TableTests(TestCase):
 
     def test_title(t) -> None:
         with t.subTest('a plain name is capitalized'):
-            t.tb.name = 'list'
-            ret = t.tb.title
+            t.tb._name = 'list'
+            ret = t.tb._title
             t.assertEqual(ret, 'List')
 
         with t.subTest('a hyphen reads as the space it stands in for'):
-            t.tb.name = 'another-list'
-            ret = t.tb.title
+            t.tb._name = 'another-list'
+            ret = t.tb._title
             t.assertEqual(ret, 'Another list')
 
     def test_heading(t) -> None:
@@ -84,7 +84,7 @@ class TableTests(TestCase):
             # The rule would have to run backwards to fit. A heading
             # that overruns its own narrow table beats one that wraps,
             # and a negative count must not eat the title.
-            t.tb.widths = [1, 1]
+            t.tb._widths = [1, 1]
             ret = t.tb.heading
             t.assertEqual(ret, '── Another list ')
 
@@ -94,50 +94,50 @@ class TableTests(TestCase):
             t.assertEqual(ret, ['   NUM  TEXT', '   4.2  A cell'])
 
         with t.subTest('an abridged table says how much it holds back'):
-            t.tb.hidden = 3
+            t.tb._hidden = 3
             ret = t.tb.lines
             t.assertEqual(ret[-1], '  … and 3 more')
 
-    def test_line(t) -> None:
+    def test__line(t) -> None:
         with t.subTest('cells are padded and aligned to the widths'):
-            ret = t.tb.line(CELLS)
+            ret = t.tb._line(CELLS)
             t.assertEqual(ret, '   4.2  A cell')
 
         with t.subTest('trailing space is not left on the line'):
-            ret = t.tb.line(('4.2', ''))
+            ret = t.tb._line(('4.2', ''))
             t.assertEqual(ret, '   4.2')
 
         with t.subTest('a cell too wide for its column is clipped'):
-            ret = t.tb.line(('12345', 'A' * 40))
+            ret = t.tb._line(('12345', 'A' * 40))
             t.assertEqual(ret, '  123…  ' + 'A' * 19 + '…')
 
         with t.subTest('each column aligns the way the table says'):
-            t.tb.align = ('<', '<')
-            ret = t.tb.line(CELLS)
+            t.tb._align = ('<', '<')
+            ret = t.tb._line(CELLS)
             t.assertEqual(ret, '  4.2   A cell')
 
     def test_name(t) -> None:
-        ret = t.tb.name
+        ret = t.tb._name
         t.assertEqual(ret, 'another-list')
 
     def test_columns(t) -> None:
-        ret = t.tb.columns
+        ret = t.tb._columns
         t.assertEqual(ret, COLUMNS)
 
     def test_align(t) -> None:
-        ret = t.tb.align
+        ret = t.tb._align
         t.assertEqual(ret, ALIGN)
 
     def test_rows(t) -> None:
-        ret = t.tb.rows
+        ret = t.tb._rows
         t.assertEqual(ret, [CELLS])
 
     def test_widths(t) -> None:
-        ret = t.tb.widths
+        ret = t.tb._widths
         t.assertEqual(ret, WIDTHS)
 
     def test_hidden(t) -> None:
-        ret = t.tb.hidden
+        ret = t.tb._hidden
         t.assertEqual(ret, 0)
 
 
@@ -159,14 +159,14 @@ class TableWidthTests(TestCase):
 
 
 class ClipTests(TestCase):
-    """Unit tests for battodo.table.clip."""
+    """Unit tests for battodo.table._clip."""
 
     def test_fits(t) -> None:
-        ret = clip('abc', 3)
+        ret = _clip('abc', 3)
         t.assertEqual(ret, 'abc')
 
     def test_cut(t) -> None:
-        ret = clip('abcdef', 3)
+        ret = _clip('abcdef', 3)
 
         with t.subTest('text too long is cut, and says so'):
             t.assertEqual(ret, 'ab…')

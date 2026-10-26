@@ -38,16 +38,16 @@ class Table:
         widths: list[int],
         hidden: int = 0,
     ) -> None:
-        self.name = name
-        self.columns = columns
-        self.align = align
-        self.rows = rows
-        self.widths = widths
-        self.hidden = hidden
+        self._name = name
+        self._columns = columns
+        self._align = align
+        self._rows = rows
+        self._widths = widths
+        self._hidden = hidden
 
     @property
-    def title(self) -> str:
-        return self.name.replace('-', ' ').capitalize()
+    def _title(self) -> str:
+        return self._name.replace('-', ' ').capitalize()
 
     @property
     def heading(self) -> str:
@@ -56,23 +56,23 @@ class Table:
         Ruled to the table's own width, not the terminal's: a divider
         that wraps looks worse than a row that does.
         """
-        prefix = f'{RULE * 2} {self.title} '
-        return prefix + RULE * max(0, table_width(self.widths) - len(prefix))
+        prefix = f'{RULE * 2} {self._title} '
+        return prefix + RULE * max(0, table_width(self._widths) - len(prefix))
 
     @property
     def lines(self) -> list[str]:
         """Everything under the heading: the column names, then the rows."""
-        out = [self.line(self.columns)]
-        out.extend(self.line(cells) for cells in self.rows)
-        if self.hidden:
-            out.append(f'{INDENT}{ELLIPSIS} and {self.hidden} more')
+        out = [self._line(self._columns)]
+        out.extend(self._line(cells) for cells in self._rows)
+        if self._hidden:
+            out.append(f'{INDENT}{ELLIPSIS} and {self._hidden} more')
         return out
 
-    def line(self, cells: tuple[str, ...]) -> str:
+    def _line(self, cells: tuple[str, ...]) -> str:
         """Clip, pad and align one row's cells. Trailing space is stripped."""
         laid = (
-            f'{clip(cell, size):{align}{size}}'
-            for cell, align, size in zip(cells, self.align, self.widths)
+            f'{_clip(cell, size):{align}{size}}'
+            for cell, align, size in zip(cells, self._align, self._widths)
         )
         return f'{INDENT}{GAP.join(laid)}'.rstrip()
 
@@ -82,7 +82,7 @@ def table_width(widths: list[int]) -> int:
     return len(INDENT) + sum(widths) + len(GAP) * (len(widths) - 1)
 
 
-def clip(text: str, width: int) -> str:
+def _clip(text: str, width: int) -> str:
     """`text` cut to `width`, the cut marked where it happened."""
     if len(text) <= width:
         return text
