@@ -75,8 +75,8 @@ class Digest:
     """What one digest holds: one period of one log, by category."""
 
     def __init__(self, directory: Path, now: datetime, *, period: str) -> None:
-        self.directory = directory
-        self.now = now
+        self._directory = directory
+        self._now = now
         self.period = period
 
     @classmethod
@@ -91,8 +91,8 @@ class Digest:
         return cls(Path(conf.view.source_dir), now, period=period)
 
     @property
-    def today(self) -> date:
-        return self.now.date()
+    def _today(self) -> date:
+        return self._now.date()
 
     @cached_property
     def start(self) -> date:
@@ -108,14 +108,14 @@ class Digest:
                 f'unknown period {self.period!r}; '
                 f'choose one of {", ".join(PERIODS)}'
             )
-        return PERIOD_STARTS[self.period](self.today)
+        return PERIOD_STARTS[self.period](self._today)
 
     @property
     def end(self) -> date:
-        return self.today
+        return self._today
 
     @cached_property
-    def path(self) -> Path:
+    def _path(self) -> Path:
         """The log this reads.
 
         Raises
@@ -123,14 +123,14 @@ class Digest:
         CompletedError
             The log is not there.
         """
-        found = self.directory.expanduser() / COMPLETED_LOG
+        found = self._directory.expanduser() / COMPLETED_LOG
         if not found.is_file():
             raise CompletedError(f'completed log not found: {found}')
         return found
 
     @cached_property
-    def text(self) -> str:
-        return self.path.read_text(encoding='utf-8')
+    def _text(self) -> str:
+        return self._path.read_text(encoding='utf-8')
 
     @cached_property
     def records(self) -> list['Record']:
@@ -143,7 +143,7 @@ class Digest:
         """
         found = [
             record
-            for line in self.text.split('\n')
+            for line in self._text.split('\n')
                 if (record := read_record(line)) is not None
                 if self.start <= record.day <= self.end
         ]  # fmt: skip
@@ -243,49 +243,49 @@ class DigestView:
     """A digest rendered for a terminal: a header, then a table each."""
 
     def __init__(self, digest: Digest) -> None:
-        self.digest = digest
+        self._digest = digest
 
     @property
-    def span(self) -> str:
+    def _span(self) -> str:
         """The days covered: the first and the last, or the one day."""
-        start, end = self.digest.start, self.digest.end
+        start, end = self._digest.start, self._digest.end
         if start == end:
             return start.isoformat()
         return f'{start.isoformat()} to {end.isoformat()}'
 
     @property
-    def header(self) -> str:
+    def _header(self) -> str:
         return (
-            f'Completed {self.digest.period}: {self.span} '
-            f'— {len(self.digest.records)} done'
+            f'Completed {self._digest.period}: {self._span} '
+            f'— {len(self._digest.records)} done'
         )
 
     @cached_property
-    def widths(self) -> list[int]:
+    def _widths(self) -> list[int]:
         """Each column's width: its widest cell, the name included.
 
         Sized against every record at once, so one set of widths serves
         all of the tables and the columns line up down the whole page.
         """
-        cells = [RecordView(record).cells for record in self.digest.records]
+        cells = [RecordView(record).cells for record in self._digest.records]
         return column_widths(COLUMNS, cells)
 
     @cached_property
-    def tables(self) -> list[Table]:
+    def _tables(self) -> list[Table]:
         return [
             Table(
                 group.name,
                 COLUMNS,
                 ALIGN,
                 [RecordView(record).cells for record in group.records],
-                self.widths,
+                self._widths,
             )
-            for group in self.digest.groups
+            for group in self._digest.groups
         ]
 
     @cached_property
     def text(self) -> str:
-        return page_text(self.header, self.tables)
+        return page_text(self._header, self._tables)
 
     def __str__(self) -> str:
         return self.text
@@ -295,7 +295,7 @@ class RecordView:
     """One record of a digest laid out as the cells of a table line."""
 
     def __init__(self, record: Record) -> None:
-        self.record = record
+        self._record = record
 
     @property
     def cells(self) -> tuple[str, ...]:
@@ -303,15 +303,15 @@ class RecordView:
 
         The attributes follow the title in its cell.
         """
-        title = self.record.title
-        attributes = self.attributes
+        title = self._record.title
+        attributes = self._attributes
         task = f'{title} {attributes}' if attributes else title
-        return (self.record.day.isoformat(), task)
+        return (self._record.day.isoformat(), task)
 
     @property
-    def attributes(self) -> str:
+    def _attributes(self) -> str:
         """Each attribute as `key=value`, in the order logged."""
-        pairs = (f'{key}={value}' for key, value in self.record.attrs.items())
+        pairs = (f'{key}={value}' for key, value in self._record.attrs.items())
         return ', '.join(pairs)
 
 
@@ -319,18 +319,18 @@ class DigestJsonView:
     """A digest laid out as JSON, for an agent to read."""
 
     def __init__(self, digest: Digest) -> None:
-        self.digest = digest
+        self._digest = digest
 
     @property
     def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
+        """`_data` as a JSON document, indented for a person to read too.
 
-        The schema is a contract for agents; see `data` for its shape.
+        The schema is a contract for agents; see `_data` for its shape.
         """
-        return dumps(self.data, indent=2)
+        return dumps(self._data, indent=2)
 
     @property
-    def data(self) -> dict[str, Any]:
+    def _data(self) -> dict[str, Any]:
         """The machine-readable form of the digest.
 
         Shaped as::
@@ -345,44 +345,44 @@ class DigestJsonView:
         of the entries: a digest abridges nothing.
         """
         return {
-            'period': self.digest.period,
-            'start': self.digest.start.isoformat(),
-            'end': self.digest.end.isoformat(),
-            'total': len(self.digest.records),
-            'categories': [group.data for group in self.groups],
+            'period': self._digest.period,
+            'start': self._digest.start.isoformat(),
+            'end': self._digest.end.isoformat(),
+            'total': len(self._digest.records),
+            'categories': [group.data for group in self._groups],
         }
 
     @property
-    def groups(self) -> list['GroupJsonView']:
+    def _groups(self) -> list['GroupJsonView']:
         """The digest's groups, each laid out as JSON."""
-        return [GroupJsonView(group) for group in self.digest.groups]
+        return [GroupJsonView(group) for group in self._digest.groups]
 
 
 class GroupJsonView:
     """One category's records within a digest, laid out as JSON."""
 
     def __init__(self, group: Group) -> None:
-        self.group = group
+        self._group = group
 
     @property
     def data(self) -> dict[str, Any]:
-        """The group as `DigestJsonView.data` records it."""
+        """The group as `DigestJsonView._data` records it."""
         return {
-            'name': self.group.name,
-            'entries': [record.data for record in self.records],
+            'name': self._group.name,
+            'entries': [record.data for record in self._records],
         }
 
     @property
-    def records(self) -> list['RecordJsonView']:
+    def _records(self) -> list['RecordJsonView']:
         """The group's records, each laid out as JSON."""
-        return [RecordJsonView(record) for record in self.group.records]
+        return [RecordJsonView(record) for record in self._group.records]
 
 
 class RecordJsonView:
     """One record of a digest laid out as JSON."""
 
     def __init__(self, record: Record) -> None:
-        self.record = record
+        self._record = record
 
     @property
     def data(self) -> dict[str, Any]:
@@ -391,7 +391,7 @@ class RecordJsonView:
         `attrs` is an empty object where the record carries none.
         """
         return {
-            'date': self.record.day.isoformat(),
-            'title': self.record.title,
-            'attrs': self.record.attrs,
+            'date': self._record.day.isoformat(),
+            'title': self._record.title,
+            'attrs': self._record.attrs,
         }

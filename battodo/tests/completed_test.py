@@ -47,7 +47,7 @@ class DigestTests(TestCase):
         t.d = Digest(t.directory, NOW, period='week')
 
     def test_today(t) -> None:
-        ret = t.d.today
+        ret = t.d._today
         t.assertEqual(ret, TODAY)
 
     def test_start(t) -> None:
@@ -78,7 +78,7 @@ class DigestTests(TestCase):
 
     def test_path(t) -> None:
         with t.subTest('the log sits beside the lists'):
-            ret = t.d.path
+            ret = t.d._path
 
             t.assertIs(ret, t.log)
             t.directory.expanduser.return_value.__truediv__.assert_called_with(
@@ -89,12 +89,12 @@ class DigestTests(TestCase):
             t.log.is_file.return_value = False
 
             with t.assertRaises(CompletedError) as caught:
-                _ = Digest(t.directory, NOW, period='week').path
+                _ = Digest(t.directory, NOW, period='week')._path
 
             t.assertIn('completed log not found', str(caught.exception))
 
     def test_text(t) -> None:
-        ret = t.d.text
+        ret = t.d._text
         t.assertEqual(ret, LOG)
         t.log.read_text.assert_called_once_with(encoding='utf-8')
 
@@ -169,10 +169,10 @@ class DigestFromConfigTests(TestCase):
         digest = Digest.from_config(t.conf, NOW, period='month')
 
         with t.subTest('the source directory is left unexpanded'):
-            t.assertEqual(digest.directory, Path('~/a-source-dir'))
+            t.assertEqual(digest._directory, Path('~/a-source-dir'))
 
         with t.subTest('the clock is the one it was given'):
-            t.assertEqual(digest.now, NOW)
+            t.assertEqual(digest._now, NOW)
 
         with t.subTest('and the period is the one given'):
             t.assertEqual(digest.period, 'month')
@@ -332,16 +332,16 @@ class DigestViewTests(TestCase):
 
     def test_span(t) -> None:
         with t.subTest('the first day and the last'):
-            ret = t.v.span
+            ret = t.v._span
             t.assertEqual(ret, '2026-07-30 to 2026-08-05')
 
         with t.subTest('a single day reads as one date'):
             t.digest.start = TODAY
-            ret = t.v.span
+            ret = t.v._span
             t.assertEqual(ret, '2026-08-05')
 
     def test_header(t) -> None:
-        ret = t.v.header
+        ret = t.v._header
 
         t.assertEqual(
             ret,
@@ -352,7 +352,7 @@ class DigestViewTests(TestCase):
     def test_widths(t, record_view: MagicMock) -> None:
         with t.subTest('each column as wide as its widest cell'):
             record_view.return_value.cells = ('2026-08-02', 'A record cell')
-            ret = t.v.widths
+            ret = t.v._widths
             t.assertEqual(ret, [10, len('A record cell')])
 
         with t.subTest('the cells of each record come from its view'):
@@ -363,21 +363,21 @@ class DigestViewTests(TestCase):
 
         with t.subTest('the column name counts too'):
             record_view.return_value.cells = ('2026-08-05', 'Go')
-            ret = DigestView(t.digest).widths
+            ret = DigestView(t.digest)._widths
             t.assertEqual(ret, [10, len('TASK')])
 
         with t.subTest('and with no records, the names alone'):
             t.digest.records = []
-            ret = DigestView(t.digest).widths
+            ret = DigestView(t.digest)._widths
             t.assertEqual(ret, [len('DATE'), len('TASK')])
 
     @patch(f'{SRC}.Table', autospec=True)
     @patch(f'{SRC}.RecordView', autospec=True)
     def test_tables(t, record_view: MagicMock, table: MagicMock) -> None:
         record_view.return_value.cells = ('2026-08-02', 'A record cell')
-        t.v.widths = [10, 28]
+        t.v._widths = [10, 28]
 
-        ret = t.v.tables
+        ret = t.v._tables
 
         # A table per group, at the widths of the digest, with the cells
         # of each record it holds.
@@ -408,12 +408,12 @@ class DigestViewTests(TestCase):
 
     @patch(f'{SRC}.page_text', autospec=True)
     def test_text(t, page_text: MagicMock) -> None:
-        t.v.tables = [Mock(spec=Table)]
+        t.v._tables = [Mock(spec=Table)]
 
         ret = t.v.text
 
         # The header, then the tables, laid out as one page.
-        page_text.assert_called_once_with(t.v.header, t.v.tables)
+        page_text.assert_called_once_with(t.v._header, t.v._tables)
         t.assertIs(ret, page_text.return_value)
 
     def test___str__(t) -> None:
@@ -428,7 +428,7 @@ class RecordViewTests(TestCase):
         t.record = Record(date(2026, 8, 4), 'chores', 'A parent > A record')
         t.rv = RecordView(t.record)
 
-    @patch.object(RecordView, 'attributes', new_callable=PropertyMock)
+    @patch.object(RecordView, '_attributes', new_callable=PropertyMock)
     def test_cells(t, attributes: PropertyMock) -> None:
         with t.subTest('the date and the title'):
             attributes.return_value = ''
@@ -447,23 +447,23 @@ class RecordViewTests(TestCase):
 
     def test_attributes(t) -> None:
         with t.subTest('none'):
-            ret = t.rv.attributes
+            ret = t.rv._attributes
             t.assertEqual(ret, '')
 
         with t.subTest('each as key=value, in the order logged'):
-            t.rv.record = Record(
+            t.rv._record = Record(
                 date(2026, 8, 4),
                 'chores',
                 'A parent > A record',
                 {'place': 'Main St, Suite 4', 'cost': '45.00'},
             )
 
-            ret = t.rv.attributes
+            ret = t.rv._attributes
 
             t.assertEqual(ret, 'place=Main St, Suite 4, cost=45.00')
 
     def test_record(t) -> None:
-        ret = t.rv.record
+        ret = t.rv._record
         t.assertIs(ret, t.record)
 
 
@@ -479,20 +479,20 @@ class DigestJsonViewTests(TestCase):
         t.djv = DigestJsonView(t.digest)
 
     @patch(f'{SRC}.dumps', autospec=True)
-    @patch.object(DigestJsonView, 'data', new_callable=PropertyMock)
+    @patch.object(DigestJsonView, '_data', new_callable=PropertyMock)
     def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
         ret = t.djv.json
         # Serialized, indented for a person to read too.
         dumps.assert_called_once_with(data.return_value, indent=2)
         t.assertIs(ret, dumps.return_value)
 
-    @patch.object(DigestJsonView, 'groups', new_callable=PropertyMock)
+    @patch.object(DigestJsonView, '_groups', new_callable=PropertyMock)
     def test_data(t, groups: PropertyMock) -> None:
         group = Mock(spec=GroupJsonView)
         group.data = {'name': 'work'}
         groups.return_value = [group]
 
-        ret = t.djv.data
+        ret = t.djv._data
 
         # A digest abridges nothing: the total counts every record.
         t.assertEqual(
@@ -512,7 +512,7 @@ class DigestJsonViewTests(TestCase):
         second = Mock(spec=Group)
         t.digest.groups = [first, second]
 
-        ret = t.djv.groups
+        ret = t.djv._groups
 
         # One per group, in the digest's order.
         t.assertEqual(ret, [group_json_view.return_value] * 2)
@@ -530,7 +530,7 @@ class GroupJsonViewTests(TestCase):
         t.group.name = 'side-quests'
         t.gjv = GroupJsonView(t.group)
 
-    @patch.object(GroupJsonView, 'records', new_callable=PropertyMock)
+    @patch.object(GroupJsonView, '_records', new_callable=PropertyMock)
     def test_data(t, records: PropertyMock) -> None:
         record = Mock(spec=RecordJsonView)
         record.data = {'title': 'A record'}
@@ -549,7 +549,7 @@ class GroupJsonViewTests(TestCase):
         second = Mock(spec=Record)
         t.group.records = [first, second]
 
-        ret = t.gjv.records
+        ret = t.gjv._records
 
         # One per record, in the group's order.
         t.assertEqual(ret, [record_json_view.return_value] * 2)
@@ -579,7 +579,7 @@ class RecordJsonViewTests(TestCase):
             )
 
         with t.subTest('and one with them holds each'):
-            t.rjv.record = Record(
+            t.rjv._record = Record(
                 date(2026, 8, 4),
                 'chores',
                 'A parent > A record',
