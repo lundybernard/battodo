@@ -91,7 +91,7 @@ interface.
 - Work on a feature branch, never on `main`. A maintainer reviews each
   branch before merge.
 - Run every task as `pixi run <task>`. A PR passes `tests`, `lint`,
-  `typecheck`, `fuz`, and `unit-py311` through `unit-py315`.
+  `typecheck`, `fuz`, `mutate`, and `unit-py311` through `unit-py315`.
 - Lint before you push. `pixi run lint` runs `ruff check` and
   `ruff format --check` with the repo settings: single quotes, 79-column
   lines. The CI lint job runs the same task.
