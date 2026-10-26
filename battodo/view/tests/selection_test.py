@@ -134,6 +134,20 @@ class SelectionTests(TestCase):
             ret = t.s.always_open
             t.assertEqual(ret, frozenset({'a-list', 'another-list'}))
 
+    def test_scheduled(t) -> None:
+        with t.subTest('an empty schedule opens no category'):
+            ret = t.s._scheduled
+            t.assertEqual(ret, set())
+
+        for day, hour in HOURS:
+            with t.subTest(day=day, hour=hour):
+                t.s.windows = SCHEDULE
+                t.s.now = at_hour(day, hour)
+
+                ret = t.s._scheduled
+
+                t.assertEqual(ret, scheduled_at(day, hour))
+
     def test_schedule(t) -> None:
         with t.subTest('no category is scheduled by default'):
             ret = t.s.schedule
@@ -917,6 +931,15 @@ def opens(day: int, hour: int) -> set[str]:
         if day in days and hour in hours:
             names.add(name)
     return names
+
+
+def scheduled_at(day: int, hour: int) -> set[str]:
+    """The SCHEDULE categories with a window that holds `day` at `hour`."""
+    return {
+        name
+        for name, days, hours in WINDOWS
+            if day in days and hour in hours
+    }  # fmt: skip
 
 
 def stored(

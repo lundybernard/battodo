@@ -158,6 +158,11 @@ class Selection:
         return frozenset(names - {''})
 
     @property
+    def _scheduled(self) -> set[str]:
+        """The schedule categories with a window that holds now."""
+        raise NotImplementedError
+
+    @property
     def schedule(self) -> dict[str, list['Window']]:
         """The windows of each category the view schedules.
 
