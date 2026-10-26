@@ -63,6 +63,11 @@ it. The text stays as recorded until that ruling lands.
   no file, so with a source dependency in the graph, check the
   dependency's manifest first. Why: the root package's missing section
   produces the same words. Next: move to `/pixi-dev-env` or to memory.
+- 2026-10-25: an external PR that a contributor's coding agent writes is
+  a live test of `AGENTS.md`. Each miss in it that a written rule would
+  have prevented becomes an `AGENTS.md` hunk in a separate docs PR, not
+  a review comment alone. Why: a review comment corrects one PR, and a
+  rule in `AGENTS.md` reaches every agent that reads the guide.
 
 ## Filed
 
