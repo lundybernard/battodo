@@ -105,7 +105,7 @@ def get_view(
         The clock, which decides both the active set and every rank.
     show_all : bool
         Whether to show every item, whatever the time window and the
-        item count.
+        item count. False leaves the choice to `view.all`.
 
     Returns
     -------
@@ -119,8 +119,9 @@ def get_view(
         The source directory is missing, or holds no todo lists.
     ValueError
         The configured item count is not a whole number of one or more,
-        the configured format is not one of FORMATS, or the configured
-        due-date curve does not decode.
+        the configured format is not one of FORMATS, the configured
+        due-date curve does not decode, or `view.all` is not true or
+        false.
     """
     selection = Selection.from_config(conf, now, show_all=show_all)
     if _is_json(conf):

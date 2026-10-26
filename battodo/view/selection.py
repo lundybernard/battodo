@@ -24,7 +24,7 @@ from typing import NamedTuple
 
 from batconf import Configuration
 
-from ..lists import category_order, discover_lists, item_count
+from ..lists import category_order, discover_lists, full_view, item_count
 from ..parser import OPEN_HEADING, TaskNode, TodoDocument, parse_date
 from ..rank import DEFAULT_DUE_CURVE, Curve, multiplier, parse_curve, rank
 from ..repeat import WEEKDAYS
@@ -95,18 +95,23 @@ class Selection:
         """Build a selection from a resolved configuration.
 
         Every configuration value is a string, so the item count is
-        decoded here. The due-date curve is decoded once, by `curve`,
-        and the schedule by `schedule` and `always_open`.
+        decoded by `item_count`, and `view.all` by `full_view`.
+        `show_all` shows every item whatever `view.all` holds. The
+        due-date curve is decoded once, by `curve`, and the schedule by
+        `schedule` and `always_open`.
 
         Raises
         ------
         ValueError
-            The configured count is not a whole number of one or more.
+            The configured count is not a whole number of one or more,
+            or `view.all` is not true or false.
         """
         return cls(
             Path(conf.view.source_dir),
             now,
-            show_all=show_all,
+            # The decode runs before the flag, so --all never hides a
+            # bad view.all.
+            show_all=full_view(conf.view.all) or show_all,
             top_n=item_count(conf.view.top),
             rank_due_curve=conf.view.rank_due_curve,
             # The lookup reads an empty value as absent, so each read

@@ -2,7 +2,13 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, Mock
 
-from ..lists import COUNT_ERROR, category_order, discover_lists, item_count
+from ..lists import (
+    COUNT_ERROR,
+    category_order,
+    discover_lists,
+    full_view,
+    item_count,
+)
 
 
 def md(name: str, text: str) -> MagicMock:
@@ -97,3 +103,24 @@ class ItemCountTests(TestCase):
                 item_count(value)
 
             t.assertIn(COUNT_ERROR, str(caught.exception))
+
+
+class FullViewTests(TestCase):
+    """Unit tests for battodo.lists.full_view."""
+
+    def test_true(t) -> None:
+        ret = full_view('true')
+        t.assertIs(ret, True)
+
+    def test_false(t) -> None:
+        ret = full_view('false')
+        t.assertIs(ret, False)
+
+    def test_unknown(t) -> None:
+        with t.assertRaises(ValueError) as caught:
+            full_view('yes')
+
+        t.assertEqual(
+            str(caught.exception),
+            "unknown view.all value 'yes'; choose one of false, true",
+        )

@@ -47,16 +47,18 @@ class ViewConfig:
 
     Every value is a string: the environment source carries nothing
     else, so a consumer decodes what it needs. `top` is read as an
-    integer by the view command. `rank_due_curve` is read as the
-    `days:factor` points of the due-date curve (ADR 0026). `time_zone`
-    names the zone of the clock; empty means the system local zone.
-    `windows` is read as the hour windows of each category, and
-    `always_active` as the names no window shuts (ADR 0018). Empty
+    integer by the view command, and `all` as `true` or `false`:
+    `true` shows every item, as `view --all` does. `rank_due_curve` is
+    read as the `days:factor` points of the due-date curve (ADR 0026).
+    `time_zone` names the zone of the clock; empty means the system
+    local zone. `windows` is read as the hour windows of each category,
+    and `always_active` as the names no window shuts (ADR 0018). Empty
     schedules nothing, so every category shows.
     """
 
     source_dir: str = '~/todo'
     top: str = str(TOP_N)
+    all: str = 'false'
     rank_due_curve: str = DEFAULT_DUE_CURVE
     time_zone: str = ''
     windows: str = ''

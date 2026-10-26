@@ -11,6 +11,8 @@ from .parser import OPEN_HEADING
 CATEGORY_ORDER = ['work', 'chores', 'study', 'career', 'events']
 # What a rejected item count reports, wherever it was configured.
 COUNT_ERROR = 'the item count must be a whole number of 1 or more'
+# The values `view.all` takes: off, then on.
+SWITCHES = ('false', 'true')
 
 
 def discover_lists(directory: Path) -> list[Path]:
@@ -58,3 +60,19 @@ def item_count(value: str) -> int:
     if count < 1:
         raise ValueError(f'{COUNT_ERROR}: {value}')
     return count
+
+
+def full_view(value: str) -> bool:
+    """Decode whether a view is the full view, from `view.all`.
+
+    Raises
+    ------
+    ValueError
+        The value is not one of SWITCHES.
+    """
+    if value not in SWITCHES:
+        raise ValueError(
+            f'unknown view.all value {value!r}; '
+            f'choose one of {", ".join(SWITCHES)}'
+        )
+    return value == 'true'
