@@ -452,6 +452,33 @@ class BATCLITests(TestCase):
         set_log_level.assert_called_with(t.get_config.return_value)
         t.exit.assert_called_with(0)
 
+    @patch(f'{SRC}.Commands.view', autospec=True)
+    @patch(f'{SRC}.Commands.set_log_level', autospec=True)
+    def test_log_level_error(t, set_log_level, view):
+        """a bad log level reports on stderr and leaves stdout clean"""
+        msg = (
+            "unknown log level 'bogus'; "
+            'choose one of CRITICAL, FATAL, ERROR, WARN, WARNING, INFO, '
+            'DEBUG, NOTSET'
+        )
+        set_log_level.side_effect = ValueError(msg)
+        out, err = StringIO(), StringIO()
+
+        with redirect_stdout(out), redirect_stderr(err):
+            BATCLI(['view'])
+
+        with t.subTest('the message goes to stderr'):
+            t.assertEqual(err.getvalue(), f'{msg}\n')
+
+        with t.subTest('stdout stays parseable for a consumer'):
+            t.assertEqual(out.getvalue(), '')
+
+        with t.subTest('the command does not run'):
+            view.assert_not_called()
+
+        with t.subTest('the exit code is non-zero'):
+            t.assertEqual(t.exit.call_args_list[0], call(1))
+
     def test_missing_command(t):
         """prints help if no arguments are given"""
         # A real parser, so `func` defaults to the real help closure.
@@ -886,6 +913,22 @@ class CommandsSetLogLevelTests(TestCase):
 
     @patch(f'{SRC}.log', autospec=True)
     def test_set_log_level(t, log):
-        conf = SimpleNamespace(loglevel=sentinel.loglevel)
-        Commands.set_log_level(conf)
-        log.setLevel.assert_called_once_with(sentinel.loglevel)
+        with t.subTest('the level is set on the logger'):
+            conf = SimpleNamespace(loglevel=sentinel.loglevel)
+            Commands.set_log_level(conf)
+            log.setLevel.assert_called_once_with(sentinel.loglevel)
+
+        with t.subTest('an unknown level raises a config refusal'):
+            log.reset_mock()
+            log.setLevel.side_effect = ValueError("Unknown level: 'bogus'")
+            conf = SimpleNamespace(loglevel='bogus')
+
+            with t.assertRaises(ValueError) as raised:
+                Commands.set_log_level(conf)
+
+            expected = (
+                "unknown log level 'bogus'; "
+                'choose one of CRITICAL, FATAL, ERROR, WARN, WARNING, INFO, '
+                'DEBUG, NOTSET'
+            )
+            t.assertEqual(str(raised.exception), expected)
