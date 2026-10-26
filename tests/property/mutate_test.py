@@ -1655,7 +1655,7 @@ def checked(fields: dict[str, str]) -> dict[str, str]:
         A `P`, `LOE` or `DUE` does not read, checked in that order.
     """
     priority = fields.get('P')
-    if priority is not None and not priority.isdigit():
+    if priority is not None and not priority.isdecimal():
         raise ValueError(f'P must be a whole number, not {priority!r}')
     loe = fields.get('LOE')
     if loe is not None and not (loe.isdecimal() and int(loe) >= 1):

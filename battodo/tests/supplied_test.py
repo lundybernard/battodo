@@ -549,6 +549,10 @@ class SuppliedFieldsTests(TestCase):
                 'high',
                 "P must be a whole number, not 'high'",
             ),
+            'a digit that int() does not read': (
+                '²',
+                "P must be a whole number, not '²'",
+            ),
             'an empty priority': ('', "P must be a whole number, not ''"),
         }
         for name, (value, message) in refused.items():
