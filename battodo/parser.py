@@ -186,8 +186,7 @@ class TodoDocument:
             The line is not a task line. A note or a heading carries no
             title to set.
         """
-        line = TaskLine(index, self.lines[index])
-        indent, mark, body = line.checkbox.groups()
+        indent, mark, body = _match_checkbox(self.lines[index]).groups()
         found = FIELD_RE.search(body)
         tail = body[found.start() :] if found else ''
         edited = f'{indent}- [{mark}] {f"{title} {tail}".rstrip()}'
@@ -643,10 +642,7 @@ class TaskLine:
         ValueError
             The line is not a task line.
         """
-        found = CHECKBOX_RE.match(self.raw)
-        if found is None:
-            raise ValueError(f'not a task line: {self.raw!r}')
-        return found
+        return _match_checkbox(self.raw)
 
     @property
     def indent(self) -> int:
@@ -672,6 +668,13 @@ class TaskLine:
     def fields(self) -> dict[str, str]:
         """The fields of the body, by name."""
         return _parse_fields(self.body)
+
+
+def _match_checkbox(raw: str) -> re.Match[str]:
+    found = CHECKBOX_RE.match(raw)
+    if found is None:
+        raise ValueError(f'not a task line: {raw!r}')
+    return found
 
 
 def _clean_title(body: str) -> str:
