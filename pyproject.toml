@@ -105,10 +105,8 @@ typecheck = { depends-on = [
 lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
 # One class of gate: both stay outside the `tests` aggregator and run
 # at the PR tip, not in the fast loop.
-# mutate: runtime is not the reason (~40s on 8 cores); the score is.
-# Two thirds of the survivors are argparse help-string mutants no test
-# can reasonably assert on, so there is no honest number to gate on
-# until they are triaged.
+# mutate: the target is zero surviving mutants. The command
+# `pixi run -e mutation mutmut results` lists the survivors.
 mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 # fuz: the property suite searches with random inputs. The
 # HYPOTHESIS_PROFILE variable picks the budget: dev runs 100 examples,
