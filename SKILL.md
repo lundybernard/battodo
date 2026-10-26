@@ -285,6 +285,12 @@ day and the time alone. A category with no window always shows. An
 unknown zone or a window that does not decode makes every command that
 reads the clock exit 1 and name the field and the bad value.
 
+The log level is `loglevel` or `BATTODO_LOGLEVEL`, default `ERROR`.
+The accepted levels are `CRITICAL`, `FATAL`, `ERROR`, `WARN`,
+`WARNING`, `INFO`, `DEBUG` and `NOTSET`. `--verbose` and `--debug`
+override it. An unknown level makes every command exit 1 and name the
+levels on stderr.
+
 An unquoted `top = 3` reaches the decoder as a TOML integer. `btodo
 view` then exits 1 and prints `'int' object has no attribute
 'isdecimal'` to stderr.

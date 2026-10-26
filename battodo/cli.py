@@ -1,7 +1,7 @@
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from datetime import datetime
-from logging import getLogger
+from logging import getLevelNamesMapping, getLogger
 from logging.config import dictConfig
 
 from battodo.conf import CONFIG_ROOT, get_config, time_zone
@@ -37,9 +37,10 @@ def BATCLI(ARGS=None):
         config_file_name=args.config_file,
         config_env=args.config_env,
     )
-    Commands.set_log_level(conf)
-    # execute function set for parsed command
     try:
+        # `set_log_level` raises on a bad level, so it stays inside the `try`.
+        Commands.set_log_level(conf)
+        # execute function set for parsed command
         args.func(conf, args)
     # Top-level CLI boundary: any command failure becomes a message on
     # stderr, never a traceback. stdout carries the command's output and
@@ -468,4 +469,18 @@ class Commands:
 
     @staticmethod
     def set_log_level(conf):
-        log.setLevel(conf.loglevel)
+        """Set the level the config names on the root logger.
+
+        Raises
+        ------
+        ValueError
+            logging does not know the configured level.
+        """
+        try:
+            log.setLevel(conf.loglevel)
+        except ValueError:
+            message = (
+                f'unknown log level {conf.loglevel!r}; '
+                f'choose one of {", ".join(getLevelNamesMapping())}'
+            )
+            raise ValueError(message) from None
