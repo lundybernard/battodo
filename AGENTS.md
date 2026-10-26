@@ -97,7 +97,8 @@ interface.
   lines. The CI lint job runs the same task.
 - At the PR tip, run `pixi run mutate` and `pixi run fuz` (the property
   suite). The mutation target is zero surviving mutants; list each
-  survivor in the PR notes. CI does not run `mutate` yet.
+  survivor in the PR notes. The CI `mutate` job runs the same task, and
+  a survivor does not fail it.
 - A statement holds at most two nested calls, whether it fits one line
   or wraps. A deeper inner value becomes its own `@property`, or a local
   name in the cases that the named-intermediate rule above keeps.

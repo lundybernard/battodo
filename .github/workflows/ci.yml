@@ -73,6 +73,20 @@ jobs:
           environments: test
       - run: HYPOTHESIS_PROFILE=ci pixi run --locked fuz
 
+  # A survivor does not fail this job: mutmut exits 0 with survivors.
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          locked: true
+          environments: mutation
+      - run: pixi run --locked mutate
+
   all-checks:
     if: always()
     needs: [test, typecheck, lint, fuz]
