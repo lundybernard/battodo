@@ -80,10 +80,26 @@ declare.
   value other than text or json, because only the command line passes
   the argparse choices check.
 - `view --all` becomes a command input, so `BATTODO_SHOW_ALL` no longer
-  reaches the view.
+  reaches the view. The 2026-10-25 amendment adds the config field
+  `view.all` beside the flag.
 - A value that should follow a shell session but never a file has no
   home in batconf: a declared field is settable from the environment
   and the file alike. Such a value becomes a declared field, or btodo
   reads it from a bootstrap configuration with no file source.
 - Each `from_config` method decodes config fields and takes the command
   inputs it forwards as keywords.
+
+## Amendment — 2026-10-25
+
+`view --all` stays a command input, and the config field `view.all`
+joins it. A user can want the full view on every run, which is the
+test the Rationale sets for a configuration. `view.all` set to `true`
+in a config file or in `BATTODO_VIEW_ALL` makes the full view the
+default. The field holds `true` or `false`, and the view refuses any
+other value, also when `--all` is given.
+
+The flag wins when given: `--all` shows every item whatever `view.all`
+holds. The flag only turns the full view on. Under a `view.all` of
+`true` in the file, `BATTODO_VIEW_ALL=false` gives one run the abridged
+view, because the environment outranks the file. Issue #102 records the
+ruling.
