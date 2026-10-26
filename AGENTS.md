@@ -55,10 +55,13 @@ order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
 ### A named intermediate is a property
 
 Inside a class, a value that is computed from the object's state and then
-used is its own `@property`. It is `_<name>` when only the class reads it,
-and public when another object reads it. The public name is the plain noun for
-the value the consumer reads, and a raw input that readers use only in a
-derived form is stored as `_raw_<name>`. A local name holds only a loop or
+used is its own `@property`. The public surface is the set of names that
+outside production code reads. Stored or computed, an attribute is
+`_<name>` unless another production object reads it. A test read never
+makes a name public. Dataclass and NamedTuple fields keep public names.
+The public name is the plain noun for the value the consumer reads, and a
+raw input that readers use only in a derived form is stored as
+`_raw_<name>`. A local name holds only a loop or
 comprehension variable, a value derived from one, or a value that depends
 on a method argument. The code reads `self.<attr>` at each use. A
 module-level function tells a simple story: its body says what happens to
@@ -68,13 +71,17 @@ methods.
 **Why:** each step is auditable and testable alone. A test sets the state
 and reads the step, so it needs fewer mocks and no `assert_called_with`
 check on an intermediate. A traceback names the step, and a debugger reads
-the property.
+the property. The underscore marks a name that no other production object
+depends on, so a change to it stays inside the class. A field name is also
+a constructor keyword, and a NamedTuple refuses a name that starts with an
+underscore.
 
 **How to apply:** split a body when the split simplifies the calling code and
 its tests. The degree is a judgement call. A function that needs a computed
 intermediate marks a missing class or method: move the work behind a method on
 the domain object, `<Entity>.<verb>(<args>)`, and keep its helper classes
-internal. Read the consumer first: the names it reads are the interface.
+internal. Read the production consumers first: the names they read are the
+interface.
 
 ## Working rules
 
