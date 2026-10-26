@@ -29,8 +29,6 @@ log = getLogger('root')
 
 def BATCLI(ARGS=None):
     p = argparser()
-    # Execute
-    # get only the first command in args
     args = p.parse_args(ARGS)
     conf = get_config(
         cli_args=args,
@@ -38,14 +36,10 @@ def BATCLI(ARGS=None):
         config_env=args.config_env,
     )
     try:
-        # `set_log_level` raises on a bad level, so it stays inside the `try`.
         Commands.set_log_level(conf)
-        # execute function set for parsed command
         args.func(conf, args)
-    # Top-level CLI boundary: any command failure becomes a message on
-    # stderr, never a traceback. stdout carries the command's output and
-    # nothing else, so a consumer can parse it unconditionally; the help
-    # dump is left to argparse, which owns actual usage errors.
+    # `BATCLI` prints a command failure on stderr, never a traceback, so
+    # stdout carries only command output.
     except Exception as exp:  # noqa: BLE001
         print(exp, file=sys.stderr)
         sys.exit(1)
@@ -89,7 +83,6 @@ def argparser():
         help=MESSAGES['cli.config_env.help'],
     )
 
-    # Add a subparser to handle sub-commands
     commands = p.add_subparsers(
         title=MESSAGES['cli.commands.title'],
         description=MESSAGES['cli.commands.description'],
@@ -100,11 +93,9 @@ def argparser():
         help=MESSAGES['view.help'],
     )
     view.set_defaults(func=Commands.view)
-    # A config option takes its dotted config path as the dest, because
-    # batconf looks up `{path}.{key}` as one flat attribute. It takes no
-    # default: batconf takes the first truthy source, so a default
-    # blocks the environment and the file. A command input takes a bare
-    # dest, and the command passes it beside the configuration.
+    # A config option takes its dotted config path as `dest` and no default:
+    # batconf takes the first truthy source, so a default shadows the
+    # environment and the file. A command input takes a bare `dest`.
     view.add_argument(
         '--all',
         dest='show_all',
