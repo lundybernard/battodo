@@ -96,9 +96,9 @@ interface.
 - At the PR tip, run `pixi run mutate` and `pixi run fuz` (the property
   suite). The mutation target is zero surviving mutants; list each
   survivor in the PR notes. CI does not run `mutate` yet.
-- A one-line statement holds at most two nested calls. A deeper inner
-  value becomes its own `@property`, or a local name in the cases that
-  the named-intermediate rule above keeps.
+- A statement holds at most two nested calls, whether it fits one line
+  or wraps. A deeper inner value becomes its own `@property`, or a local
+  name in the cases that the named-intermediate rule above keeps.
 - Docstrings use the numpydoc sections `Parameters`, `Returns`, and
   `Raises` with underline headers, as `battodo/lib.py` does.
 - A code comment states the one constraint that the code cannot show, in
