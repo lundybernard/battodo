@@ -89,7 +89,7 @@ jobs:
 
   all-checks:
     if: always()
-    needs: [test, typecheck, lint, fuz]
+    needs: [test, typecheck, lint, fuz, mutate]
     runs-on: ubuntu-latest
     steps:
       - name: All checks passed
@@ -97,6 +97,7 @@ jobs:
           if [[ "${{ needs.test.result }}" != "success" || \
                 "${{ needs.typecheck.result }}" != "success" || \
                 "${{ needs.lint.result }}" != "success" || \
-                "${{ needs.fuz.result }}" != "success" ]]; then
+                "${{ needs.fuz.result }}" != "success" || \
+                "${{ needs.mutate.result }}" != "success" ]]; then
             exit 1
           fi
