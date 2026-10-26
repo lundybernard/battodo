@@ -50,6 +50,7 @@ WIDTH = '80'
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
 FORMAT_VAR = 'BATTODO_FORMAT'
+LEVEL_VAR = 'BATTODO_LOGLEVEL'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
 CONFIG_VAR = 'BATTODO_CONFIG_FILE'
 ZONE_VAR = 'BATTODO_VIEW_TIME_ZONE'
@@ -173,6 +174,20 @@ class ViewCommandTests(TestCase):
         with t.subTest('a configured format btodo cannot write is reported'):
             t.assertEqual(
                 err, "unknown format 'xml'; choose one of text, json\n"
+            )
+
+        with t.subTest('which exits non-zero and writes no view'):
+            t.assertEqual(code, 1)
+            t.assertEqual(out, '')
+
+    def test_view_log_level_is_configured(t) -> None:
+        out, err, code = t.cli(env={LEVEL_VAR: 'bogus'})
+
+        with t.subTest('a configured level btodo cannot set is reported'):
+            t.assertEqual(
+                err,
+                "unknown log level 'bogus'; choose one of CRITICAL, FATAL, "
+                'ERROR, WARN, WARNING, INFO, DEBUG, NOTSET\n',
             )
 
         with t.subTest('which exits non-zero and writes no view'):
