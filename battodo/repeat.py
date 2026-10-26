@@ -75,4 +75,5 @@ def _next_month_day(day: int, completed: date) -> date:
     if completed.day >= day:
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     # Short months clamp: `monthly:31` is the last day of February.
-    return date(year, month, min(day, monthrange(year, month)[1]))
+    last_day = monthrange(year, month)[1]
+    return date(year, month, min(day, last_day))
