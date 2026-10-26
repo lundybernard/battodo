@@ -179,7 +179,8 @@ def time_zone(conf: Configuration) -> tzinfo:
         name = conf.view.time_zone
     except AttributeError:
         local = datetime.now(UTC).astimezone()
-        return cast('tzinfo', local.tzinfo)
+        # The type argument of cast() has no run-time effect.
+        return cast('tzinfo', local.tzinfo)  # pragma: no mutate
     try:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError) as exp:
