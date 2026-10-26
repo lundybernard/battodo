@@ -162,7 +162,10 @@ interface.
   tests follow.
 - One test method per function under test, `test_<fn>`. Each code path is
   a `subTest` inside it, as in `CommandsNoteTests.test_note` in
-  `battodo/tests/cli_test.py`.
+  `battodo/tests/cli_test.py`. A module-level function that shares no
+  `setUp` with two or more others gets its own `<FnName>Tests` class
+  instead, with one `test_<behaviour>` method per behaviour. Never name a
+  method `test_<fn>_<behaviour>`.
 - Spec every mock: `patch(..., autospec=True)`, and `Mock(spec=...)` or a
   real value where you build a mock by hand.
 - Test the unit in isolation. Patch each collaborator, let a
