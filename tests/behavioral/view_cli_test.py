@@ -49,6 +49,7 @@ WIDTH = '80'
 # The environment outranks any config file in the checkout.
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 TOP_VAR = 'BATTODO_VIEW_TOP'
+ALL_VAR = 'BATTODO_VIEW_ALL'
 FORMAT_VAR = 'BATTODO_FORMAT'
 CURVE_VAR = 'BATTODO_VIEW_RANK_DUE_CURVE'
 CONFIG_VAR = 'BATTODO_CONFIG_FILE'
@@ -157,6 +158,29 @@ class ViewCommandTests(TestCase):
 
         with t.subTest('which exits non-zero and writes no view'):
             t.assertNotEqual(code, 0)
+            t.assertEqual(out, '')
+
+    def test_view_all_is_configured(t) -> None:
+        with t.subTest('the environment shows every item without the flag'):
+            out = t.render(env={ALL_VAR: 'true'})
+            t.assertEqual(out, golden('view_all.txt'))
+
+        with t.subTest('a configured false keeps the abridged view'):
+            out = t.render(env={ALL_VAR: 'false'})
+            t.assertEqual(out, golden('view.txt'))
+
+        with t.subTest('the flag shows every item whatever is configured'):
+            out = t.render('--all', env={ALL_VAR: 'false'})
+            t.assertEqual(out, golden('view_all.txt'))
+
+        with t.subTest('a value btodo cannot read: reported, exit 1, no view'):
+            out, err, code = t.cli(env={ALL_VAR: 'yes'})
+
+            t.assertEqual(
+                err,
+                "unknown view.all value 'yes'; choose one of false, true\n",
+            )
+            t.assertEqual(code, 1)
             t.assertEqual(out, '')
 
     def test_view_format_is_configured(t) -> None:
