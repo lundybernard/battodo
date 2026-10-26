@@ -29,8 +29,8 @@ jobs:
         with:
           pixi-version: v0.81.0
           locked: true
-          # Install only this leg's env; the default 3.14 env is unused
-          # here and would be an extra download on every other leg.
+          # Install only this leg's env; the default env is unused here
+          # and would be an extra download on every other leg.
           environments: test-${{ matrix.py }}
       - run: pixi run --locked unit-${{ matrix.py }}
 
