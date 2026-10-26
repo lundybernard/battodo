@@ -113,8 +113,11 @@ interface.
 - Subject: `<type>: <summary>`, 50 characters as the target and 72 as the
   cap. The summary is lowercase and names the symbol or file changed. The
   scope slot stays empty; `(RED)` is the one marker it carries.
-- Type: `feat`, `fix`, `refactor`, `test`, `lint`, `docs`, or `chore`.
-  A linter-driven change uses `lint`, never `style`.
+- Type: `feat`, `fix`, `refactor`, `test`, `lint`, `docs`, `build`, `ci`,
+  or `chore`. `build` is a change to the build system, the dependencies,
+  the interpreter pins, or the lock file. `ci` is a change to the CI
+  workflows. `chore` is only for a change that fits no other type. A
+  linter-driven change uses `lint`, never `style`.
 - Every commit passes `pixi run lint` and `pixi run tests`, not only the
   tip. A `test(RED): <summary>` commit adds a failing test, and the next
   commit turns it green.
