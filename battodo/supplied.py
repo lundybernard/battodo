@@ -354,7 +354,8 @@ class SuppliedFields:
             The value is not a whole number.
         """
         priority = self.fields.get('P')
-        if priority is not None and not priority.isdigit():
+        # `isdecimal`, not `isdigit`: `int` cannot read a superscript digit.
+        if priority is not None and not priority.isdecimal():
             raise ValueError(f'P must be a whole number, not {priority!r}')
         return priority
 
