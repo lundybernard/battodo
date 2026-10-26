@@ -14,6 +14,8 @@ from battodo.lists import discover_lists
 PARKED = '<!-- battodo:parked -->'
 # A document with a longer heading that starts with `## Open`.
 LONGER_HEADING = '# Longer heading\n\n## Open-prefixed heading\n'
+# A document that shows the list format in a fenced example.
+GUIDE = '# Guide\n\n```markdown\n## Open\n\n- [ ] fenced example task\n```\n'
 
 
 def source_dir(t: TestCase) -> Path:
@@ -61,6 +63,8 @@ class DiscoverListsTests(TestCase):
         loose.write_text('# Notes\n\nNothing open here.\n', encoding='utf-8')
         longer = t.source / 'longer-heading.md'
         longer.write_text(LONGER_HEADING, encoding='utf-8')
+        guide = t.source / 'format-guide.md'
+        guide.write_text(GUIDE, encoding='utf-8')
 
         ret = discover_lists(t.source)
 
@@ -69,6 +73,9 @@ class DiscoverListsTests(TestCase):
 
         with t.subTest('nor is one whose heading only starts with Open'):
             t.assertNotIn(longer, ret)
+
+        with t.subTest('nor is one whose open heading is a fenced example'):
+            t.assertNotIn(guide, ret)
 
     def test_absent(t) -> None:
         ret = discover_lists(t.source / 'absent')

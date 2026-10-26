@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from functools import cached_property
-from itertools import pairwise
+from itertools import accumulate, pairwise
 from typing import Any
 
 FIELD_NAMES: tuple[str, ...] = (
@@ -28,6 +28,8 @@ FIELD_NAMES: tuple[str, ...] = (
 FIELD_RE = re.compile(rf'\[({"|".join(FIELD_NAMES)}):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
 OPEN_HEADING = '## Open'
+# The run of backticks or tildes that opens or closes a code fence.
+FENCE_RE = re.compile(r'`{3,}|~{3,}')
 # SCHEMA.md's own field grammar, in SCHEMA.md's order. `BUMPED` is
 # retired; `ADDED` and `ID` are btodo extensions and so are not in it.
 # Whatever btodo authors -- a `completed.md` record, a brand new task
@@ -111,6 +113,46 @@ class TodoDocument:
             for index, line in enumerate(self.lines)
                 if line.strip().startswith('## ')
         ]  # fmt: skip
+
+    @property
+    def open_headings(self) -> list[int]:
+        """The index of each `## Open` heading outside fenced code.
+
+        `open_bounds` reads a fenced heading too, so this is the stricter
+        set: a line in fenced code is an example, not a heading.
+        """
+        return [
+            start
+            for start, _ in self.open_bounds
+                if not self._fences[start]
+        ]  # fmt: skip
+
+    @property
+    def _fences(self) -> list[str]:
+        """The code fence open before each line, or '' outside one."""
+        return list(accumulate(self.lines[:-1], self._fence_after, initial=''))
+
+    @staticmethod
+    def _fence_after(fence: str, line: str) -> str:
+        """The code fence open after `line`, with `fence` open before it.
+
+        A fence is the run that opens it, and '' is no fence. Only a line
+        that holds nothing but a run of the same character, at least as
+        long, closes it.
+
+        Returns
+        -------
+        str
+            The fence open after `line`, or ''.
+        """
+        stripped = line.strip()
+        found = FENCE_RE.match(stripped)
+        run = found.group() if found else ''
+        if not fence:
+            return run
+        if run.startswith(fence) and run == stripped:
+            return ''
+        return fence
 
     @property
     def ancestries(self) -> list[list['TaskNode']]:
