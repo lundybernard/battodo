@@ -6,9 +6,9 @@ own input and display. A keyword of None means that the input was not
 given. A script imports the same functions.
 
 Every code path a UI executes runs through this module. The names its
-own input handling needs are re-exported here: the zone of the clock,
-the periods, the formats, and the count check. Startup wiring stays
-out: a UI reads its logging configuration from `logconf`.
+own input handling needs are re-exported here: the periods, the
+formats, and the count check. Startup wiring stays out: a UI reads its
+logging configuration from `logconf`.
 """
 
 from datetime import datetime
