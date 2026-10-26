@@ -44,12 +44,12 @@ class ViewTests(TestCase):
         t.v = View(t.selection)
 
     def test_today(t) -> None:
-        ret = t.v.today
+        ret = t.v._today
         t.assertEqual(ret, TODAY)
 
     def test_header(t) -> None:
         with t.subTest('the day, the date, the time, then what is open'):
-            ret = t.v.header
+            ret = t.v._header
 
             t.assertEqual(
                 ret, 'Wednesday 2026-08-05 10:30 — active: study, work'
@@ -59,34 +59,34 @@ class ViewTests(TestCase):
             # Given in the wrong order on purpose: a set would iterate
             # in whatever order it liked, which is no test of sorting.
             t.selection.active = ['work', 'study', 'career']
-            ret = t.v.header
+            ret = t.v._header
             t.assertTrue(ret.endswith('career, study, work'))
 
         with t.subTest('with nothing active, the day and the time alone'):
             t.selection.active = set()
-            ret = t.v.header
+            ret = t.v._header
             t.assertEqual(ret, 'Wednesday 2026-08-05 10:30')
 
     def test_categories(t) -> None:
-        ret = t.v.categories
+        ret = t.v._categories
         t.assertEqual(ret, t.selection.categories)
 
     def test_rows(t) -> None:
         with t.subTest('a category contributes the rows it shows'):
-            ret = t.v.rows
+            ret = t.v._rows
             t.assertEqual(ret, t.selection.categories[0].shown)
 
         with t.subTest('and the categories run together in display order'):
-            t.v.__dict__.pop('rows')
+            t.v.__dict__.pop('_rows')
             first, second = category('work'), category('study', rows=2)
-            t.v.categories = [first, second]
+            t.v._categories = [first, second]
 
-            ret = t.v.rows
+            ret = t.v._rows
 
             t.assertEqual(ret, first.shown + second.shown)
 
     def test_columns(t) -> None:
-        ret = t.v.columns
+        ret = t.v._columns
 
         t.assertEqual(ret, 80)
         t.get_terminal_size.assert_called_once_with()
@@ -94,27 +94,27 @@ class ViewTests(TestCase):
     def resize(t, width: int) -> list[int]:
         """The widths this view settles on at `width` columns."""
         t.get_terminal_size.return_value.columns = width
-        for cached in ('columns', 'widths'):
+        for cached in ('_columns', '_widths'):
             t.v.__dict__.pop(cached, None)
-        return t.v.widths
+        return t.v._widths
 
     @patch(f'{SRC}.RowView', autospec=True)
     def test_widths(t, row_view: MagicMock) -> None:
         row_view.return_value.cells = CELLS
 
         with t.subTest('a column is as wide as its widest cell or name'):
-            ret = t.v.widths
+            ret = t.v._widths
             # RANK is held open by its own name, P and LOE by theirs.
             t.assertEqual(ret[:3], [4, 3, 3])
 
         with t.subTest('the cells of each row come from its view'):
             t.assertEqual(
                 row_view.call_args_list,
-                [call(row) for row in t.v.rows],
+                [call(row) for row in t.v._rows],
             )
 
         with t.subTest('a table claims no more of the terminal than it needs'):
-            ret = t.v.widths
+            ret = t.v._widths
             t.assertLessEqual(sum(ret) + 2 + 8, 80)
 
         # The other columns take 27 of the line between them, so what is
@@ -144,13 +144,13 @@ class ViewTests(TestCase):
     @patch(f'{SRC}.RowView', autospec=True)
     def test_tables(t, row_view: MagicMock, table: MagicMock) -> None:
         row_view.return_value.cells = CELLS
-        t.v.categories = [
+        t.v._categories = [
             category('work'),
             category('another-list', hidden=4, rows=2),
         ]
-        t.v.widths = [4, 3, 3, 20, 7]
+        t.v._widths = [4, 3, 3, 20, 7]
 
-        ret = t.v.tables
+        ret = t.v._tables
 
         # A table per category, at the widths of the view, with the
         # cells of each row it shows and the count it holds back.
@@ -159,7 +159,7 @@ class ViewTests(TestCase):
             row_view.call_args_list,
             [
                 call(row)
-                for category in t.v.categories
+                for category in t.v._categories
                 for row in category.shown
             ],
         )  # fmt: skip
@@ -180,12 +180,12 @@ class ViewTests(TestCase):
 
     @patch(f'{SRC}.page_text', autospec=True)
     def test_text(t, page_text: MagicMock) -> None:
-        t.v.tables = [Mock(spec=Table)]
+        t.v._tables = [Mock(spec=Table)]
 
         ret = t.v.text
 
         # The header, then the tables, laid out as one page.
-        page_text.assert_called_once_with(t.v.header, t.v.tables)
+        page_text.assert_called_once_with(t.v._header, t.v._tables)
         t.assertIs(ret, page_text.return_value)
 
     def test___str__(t) -> None:
@@ -213,8 +213,8 @@ class RowViewTests(TestCase):
 
         t.rv = RowView(t.row)
 
-    @patch.object(RowView, 'due_label', new_callable=PropertyMock)
-    @patch.object(RowView, 'badge', new_callable=PropertyMock)
+    @patch.object(RowView, '_due_label', new_callable=PropertyMock)
+    @patch.object(RowView, '_badge', new_callable=PropertyMock)
     def test_cells(t, badge: PropertyMock, due_label: PropertyMock) -> None:
         badge.return_value = ''
         due_label.return_value = ''
@@ -248,12 +248,12 @@ class RowViewTests(TestCase):
 
     def test_badge(t) -> None:
         with t.subTest('a task with nothing outstanding wears no badge'):
-            ret = t.rv.badge
+            ret = t.rv._badge
             t.assertEqual(ret, '')
 
         with t.subTest('otherwise the badge carries the count'):
             t.row.subtasks = 2
-            ret = t.rv.badge
+            ret = t.rv._badge
             t.assertEqual(ret, ' (+2)')
 
     def test_due_label(t) -> None:
@@ -281,9 +281,9 @@ class RowViewTests(TestCase):
             with t.subTest(name):
                 t.task.due = due
                 t.row.parsed_due = parsed
-                ret = t.rv.due_label
+                ret = t.rv._due_label
                 t.assertEqual(ret, expected)
 
     def test_row(t) -> None:
-        ret = t.rv.row
+        ret = t.rv._row
         t.assertIs(ret, t.row)
