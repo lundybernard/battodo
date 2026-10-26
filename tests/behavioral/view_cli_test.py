@@ -21,11 +21,18 @@ The fixture lists:
 - `side-quests.md`: a name outside the category order, so always
   shown. The hyphen renders as a space, and its undated item makes a
   rank with more decimals than the JSON publishes.
+
+`data/format-guide.md` is a document, not a list: it shows the list
+format in a fenced example. A test copies it beside the lists.
+`data/longer-heading.md` is not a list either: its heading
+`## Open-prefixed heading` starts with `## Open` but is longer.
 """
 
 from datetime import datetime
 from json import loads
 from pathlib import Path
+from shutil import copy, copytree
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -40,6 +47,8 @@ GOLDEN_DIR = DATA / 'golden'
 SCHEDULE_FILE = DATA / 'battodo.toml'
 # A config file that sets no schedule.
 UNSCHEDULED_FILE = DATA / 'unscheduled.toml'
+GUIDE_FILE = DATA / 'format-guide.md'
+LONGER_HEADING_FILE = DATA / 'longer-heading.md'
 
 # Wednesday mid-morning: the work window is open, the chores window
 # is shut. All fixture dates are relative to this instant.
@@ -141,6 +150,37 @@ class ViewCommandTests(TestCase):
 
         with t.subTest('which exits non-zero and writes no view'):
             t.assertNotEqual(code, 0)
+            t.assertEqual(out, '')
+
+    def test_view_fenced_example(t) -> None:
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        source = Path(tmp.name) / 'todo'
+        copytree(TODO_DIR, source)
+        copy(GUIDE_FILE, source)
+
+        out = t.render('--all', env={SOURCE_VAR: str(source)})
+
+        # A fenced example of the list format is not a list.
+        t.assertEqual(out, golden('view_all.txt'))
+
+    def test_view_longer_heading(t) -> None:
+        tmp = TemporaryDirectory()
+        t.addCleanup(tmp.cleanup)
+        source = Path(tmp.name)
+        copy(LONGER_HEADING_FILE, source)
+
+        out, err, code = t.cli(env={SOURCE_VAR: str(source)})
+
+        with t.subTest('a heading that only starts with Open makes no list'):
+            t.assertEqual(
+                err,
+                'no todo lists (no file with a "## Open" heading) '
+                f'in: {source}\n',
+            )
+            t.assertEqual(code, 1)
+
+        with t.subTest('and the run writes no view'):
             t.assertEqual(out, '')
 
     def test_view_top_is_configured(t) -> None:

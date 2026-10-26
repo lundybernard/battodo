@@ -12,6 +12,8 @@ from unittest import TestCase
 from battodo.lists import discover_lists
 
 PARKED = '<!-- battodo:parked -->'
+# A document with a longer heading that starts with `## Open`.
+LONGER_HEADING = '# Longer heading\n\n## Open-prefixed heading\n'
 
 
 def source_dir(t: TestCase) -> Path:
@@ -57,11 +59,16 @@ class DiscoverListsTests(TestCase):
         write(t.source, 'career', '- [ ] A visible task [P:2]')
         loose = t.source / 'notes.md'
         loose.write_text('# Notes\n\nNothing open here.\n', encoding='utf-8')
+        longer = t.source / 'longer-heading.md'
+        longer.write_text(LONGER_HEADING, encoding='utf-8')
 
         ret = discover_lists(t.source)
 
-        # A file with no open section is not a list.
-        t.assertNotIn(loose, ret)
+        with t.subTest('a file with no open section is not a list'):
+            t.assertNotIn(loose, ret)
+
+        with t.subTest('nor is one whose heading only starts with Open'):
+            t.assertNotIn(longer, ret)
 
     def test_absent(t) -> None:
         ret = discover_lists(t.source / 'absent')

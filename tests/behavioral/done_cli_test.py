@@ -14,7 +14,7 @@ behaviour of its own.
 
 from datetime import datetime
 from pathlib import Path
-from shutil import copytree
+from shutil import copy, copytree
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
@@ -25,6 +25,9 @@ from tests.environment import TZ
 from .cli_runner import run_cli
 
 FIXTURES = Path(__file__).parent / 'data' / 'todo'
+# A document beside the lists that shows the list format in a fenced
+# example.
+GUIDE = Path(__file__).parent / 'data' / 'format-guide.md'
 FROZEN = datetime(2026, 8, 5, 10, 30, tzinfo=TZ)
 SOURCE_VAR = 'BATTODO_VIEW_SOURCE_DIR'
 # The day the work finished, earlier than the day it is logged.
@@ -80,6 +83,22 @@ class DoneCommandTests(TestCase):
             f'{FROZEN.date().isoformat()} | work | DONE | Due today task',
             logged,
         )
+
+    def test_done_fenced_example(t) -> None:
+        copy(GUIDE, t.source)
+        before = t.read('format-guide.md')
+
+        out, err, code = run_cli(['done', 'fenced example task'], t.env)
+
+        with t.subTest('a fenced example of the list format is no task'):
+            t.assertEqual(err, "no open task matches 'fenced example task'\n")
+            t.assertEqual(code, 1)
+
+        with t.subTest('stdout stays empty'):
+            t.assertEqual(out, '')
+
+        with t.subTest('and the document stays as it was'):
+            t.assertEqual(t.read('format-guide.md'), before)
 
     def test_done_on_an_unreadable_date(t) -> None:
         """A rejected date reports on stderr and writes nothing."""
