@@ -45,12 +45,13 @@ selector rule, output key, refusal, or exit code. Internal changes stay
 out: refactors, object design, test layout. `README.md` and `SKILL.md`
 share no text. Lint both with `markdownlint-cli2`.
 
-### A refusal lists its choices from a declared tuple
+### A refusal lists its choices in a stable order
 
 A refusal that lists choices reads them from a declared tuple, in declared
 order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
-`battodo/completed.py` do. The message reads
-`unknown <thing> <value!r>; choose one of <list>`.
+`battodo/completed.py` do. A discovered set, which btodo reads from files
+or data at run time, lists in sorted order. The message reads
+`unknown <thing> <value!r>; choose one of <list>` in both cases.
 
 ### A named intermediate is a property
 
