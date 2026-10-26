@@ -47,8 +47,9 @@ class GetConfigTests(TestCase):
 
         t.GlobalConfig = GlobalConfig
 
+    @patch(f'{SRC}.NamespaceSource', autospec=True)
     @patch(f'{SRC}.EnvSource', autospec=True)
-    def test_default_values(t, EnvSource):
+    def test_default_values(t, EnvSource, NamespaceSource):
         t.ConfigFile.return_value.source = None
         EnvSource.return_value = None
 
@@ -56,6 +57,7 @@ class GetConfigTests(TestCase):
 
         t.assertEqual(CONF.AModule.arg_3, 'dataclass_default_arg_3')
         t.assertEqual(CONF.BModule.arg_1, 'dataclass_default_isodate')
+        NamespaceSource.assert_not_called()
 
     def test_arg_cli_args(t):
         """CLI values are addressed by their dotted config path"""
