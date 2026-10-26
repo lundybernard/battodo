@@ -31,15 +31,15 @@ class TaskSelection:
     """
 
     def __init__(self, directory: Path, selector: str) -> None:
-        self.directory = directory
-        self.selector = selector
+        self._directory = directory
+        self._selector = selector
 
     @cached_property
     def lists(self) -> list[tuple[Path, TodoDocument]]:
         """Every discovered list, parsed, beside the path it came from."""
         return [
             (path, TodoDocument(path.read_text()))
-            for path in discover_lists(self.directory)
+            for path in discover_lists(self._directory)
         ]
 
     @cached_property
@@ -54,23 +54,23 @@ class TaskSelection:
             TaskRecord(path, doc, ancestry)
             for path, doc in self.lists
             for ancestry in doc.ancestries
-                if not ancestry[-1].done and self.selects(ancestry[-1])
+                if not ancestry[-1].done and self._selects(ancestry[-1])
         ]  # fmt: skip
         by_id = [
             record
             for record in found
-                if record.task.task_id == self.selector
+                if record.task.task_id == self._selector
         ]  # fmt: skip
         return by_id or found
 
-    def selects(self, task: TaskNode) -> bool:
+    def _selects(self, task: TaskNode) -> bool:
         """Whether the selector names `task`, done or not.
 
         An `[ID:]` equal to the selector names it, and so does a title
         that holds the selector in any case.
         """
-        part = self.selector.lower()
-        return task.task_id == self.selector or part in task.title.lower()
+        part = self._selector.lower()
+        return task.task_id == self._selector or part in task.title.lower()
 
     @cached_property
     def record(self) -> 'TaskRecord':
@@ -83,11 +83,11 @@ class TaskSelection:
         """
         records = self.records
         if not records:
-            raise SelectionError(f'no open task matches {self.selector!r}')
+            raise SelectionError(f'no open task matches {self._selector!r}')
         if len(records) > 1:
             titles = ', '.join(repr(record.task.title) for record in records)
             raise SelectionError(
-                f'{self.selector!r} matches {len(records)} open tasks: '
+                f'{self._selector!r} matches {len(records)} open tasks: '
                 f'{titles}'
             )
         return records[0]
