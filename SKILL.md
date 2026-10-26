@@ -252,6 +252,11 @@ The source directory holds the lists. It defaults to `~/todo`.
 Override it with `BATTODO_VIEW_SOURCE_DIR`, or set `view.source_dir` in
 a config file.
 
+A markdown file there is a list only when it holds an `## Open`
+heading outside fenced code. A format guide that shows a list in a
+fenced example is not one: `view` leaves it out, and no selector
+reaches its example tasks.
+
 Every value in the config file is a quoted string. The environment and
 the command line carry strings only, so a quoted value gives an option
 one type from every source; the command that reads a value decodes it.

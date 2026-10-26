@@ -77,6 +77,10 @@ rescheduled: it ranks low while its due date is far off and climbs as
 the date comes near. `done` moves its `[ADDED:]` to the completion day,
 so its wait starts again; its `[ID:]` and its history stay.
 
+Every markdown file in the source directory with an `## Open` heading
+is a list. An `## Open` line inside fenced code is an example, not a
+heading, so a guide to the format can sit beside the lists.
+
 A list opts out of views by carrying `<!-- battodo:parked -->` anywhere
 in the file. It stays discoverable, so migrations still reach it, and
 it stays out of `--all` too — opting out is not a time window.

@@ -68,6 +68,11 @@ A markdown file is a todo list if it contains a `## Open` heading.
 `discover_lists` returns every such file, including ones marked parked;
 only `Selection.shows` filters those out.
 
+A line inside fenced code is an example, not a heading. A fence opens
+on a run of three or more backticks or tildes. Only a line that holds
+nothing but a run of the same character, at least as long, closes it.
+`TodoDocument.open_headings` applies this rule.
+
 ## Adding a task
 
 `btodo add <list> <title>` files one new top-level task, and
