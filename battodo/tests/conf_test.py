@@ -279,20 +279,15 @@ class TimeZoneTests(TestCase):
 
     @patch(f'{SRC}.datetime', autospec=True)
     def test_local(t, datetime: MagicMock) -> None:
+        # A view without a time_zone attribute stands for an absent zone
+        # and for an empty one.
+        t.conf.view = Mock(spec=[])
         local = datetime.now.return_value.astimezone.return_value
 
-        with t.subTest('an empty name reads the zone of the system'):
-            t.conf.view.time_zone = ''
+        ret = time_zone(t.conf)
 
-            ret = time_zone(t.conf)
-
-            t.assertIs(ret, local.tzinfo)
-            datetime.now.assert_called_once_with(UTC)
-
-        with t.subTest('and so does a name the lookup cannot find'):
-            t.conf.view = Mock(spec=[])
-            ret = time_zone(t.conf)
-            t.assertIs(ret, local.tzinfo)
+        t.assertIs(ret, local.tzinfo)
+        datetime.now.assert_called_once_with(UTC)
 
     def test_unknown(t) -> None:
         refusals = {

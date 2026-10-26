@@ -181,6 +181,11 @@ class TimeZoneTests(TestCase):
             ret = datetime(2026, 8, 5, tzinfo=zone).utcoffset()
             t.assertIsNotNone(ret)
 
+        with t.subTest('an empty zone reads as none configured'):
+            zone = t.zone('')
+            ret = datetime(2026, 8, 5, tzinfo=zone).utcoffset()
+            t.assertIsNotNone(ret)
+
         refusals = {
             'a name with no zone': 'Mars/Olympus',
             'a region and not a zone': 'America',
