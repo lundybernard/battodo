@@ -39,9 +39,9 @@ class TaskHistory:
         selector: str,
         zone: tzinfo | None,
     ) -> None:
-        self.journal = journal
-        self.selector = selector
-        self.zone = zone
+        self._journal = journal
+        self._selector = selector
+        self._zone = zone
 
     @classmethod
     def from_config(
@@ -61,10 +61,10 @@ class TaskHistory:
     @property
     def task_id(self) -> str:
         """The id of the task: its stream id after `task/`."""
-        return self.stream.task_id
+        return self._stream.task_id
 
     @property
-    def stream(self) -> 'TaskStream':
+    def _stream(self) -> 'TaskStream':
         """The stream the selector names.
 
         Raises
@@ -72,14 +72,14 @@ class TaskHistory:
         ValueError
             The selector names no stream, or several.
         """
-        return StreamSelection(self.streams, self.selector).stream
+        return StreamSelection(self._streams, self._selector).stream
 
     @property
-    def streams(self) -> list['TaskStream']:
+    def _streams(self) -> list['TaskStream']:
         """Every stream of the journal, read in the zone of the history."""
         return [
-            TaskStream(stream_id, events, self.zone)
-            for stream_id, events in self.journal.streams.items()
+            TaskStream(stream_id, events, self._zone)
+            for stream_id, events in self._journal.streams.items()
         ]
 
     @property
@@ -88,7 +88,7 @@ class TaskHistory:
 
         None when the stream holds no event of the task's own.
         """
-        return self.stream.title
+        return self._stream.title
 
     @property
     def entries(self) -> list['HistoryEntry']:
@@ -97,7 +97,9 @@ class TaskHistory:
         A completion and a scratch each close the task. Newest first: by
         day, then the later event in the journal first.
         """
-        read = [HistoryEntry(event, self.zone) for event in self.stream.events]
+        read = [
+            HistoryEntry(event, self._zone) for event in self._stream.events
+        ]
         closes = (COMPLETED_EVENT, SCRATCHED_EVENT)
         listed = [
             entry
@@ -117,8 +119,8 @@ class StreamSelection:
     """
 
     def __init__(self, streams: list['TaskStream'], selector: str) -> None:
-        self.streams = streams
-        self.selector = selector
+        self._streams = streams
+        self._selector = selector
 
     @property
     def stream(self) -> 'TaskStream':
@@ -134,7 +136,7 @@ class StreamSelection:
         found = self.candidates
         if not found:
             raise ValueError(
-                f'no task in the journal matches {self.selector!r}'
+                f'no task in the journal matches {self._selector!r}'
             )
         if len(found) > 1:
             newest = sorted(found, key=attrgetter('day', 'seq'), reverse=True)
@@ -143,7 +145,7 @@ class StreamSelection:
                 for stream in newest
             )
             raise ValueError(
-                f'{self.selector!r} matches {len(found)} tasks in the '
+                f'{self._selector!r} matches {len(found)} tasks in the '
                 f'journal:\n{lines}'
             )
         return found[0]
@@ -153,13 +155,13 @@ class StreamSelection:
         """Every stream the selector names, in journal order."""
         named = [
             stream
-            for stream in self.streams
-                if stream.task_id == self.selector
+            for stream in self._streams
+                if stream.task_id == self._selector
         ]  # fmt: skip
-        part = self.selector.lower()
+        part = self._selector.lower()
         return named or [
             stream
-            for stream in self.streams
+            for stream in self._streams
                 if stream.title is not None and part in stream.title.lower()
         ]  # fmt: skip
 
@@ -177,14 +179,14 @@ class TaskStream:
         events: list[dict[str, Any]],
         zone: tzinfo | None,
     ) -> None:
-        self.stream_id = stream_id
+        self._stream_id = stream_id
         self.events = events
-        self.zone = zone
+        self._zone = zone
 
     @property
     def task_id(self) -> str:
         """The id of the task: the stream id after `task/`."""
-        return self.stream_id.removeprefix('task/')
+        return self._stream_id.removeprefix('task/')
 
     @property
     def title(self) -> str | None:
@@ -203,7 +205,7 @@ class TaskStream:
     @property
     def day(self) -> date:
         """The day of the last event, as a history entry reads it."""
-        return HistoryEntry(self.events[-1], self.zone).day
+        return HistoryEntry(self.events[-1], self._zone).day
 
     @property
     def seq(self) -> int:
@@ -286,18 +288,18 @@ class HistoryEntry:
     """One event of a history: its kind, its day and its attributes."""
 
     def __init__(self, event: dict[str, Any], zone: tzinfo | None) -> None:
-        self.event = event
-        self.zone = zone
+        self._event = event
+        self._zone = zone
 
     @property
     def kind(self) -> str:
         """The event type."""
-        return self.event['type']
+        return self._event['type']
 
     @property
     def checklist_item(self) -> bool:
         """Whether the event belongs to a checklist item."""
-        return bool(self.event['payload'].get('checklist_item'))
+        return bool(self._event['payload'].get('checklist_item'))
 
     @property
     def day(self) -> date:
@@ -307,21 +309,21 @@ class HistoryEntry:
         of `occurred_at` for any other event, and for a close that
         predates `completed_on`.
         """
-        completed_on = self.event['payload'].get('completed_on')
+        completed_on = self._event['payload'].get('completed_on')
         if completed_on is not None:
             return date.fromisoformat(completed_on)
-        occurred = datetime.fromisoformat(self.event['occurred_at'])
-        return occurred.astimezone(self.zone).date()
+        occurred = datetime.fromisoformat(self._event['occurred_at'])
+        return occurred.astimezone(self._zone).date()
 
     @property
     def attrs(self) -> dict[str, str]:
         """The attributes, in recorded order. Absent reads as none."""
-        return self.event['payload'].get('attrs', {})
+        return self._event['payload'].get('attrs', {})
 
     @property
     def reopen(self) -> bool:
         """Whether the event reopens the task: done turns false."""
-        delta = self.event['payload'].get('delta', {})
+        delta = self._event['payload'].get('delta', {})
         return delta.get('done') == [True, False]
 
 
@@ -329,53 +331,53 @@ class HistoryView:
     """A history rendered for a terminal: a header, then the entries."""
 
     def __init__(self, history: TaskHistory) -> None:
-        self.history = history
+        self._history = history
 
     @property
     def text(self) -> str:
         """The header, then each entry. Without a trailing newline."""
-        lines = [self.header]
-        for entry in self.entries:
+        lines = [self._header]
+        for entry in self._entries:
             lines.extend(entry.lines)
         return '\n'.join(lines)
 
     @property
-    def header(self) -> str:
+    def _header(self) -> str:
         """The title of the task and its `[ID:]`, or the `[ID:]` alone."""
-        marker = f'[ID:{self.history.task_id}]'
-        title = self.history.title
+        marker = f'[ID:{self._history.task_id}]'
+        title = self._history.title
         return f'{title} {marker}' if title else marker
 
     @property
-    def entries(self) -> list['HistoryEntryView']:
+    def _entries(self) -> list['HistoryEntryView']:
         """The entries of the history, each laid out as text."""
-        return [HistoryEntryView(entry) for entry in self.history.entries]
+        return [HistoryEntryView(entry) for entry in self._history.entries]
 
 
 class HistoryEntryView:
     """One entry of a history: its day and kind, then its attributes."""
 
     def __init__(self, entry: HistoryEntry) -> None:
-        self.entry = entry
+        self._entry = entry
 
     @property
     def lines(self) -> list[str]:
         """The day and the label, then one `key=value` line each."""
-        day = self.entry.day.isoformat()
+        day = self._entry.day.isoformat()
         return [
-            f'{INDENT}{day}{INDENT}{self.label}',
+            f'{INDENT}{day}{INDENT}{self._label}',
             *(
                 f'{INDENT * 2}{key}={value}'
-                for key, value in self.entry.attrs.items()
+                for key, value in self._entry.attrs.items()
             ),
         ]
 
     @property
-    def label(self) -> str:
+    def _label(self) -> str:
         """The kind. The checklist marker labels a checklist item's."""
-        kind = self.entry.kind
+        kind = self._entry.kind
         return (
-            f'{kind} {CHECKLIST_LABEL}' if self.entry.checklist_item else kind
+            f'{kind} {CHECKLIST_LABEL}' if self._entry.checklist_item else kind
         )
 
 
@@ -383,18 +385,18 @@ class HistoryJsonView:
     """A history laid out as JSON, for an agent to read."""
 
     def __init__(self, history: TaskHistory) -> None:
-        self.history = history
+        self._history = history
 
     @property
     def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
+        """`_data` as a JSON document, indented for a person to read too.
 
-        The schema is a contract for agents; see `data` for its shape.
+        The schema is a contract for agents; see `_data` for its shape.
         """
-        return dumps(self.data, indent=2)
+        return dumps(self._data, indent=2)
 
     @property
-    def data(self) -> dict[str, Any]:
+    def _data(self) -> dict[str, Any]:
         """The machine-readable form of the history.
 
         Shaped as::
@@ -407,29 +409,29 @@ class HistoryJsonView:
         `title` is null when no event of the task's own records one.
         """
         return {
-            'id': self.history.task_id,
-            'title': self.history.title,
-            'entries': [entry.data for entry in self.entries],
+            'id': self._history.task_id,
+            'title': self._history.title,
+            'entries': [entry.data for entry in self._entries],
         }
 
     @property
-    def entries(self) -> list['HistoryEntryJsonView']:
+    def _entries(self) -> list['HistoryEntryJsonView']:
         """The entries of the history, each laid out as JSON."""
-        return [HistoryEntryJsonView(entry) for entry in self.history.entries]
+        return [HistoryEntryJsonView(entry) for entry in self._history.entries]
 
 
 class HistoryEntryJsonView:
     """One entry of a history laid out as JSON."""
 
     def __init__(self, entry: HistoryEntry) -> None:
-        self.entry = entry
+        self._entry = entry
 
     @property
     def data(self) -> dict[str, Any]:
-        """The entry as `HistoryJsonView.data` records it."""
+        """The entry as `HistoryJsonView._data` records it."""
         return {
-            'kind': self.entry.kind,
-            'checklist_item': self.entry.checklist_item,
-            'day': self.entry.day.isoformat(),
-            'attrs': self.entry.attrs,
+            'kind': self._entry.kind,
+            'checklist_item': self._entry.checklist_item,
+            'day': self._entry.day.isoformat(),
+            'attrs': self._entry.attrs,
         }
