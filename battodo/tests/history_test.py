@@ -40,18 +40,18 @@ class TaskHistoryTests(TestCase):
         ret = TaskHistory.from_config(conf, now, selector='a selector')
 
         journal.assert_called_once_with(Path('~/a-source-dir'))
-        t.assertIs(ret.journal, journal.return_value)
-        t.assertEqual(ret.selector, 'a selector')
-        t.assertIs(ret.zone, sentinel.zone)
+        t.assertIs(ret._journal, journal.return_value)
+        t.assertEqual(ret._selector, 'a selector')
+        t.assertIs(ret._zone, sentinel.zone)
 
-    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
+    @patch.object(TaskHistory, '_stream', new_callable=PropertyMock)
     def test_task_id(t, stream: PropertyMock) -> None:
         stream.return_value = Mock(spec=['task_id'], task_id='ab12cd')
         ret = t.th.task_id
         t.assertEqual(ret, 'ab12cd')
 
     @patch(f'{SRC}.StreamSelection', autospec=True)
-    @patch.object(TaskHistory, 'streams', new_callable=PropertyMock)
+    @patch.object(TaskHistory, '_streams', new_callable=PropertyMock)
     def test_stream(
         t,
         streams: PropertyMock,
@@ -59,7 +59,7 @@ class TaskHistoryTests(TestCase):
     ) -> None:
         streams.return_value = sentinel.streams
 
-        ret = t.th.stream
+        ret = t.th._stream
 
         stream_selection.assert_called_once_with(
             sentinel.streams, 'a selector'
@@ -74,7 +74,7 @@ class TaskHistoryTests(TestCase):
         }
         task_stream.side_effect = [sentinel.aa, sentinel.bb]
 
-        ret = t.th.streams
+        ret = t.th._streams
 
         t.assertEqual(ret, [sentinel.aa, sentinel.bb])
         t.assertEqual(
@@ -85,14 +85,14 @@ class TaskHistoryTests(TestCase):
             ],
         )
 
-    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
+    @patch.object(TaskHistory, '_stream', new_callable=PropertyMock)
     def test_title(t, stream: PropertyMock) -> None:
         stream.return_value = Mock(spec=['title'], title='A task title')
         ret = t.th.title
         t.assertEqual(ret, 'A task title')
 
     @patch(f'{SRC}.HistoryEntry', autospec=True)
-    @patch.object(TaskHistory, 'stream', new_callable=PropertyMock)
+    @patch.object(TaskHistory, '_stream', new_callable=PropertyMock)
     def test_entries(
         t, stream: PropertyMock, history_entry: MagicMock
     ) -> None:
@@ -204,7 +204,7 @@ class StreamSelectionTests(TestCase):
         }
         for name, (selector, expected) in cases.items():
             with t.subTest(name):
-                t.ss.selector = selector
+                t.ss._selector = selector
                 ret = t.ss.candidates
                 t.assertEqual(ret, expected)
 
@@ -426,7 +426,7 @@ class HistoryEntryTests(TestCase):
             t.assertEqual(ret, date(2026, 10, 1))
 
         with t.subTest('the same instant falls on another day elsewhere'):
-            t.he.zone = AHEAD
+            t.he._zone = AHEAD
             ret = t.he.day
             t.assertEqual(ret, date(2026, 10, 2))
 
@@ -471,8 +471,8 @@ class HistoryViewTests(TestCase):
         t.history.title = 'A task title'
         t.hv = HistoryView(t.history)
 
-    @patch.object(HistoryView, 'entries', new_callable=PropertyMock)
-    @patch.object(HistoryView, 'header', new_callable=PropertyMock)
+    @patch.object(HistoryView, '_entries', new_callable=PropertyMock)
+    @patch.object(HistoryView, '_header', new_callable=PropertyMock)
     def test_text(t, header: PropertyMock, entries: PropertyMock) -> None:
         header.return_value = 'A header'
 
@@ -493,12 +493,12 @@ class HistoryViewTests(TestCase):
 
     def test_header(t) -> None:
         with t.subTest('the title, then the id'):
-            ret = t.hv.header
+            ret = t.hv._header
             t.assertEqual(ret, 'A task title [ID:ab12cd]')
 
         with t.subTest('the id alone where no title is recorded'):
             t.history.title = None
-            ret = t.hv.header
+            ret = t.hv._header
             t.assertEqual(ret, '[ID:ab12cd]')
 
     @patch(f'{SRC}.HistoryEntryView', autospec=True)
@@ -506,7 +506,7 @@ class HistoryViewTests(TestCase):
         t.history.entries = [sentinel.first, sentinel.second]
         history_entry_view.side_effect = [sentinel.shown, sentinel.next]
 
-        ret = t.hv.entries
+        ret = t.hv._entries
 
         t.assertEqual(ret, [sentinel.shown, sentinel.next])
         history_entry_view.assert_has_calls(
@@ -525,7 +525,7 @@ class HistoryEntryViewTests(TestCase):
         t.entry.attrs = {}
         t.hev = HistoryEntryView(t.entry)
 
-    @patch.object(HistoryEntryView, 'label', new_callable=PropertyMock)
+    @patch.object(HistoryEntryView, '_label', new_callable=PropertyMock)
     def test_lines(t, label: PropertyMock) -> None:
         label.return_value = 'A label'
 
@@ -549,12 +549,12 @@ class HistoryEntryViewTests(TestCase):
 
     def test_label(t) -> None:
         with t.subTest('the kind'):
-            ret = t.hev.label
+            ret = t.hev._label
             t.assertEqual(ret, 'TaskCompleted')
 
         with t.subTest('marked on the event of a checklist item'):
             t.entry.checklist_item = True
-            ret = t.hev.label
+            ret = t.hev._label
             t.assertEqual(ret, 'TaskCompleted (checklist item)')
 
 
@@ -567,18 +567,18 @@ class HistoryJsonViewTests(TestCase):
         t.history.title = 'A task title'
         t.hjv = HistoryJsonView(t.history)
 
-    @patch.object(HistoryJsonView, 'data', new_callable=PropertyMock)
+    @patch.object(HistoryJsonView, '_data', new_callable=PropertyMock)
     def test_json(t, data: PropertyMock) -> None:
         data.return_value = {'id': 'ab12cd', 'entries': []}
         ret = t.hjv.json
         t.assertEqual(ret, '{\n  "id": "ab12cd",\n  "entries": []\n}')
 
-    @patch.object(HistoryJsonView, 'entries', new_callable=PropertyMock)
+    @patch.object(HistoryJsonView, '_entries', new_callable=PropertyMock)
     def test_data(t, entries: PropertyMock) -> None:
         entries.return_value = [Mock(spec=['data'], data={'k': 'v'})]
 
         with t.subTest('the id, the title and the entries'):
-            ret = t.hjv.data
+            ret = t.hjv._data
             t.assertEqual(
                 ret,
                 {
@@ -590,7 +590,7 @@ class HistoryJsonViewTests(TestCase):
 
         with t.subTest('a title that is not recorded is null'):
             t.history.title = None
-            ret = t.hjv.data
+            ret = t.hjv._data
             t.assertIsNone(ret['title'])
 
     @patch(f'{SRC}.HistoryEntryJsonView', autospec=True)
@@ -598,7 +598,7 @@ class HistoryJsonViewTests(TestCase):
         t.history.entries = [sentinel.first, sentinel.second]
         history_entry_json_view.side_effect = [sentinel.shown, sentinel.next]
 
-        ret = t.hjv.entries
+        ret = t.hjv._entries
 
         t.assertEqual(ret, [sentinel.shown, sentinel.next])
         history_entry_json_view.assert_has_calls(

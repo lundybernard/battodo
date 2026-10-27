@@ -239,7 +239,7 @@ class TaskHistoryTests(TestCase):
         ret = TaskHistory.from_config(conf, NOW, selector='parking')
 
         t.assertEqual(ret.task_id, 'ab12cd')
-        t.assertEqual(ret.zone, TZ)
+        t.assertEqual(ret._zone, TZ)
 
     def test_task_id(t) -> None:
         cases = {
