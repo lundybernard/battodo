@@ -59,7 +59,8 @@ def next_due(spec: str, completed: date) -> date:
     if weekly := WEEKLY_RE.match(value):
         return _next_weekday(weekly.group(1), completed)
     if monthly := MONTHLY_RE.match(value):
-        return _next_month_day(int(monthly.group(1)), completed)
+        day = int(monthly.group(1))
+        return _next_month_day(day, completed)
 
     raise RepeatError(f'unrecognised REPEAT value: {spec!r}')
 
@@ -74,4 +75,5 @@ def _next_month_day(day: int, completed: date) -> date:
     if completed.day >= day:
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     # Short months clamp: `monthly:31` is the last day of February.
-    return date(year, month, min(day, monthrange(year, month)[1]))
+    last_day = monthrange(year, month)[1]
+    return date(year, month, min(day, last_day))
