@@ -693,6 +693,64 @@ class TodoDocumentTests(TestCase):
 
             t.assertEqual(ret, [1, 3])
 
+    def test_open_headings(t) -> None:
+        with t.subTest('the index of each Open heading'):
+            ret = t.td.open_headings
+            t.assertEqual(ret, [4])
+
+        cases = {
+            'at the first line too': (['## Open'], [0]),
+            'but none in fenced code, which is an example': (
+                ['# Guide', '```markdown', '## Open', '```'],
+                [],
+            ),
+            'and one again once the fence closes': (
+                ['```', '## Open', '```', '## Open'],
+                [3],
+            ),
+        }
+
+        for name, (lines, expected) in cases.items():
+            with t.subTest(name):
+                t.td.lines = lines
+                ret = t.td.open_headings
+                t.assertEqual(ret, expected)
+
+    def test_fences(t) -> None:
+        t.td.lines = ['# Guide', '```markdown', '## Open', '```', '## Open']
+        ret = t.td._fences
+        # The fence that each line opens is open from the next line on.
+        t.assertEqual(ret, ['', '', '```', '```', ''])
+
+    def test_fence_after(t) -> None:
+        with t.subTest('a plain line opens no fence'):
+            ret = t.td._fence_after('', '- [ ] fenced task')
+            t.assertEqual(ret, '')
+
+        cases = {
+            'a run of three backticks opens one': ('', '```', '```'),
+            'without the info string after it': ('', '```markdown', '```'),
+            'or the indent before it': ('', '  ```', '```'),
+            'a run of tildes opens one too': ('', '~~~', '~~~'),
+            'a run of two opens none': ('', '``', ''),
+            'inside a fence a plain line keeps it open': (
+                '```',
+                '## Open',
+                '```',
+            ),
+            'the same run closes it': ('```', '```', ''),
+            'with space around it too': ('```', '  ```  ', ''),
+            'and so does a longer run': ('```', '````', ''),
+            'a shorter run does not': ('````', '```', '````'),
+            'nor a run of the other character': ('```', '~~~', '```'),
+            'nor a run with text after it': ('```', '```markdown', '```'),
+        }
+
+        for name, (fence, line, expected) in cases.items():
+            with t.subTest(name):
+                ret = t.td._fence_after(fence, line)
+                t.assertEqual(ret, expected)
+
     def test_ancestries(t) -> None:
         below = TaskNode(
             raw_index=3,

@@ -1,14 +1,17 @@
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, call, create_autospec, patch
 
 from ..lists import (
     COUNT_ERROR,
+    TodoDocument,
     category_order,
     discover_lists,
     full_view,
     item_count,
 )
+
+SRC = 'battodo.lists'
 
 
 def md(name: str, text: str) -> MagicMock:
@@ -20,13 +23,32 @@ def md(name: str, text: str) -> MagicMock:
     return path
 
 
+def document(open_headings: list[int]) -> MagicMock:
+    """A stand-in parsed file that holds `open_headings`."""
+    doc = create_autospec(TodoDocument, instance=True)
+    doc.open_headings = open_headings
+    return doc
+
+
 class DiscoverListsTests(TestCase):
     """Unit tests for battodo.lists.discover_lists."""
 
+    TodoDocument: MagicMock
+
     def setUp(t) -> None:
-        t.work = md('work.md', '# W\n\n## Open\n\n- [ ] A\n')
-        t.backlog = md('backlog.md', '## Open\n\n- [ ] B\n')
-        t.prose = md('SCHEMA.md', '# Schema\n\nprose, and no open section\n')
+        patcher = patch(f'{SRC}.TodoDocument', autospec=True)
+        t.TodoDocument = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.work = md('work.md', 'work-list text')
+        t.backlog = md('backlog.md', 'backlog-list text')
+        t.prose = md('SCHEMA.md', 'schema text')
+        t.documents = {
+            'work-list text': document([2]),
+            'backlog-list text': document([0]),
+            'schema text': document([]),
+        }
+        t.TodoDocument.side_effect = t.documents.__getitem__
         t.dir = Mock(spec=Path)
         t.dir.is_dir.return_value = True
         t.dir.glob.return_value = [t.work, t.prose, t.backlog]
@@ -34,7 +56,17 @@ class DiscoverListsTests(TestCase):
     def test_open_section(t) -> None:
         ret = discover_lists(t.dir)
 
-        with t.subTest('a list is a file carrying an open section'):
+        with t.subTest('each file is parsed from its text'):
+            t.assertEqual(
+                t.TodoDocument.mock_calls,
+                [
+                    call('work-list text'),
+                    call('schema text'),
+                    call('backlog-list text'),
+                ],
+            )
+
+        with t.subTest('a list is a file with an open heading'):
             t.assertEqual(ret, [t.backlog, t.work])
 
         with t.subTest('which is what an ad-hoc name is admitted on'):

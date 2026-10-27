@@ -6,7 +6,7 @@ Every reader of a source directory finds its lists here.
 
 from pathlib import Path
 
-from .parser import OPEN_HEADING
+from .parser import TodoDocument
 
 CATEGORY_ORDER = ['work', 'chores', 'study', 'career', 'events']
 # What a rejected item count reports, wherever it was configured.
@@ -18,20 +18,21 @@ SWITCHES = ('false', 'true')
 def discover_lists(directory: Path) -> list[Path]:
     """Every markdown file in `directory` that is a todo list.
 
-    The predicate is the presence of a `## Open` heading, so an ad-hoc
-    list such as backlog.md is found, while SCHEMA.md, CLAUDE.md and
-    the differently-formatted completed.md are not.
+    The predicate is the presence of a `## Open` heading outside fenced
+    code, so an ad-hoc list such as backlog.md is found, while SCHEMA.md,
+    CLAUDE.md and the differently-formatted completed.md are not.
 
     Parked lists are included -- opting out of *views* is not opting out
     of existing, and a mutation must still reach them.
     """
     if not directory.is_dir():
         return []
-    return sorted(
-        path
-        for path in directory.glob('*.md')
-        if OPEN_HEADING in path.read_text()
-    )
+    found: list[Path] = []
+    for path in directory.glob('*.md'):
+        document = TodoDocument(path.read_text())
+        if document.open_headings:
+            found.append(path)
+    return sorted(found)
 
 
 def category_order(name: str) -> tuple[int, str]:
