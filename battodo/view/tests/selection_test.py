@@ -187,19 +187,14 @@ class SelectionTests(TestCase):
             later.order, earlier.order = (2, 'study'), (0, 'work')
             todo_list.side_effect = [later, earlier]
             t.s.curve = sentinel.curve
+            # Each list ranks its tasks on the selection's day and curve.
+            calls = [call(path, TODAY, sentinel.curve) for path in paths]
 
             ret = t.s.lists
 
             t.assertEqual(ret, [earlier, later])
             t.discover_lists.assert_called_with(t.resolved)
-            # Each list ranks its tasks on the selection's day and curve.
-            t.assertEqual(
-                todo_list.call_args_list,
-                [
-                    call(Path('later.md'), TODAY, sentinel.curve),
-                    call(Path('earlier.md'), TODAY, sentinel.curve),
-                ],
-            )
+            t.assertEqual(todo_list.call_args_list, calls)
 
     def test_shows(t) -> None:
         t.s.windows = 'a-list=mon 9-10; another-list=tue 9-10'
