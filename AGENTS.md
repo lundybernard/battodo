@@ -45,20 +45,24 @@ selector rule, output key, refusal, or exit code. Internal changes stay
 out: refactors, object design, test layout. `README.md` and `SKILL.md`
 share no text. Lint both with `markdownlint-cli2`.
 
-### A refusal lists its choices from a declared tuple
+### A refusal lists its choices in a stable order
 
 A refusal that lists choices reads them from a declared tuple, in declared
 order, as `FORMATS` in `battodo/lib.py` and `PERIODS` in
-`battodo/completed.py` do. The message reads
-`unknown <thing> <value!r>; choose one of <list>`.
+`battodo/completed.py` do. A discovered set, which btodo reads from files
+or data at run time, lists in sorted order. The message reads
+`unknown <thing> <value!r>; choose one of <list>` in both cases.
 
 ### A named intermediate is a property
 
 Inside a class, a value that is computed from the object's state and then
-used is its own `@property`. It is `_<name>` when only the class reads it,
-and public when another object reads it. The public name is the plain noun for
-the value the consumer reads, and a raw input that readers use only in a
-derived form is stored as `_raw_<name>`. A local name holds only a loop or
+used is its own `@property`. The public surface is the set of names that
+outside production code reads. Stored or computed, an attribute is
+`_<name>` unless another production object reads it. A test read never
+makes a name public. Dataclass and NamedTuple fields keep public names.
+The public name is the plain noun for the value the consumer reads, and a
+raw input that readers use only in a derived form is stored as
+`_raw_<name>`. A local name holds only a loop or
 comprehension variable, a value derived from one, or a value that depends
 on a method argument. The code reads `self.<attr>` at each use. A
 module-level function tells a simple story: its body says what happens to
@@ -68,13 +72,17 @@ methods.
 **Why:** each step is auditable and testable alone. A test sets the state
 and reads the step, so it needs fewer mocks and no `assert_called_with`
 check on an intermediate. A traceback names the step, and a debugger reads
-the property.
+the property. The underscore marks a name that no other production object
+depends on, so a change to it stays inside the class. A field name is also
+a constructor keyword, and a NamedTuple refuses a name that starts with an
+underscore.
 
 **How to apply:** split a body when the split simplifies the calling code and
 its tests. The degree is a judgement call. A function that needs a computed
 intermediate marks a missing class or method: move the work behind a method on
 the domain object, `<Entity>.<verb>(<args>)`, and keep its helper classes
-internal. Read the consumer first: the names it reads are the interface.
+internal. Read the production consumers first: the names they read are the
+interface.
 
 ## Working rules
 
@@ -88,9 +96,9 @@ internal. Read the consumer first: the names it reads are the interface.
 - At the PR tip, run `pixi run mutate` and `pixi run fuz` (the property
   suite). The mutation target is zero surviving mutants; list each
   survivor in the PR notes. CI does not run `mutate` yet.
-- A one-line statement holds at most two nested calls. A deeper inner
-  value becomes its own `@property`, or a local name in the cases that
-  the named-intermediate rule above keeps.
+- A statement holds at most two nested calls, whether it fits one line
+  or wraps. A deeper inner value becomes its own `@property`, or a local
+  name in the cases that the named-intermediate rule above keeps.
 - Docstrings use the numpydoc sections `Parameters`, `Returns`, and
   `Raises` with underline headers, as `battodo/lib.py` does.
 - A code comment states the one constraint that the code cannot show, in
@@ -106,8 +114,11 @@ internal. Read the consumer first: the names it reads are the interface.
 - Subject: `<type>: <summary>`, 50 characters as the target and 72 as the
   cap. The summary is lowercase and names the symbol or file changed. The
   scope slot stays empty; `(RED)` is the one marker it carries.
-- Type: `feat`, `fix`, `refactor`, `test`, `lint`, `docs`, or `chore`.
-  A linter-driven change uses `lint`, never `style`.
+- Type: `feat`, `fix`, `refactor`, `test`, `lint`, `docs`, `build`, `ci`,
+  or `chore`. `build` is a change to the build system, the dependencies,
+  the interpreter pins, or the lock file. `ci` is a change to the CI
+  workflows. `chore` is only for a change that fits no other type. A
+  linter-driven change uses `lint`, never `style`.
 - Every commit passes `pixi run lint` and `pixi run tests`, not only the
   tip. A `test(RED): <summary>` commit adds a failing test, and the next
   commit turns it green.
@@ -131,14 +142,30 @@ internal. Read the consumer first: the names it reads are the interface.
 ## Tests
 
 - Unit tests live in `battodo/**/tests/`. They touch no disk, mock all
-  I/O, and carry a 100% coverage gate. The root `tests/` holds the
-  integration, behavioral, and property suites.
+  I/O, and carry a 100% coverage gate.
+- The root `tests/` holds three suites, one per purpose, beside the
+  property suite in `tests/property/`:
+  - `tests/cli/`: the tests that drive the CLI, and their harness.
+  - `tests/behavioral/`: the BDD suite. It covers the behaviour of the
+    public API, its edge cases, its error handling, and its refusals. A
+    solo class, which exposes one public property such as `.text`, gets
+    one test method per behaviour here.
+  - `tests/integration/`: the happy path where the parts meet. One test
+    method per property, with a `subTest` per code path. An integration
+    test may read a private attribute whose value depends on an
+    integration.
+- A rising `subTest` count on one property means that the property
+  splits, never the test.
 - A bug fix starts with a test that reproduces the reported behaviour at
-  the highest layer that shows it, usually `tests/behavioral/`. The unit
+  the highest layer that shows it: `tests/cli/` for a bug that the CLI
+  shows, and `tests/behavioral/` for a bug that the API shows. The unit
   tests follow.
 - One test method per function under test, `test_<fn>`. Each code path is
   a `subTest` inside it, as in `CommandsNoteTests.test_note` in
-  `battodo/tests/cli_test.py`.
+  `battodo/tests/cli_test.py`. A module-level function that shares no
+  `setUp` with two or more others gets its own `<FnName>Tests` class
+  instead, with one `test_<behaviour>` method per behaviour. Never name a
+  method `test_<fn>_<behaviour>`.
 - Spec every mock: `patch(..., autospec=True)`, and `Mock(spec=...)` or a
   real value where you build a mock by hand.
 - Test the unit in isolation. Patch each collaborator, let a
