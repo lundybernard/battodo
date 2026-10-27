@@ -46,8 +46,8 @@ class Item:
         task: Task,
         rank_due_curve: str = DEFAULT_DUE_CURVE,
     ) -> None:
-        self.task = task
-        self.rank_due_curve = rank_due_curve
+        self._task = task
+        self._raw_curve = rank_due_curve
 
     @classmethod
     def from_config(
@@ -71,20 +71,20 @@ class Item:
     @property
     def category(self) -> str:
         """The name of the list: its file's name without the extension."""
-        return self.task.path.stem
+        return self._task.path.stem
 
     @property
     def node(self) -> TaskNode:
         """The task as the parser reads it."""
-        return self.task.node
+        return self._task.node
 
     @property
     def rank(self) -> float:
         """The task's rank on the day the task carries."""
-        return rank(self.node, self.task.today, self.curve)
+        return rank(self.node, self._task.today, self._curve)
 
     @cached_property
-    def curve(self) -> Curve:
+    def _curve(self) -> Curve:
         """The due-date curve the task is ranked on.
 
         Raises
@@ -92,7 +92,7 @@ class Item:
         ValueError
             The configured curve does not decode.
         """
-        return parse_curve(self.rank_due_curve)
+        return parse_curve(self._raw_curve)
 
     @property
     def priority(self) -> float:
@@ -109,7 +109,7 @@ class ItemView:
     """An item rendered for a terminal: a title, then labelled rows."""
 
     def __init__(self, item: Item) -> None:
-        self.item = item
+        self._item = item
 
     @property
     def text(self) -> str:
@@ -117,19 +117,19 @@ class ItemView:
 
         Returned without a trailing newline.
         """
-        width = self.width
-        lines = [self.item.node.title]
+        width = self._width
+        lines = [self._item.node.title]
         lines.extend(
             f'{INDENT}{label:<{width}}{INDENT}{value}'
-            for label, value in self.rows
+            for label, value in self._rows
         )
-        if self.item.subtasks:
+        if self._item.subtasks:
             lines.append(f'{INDENT}subtasks')
-            lines.extend(self.outline)
+            lines.extend(self._outline)
         return '\n'.join(lines)
 
     @property
-    def rows(self) -> list[tuple[str, str]]:
+    def _rows(self) -> list[tuple[str, str]]:
         """The labelled values the text form lists, in order.
 
         An absent field has no row. An absent id reads as NO_VALUE. The
@@ -137,12 +137,12 @@ class ItemView:
         published rank. Each description line closes them with a row,
         and only the first of those carries a label.
         """
-        node = self.item.node
+        node = self._item.node
         rows = [
-            ('list', self.item.category),
+            ('list', self._item.category),
             ('id', node.task_id or NO_VALUE),
-            ('rank', f'{self.item.rank:.1f}'),
-            ('P', f'{self.item.priority:.1f}'),
+            ('rank', f'{self._item.rank:.1f}'),
+            ('P', f'{self._item.priority:.1f}'),
         ]
         # SCHEMA.md's order, then ADDED, a btodo extension.
         stored = (
@@ -164,70 +164,70 @@ class ItemView:
         return rows
 
     @property
-    def width(self) -> int:
+    def _width(self) -> int:
         """How wide the labels pad to: the longest label."""
-        return max(len(label) for label, _ in self.rows)
+        return max(len(label) for label, _ in self._rows)
 
     @property
-    def outline(self) -> list[str]:
+    def _outline(self) -> list[str]:
         """The subtask lines, indented below their label."""
         return [
             f'{INDENT * 2}{line}'
-            for subtask in self.subtasks
+            for subtask in self._subtasks
             for line in subtask.lines
         ]
 
     @property
-    def subtasks(self) -> list['SubtaskView']:
+    def _subtasks(self) -> list['SubtaskView']:
         """The item's children, each laid out as text."""
-        return [SubtaskView(child) for child in self.item.subtasks]
+        return [SubtaskView(child) for child in self._item.subtasks]
 
 
 class SubtaskView:
     """One child of an item in SCHEMA.md markup, its children below it."""
 
     def __init__(self, node: TaskNode) -> None:
-        self.node = node
+        self._node = node
 
     @property
     def lines(self) -> list[str]:
         """The child's line, then its children's, one indent deeper."""
         return [
-            self.line,
+            self._line,
             *(
                 f'{INDENT}{line}'
-                for subtask in self.subtasks
+                for subtask in self._subtasks
                 for line in subtask.lines
             ),
         ]
 
     @property
-    def line(self) -> str:
+    def _line(self) -> str:
         """The child in SCHEMA.md markup: the checkbox, title and fields."""
-        return f'[{self.mark}] {self.node.title}{self.fields}'
+        return f'[{self._mark}] {self._node.title}{self._fields}'
 
     @property
-    def subtasks(self) -> list['SubtaskView']:
+    def _subtasks(self) -> list['SubtaskView']:
         """The child's own children, each laid out as text."""
-        return [SubtaskView(child) for child in self.node.children]
+        return [SubtaskView(child) for child in self._node.children]
 
     @property
-    def mark(self) -> str:
+    def _mark(self) -> str:
         """The checkbox mark: `x` once done, a space while open."""
-        return 'x' if self.node.done else ' '
+        return 'x' if self._node.done else ' '
 
     @property
-    def fields(self) -> str:
+    def _fields(self) -> str:
         """The child's fields as SCHEMA.md writes them, in its order.
 
         An absent field is left out.
         """
         stored = (
-            ('LOE', self.node.loe),
-            ('DUE', self.node.due),
-            ('REPEAT', self.node.repeat),
-            ('TAGS', ','.join(self.node.tags) or None),
-            ('ID', self.node.task_id),
+            ('LOE', self._node.loe),
+            ('DUE', self._node.due),
+            ('REPEAT', self._node.repeat),
+            ('TAGS', ','.join(self._node.tags) or None),
+            ('ID', self._node.task_id),
         )
         return ''.join(
             f' [{name}:{value}]'
@@ -240,18 +240,18 @@ class ItemJsonView:
     """An item laid out as JSON, for an agent to read."""
 
     def __init__(self, item: Item) -> None:
-        self.item = item
+        self._item = item
 
     @property
     def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
+        """`_data` as a JSON document, indented for a person to read too.
 
-        The schema is a contract for agents; see `data` for its shape.
+        The schema is a contract for agents; see `_data` for its shape.
         """
-        return dumps(self.data, indent=2)
+        return dumps(self._data, indent=2)
 
     @property
-    def data(self) -> dict[str, Any]:
+    def _data(self) -> dict[str, Any]:
         """The machine-readable form of the item.
 
         Shaped as::
@@ -270,27 +270,27 @@ class ItemJsonView:
         nests to any depth, and holds completed children as well as open
         ones -- a read reports the item as it stands.
         """
-        node = self.item.node
+        node = self._item.node
         return {
-            'list': self.item.category,
+            'list': self._item.category,
             'id': node.task_id,
             'title': node.title,
             'done': node.done,
-            'rank': round(self.item.rank, RANK_PLACES),
-            'priority': self.item.priority,
+            'rank': round(self._item.rank, RANK_PLACES),
+            'priority': self._item.priority,
             'loe': node.loe,
             'due': node.due,
             'added': node.added,
             'repeat': node.repeat,
             'tags': node.tags,
             'description': node.description,
-            'subtasks': [subtask.data for subtask in self.subtasks],
+            'subtasks': [subtask.data for subtask in self._subtasks],
         }
 
     @property
-    def subtasks(self) -> list['SubtaskJsonView']:
+    def _subtasks(self) -> list['SubtaskJsonView']:
         """The item's children, each laid out as JSON."""
-        return [SubtaskJsonView(child) for child in self.item.subtasks]
+        return [SubtaskJsonView(child) for child in self._item.subtasks]
 
 
 class SubtaskJsonView:
@@ -302,24 +302,24 @@ class SubtaskJsonView:
     """
 
     def __init__(self, node: TaskNode) -> None:
-        self.node = node
+        self._node = node
 
     @property
     def data(self) -> dict[str, Any]:
-        """The child as `ItemJsonView.data` records it, with its children."""
+        """The child as `ItemJsonView._data` records it, with its children."""
         return {
-            'id': self.node.task_id,
-            'title': self.node.title,
-            'done': self.node.done,
-            'loe': self.node.loe,
-            'due': self.node.due,
-            'repeat': self.node.repeat,
-            'tags': self.node.tags,
-            'description': self.node.description,
-            'subtasks': [subtask.data for subtask in self.subtasks],
+            'id': self._node.task_id,
+            'title': self._node.title,
+            'done': self._node.done,
+            'loe': self._node.loe,
+            'due': self._node.due,
+            'repeat': self._node.repeat,
+            'tags': self._node.tags,
+            'description': self._node.description,
+            'subtasks': [subtask.data for subtask in self._subtasks],
         }
 
     @property
-    def subtasks(self) -> list['SubtaskJsonView']:
+    def _subtasks(self) -> list['SubtaskJsonView']:
         """The child's own children, each laid out as JSON."""
-        return [SubtaskJsonView(child) for child in self.node.children]
+        return [SubtaskJsonView(child) for child in self._node.children]

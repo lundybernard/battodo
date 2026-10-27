@@ -57,8 +57,8 @@ class ItemTests(TestCase):
             'a selector',
             TODAY,
         )
-        t.assertIs(ret.task, task.return_value)
-        t.assertEqual(ret.rank_due_curve, 'a-curve')
+        t.assertIs(ret._task, task.return_value)
+        t.assertEqual(ret._raw_curve, 'a-curve')
 
     def test_category(t) -> None:
         ret = t.it.category
@@ -70,14 +70,14 @@ class ItemTests(TestCase):
 
     @patch(f'{SRC}.parse_curve', autospec=True)
     def test_curve(t, parse_curve: MagicMock) -> None:
-        ret = t.it.curve
+        ret = t.it._curve
 
         # Decoded from the default, since the fixture names no curve.
         t.assertIs(ret, parse_curve.return_value)
         parse_curve.assert_called_once_with('-30:0.5, -7:1.0, 0:2.0, 14:4.0')
 
     def test_rank(t) -> None:
-        t.it.curve = sentinel.curve
+        t.it._curve = sentinel.curve
 
         ret = t.it.rank
 
@@ -125,8 +125,8 @@ class ItemViewTests(TestCase):
         t.item.subtasks = []
         t.iv = ItemView(t.item)
 
-    @patch.object(ItemView, 'outline', new_callable=PropertyMock)
-    @patch.object(ItemView, 'rows', new_callable=PropertyMock)
+    @patch.object(ItemView, '_outline', new_callable=PropertyMock)
+    @patch.object(ItemView, '_rows', new_callable=PropertyMock)
     def test_text(t, rows: PropertyMock, outline: PropertyMock) -> None:
         rows.return_value = [('list', 'a-list'), ('REPEAT', '30d')]
         outline.return_value = ['    [ ] Sweep']
@@ -151,7 +151,7 @@ class ItemViewTests(TestCase):
 
     def test_rows(t) -> None:
         with t.subTest('the list, the id, the rank, P, then each field'):
-            ret = t.iv.rows
+            ret = t.iv._rows
             t.assertEqual(
                 ret,
                 [
@@ -170,7 +170,7 @@ class ItemViewTests(TestCase):
         with t.subTest('an absent field has no row, an absent id a dash'):
             t.item.node = bare_node()
 
-            ret = t.iv.rows
+            ret = t.iv._rows
 
             t.assertEqual(
                 ret,
@@ -186,20 +186,20 @@ class ItemViewTests(TestCase):
             t.item.rank = 10.006
             t.item.priority = 2.04
 
-            ret = t.iv.rows
+            ret = t.iv._rows
 
             t.assertEqual(ret[2:4], [('rank', '10.0'), ('P', '2.0')])
 
         with t.subTest('the rank rounds once, as a view row shows it'):
             t.item.rank = 1.952
-            ret = t.iv.rows
+            ret = t.iv._rows
             # Rounded to the published 1.95 first, it would show 1.9.
             t.assertEqual(ret[2], ('rank', '2.0'))
 
         with t.subTest('a description closes them, a row per line'):
             t.item.node.description_lines = ['A line.', 'Another line.']
 
-            ret = t.iv.rows
+            ret = t.iv._rows
 
             # Only its first row carries the label.
             t.assertEqual(
@@ -207,19 +207,19 @@ class ItemViewTests(TestCase):
                 [('description', 'A line.'), ('', 'Another line.')],
             )
 
-    @patch.object(ItemView, 'rows', new_callable=PropertyMock)
+    @patch.object(ItemView, '_rows', new_callable=PropertyMock)
     def test_width(t, rows: PropertyMock) -> None:
         rows.return_value = [('list', 'a-list'), ('REPEAT', '30d')]
-        ret = t.iv.width
+        ret = t.iv._width
         t.assertEqual(ret, len('REPEAT'))
 
-    @patch.object(ItemView, 'subtasks', new_callable=PropertyMock)
+    @patch.object(ItemView, '_subtasks', new_callable=PropertyMock)
     def test_outline(t, subtasks: PropertyMock) -> None:
         subtask = Mock(spec=SubtaskView)
         subtask.lines = ['[ ] Chip the brush', '  [x] Buy the lumber']
         subtasks.return_value = [subtask]
 
-        ret = t.iv.outline
+        ret = t.iv._outline
 
         # Two indents in: one below the label, which sits one in.
         t.assertEqual(
@@ -233,7 +233,7 @@ class ItemViewTests(TestCase):
         second = Mock(spec=TaskNode)
         t.item.subtasks = [first, second]
 
-        ret = t.iv.subtasks
+        ret = t.iv._subtasks
 
         # One per child, in the item's order.
         t.assertEqual(
@@ -253,8 +253,8 @@ class SubtaskViewTests(TestCase):
         t.node = brush_node()
         t.sv = SubtaskView(t.node)
 
-    @patch.object(SubtaskView, 'subtasks', new_callable=PropertyMock)
-    @patch.object(SubtaskView, 'line', new_callable=PropertyMock)
+    @patch.object(SubtaskView, '_subtasks', new_callable=PropertyMock)
+    @patch.object(SubtaskView, '_line', new_callable=PropertyMock)
     def test_lines(t, line: PropertyMock, subtasks: PropertyMock) -> None:
         line.return_value = '[ ] Chip the brush'
         child = Mock(spec=SubtaskView)
@@ -273,13 +273,13 @@ class SubtaskViewTests(TestCase):
             ],
         )
 
-    @patch.object(SubtaskView, 'fields', new_callable=PropertyMock)
-    @patch.object(SubtaskView, 'mark', new_callable=PropertyMock)
+    @patch.object(SubtaskView, '_fields', new_callable=PropertyMock)
+    @patch.object(SubtaskView, '_mark', new_callable=PropertyMock)
     def test_line(t, mark: PropertyMock, fields: PropertyMock) -> None:
         mark.return_value = 'x'
         fields.return_value = ' [LOE:2]'
 
-        ret = t.sv.line
+        ret = t.sv._line
 
         t.assertEqual(ret, '[x] Chip the brush [LOE:2]')
 
@@ -287,25 +287,25 @@ class SubtaskViewTests(TestCase):
         deeper = Mock(spec=TaskNode)
         t.node.children = [deeper]
 
-        ret = t.sv.subtasks
+        ret = t.sv._subtasks
 
-        t.assertEqual([view.node for view in ret], [deeper])
+        t.assertEqual([view._node for view in ret], [deeper])
 
     def test_mark(t) -> None:
         with t.subTest('an open child leaves the box empty'):
-            ret = t.sv.mark
+            ret = t.sv._mark
             t.assertEqual(ret, ' ')
 
         with t.subTest('a done child is checked'):
             t.node.done = True
-            ret = t.sv.mark
+            ret = t.sv._mark
             t.assertEqual(ret, 'x')
 
     def test_fields(t) -> None:
         with t.subTest('every field, in SCHEMA.md order'):
             t.node.fields['REPEAT'] = '7d'
 
-            ret = t.sv.fields
+            ret = t.sv._fields
 
             t.assertEqual(
                 ret,
@@ -315,12 +315,12 @@ class SubtaskViewTests(TestCase):
 
         with t.subTest('an absent field is left out'):
             t.node.fields = {'DUE': '2026-09-01'}
-            ret = t.sv.fields
+            ret = t.sv._fields
             t.assertEqual(ret, ' [DUE:2026-09-01]')
 
         with t.subTest('a TAGS field holding no tag is left out'):
             t.node.fields = {'TAGS': ','}
-            ret = t.sv.fields
+            ret = t.sv._fields
             t.assertEqual(ret, '')
 
 
@@ -336,21 +336,21 @@ class ItemJsonViewTests(TestCase):
         t.ijv = ItemJsonView(t.item)
 
     @patch(f'{SRC}.dumps', autospec=True)
-    @patch.object(ItemJsonView, 'data', new_callable=PropertyMock)
+    @patch.object(ItemJsonView, '_data', new_callable=PropertyMock)
     def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
         ret = t.ijv.json
         # Serialized, indented for a person to read too.
         dumps.assert_called_once_with(data.return_value, indent=2)
         t.assertIs(ret, dumps.return_value)
 
-    @patch.object(ItemJsonView, 'subtasks', new_callable=PropertyMock)
+    @patch.object(ItemJsonView, '_subtasks', new_callable=PropertyMock)
     def test_data(t, subtasks: PropertyMock) -> None:
         child = Mock(spec=SubtaskJsonView)
         child.data = {'title': 'Sweep'}
         subtasks.return_value = [child]
 
         with t.subTest('the list, the stored fields, the rank, the children'):
-            ret = t.ijv.data
+            ret = t.ijv._data
             t.assertEqual(
                 ret,
                 {
@@ -375,7 +375,7 @@ class ItemJsonViewTests(TestCase):
             t.item.node = bare_node()
             subtasks.return_value = []
 
-            ret = t.ijv.data
+            ret = t.ijv._data
 
             t.assertEqual(
                 ret,
@@ -398,7 +398,7 @@ class ItemJsonViewTests(TestCase):
 
         with t.subTest('a description joins its lines'):
             t.item.node.description_lines = ['A line.', 'Another line.']
-            ret = t.ijv.data
+            ret = t.ijv._data
             t.assertEqual(ret['description'], 'A line.\nAnother line.')
 
     @patch(f'{SRC}.SubtaskJsonView', autospec=True)
@@ -407,7 +407,7 @@ class ItemJsonViewTests(TestCase):
         second = Mock(spec=TaskNode)
         t.item.subtasks = [first, second]
 
-        ret = t.ijv.subtasks
+        ret = t.ijv._subtasks
 
         # One per child, in the item's order.
         t.assertEqual(
@@ -427,7 +427,7 @@ class SubtaskJsonViewTests(TestCase):
         t.node = brush_node()
         t.sjv = SubtaskJsonView(t.node)
 
-    @patch.object(SubtaskJsonView, 'subtasks', new_callable=PropertyMock)
+    @patch.object(SubtaskJsonView, '_subtasks', new_callable=PropertyMock)
     def test_data(t, subtasks: PropertyMock) -> None:
         child = Mock(spec=SubtaskJsonView)
         child.data = {'title': 'Buy the lumber'}
@@ -456,7 +456,7 @@ class SubtaskJsonViewTests(TestCase):
             t.assertEqual(ret['repeat'], '7d')
 
         with t.subTest('a checklist item carries no field at all'):
-            t.sjv.node = TaskNode(
+            t.sjv._node = TaskNode(
                 raw_index=1,
                 indent=2,
                 done=True,
@@ -483,7 +483,7 @@ class SubtaskJsonViewTests(TestCase):
             )
 
         with t.subTest('a description joins its lines'):
-            t.sjv.node.description_lines = ['A line.', 'Another line.']
+            t.sjv._node.description_lines = ['A line.', 'Another line.']
             ret = t.sjv.data
             t.assertEqual(ret['description'], 'A line.\nAnother line.')
 
@@ -491,9 +491,9 @@ class SubtaskJsonViewTests(TestCase):
         deeper = Mock(spec=TaskNode)
         t.node.children = [deeper]
 
-        ret = t.sjv.subtasks
+        ret = t.sjv._subtasks
 
-        t.assertEqual([view.node for view in ret], [deeper])
+        t.assertEqual([view._node for view in ret], [deeper])
 
 
 def deck_node() -> TaskNode:
