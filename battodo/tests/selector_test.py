@@ -106,7 +106,7 @@ class TaskSelectionTests(TestCase):
             )
             t.assertEqual(lists, [(t.path, t.TodoDocument.return_value)])
 
-    def test_selects(t) -> None:
+    def test__selects(t) -> None:
         cases = {
             'a task whose id is the selector': ('9o71lx', t.parent, True),
             'a task whose title holds it, in any case': (
@@ -120,8 +120,8 @@ class TaskSelectionTests(TestCase):
 
         for name, (selector, task, expected) in cases.items():
             with t.subTest(name):
-                t.ts.selector = selector
-                ret = t.ts.selects(task)
+                t.ts._selector = selector
+                ret = t.ts._selects(task)
                 t.assertIs(ret, expected)
 
     def test_records(t) -> None:

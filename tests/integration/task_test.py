@@ -54,4 +54,7 @@ class TaskTests(TestCase):
 
     def test_selection(t) -> None:
         ret = t.tk.selection
-        t.assertEqual((ret.directory, ret.selector), (t.source, '9o71lx'))
+        t.assertEqual(
+            (ret.record.path, ret.record.task.task_id),
+            (t.path, '9o71lx'),
+        )
