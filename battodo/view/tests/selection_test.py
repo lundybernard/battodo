@@ -107,22 +107,14 @@ class SelectionTests(TestCase):
 
             t.assertIn(str(t.resolved), str(caught.exception))
 
-    def test_active(t) -> None:
-        with t.subTest('with no schedule, no category is active'):
-            ret = t.s.active
-            t.assertEqual(ret, set())
+    @patch.object(Selection, '_scheduled', new_callable=PropertyMock)
+    def test_active(t, scheduled: PropertyMock) -> None:
+        t.s.always_active = ALWAYS
+        scheduled.return_value = {'a-list'}
 
-        for day, hour in HOURS:
-            with t.subTest(day=day, hour=hour):
-                ret = Selection(
-                    t.directory,
-                    at_hour(day, hour),
-                    show_all=False,
-                    windows=SCHEDULE,
-                    always_active=ALWAYS,
-                ).active
+        ret = t.s.active
 
-                t.assertEqual(ret, opens(day, hour))
+        t.assertEqual(ret, {'a-list', 'a-third-list', 'a-fourth-list'})
 
     def test_always_open(t) -> None:
         with t.subTest('no name is always open by default'):
@@ -133,6 +125,20 @@ class SelectionTests(TestCase):
             t.s.always_active = ' a-list,another-list , '
             ret = t.s.always_open
             t.assertEqual(ret, frozenset({'a-list', 'another-list'}))
+
+    def test_scheduled(t) -> None:
+        with t.subTest('an empty schedule opens no category'):
+            ret = t.s._scheduled
+            t.assertEqual(ret, set())
+
+        for day, hour in HOURS:
+            with t.subTest(day=day, hour=hour):
+                t.s.windows = SCHEDULE
+                t.s.now = at_hour(day, hour)
+
+                ret = t.s._scheduled
+
+                t.assertEqual(ret, scheduled_at(day, hour))
 
     def test_schedule(t) -> None:
         with t.subTest('no category is scheduled by default'):
@@ -181,19 +187,14 @@ class SelectionTests(TestCase):
             later.order, earlier.order = (2, 'study'), (0, 'work')
             todo_list.side_effect = [later, earlier]
             t.s.curve = sentinel.curve
+            # Each list ranks its tasks on the selection's day and curve.
+            calls = [call(path, TODAY, sentinel.curve) for path in paths]
 
             ret = t.s.lists
 
             t.assertEqual(ret, [earlier, later])
             t.discover_lists.assert_called_with(t.resolved)
-            # Each list ranks its tasks on the selection's day and curve.
-            t.assertEqual(
-                todo_list.call_args_list,
-                [
-                    call(Path('later.md'), TODAY, sentinel.curve),
-                    call(Path('earlier.md'), TODAY, sentinel.curve),
-                ],
-            )
+            t.assertEqual(todo_list.call_args_list, calls)
 
     def test_shows(t) -> None:
         t.s.windows = 'a-list=mon 9-10; another-list=tue 9-10'
@@ -929,17 +930,13 @@ def at_hour(day: int, hour: int) -> datetime:
     return datetime.combine(WEEK_START + timedelta(days=day), time(hour))
 
 
-def opens(day: int, hour: int) -> set[str]:
-    """The categories open on `day` at `hour`.
-
-    The names of ALWAYS stay open at every hour. The window table adds
-    the rest.
-    """
-    names = {'a-third-list', 'a-fourth-list'}
-    for name, days, hours in WINDOWS:
-        if day in days and hour in hours:
-            names.add(name)
-    return names
+def scheduled_at(day: int, hour: int) -> set[str]:
+    """The SCHEDULE categories with a window that holds `day` at `hour`."""
+    return {
+        name
+        for name, days, hours in WINDOWS
+            if day in days and hour in hours
+    }  # fmt: skip
 
 
 def stored(

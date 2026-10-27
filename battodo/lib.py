@@ -283,7 +283,6 @@ def add_item(
         parent cannot hold a subtask. Raised before anything is written.
     """
     checked = SuppliedAttributes(attrs, note).checked
-    source = _source(conf)
     fields = _supplied(
         {
             'P': priority,
@@ -296,7 +295,7 @@ def add_item(
     addition: Addition | SubtaskAddition
     if parent is None:
         addition = Addition(
-            source,
+            _source(conf),
             list_name,
             title,
             fields,
@@ -305,8 +304,9 @@ def add_item(
             attrs=checked,
         )
     else:
+        parent_task = Task(_source(conf), parent, now.date())
         addition = SubtaskAddition(
-            Task(source, parent, now.date()),
+            parent_task,
             list_name,
             title,
             fields,

@@ -369,10 +369,11 @@ def get_help(parser):
 class Commands:
     @staticmethod
     def add(conf, args):
+        now = datetime.now(time_zone(conf))
         print(
             add_item(
                 conf,
-                datetime.now(time_zone(conf)),
+                now,
                 list_name=args.list_name,
                 title=args.title,
                 parent=args.parent,
@@ -399,10 +400,11 @@ class Commands:
 
     @staticmethod
     def update(conf, args):
+        now = datetime.now(time_zone(conf))
         print(
             update_item(
                 conf,
-                datetime.now(time_zone(conf)),
+                now,
                 selector=args.selector,
                 title=args.title,
                 priority=args.priority,
@@ -419,10 +421,11 @@ class Commands:
 
     @staticmethod
     def done(conf, args):
+        now = datetime.now(time_zone(conf))
         print(
             complete_item(
                 conf,
-                datetime.now(time_zone(conf)),
+                now,
                 selector=args.selector,
                 date=args.date,
                 scratch=args.scratch,
@@ -433,10 +436,11 @@ class Commands:
 
     @staticmethod
     def note(conf, args):
+        now = datetime.now(time_zone(conf))
         print(
             annotate_item(
                 conf,
-                datetime.now(time_zone(conf)),
+                now,
                 selector=args.selector,
                 text=args.text,
                 attrs=args.attrs,
