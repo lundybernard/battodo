@@ -19,21 +19,17 @@ from batconf.types import ConfigP, SourceInterfaceP
 from battodo.rank import DEFAULT_DUE_CURVE
 from battodo.view import TOP_N
 
-# Root of the config tree: the path every lookup is namespaced under, and
-# so the prefix CLI arguments must carry to be resolvable as config.
-# Named explicitly and passed to Configuration, so no lookup path ever
-# depends on where a config class happens to be defined.
+# Every lookup path starts here, so a CLI argument carries this prefix to
+# resolve as config.
 CONFIG_ROOT = 'battodo'
 
-# The searched file names. The working directory holds the files of
-# every tool, so the file there carries the application name; the user
-# config directory is already named for the application.
+# The working directory holds the files of every tool, so the file there
+# carries the application name. The user config directory already names
+# the application.
 PROJECT_FILE_NAME = 'battodo.toml'
 USER_FILE_NAME = 'config.toml'
-# The environment variable that names a file.
 CONFIG_FILE_ENV_VAR = EnvSource().env_name('config_file', CONFIG_ROOT)
 
-# What a configured zone the system does not know reports.
 ZONE_ERROR = 'unknown time zone in view.time_zone'
 
 
@@ -144,7 +140,10 @@ class ConfigFile:
 
 
 def get_config(
-    # Known issue: https://github.com/python/mypy/issues/4536
+    # mypy rejects the class default, because a dataclass types
+    # `__dataclass_fields__` as `dict[str, Field[Any]]` and `ConfigP` names
+    # `dict[str, FieldP]`.
+    # https://github.com/python/mypy/issues/4536
     config_class: ConfigP = GlobalConfig,  # type: ignore
     cli_args: Namespace | None = None,
     config_file: SourceInterfaceP | None = None,
@@ -152,7 +151,7 @@ def get_config(
     config_env: str | None = None,
 ) -> Configuration:
 
-    # Build a prioritized config source list
+    # The list puts the highest-priority source first.
     config_sources = [
         NamespaceSource(cli_args) if cli_args else None,
         EnvSource(),

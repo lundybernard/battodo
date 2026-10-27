@@ -22,25 +22,25 @@ from math import isfinite
 
 from .parser import TaskNode, parse_date
 
-# `P` on the new scale. Absent reads as NEUTRAL, not zero: an
-# unprioritized item still ranks by its dates. An explicit `P:0` parks it.
+# An absent `P` reads as NEUTRAL, not zero, so an unprioritized item still
+# ranks by its dates.
 NEUTRAL_MULTIPLIER = 1.0
 MAX_MULTIPLIER = 5.0
-# Bump-inflated legacy values (1..125 in the live data) fold on to the
-# scale order-preservingly, so no existing ordering is lost.
+# A `P` above `MAX_MULTIPLIER` folds on to the scale, and of two such values
+# the higher `P` never folds below the lower.
 LEGACY_P_DIVISOR = 25
 
 AGE_SCALE_DAYS = 30
 AGE_CAP = 2.0
 # A task with no readable due date keeps its rank unscaled.
 UNDATED_FACTOR = 1.0
-# The due-date factor curve: `days:factor` points, where `days` is
-# today minus the due date. A negative day is before the due date.
+# Each `days:factor` point counts `days` as today minus the due date, so a
+# negative day falls before the due date.
 DEFAULT_DUE_CURVE = '-30:0.5, -7:1.0, 0:2.0, 14:4.0'
 CURVE_ERROR = 'a rank due curve point must read days:factor'
 CURVE_DAY_ERROR = 'a rank due curve names a day twice'
 
-# A decoded curve: its points, earliest day first.
+# A decoded curve lists its points earliest day first.
 Curve = list[tuple[int, float]]
 
 

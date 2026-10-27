@@ -40,14 +40,13 @@ class SourceError(Exception):
 
 
 NO_DUE_SORTS_LAST = 'zzzz'
-# A list carrying this marker anywhere is parked: still discovered, so
-# mutations reach it, but never surfaced in a view (ADR 0005).
+# A list that carries this marker anywhere is parked. Mutations reach it,
+# and a view never shows it (ADR 0006).
 PARKED_MARKER = 'battodo:parked'
-# How many items of a category a view shows before it starts abridging.
+# A view shows this many items of a category before it starts abridging.
 TOP_N = 5
-# How many decimal places a published rank carries.
 RANK_PLACES = 2
-# One window: a day or a run of days, then a span of whole hours.
+# A window names a day or a run of days, then a span of whole hours.
 WINDOW_RE = re.compile(
     rf'(?P<first>{"|".join(WEEKDAYS)})'
     rf'(?:\s*-\s*(?P<last>{"|".join(WEEKDAYS)}))?'
@@ -56,7 +55,6 @@ WINDOW_RE = re.compile(
 )
 # A window's end hour can reach the end of the day, and no further.
 DAY_HOURS = 24
-# What the windows of a view report when they do not read.
 ENTRY_ERROR = 'a view.windows entry must read <category>=<window>'
 WINDOW_ERROR = 'a view.windows window must read <days> <start>-<end>'
 NAME_ERROR = 'view.windows names a category twice'
