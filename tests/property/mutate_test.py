@@ -100,7 +100,6 @@ SUBTASK_OPTIONS = {
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 # The fields an update clears with `None` (ADR 0028).
 CLEARABLE_FIELDS = ('DUE', 'REPEAT', 'TAGS')
-LOE_VALUES = ('1', '2', '3', '5', '8')
 # The fields only a top-level task carries.
 ROOT_FIELDS = ('P',)
 # The indent each level of the schema adds.
@@ -1486,7 +1485,7 @@ def option_values(field: str) -> st.SearchStrategy[str]:
     """
     readable = {
         'P': st.integers(min_value=0, max_value=130).map(str),
-        'LOE': st.sampled_from(LOE_VALUES),
+        'LOE': st.integers(min_value=1).map(str),
         'DUE': either(
             st.dates(
                 min_value=TODAY - NEARBY,
@@ -1656,11 +1655,13 @@ def checked(fields: dict[str, str]) -> dict[str, str]:
         A `P`, `LOE` or `DUE` does not read, checked in that order.
     """
     priority = fields.get('P')
-    if priority is not None and not priority.isdigit():
+    if priority is not None and not priority.isdecimal():
         raise ValueError(f'P must be a whole number, not {priority!r}')
     loe = fields.get('LOE')
-    if loe is not None and loe not in LOE_VALUES:
-        raise ValueError(f'LOE must be one of 1, 2, 3, 5, 8, not {loe!r}')
+    if loe is not None and not (loe.isdecimal() and int(loe) >= 1):
+        raise ValueError(
+            f'LOE must be a whole number of 1 or more, not {loe!r}'
+        )
     due = fields.get('DUE')
     if due is None:
         return dict(fields)

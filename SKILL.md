@@ -97,8 +97,8 @@ btodo note <selector> [TEXT] [--attrs ATTRS]
 
 - `<list>` is a filename stem: `chores` for `chores.md`.
 - `-p` is the priority multiplier, 0 and up. `--loe` is the level of
-  effort: 1, 2, 3, 5 or 8. `--repeat` is `Nd`, `Nw`, `weekly:DAY` or
-  `monthly:N`. `--tags` is a comma-separated list.
+  effort, a whole number of 1 or more. `--repeat` is `Nd`, `Nw`,
+  `weekly:DAY` or `monthly:N`. `--tags` is a comma-separated list.
 - `update --repeat R` sets or changes the repeat of a task at any
   depth. `update --repeat None` removes it; btodo refuses an empty
   `--repeat`. `DUE` stays as it is: the new rule applies at the next

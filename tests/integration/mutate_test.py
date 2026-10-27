@@ -437,9 +437,9 @@ class AdditionTests(TestCase):
                 {'P': 'high'},
                 "P must be a whole number, not 'high'",
             ),
-            'a level of effort off the scale': (
-                {'LOE': '4'},
-                "LOE must be one of 1, 2, 3, 5, 8, not '4'",
+            'a level of effort under the bound': (
+                {'LOE': '0'},
+                "LOE must be a whole number of 1 or more, not '0'",
             ),
             'a due date that does not read': (
                 {'DUE': 'someday'},
