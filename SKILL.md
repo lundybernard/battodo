@@ -264,6 +264,13 @@ top = "3"
 The table sits under the environment the file names.
 [README.md](README.md#configuration) holds the full file skeleton.
 
+`view.all`, or `BATTODO_VIEW_ALL`, set to `true` makes every `view`
+call show every open item and every category. The default `false`
+leaves that to `--all`, which shows them all whatever the field holds.
+Another value makes `view` exit 1 and print
+`unknown view.all value '<value>'; choose one of false, true` to
+stderr.
+
 The due-date curve is `view.rank_due_curve`, or
 `BATTODO_VIEW_RANK_DUE_CURVE`: comma-separated `days:factor` points, a
 negative day before the due date. A curve that does not decode makes

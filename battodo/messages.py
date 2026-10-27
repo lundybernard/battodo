@@ -34,7 +34,8 @@ MESSAGES = {
     'view.description': 'show open items for the currently active categories',
     'view.help': 'for details use view --help',
     'view.all.help': (
-        'show every open item, and every category, not just those active now'
+        'show every open item, and every category, not just those active'
+        ' now; outranks the configured view.all'
     ),
     'view.top.help': (
         'how many items a category shows, 1 or more; overrides the'

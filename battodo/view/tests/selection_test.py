@@ -282,12 +282,18 @@ class SelectionFromConfigTests(TestCase):
     """
 
     def setUp(t) -> None:
+        patcher = patch(f'{SRC}.full_view', autospec=True)
+        t.full_view = patcher.start()
+        t.addCleanup(patcher.stop)
+        t.full_view.return_value = False
+
         t.now = at('2026-08-05T10:30')
         t.conf = Mock(spec=['view'])
         t.conf.view = Mock(
             spec=[
                 'source_dir',
                 'top',
+                'all',
                 'rank_due_curve',
                 'windows',
                 'always_active',
@@ -295,6 +301,7 @@ class SelectionFromConfigTests(TestCase):
         )
         t.conf.view.source_dir = '~/a-source-dir'
         t.conf.view.top = '2'
+        t.conf.view.all = 'false'
         t.conf.view.rank_due_curve = 'a-curve'
         t.conf.view.windows = 'some-windows'
         t.conf.view.always_active = 'some-names'
@@ -314,6 +321,9 @@ class SelectionFromConfigTests(TestCase):
         with t.subTest('the flag is the one given'):
             t.assertTrue(selection.show_all)
 
+        with t.subTest('view.all is decoded, also under the flag'):
+            t.full_view.assert_called_once_with('false')
+
         with t.subTest('the curve is carried as written'):
             t.assertEqual(selection.rank_due_curve, 'a-curve')
 
@@ -321,10 +331,23 @@ class SelectionFromConfigTests(TestCase):
             t.assertEqual(selection.windows, 'some-windows')
             t.assertEqual(selection.always_active, 'some-names')
 
+        with t.subTest('a decoded true shows every item without the flag'):
+            t.full_view.return_value = True
+            shown = Selection.from_config(t.conf, t.now, show_all=False)
+            t.assertTrue(shown.show_all)
+
+        with t.subTest('a decoded false leaves the choice to the flag'):
+            t.full_view.return_value = False
+            abridged = Selection.from_config(t.conf, t.now, show_all=False)
+            t.assertFalse(abridged.show_all)
+
         with t.subTest('a schedule field the lookup cannot find is empty'):
-            t.conf.view = Mock(spec=['source_dir', 'top', 'rank_due_curve'])
+            t.conf.view = Mock(
+                spec=['source_dir', 'top', 'all', 'rank_due_curve']
+            )
             t.conf.view.source_dir = '~/a-source-dir'
             t.conf.view.top = '2'
+            t.conf.view.all = 'false'
             t.conf.view.rank_due_curve = 'a-curve'
 
             unset = Selection.from_config(t.conf, t.now, show_all=True)

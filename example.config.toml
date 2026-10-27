@@ -9,6 +9,8 @@ default_env = "default"
 # Every value is addressed by its config path, under the environment.
 [default.battodo.view]
 source_dir = "~/todo"
+# Every open item and every category, as `view --all` shows them.
+# all = "true"
 # The due-date curve, as `days:factor` points (ADR 0026).
 # rank_due_curve = "-30:0.5, -7:1.0, 0:2.0, 14:4.0"
 # The schedule (ADR 0018): the zone of the clock, the hours each
