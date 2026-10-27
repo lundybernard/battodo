@@ -60,10 +60,12 @@ and public when another object reads it. The public name is the plain noun for
 the value the consumer reads, and a raw input that readers use only in a
 derived form is stored as `_raw_<name>`. A local name holds only a loop or
 comprehension variable, a value derived from one, or a value that depends
-on a method argument. The code reads `self.<attr>` at each use. A
-module-level function tells a simple story: its body says what happens to
-the objects that it operates on, and the computation lives in their
-methods.
+on a method argument. A decoded configuration value is not a local: a
+module-level decoder beside `item_count` in `battodo/lists.py` returns it,
+and the reader calls the decoder in place. The code reads `self.<attr>` at
+each use. A module-level function tells a simple story: its body says what
+happens to the objects that it operates on, and the computation lives in
+their methods.
 
 **Why:** each step is auditable and testable alone. A test sets the state
 and reads the step, so it needs fewer mocks and no `assert_called_with`
