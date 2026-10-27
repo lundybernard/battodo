@@ -96,10 +96,7 @@ def due_factor(task: TaskNode, today: date, curve: Curve) -> float:
     due = parse_date(task.due)
     if due is None:
         return UNDATED_FACTOR
-    days = (today - due).days
-    first_days, first_factor = curve[0]
-    if days <= first_days:
-        return first_factor
+    days = max((today - due).days, curve[0][0])
     for (low_days, low_factor), (high_days, high_factor) in pairwise(curve):
         if days < high_days:
             share = (days - low_days) / (high_days - low_days)

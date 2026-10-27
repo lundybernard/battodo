@@ -105,10 +105,8 @@ typecheck = { depends-on = [
 lint = { depends-on = [{ task = "_lint", environment = "lint" }] }
 # One class of gate: both stay outside the `tests` aggregator and run
 # at the PR tip, not in the fast loop.
-# mutate: runtime is not the reason (~40s on 8 cores); the score is.
-# Two thirds of the survivors are argparse help-string mutants no test
-# can reasonably assert on, so there is no honest number to gate on
-# until they are triaged.
+# mutate: the target is zero surviving mutants. The command
+# `pixi run -e mutation mutmut results` lists the survivors.
 mutate = { depends-on = [{ task = "_mutate", environment = "mutation" }] }
 # fuz: the property suite searches with random inputs. The
 # HYPOTHESIS_PROFILE variable picks the budget: dev runs 100 examples,
@@ -154,6 +152,10 @@ _typecheck = "mypy battodo tests"
 # it collects the stdlib TestCase suite unchanged.
 [tool.pixi.feature.mutation.dependencies]
 pytest = "*"
+# mutmut needs libcst, and libcst needs PyYAML, which does not ship a
+# 3.15 wheel. Until it does, the pin keeps the lock free of source
+# builds.
+python = "3.14.*"
 
 [tool.pixi.feature.mutation.pypi-dependencies]
 mutmut = ">=3.6"
@@ -188,10 +190,10 @@ python = "3.14.*"
 python = "3.15.*"
 
 [tool.pixi.environments]
-# Spelled out to pin the dev interpreter at 3.14; a solve group
+# Spelled out to pin the dev interpreter at 3.15; a solve group
 # resolves as one package set, so test, typecheck and dev inherit that
 # same interpreter build.
-default = { features = ["py314"], solve-group = "default" }
+default = { features = ["py315"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 # ruff is a standalone binary: no interpreter, no project install.
 lint = { features = [
@@ -200,22 +202,23 @@ lint = { features = [
 # mypy checks the test tree too, so it needs what the tests import.
 typecheck = { features = ["typecheck", "test"], solve-group = "default" }
 # mutmut needs the interpreter and the editable install, nothing from
-# the test feature: it runs the suite through its own pytest.
-mutation = { features = ["mutation"], solve-group = "default" }
+# the test feature: it runs the suite through its own pytest. The
+# feature pins its own interpreter, so the env has no solve group, and
+# dev leaves the feature out.
+mutation = { features = ["mutation"] }
 dev = { features = [
     "test",
     "lint",
     "typecheck",
-    "mutation",
 ], solve-group = "default" }
 # The version matrix: what turns requires-python from a claim into a
-# tested range. Each interpreter other than 3.14 needs its own solve
+# tested range. Each interpreter other than 3.15 needs its own solve
 # group, since one group means one shared package set.
 test-py311 = { features = ["py311", "test"] }
 test-py312 = { features = ["py312", "test"] }
 test-py313 = { features = ["py313", "test"] }
-test-py314 = { features = ["py314", "test"], solve-group = "default" }
-test-py315 = { features = ["py315", "test"] }
+test-py314 = { features = ["py314", "test"] }
+test-py315 = { features = ["py315", "test"], solve-group = "default" }
 
 [tool.coverage.run]
 data_file = ".cache/coverage"

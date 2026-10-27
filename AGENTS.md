@@ -91,13 +91,14 @@ interface.
 - Work on a feature branch, never on `main`. A maintainer reviews each
   branch before merge.
 - Run every task as `pixi run <task>`. A PR passes `tests`, `lint`,
-  `typecheck`, `fuz`, and `unit-py311` through `unit-py315`.
+  `typecheck`, `fuz`, `mutate`, and `unit-py311` through `unit-py315`.
 - Lint before you push. `pixi run lint` runs `ruff check` and
   `ruff format --check` with the repo settings: single quotes, 79-column
   lines. The CI lint job runs the same task.
 - At the PR tip, run `pixi run mutate` and `pixi run fuz` (the property
   suite). The mutation target is zero surviving mutants; list each
-  survivor in the PR notes. CI does not run `mutate` yet.
+  survivor in the PR notes. The CI `mutate` job runs the same task, and
+  a survivor does not fail it.
 - A statement holds at most two nested calls, whether it fits one line
   or wraps. A deeper inner value becomes its own `@property`, or a local
   name in the cases that the named-intermediate rule above keeps.

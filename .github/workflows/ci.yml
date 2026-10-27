@@ -25,12 +25,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
           pixi-version: v0.81.0
           locked: true
-          # Install only this leg's env; the default 3.14 env is unused
-          # here and would be an extra download on every other leg.
+          # Install only this leg's env; the default env is unused here
+          # and would be an extra download on every other leg.
           environments: test-${{ matrix.py }}
       - run: pixi run --locked unit-${{ matrix.py }}
 
@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
           pixi-version: v0.81.0
           locked: true
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
           pixi-version: v0.81.0
           locked: true
@@ -66,16 +66,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659  # v0.8.1
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
           pixi-version: v0.81.0
           locked: true
           environments: test
       - run: HYPOTHESIS_PROFILE=ci pixi run --locked fuz
 
+  # A survivor does not fail this job: mutmut exits 0 with survivors.
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          locked: true
+          environments: mutation
+      - run: pixi run --locked mutate
+
   all-checks:
     if: always()
-    needs: [test, typecheck, lint, fuz]
+    needs: [test, typecheck, lint, fuz, mutate]
     runs-on: ubuntu-latest
     steps:
       - name: All checks passed
@@ -83,6 +97,7 @@ jobs:
           if [[ "${{ needs.test.result }}" != "success" || \
                 "${{ needs.typecheck.result }}" != "success" || \
                 "${{ needs.lint.result }}" != "success" || \
-                "${{ needs.fuz.result }}" != "success" ]]; then
+                "${{ needs.fuz.result }}" != "success" || \
+                "${{ needs.mutate.result }}" != "success" ]]; then
             exit 1
           fi

@@ -28,9 +28,10 @@ Nothing changed upstream after PR #5.
   `NameError` from eager annotations on 3.10 to 3.13 (#82). A range bump
   follows battodo #110: drop the EOL interpreter everywhere, add the new
   one in the same shape, lock after the cooldown, and apply the ruff
-  rules that the new floor enables in the same commit. Open battodo
-  ruling: the floor version's unit task in the local gate, and the
-  default env on 3.15.
+  rules that the new floor enables in the same commit. A battodo ruling
+  puts the default env on 3.15 and keeps the `mutation` env on 3.14
+  until PyYAML ships a 3.15 wheel (battodo #151). Open battodo ruling:
+  the floor version's unit task in the local gate.
 - Lint and types: run ruff at its current release, then a mypy
   `--strict` annotation pass. The non-strict default is close to clean.
 - Service separation: removing the web service took `server/`, `api/`,

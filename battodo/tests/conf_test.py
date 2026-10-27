@@ -47,8 +47,9 @@ class GetConfigTests(TestCase):
 
         t.GlobalConfig = GlobalConfig
 
+    @patch(f'{SRC}.NamespaceSource', autospec=True)
     @patch(f'{SRC}.EnvSource', autospec=True)
-    def test_default_values(t, EnvSource):
+    def test_default_values(t, EnvSource, NamespaceSource):
         t.ConfigFile.return_value.source = None
         EnvSource.return_value = None
 
@@ -56,6 +57,7 @@ class GetConfigTests(TestCase):
 
         t.assertEqual(CONF.AModule.arg_3, 'dataclass_default_arg_3')
         t.assertEqual(CONF.BModule.arg_1, 'dataclass_default_isodate')
+        NamespaceSource.assert_not_called()
 
     def test_arg_cli_args(t):
         """CLI values are addressed by their dotted config path"""
@@ -277,20 +279,15 @@ class TimeZoneTests(TestCase):
 
     @patch(f'{SRC}.datetime', autospec=True)
     def test_local(t, datetime: MagicMock) -> None:
+        # A view without a time_zone attribute stands for an absent zone
+        # and for an empty one.
+        t.conf.view = Mock(spec=[])
         local = datetime.now.return_value.astimezone.return_value
 
-        with t.subTest('an empty name reads the zone of the system'):
-            t.conf.view.time_zone = ''
+        ret = time_zone(t.conf)
 
-            ret = time_zone(t.conf)
-
-            t.assertIs(ret, local.tzinfo)
-            datetime.now.assert_called_once_with(UTC)
-
-        with t.subTest('and so does a name the lookup cannot find'):
-            t.conf.view = Mock(spec=[])
-            ret = time_zone(t.conf)
-            t.assertIs(ret, local.tzinfo)
+        t.assertIs(ret, local.tzinfo)
+        datetime.now.assert_called_once_with(UTC)
 
     def test_unknown(t) -> None:
         refusals = {

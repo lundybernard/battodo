@@ -168,18 +168,19 @@ def get_config(
 def time_zone(conf: Configuration) -> tzinfo:
     """The zone the clock of a run reads: the configured one, or local.
 
-    The lookup reads an empty value as absent, so the read supplies the
-    empty default itself.
+    The lookup raises AttributeError for a zone that is absent or empty.
 
     Raises
     ------
     ValueError
         The configured name is not a zone the system knows.
     """
-    name = getattr(conf.view, 'time_zone', '')
-    if not name:
+    try:
+        name = conf.view.time_zone
+    except AttributeError:
         local = datetime.now(UTC).astimezone()
-        return cast('tzinfo', local.tzinfo)
+        # The type argument of cast() has no run-time effect.
+        return cast('tzinfo', local.tzinfo)  # pragma: no mutate
     try:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError) as exp:

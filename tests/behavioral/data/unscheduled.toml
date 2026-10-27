@@ -1,6 +1,8 @@
 # A config file that sets no schedule: the view shows every list at
-# every hour.
+# every hour. The zone is the zone of the fixture clock, so the local
+# time of a run does not depend on the host.
 [batconf]
 default_env = "fixture"
 
 [fixture.battodo.view]
+time_zone = "America/Los_Angeles"
