@@ -21,13 +21,11 @@ from shutil import get_terminal_size
 from ..table import Table, column_widths, page_text, table_width
 from .selection import Category, Row, Selection
 
-# Layout. TASK is the elastic column: every other one is as wide as its
-# widest value, and the titles absorb whatever room is left over.
 COLUMNS = ('RANK', 'P', 'LOE', 'TASK', 'DUE')
 ALIGN = ('>', '>', '>', '<', '<')
 TASK_COLUMN = COLUMNS.index('TASK')
-# Below this, titles are too clipped to identify; a line that overruns a
-# very narrow terminal and wraps beats one that says nothing.
+# A title clipped below this width identifies nothing, so on a very narrow
+# terminal the line overruns and wraps.
 MIN_TASK_WIDTH = 20
 
 
@@ -152,7 +150,8 @@ class RowView:
             return ''
         parsed = self._row.parsed_due
         if parsed is None:
-            # a placeholder such as YYYY-MM-DD: show it verbatim
+            # A due value that does not parse as a date, such as the
+            # placeholder `YYYY-MM-DD`, shows as written.
             return due
         if parsed < self._row.today:
             return 'OVERDUE'
