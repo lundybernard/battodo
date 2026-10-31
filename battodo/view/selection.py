@@ -434,14 +434,14 @@ class SelectionJsonView:
 
     @property
     def json(self) -> str:
-        """`data` as a JSON document, indented for a person to read too.
+        """`_data` as a JSON document, indented for a person to read too.
 
-        The schema is a contract for agents; see `data` for its shape.
+        The schema is a contract for agents; see `_data` for its shape.
         """
-        return dumps(self.data, indent=2)
+        return dumps(self._data, indent=2)
 
     @property
-    def data(self) -> dict[str, object]:
+    def _data(self) -> dict[str, object]:
         """The machine-readable form of the selection.
 
         Shaped as::
@@ -477,7 +477,7 @@ class CategoryJsonView:
 
     @property
     def data(self) -> dict[str, object]:
-        """The category as `SelectionJsonView.data` records it.
+        """The category as `SelectionJsonView._data` records it.
 
         `hidden` is how many of the category's open items the view
         leaves out. Without it an abridged document reads exactly like
@@ -504,7 +504,7 @@ class RowJsonView:
     """
 
     def __init__(self, row: Row, list_name: str) -> None:
-        self.row = row
+        self._row = row
         self.list_name = list_name
 
     @property
@@ -515,17 +515,17 @@ class RowJsonView:
         `rank` is rounded for display and must not be used to re-sort;
         the array order is the rank order.
         """
-        task = self.row.task
+        task = self._row.task
         return {
             'list': self.list_name,
             'id': task.task_id,
             'title': task.title,
-            'rank': round(self.row.rank, RANK_PLACES),
-            'priority': self.row.priority,
+            'rank': round(self._row.rank, RANK_PLACES),
+            'priority': self._row.priority,
             'loe': task.loe,
             'due': task.due,
             'added': task.added,
             'repeat': task.repeat,
             'tags': task.tags,
-            'subtasks': self.row.subtasks,
+            'subtasks': self._row.subtasks,
         }

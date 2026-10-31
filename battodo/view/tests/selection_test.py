@@ -609,7 +609,7 @@ class SelectionJsonViewTests(TestCase):
         t.sjv = SelectionJsonView(t.selection)
 
     @patch(f'{SRC}.dumps', autospec=True)
-    @patch.object(SelectionJsonView, 'data', new_callable=PropertyMock)
+    @patch.object(SelectionJsonView, '_data', new_callable=PropertyMock)
     def test_json(t, data: PropertyMock, dumps: MagicMock) -> None:
         ret = t.sjv.json
         # Serialized, indented for a person to read too.
@@ -622,7 +622,7 @@ class SelectionJsonViewTests(TestCase):
         category.data = {'name': 'work'}
         categories.return_value = [category]
 
-        ret = t.sjv.data
+        ret = t.sjv._data
 
         with t.subTest('the day is recorded in its stored form'):
             t.assertEqual(ret['date'], '2026-08-05')
