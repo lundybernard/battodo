@@ -140,20 +140,20 @@ class ConfigFileTests(TestCase):
 
     def test_named(t):
         with t.subTest('nothing names a file'):
-            ret = t.cf.named
+            ret = t.cf._named
             t.assertIsNone(ret)
 
         with t.subTest('the given name'):
-            ret = t.cf_named.named
+            ret = t.cf_named._named
             t.assertEqual(ret, '/given.toml')
 
         with patch.dict('os.environ', {CONFIG_FILE_ENV_VAR: '/env.toml'}):
             with t.subTest('the environment names one'):
-                ret = ConfigFile().named
+                ret = ConfigFile()._named
                 t.assertEqual(ret, '/env.toml')
 
             with t.subTest('the given name outranks the environment'):
-                ret = ConfigFile('/given.toml').named
+                ret = ConfigFile('/given.toml')._named
                 t.assertEqual(ret, '/given.toml')
 
     @patch(f'{SRC}.Path', autospec=True)
