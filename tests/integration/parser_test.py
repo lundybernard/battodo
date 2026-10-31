@@ -11,7 +11,7 @@ from unittest import TestCase
 
 from battodo.parser import TodoDocument
 
-TODO_DIR = Path(__file__).parent.parent / 'behavioral' / 'data' / 'todo'
+TODO_DIR = Path(__file__).parent.parent / 'cli' / 'data' / 'todo'
 WORK = TODO_DIR / 'work.md'
 # The first open task of `work.md`, and the same line once btodo
 # stamps an id on it.
