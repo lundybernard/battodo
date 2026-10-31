@@ -79,17 +79,17 @@ class SelectionTests(TestCase):
 
     def test_limit(t) -> None:
         with t.subTest('an abridged view stops at the top few'):
-            ret = t.s.limit
+            ret = t.s._limit
             t.assertEqual(ret, TOP_N)
 
         with t.subTest('an explicit count replaces the default'):
-            t.s.top_n = 2
-            ret = t.s.limit
+            t.s._top_n = 2
+            ret = t.s._limit
             t.assertEqual(ret, 2)
 
         with t.subTest('asking for everything lifts the limit'):
             t.s.show_all = True
-            ret = t.s.limit
+            ret = t.s._limit
             t.assertIsNone(ret)
 
     def test_source(t) -> None:
@@ -109,7 +109,7 @@ class SelectionTests(TestCase):
 
     @patch.object(Selection, '_scheduled', new_callable=PropertyMock)
     def test_active(t, scheduled: PropertyMock) -> None:
-        t.s.always_active = ALWAYS
+        t.s._always_active = ALWAYS
         scheduled.return_value = {'a-list'}
 
         ret = t.s.active
@@ -118,12 +118,12 @@ class SelectionTests(TestCase):
 
     def test_always_open(t) -> None:
         with t.subTest('no name is always open by default'):
-            ret = t.s.always_open
+            ret = t.s._always_open
             t.assertEqual(ret, frozenset())
 
         with t.subTest('each name of the list, spaces and empties aside'):
-            t.s.always_active = ' a-list,another-list , '
-            ret = t.s.always_open
+            t.s._always_active = ' a-list,another-list , '
+            ret = t.s._always_open
             t.assertEqual(ret, frozenset({'a-list', 'another-list'}))
 
     def test_scheduled(t) -> None:
@@ -133,7 +133,7 @@ class SelectionTests(TestCase):
 
         for day, hour in HOURS:
             with t.subTest(day=day, hour=hour):
-                t.s.windows = SCHEDULE
+                t.s._windows = SCHEDULE
                 t.s.now = at_hour(day, hour)
 
                 ret = t.s._scheduled
@@ -142,12 +142,12 @@ class SelectionTests(TestCase):
 
     def test_schedule(t) -> None:
         with t.subTest('no category is scheduled by default'):
-            ret = t.s.schedule
+            ret = t.s._schedule
             t.assertEqual(ret, {})
 
         with t.subTest('the configured windows, read'):
-            t.s.windows = 'a-list=mon 9-10'
-            ret = t.s.schedule
+            t.s._windows = 'a-list=mon 9-10'
+            ret = t.s._schedule
             t.assertEqual(ret, {'a-list': [Window(0, 0, 9, 10)]})
 
     def test_day(t) -> None:
@@ -156,12 +156,12 @@ class SelectionTests(TestCase):
         t.assertEqual(ret, 2)
 
     def test_hour(t) -> None:
-        ret = t.s.hour
+        ret = t.s._hour
         t.assertEqual(ret, 10)
 
     @patch(f'{SRC}.parse_curve', autospec=True)
     def test_curve(t, parse_curve: MagicMock) -> None:
-        ret = t.s.curve
+        ret = t.s._curve
 
         # Decoded from the default, since the fixture names no curve.
         t.assertIs(ret, parse_curve.return_value)
@@ -186,7 +186,7 @@ class SelectionTests(TestCase):
             later, earlier = t.todo('study'), t.todo('work')
             later.order, earlier.order = (2, 'study'), (0, 'work')
             todo_list.side_effect = [later, earlier]
-            t.s.curve = sentinel.curve
+            t.s._curve = sentinel.curve
             # Each list ranks its tasks on the selection's day and curve.
             calls = [call(path, TODAY, sentinel.curve) for path in paths]
 
@@ -196,8 +196,8 @@ class SelectionTests(TestCase):
             t.discover_lists.assert_called_with(t.resolved)
             t.assertEqual(todo_list.call_args_list, calls)
 
-    def test_shows(t) -> None:
-        t.s.windows = 'a-list=mon 9-10; another-list=tue 9-10'
+    def test__shows(t) -> None:
+        t.s._windows = 'a-list=mon 9-10; another-list=tue 9-10'
         t.s.active = {'a-list'}
 
         cases = {
@@ -228,7 +228,7 @@ class SelectionTests(TestCase):
         }
         for name, (found, expected) in cases.items():
             with t.subTest(name):
-                ret = t.s.shows(found)
+                ret = t.s._shows(found)
                 t.assertEqual(ret, expected)
 
         t.s.show_all = True
@@ -248,11 +248,11 @@ class SelectionTests(TestCase):
         }
         for name, (found, expected) in everything.items():
             with t.subTest(name):
-                ret = t.s.shows(found)
+                ret = t.s._shows(found)
                 t.assertEqual(ret, expected)
 
     def test_categories(t) -> None:
-        t.s.windows = 'chores=sun 9-10'
+        t.s._windows = 'chores=sun 9-10'
         t.s.active = {'work', 'study'}
         shown, shut, empty = (
             t.todo('work'),
@@ -270,7 +270,7 @@ class SelectionTests(TestCase):
             t.assertEqual(categories[0].rows, shown.rows)
 
         with t.subTest('and the limit the view was asked for'):
-            t.assertEqual(categories[0].limit, TOP_N)
+            t.assertEqual(categories[0]._limit, TOP_N)
 
         with t.subTest('a list with nothing open contributes no category'):
             t.assertNotIn('study', [c.name for c in categories])
@@ -311,13 +311,13 @@ class SelectionFromConfigTests(TestCase):
         selection = Selection.from_config(t.conf, t.now, show_all=True)
 
         with t.subTest('the source directory is left unexpanded'):
-            t.assertEqual(selection.directory, Path('~/a-source-dir'))
+            t.assertEqual(selection._directory, Path('~/a-source-dir'))
 
         with t.subTest('the clock is the one it was given'):
             t.assertEqual(selection.now, t.now)
 
         with t.subTest('the count is read as a number'):
-            t.assertEqual(selection.top_n, 2)
+            t.assertEqual(selection._top_n, 2)
 
         with t.subTest('the flag is the one given'):
             t.assertTrue(selection.show_all)
@@ -329,8 +329,8 @@ class SelectionFromConfigTests(TestCase):
             t.assertEqual(selection.rank_due_curve, 'a-curve')
 
         with t.subTest('and so are the schedule fields'):
-            t.assertEqual(selection.windows, 'some-windows')
-            t.assertEqual(selection.always_active, 'some-names')
+            t.assertEqual(selection._windows, 'some-windows')
+            t.assertEqual(selection._always_active, 'some-names')
 
         with t.subTest('a decoded true shows every item without the flag'):
             t.full_view.return_value = True
@@ -353,8 +353,8 @@ class SelectionFromConfigTests(TestCase):
 
             unset = Selection.from_config(t.conf, t.now, show_all=True)
 
-            t.assertEqual(unset.windows, '')
-            t.assertEqual(unset.always_active, '')
+            t.assertEqual(unset._windows, '')
+            t.assertEqual(unset._always_active, '')
 
         with t.subTest('a count below one is refused'):
             t.conf.view.top = '0'
@@ -389,20 +389,20 @@ class TodoListTests(TestCase):
     def test_document(t, parsed: MagicMock) -> None:
         t.tl.text = 'a list file'
 
-        ret = t.tl.document
+        ret = t.tl._document
 
         t.assertEqual(ret, parsed.return_value)
         parsed.assert_called_once_with('a list file')
 
     def test_open_rows(t) -> None:
-        t.tl.document = Mock(spec=['tasks'])
-        t.tl.document.tasks = [
+        t.tl._document = Mock(spec=['tasks'])
+        t.tl._document.tasks = [
             stored('An open task'),
             stored('A finished task', done=True),
             stored('A later recurrence', due='2026-08-20', repeat='7d'),
         ]
 
-        ret = t.tl.open_rows
+        ret = t.tl._open_rows
 
         # Every open task is shown, a recurrence due later included:
         # its due date lowers its rank instead of hiding it.
@@ -410,7 +410,7 @@ class TodoListTests(TestCase):
             [row.task.title for row in ret],
             ['An open task', 'A later recurrence'],
         )
-        t.assertEqual([row.curve for row in ret], [sentinel.curve] * 2)
+        t.assertEqual([row._curve for row in ret], [sentinel.curve] * 2)
 
     def test_parked(t) -> None:
         with t.subTest('a list with no marker is not parked'):
@@ -430,7 +430,7 @@ class TodoListTests(TestCase):
             low, high = Mock(spec=['key']), Mock(spec=['key'])
             low.key = (-1.0, 'zzzz', 'Low')
             high.key = (-5.0, 'zzzz', 'High')
-            t.tl.open_rows = [low, high]
+            t.tl._open_rows = [low, high]
 
             ret = t.tl.rows
 
@@ -438,7 +438,7 @@ class TodoListTests(TestCase):
 
         with t.subTest('a list with nothing open comes back empty'):
             t.tl.__dict__.pop('rows')
-            t.tl.open_rows = []
+            t.tl._open_rows = []
 
             ret = t.tl.rows
 
@@ -477,12 +477,12 @@ class CategoryTests(TestCase):
             t.assertEqual(ret, t.rows[:2])
 
         with t.subTest('no limit shows every one'):
-            t.c.limit = None
+            t.c._limit = None
             ret = t.c.shown
             t.assertEqual(ret, t.rows)
 
         with t.subTest('a limit past the end shows every one too'):
-            t.c.limit = 99
+            t.c._limit = 99
             ret = t.c.shown
             t.assertEqual(ret, t.rows)
 
@@ -492,7 +492,7 @@ class CategoryTests(TestCase):
             t.assertEqual(ret, 4)
 
         with t.subTest('nothing is held back without a limit'):
-            t.c.limit = None
+            t.c._limit = None
             ret = t.c.hidden
             t.assertEqual(ret, 0)
 

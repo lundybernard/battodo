@@ -74,13 +74,13 @@ class Selection:
         windows: str = '',
         always_active: str = '',
     ) -> None:
-        self.directory = directory
+        self._directory = directory
         self.now = now
         self.show_all = show_all
-        self.top_n = top_n
+        self._top_n = top_n
         self.rank_due_curve = rank_due_curve
-        self.windows = windows
-        self.always_active = always_active
+        self._windows = windows
+        self._always_active = always_active
 
     @classmethod
     def from_config(
@@ -95,8 +95,8 @@ class Selection:
         Every configuration value is a string, so the item count is
         decoded by `item_count`, and `view.all` by `full_view`.
         `show_all` shows every item whatever `view.all` holds. The
-        due-date curve is decoded once, by `curve`, and the schedule by
-        `schedule` and `always_open`.
+        due-date curve is decoded once, by `_curve`, and the schedule by
+        `_schedule` and `_always_open`.
 
         Raises
         ------
@@ -123,9 +123,9 @@ class Selection:
         return self.now.date()
 
     @property
-    def limit(self) -> int | None:
+    def _limit(self) -> int | None:
         """How many items a category may show; None for all of them."""
-        return None if self.show_all else self.top_n
+        return None if self.show_all else self._top_n
 
     @cached_property
     def source(self) -> Path:
@@ -136,7 +136,7 @@ class Selection:
         SourceError
             The directory is not there.
         """
-        resolved = self.directory.expanduser().resolve()
+        resolved = self._directory.expanduser().resolve()
         if not resolved.is_dir():
             raise SourceError(f'todo source directory not found: {resolved}')
         return resolved
@@ -146,12 +146,12 @@ class Selection:
         """The categories open at `now`: the always-open names, and each
         category with a window that holds now.
         """
-        return set(self.always_open) | self._scheduled
+        return set(self._always_open) | self._scheduled
 
     @property
-    def always_open(self) -> frozenset[str]:
+    def _always_open(self) -> frozenset[str]:
         """The categories no window shuts."""
-        names = {part.strip() for part in self.always_active.split(',')}
+        names = {part.strip() for part in self._always_active.split(',')}
         return frozenset(names - {''})
 
     @property
@@ -159,12 +159,12 @@ class Selection:
         """The schedule categories with a window that holds now."""
         return {
             name
-            for name, windows in self.schedule.items()
-                if any(window.holds(self.day, self.hour) for window in windows)
+            for name, windows in self._schedule.items()
+                if any(window.holds(self.day, self._hour) for window in windows)
         }  # fmt: skip
 
     @property
-    def schedule(self) -> dict[str, list['Window']]:
+    def _schedule(self) -> dict[str, list['Window']]:
         """The windows of each category the view schedules.
 
         Raises
@@ -172,7 +172,7 @@ class Selection:
         ValueError
             The configured windows do not read.
         """
-        return parse_windows(self.windows)
+        return parse_windows(self._windows)
 
     @property
     def day(self) -> int:
@@ -180,7 +180,7 @@ class Selection:
         return self.now.weekday()
 
     @property
-    def hour(self) -> int:
+    def _hour(self) -> int:
         """The hour of the day the clock reads."""
         return self.now.hour
 
@@ -199,11 +199,11 @@ class Selection:
                 f'no todo lists (no file with a "{OPEN_HEADING}" heading) '
                 f'in: {self.source}'
             )
-        found = [TodoList(path, self.today, self.curve) for path in paths]
+        found = [TodoList(path, self.today, self._curve) for path in paths]
         return sorted(found, key=lambda todo: todo.order)
 
     @cached_property
-    def curve(self) -> Curve:
+    def _curve(self) -> Curve:
         """The due-date curve every task of the view is ranked on.
 
         Raises
@@ -213,7 +213,7 @@ class Selection:
         """
         return parse_curve(self.rank_due_curve)
 
-    def shows(self, todo: 'TodoList') -> bool:
+    def _shows(self, todo: 'TodoList') -> bool:
         """Whether `todo` has any place in this view.
 
         A category with windows is shown while it is active, or whenever
@@ -224,7 +224,7 @@ class Selection:
         Opting out is not a window, and nothing reopens it: a parked
         list stays out of every view.
         """
-        scheduled = todo.category in self.schedule
+        scheduled = todo.category in self._schedule
         shut = scheduled and todo.category not in self.active
         if shut and not self.show_all:
             return False
@@ -234,9 +234,9 @@ class Selection:
     def categories(self) -> list['Category']:
         """The categories a view renders, each with its rows."""
         return [
-            Category(todo.category, todo.rows, self.limit)
+            Category(todo.category, todo.rows, self._limit)
             for todo in self.lists
-                if self.shows(todo) and todo.rows
+                if self._shows(todo) and todo.rows
         ]  # fmt: skip
 
 
@@ -311,7 +311,7 @@ class TodoList:
     def __init__(self, path: Path, today: date, curve: Curve) -> None:
         self.path = path
         self.today = today
-        self.curve = curve
+        self._curve = curve
 
     @cached_property
     def category(self) -> str:
@@ -323,16 +323,16 @@ class TodoList:
         return self.path.read_text()
 
     @cached_property
-    def document(self) -> TodoDocument:
+    def _document(self) -> TodoDocument:
         """The list file, parsed."""
         return TodoDocument(self.text)
 
     @cached_property
-    def open_rows(self) -> list['Row']:
+    def _open_rows(self) -> list['Row']:
         """A row per open top-level task."""
         return [
-            Row(task, self.today, self.curve)
-            for task in self.document.tasks
+            Row(task, self.today, self._curve)
+            for task in self._document.tasks
                 if not task.done
         ]  # fmt: skip
 
@@ -343,7 +343,7 @@ class TodoList:
     @cached_property
     def rows(self) -> list['Row']:
         """A row per open task, in the order a view shows them."""
-        return sorted(self.open_rows, key=lambda row: row.key)
+        return sorted(self._open_rows, key=lambda row: row.key)
 
     @property
     def order(self) -> tuple[int, str]:
@@ -362,12 +362,12 @@ class Category:
     ) -> None:
         self.name = name
         self.rows = rows
-        self.limit = limit
+        self._limit = limit
 
     @property
     def shown(self) -> list['Row']:
         """The rows that make it into the view."""
-        return self.rows if self.limit is None else self.rows[: self.limit]
+        return self.rows if self._limit is None else self.rows[: self._limit]
 
     @property
     def hidden(self) -> int:
@@ -385,7 +385,7 @@ class Row:
     def __init__(self, task: TaskNode, today: date, curve: Curve) -> None:
         self.task = task
         self.today = today
-        self.curve = curve
+        self._curve = curve
 
     @cached_property
     def key(self) -> tuple[float, str, str]:
@@ -399,7 +399,7 @@ class Row:
     @cached_property
     def rank(self) -> float:
         """The task's rank on the day and the curve of the view."""
-        return rank(self.task, self.today, self.curve)
+        return rank(self.task, self.today, self._curve)
 
     @cached_property
     def priority(self) -> float:
