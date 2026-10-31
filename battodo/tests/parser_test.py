@@ -612,11 +612,11 @@ class TodoDocumentTests(TestCase):
 
             t.assertEqual(outside_tasks, [])
 
-    @patch.object(TodoDocument, 'open_sections', new_callable=PropertyMock)
+    @patch.object(TodoDocument, '_open_sections', new_callable=PropertyMock)
     def test_sections(t, open_sections: PropertyMock) -> None:
         open_sections.return_value = [[1, 2], [5]]
 
-        ret = t.td.sections
+        ret = t.td._sections
 
         with t.subTest('a section per list of Open line indices'):
             t.assertEqual(
@@ -629,7 +629,7 @@ class TodoDocumentTests(TestCase):
 
     def test_open_sections(t) -> None:
         with t.subTest('the line indices under the Open heading'):
-            ret = t.td.open_sections
+            ret = t.td._open_sections
             t.assertEqual(ret, [list(range(5, APPEND_INDEX + 1))])
 
         with t.subTest('one list per Open section, each up to the next one'):
@@ -642,18 +642,18 @@ class TodoDocumentTests(TestCase):
                 '- [ ] Second task',
             ]
 
-            ret = t.td.open_sections
+            ret = t.td._open_sections
 
             t.assertEqual(ret, [[1], [5]])
 
         with t.subTest('none, where no Open heading stands'):
             t.td.lines = ['# A heading', '- [ ] Loose task']
-            ret = t.td.open_sections
+            ret = t.td._open_sections
             t.assertEqual(ret, [])
 
     def test_open_bounds(t) -> None:
         with t.subTest('the Open heading, then the next heading'):
-            ret = t.td.open_bounds
+            ret = t.td._open_bounds
             t.assertEqual(ret, [(4, 16)])
 
         with t.subTest('a pair per Open section, the last up to the end'):
@@ -666,18 +666,18 @@ class TodoDocumentTests(TestCase):
                 '- [ ] Second task',
             ]
 
-            ret = t.td.open_bounds
+            ret = t.td._open_bounds
 
             t.assertEqual(ret, [(0, 2), (4, 6)])
 
         with t.subTest('none, where no Open heading stands'):
             t.td.lines = ['# A heading', '- [ ] Loose task']
-            ret = t.td.open_bounds
+            ret = t.td._open_bounds
             t.assertEqual(ret, [])
 
     def test_heading_indices(t) -> None:
         with t.subTest('every level-two heading, in file order'):
-            ret = t.td.heading_indices
+            ret = t.td._heading_indices
             t.assertEqual(ret, [4, 16])
 
         with t.subTest('a deeper heading or a bare ## is none'):
@@ -689,7 +689,7 @@ class TodoDocumentTests(TestCase):
                 '##No-space',
             ]
 
-            ret = t.td.heading_indices
+            ret = t.td._heading_indices
 
             t.assertEqual(ret, [1, 3])
 
@@ -1104,7 +1104,7 @@ class SectionTests(TestCase):
         )
 
     def test_task_lines(t) -> None:
-        ret = t.sn.task_lines
+        ret = t.sn._task_lines
 
         t.assertEqual(
             ret,
@@ -1115,18 +1115,18 @@ class SectionTests(TestCase):
         )
 
     def test_notes(t) -> None:
-        ret = t.sn.notes
+        ret = t.sn._notes
         # The note before the first task line falls in no range.
         t.assertEqual(ret, [[3, 6], [8]])
 
     def test_stops(t) -> None:
         with t.subTest('the next task line, then the end of the section'):
-            ret = t.sn.stops
+            ret = t.sn._stops
             t.assertEqual(ret, [7, 9])
 
         with t.subTest('none, where the section is empty'):
             t.sn.indices = []
-            ret = t.sn.stops
+            ret = t.sn._stops
             t.assertEqual(ret, [])
 
     def test_end(t) -> None:
@@ -1140,7 +1140,7 @@ class SectionTests(TestCase):
             t.assertEqual(ret, 0)
 
     def test_texts(t) -> None:
-        ret = t.sn.texts
+        ret = t.sn._texts
 
         # A blank line and a comment hold no text.
         t.assertEqual(
@@ -1156,7 +1156,7 @@ class SectionTests(TestCase):
         )
 
     def test_descriptions(t) -> None:
-        ret = t.sn.descriptions
+        ret = t.sn._descriptions
 
         t.assertEqual(
             ret,
@@ -1228,7 +1228,7 @@ class TaskLineTests(TestCase):
                 t.assertIs(ret, expected)
 
     def test_body(t) -> None:
-        ret = t.tl.body
+        ret = t.tl._body
         t.assertEqual(ret, 'A done subtask [LOE:2] [P:1]')
 
     def test_title(t) -> None:
