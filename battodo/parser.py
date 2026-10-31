@@ -72,7 +72,7 @@ class TodoDocument:
         node with none is a top-level task.
         """
         tasks: list[TaskNode] = []
-        for section in self.sections:
+        for section in self._sections:
             nodes = section.nodes
             for node, parent in zip(nodes, section.parents):
                 siblings = tasks if parent is None else nodes[parent].children
@@ -80,25 +80,27 @@ class TodoDocument:
         return tasks
 
     @property
-    def sections(self) -> list['Section']:
+    def _sections(self) -> list['Section']:
         """A `Section` per `## Open` heading, in file order."""
-        return [Section(self.lines, indices) for indices in self.open_sections]
-
-    @property
-    def open_sections(self) -> list[list[int]]:
-        """The line indices under each `## Open` heading, in file order."""
         return [
-            list(range(start + 1, stop)) for start, stop in self.open_bounds
+            Section(self.lines, indices) for indices in self._open_sections
         ]
 
     @property
-    def open_bounds(self) -> list[tuple[int, int]]:
+    def _open_sections(self) -> list[list[int]]:
+        """The line indices under each `## Open` heading, in file order."""
+        return [
+            list(range(start + 1, stop)) for start, stop in self._open_bounds
+        ]
+
+    @property
+    def _open_bounds(self) -> list[tuple[int, int]]:
         """The heading index and the stop index of each `## Open` section.
 
         In file order. A section stops at the next `## ` heading or at
         the end of the file.
         """
-        bounds = [*self.heading_indices, len(self.lines)]
+        bounds = [*self._heading_indices, len(self.lines)]
         return [
             (start, stop)
             for start, stop in pairwise(bounds)
@@ -106,7 +108,7 @@ class TodoDocument:
         ]  # fmt: skip
 
     @property
-    def heading_indices(self) -> list[int]:
+    def _heading_indices(self) -> list[int]:
         """The index of every `## ` heading line, in file order."""
         return [
             index
@@ -118,12 +120,12 @@ class TodoDocument:
     def open_headings(self) -> list[int]:
         """The index of each `## Open` heading outside fenced code.
 
-        `open_bounds` reads a fenced heading too, so this is the stricter
+        `_open_bounds` reads a fenced heading too, so this is the stricter
         set: a line in fenced code is an example, not a heading.
         """
         return [
             start
-            for start, _ in self.open_bounds
+            for start, _ in self._open_bounds
                 if not self._fences[start]
         ]  # fmt: skip
 
@@ -268,7 +270,7 @@ class TodoDocument:
         StopIteration
             There is no `## Open` heading.
         """
-        start, stop = next(iter(self.open_bounds))
+        start, stop = next(iter(self._open_bounds))
         # `start` is itself non-blank, so an empty section appends
         # directly under the heading rather than falling off the front
         # of the file.
@@ -585,12 +587,12 @@ class Section:
                 description_lines=description,
             )
             for line, notes, description in zip(
-                self.task_lines, self.notes, self.descriptions
+                self._task_lines, self._notes, self._descriptions
             )
         ]
 
     @property
-    def task_lines(self) -> list['TaskLine']:
+    def _task_lines(self) -> list['TaskLine']:
         """A `TaskLine` per checkbox line of the section, in file order."""
         return [
             TaskLine(index, self.lines[index])
@@ -599,24 +601,24 @@ class Section:
         ]  # fmt: skip
 
     @property
-    def notes(self) -> list[list[int]]:
+    def _notes(self) -> list[list[int]]:
         """The note line indices below each task line, in file order.
 
         The notes of a task line run up to its stop. A line with text
         there is a note.
         """
-        texts = self.texts
+        texts = self._texts
         return [
             [
                 index
                 for index in range(line.index + 1, stop)
                     if index in texts
             ]
-            for line, stop in zip(self.task_lines, self.stops)
+            for line, stop in zip(self._task_lines, self._stops)
         ]  # fmt: skip
 
     @property
-    def texts(self) -> dict[int, str]:
+    def _texts(self) -> dict[int, str]:
         """The stripped text of each section line, by index.
 
         A blank line and a `<!--` comment line hold no text.
@@ -629,13 +631,13 @@ class Section:
         }  # fmt: skip
 
     @property
-    def stops(self) -> list[int]:
+    def _stops(self) -> list[int]:
         """Where the note range of each task line stops.
 
         At the next task line, or at the end of the section for the last
         one.
         """
-        starts = [line.index for line in self.task_lines]
+        starts = [line.index for line in self._task_lines]
         return [stop for _, stop in pairwise([*starts, self.end])]
 
     @property
@@ -644,10 +646,10 @@ class Section:
         return max(self.indices, default=-1) + 1
 
     @property
-    def descriptions(self) -> list[list[str]]:
+    def _descriptions(self) -> list[list[str]]:
         """The text of the notes of each task line, in file order."""
-        texts = self.texts
-        return [[texts[index] for index in notes] for notes in self.notes]
+        texts = self._texts
+        return [[texts[index] for index in notes] for notes in self._notes]
 
     @property
     def parents(self) -> list[int | None]:
@@ -656,7 +658,7 @@ class Section:
         The parent is the nearest earlier task line of the section with
         a lower indent. A task line with none has None.
         """
-        indents = [line.indent for line in self.task_lines]
+        indents = [line.indent for line in self._task_lines]
         shallower = [
             [
                 above
@@ -697,19 +699,19 @@ class TaskLine:
         return self.checkbox.group(2) in 'xX'
 
     @property
-    def body(self) -> str:
+    def _body(self) -> str:
         """The text after the checkbox: the title and the fields."""
         return self.checkbox.group(3)
 
     @property
     def title(self) -> str:
         """The body without its fields."""
-        return _clean_title(self.body)
+        return _clean_title(self._body)
 
     @property
     def fields(self) -> dict[str, str]:
         """The fields of the body, by name."""
-        return _parse_fields(self.body)
+        return _parse_fields(self._body)
 
 
 def _match_checkbox(raw: str) -> re.Match[str]:
