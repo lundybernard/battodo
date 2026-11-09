@@ -96,7 +96,7 @@ class ConfigFile:
         self._config_env = config_env
 
     @cached_property
-    def named(self) -> str | None:
+    def _named(self) -> str | None:
         """The file the user named, or None when there is none."""
         return self._name or environ.get(CONFIG_FILE_ENV_VAR)
 
@@ -117,8 +117,8 @@ class ConfigFile:
     @cached_property
     def path(self) -> str | None:
         """The file to read, or None when there is none."""
-        if self.named:
-            return self.named
+        if self._named:
+            return self._named
         for candidate in self.candidates:
             if candidate.is_file():
                 return str(candidate)
@@ -135,7 +135,7 @@ class ConfigFile:
             # A file the user named must exist: an unreadable one is a
             # configuration error, not an empty result. A file the
             # search found exists already.
-            missing_file_option='error' if self.named else 'ignore',
+            missing_file_option='error' if self._named else 'ignore',
         )
 
 
