@@ -28,17 +28,11 @@ FIELD_NAMES: tuple[str, ...] = (
 FIELD_RE = re.compile(rf'\[({"|".join(FIELD_NAMES)}):([^\]]*)\]')
 CHECKBOX_RE = re.compile(r'^(\s*)- \[([ xX])\]\s?(.*)$')
 OPEN_HEADING = '## Open'
-# The run of backticks or tildes that opens or closes a code fence.
 FENCE_RE = re.compile(r'`{3,}|~{3,}')
-# SCHEMA.md's own field grammar, in SCHEMA.md's order. `BUMPED` is
-# retired; `ADDED` and `ID` are btodo extensions and so are not in it.
-# Whatever btodo authors -- a `completed.md` record, a brand new task
-# line -- is written in this order, which is what makes those lines
-# canonical where hand-written ones keep whatever order they came with.
+# SCHEMA.md fixes this field order. btodo writes the fields that it authors
+# in it, and leaves the order of a hand-written line alone.
 SCHEMA_FIELDS = ('P', 'LOE', 'DUE', 'REPEAT', 'TAGS')
 DATE_FIELDS = ('DUE',)
-# How far a description line indents past its task line: under the
-# title, clear of the checkbox.
 DESCRIPTION_INDENT = len('- [ ] ')
 ANCESTRY_SEPARATOR = ' > '
 
@@ -269,9 +263,8 @@ class TodoDocument:
             There is no `## Open` heading.
         """
         start, stop = next(iter(self.open_bounds))
-        # `start` is itself non-blank, so an empty section appends
-        # directly under the heading rather than falling off the front
-        # of the file.
+        # The heading at `start` is non-blank, so an empty section appends
+        # directly under it.
         last = max(
             index
             for index in range(start, stop)
