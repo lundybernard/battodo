@@ -293,18 +293,22 @@ class SelectionTests(TestCase):
     def setUp(t) -> None:
         t.source = source_dir(t)
 
-    def test_curve(t) -> None:
-        with t.subTest('the default curve'):
-            selection = Selection(t.source, NOW, show_all=False)
-            ret = selection.curve
-            t.assertEqual(ret, [(-30, 0.5), (-7, 1.0), (0, 2.0), (14, 4.0)])
+    def test_categories(t) -> None:
+        write(t.source, 'work', '- [ ] A dated task [P:2] [DUE:2026-09-30]')
 
-        with t.subTest('a curve given in its place'):
+        with t.subTest('the default curve ranks a far due date'):
+            selection = Selection(t.source, NOW, show_all=False)
+            ret = selection.categories
+            t.assertAlmostEqual(ret[0].shown[0].rank, 1.0)
+
+        with t.subTest('a curve given in its place decides instead'):
             selection = Selection(
                 t.source, NOW, show_all=False, rank_due_curve='0:3.0'
             )
-            ret = selection.curve
-            t.assertEqual(ret, [(0, 3.0)])
+
+            ret = selection.categories
+
+            t.assertAlmostEqual(ret[0].shown[0].rank, 6.0)
 
 
 class RowTests(TestCase):
