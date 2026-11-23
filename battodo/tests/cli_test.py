@@ -227,6 +227,7 @@ class ArgparserTests(TestCase):
             (['history', 'brush pile'], Commands.history),
             (['backfill'], Commands.backfill),
             (['completed'], Commands.completed),
+            (['skill'], Commands.skill),
         ]
         for argv, command in cases:
             with t.subTest(argv[0]):
@@ -906,6 +907,30 @@ class CommandsNoteTests(TestCase):
 
         with t.subTest('and the command prints what comes back'):
             t.print.assert_called_once_with(t.annotate_item.return_value)
+
+
+class CommandsSkillTests(TestCase):
+    """Unit tests for battodo.cli.Commands.skill."""
+
+    def setUp(t):
+        patcher = patch(f'{SRC}.get_manual', autospec=True)
+        t.get_manual = patcher.start()
+        t.addCleanup(patcher.stop)
+        patcher = patch('builtins.print', autospec=True)
+        t.print = patcher.start()
+        t.addCleanup(patcher.stop)
+
+        t.conf = sentinel.conf
+        t.args = Namespace()
+
+    def test_skill(t):
+        Commands.skill(t.conf, t.args)
+
+        with t.subTest('the manual comes from the library'):
+            t.get_manual.assert_called_once_with()
+
+        with t.subTest('and the command prints what comes back'):
+            t.print.assert_called_once_with(t.get_manual.return_value)
 
 
 class CommandsSetLogLevelTests(TestCase):

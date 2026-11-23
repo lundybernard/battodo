@@ -16,6 +16,7 @@ from battodo.lib import (
     get_completed,
     get_history,
     get_item,
+    get_manual,
     get_view,
     item_count,
     update_item,
@@ -461,6 +462,10 @@ class Commands:
     def completed(conf, args):
         now = datetime.now(time_zone(conf))
         print(get_completed(conf, now, period=args.period))
+
+    @staticmethod
+    def skill(conf, args):
+        raise NotImplementedError
 
     @staticmethod
     def set_log_level(conf):
