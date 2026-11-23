@@ -70,7 +70,7 @@ class SuppliedEditTests(TestCase):
 
     def test_cleared(t) -> None:
         with t.subTest('none, where no field names the clear token'):
-            ret = t.se.cleared
+            ret = t.se._cleared
             t.assertEqual(ret, [])
 
         with t.subTest('each due date, repeat and tags it names'):
@@ -81,24 +81,24 @@ class SuppliedEditTests(TestCase):
                 'TAGS': 'None',
             }
 
-            ret = t.se.cleared
+            ret = t.se._cleared
 
             t.assertEqual(ret, ['DUE', 'REPEAT', 'TAGS'])
 
         with t.subTest('not a priority, which reads the token as a value'):
             t.se.fields = {'P': 'None'}
-            ret = t.se.cleared
+            ret = t.se._cleared
             t.assertEqual(ret, [])
 
         with t.subTest('not an empty value'):
             t.se.fields = {'TAGS': ''}
-            ret = t.se.cleared
+            ret = t.se._cleared
             t.assertEqual(ret, [])
 
     @patch(f'{SRC}.SuppliedFields', autospec=True)
     def test_supplied(t, supplied_fields: MagicMock) -> None:
         with t.subTest('the named fields, against the day'):
-            ret = t.se.supplied
+            ret = t.se._supplied
             supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
             t.assertIs(ret, supplied_fields.return_value)
 
@@ -106,7 +106,7 @@ class SuppliedEditTests(TestCase):
             supplied_fields.reset_mock()
             t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
 
-            _ = t.se.supplied
+            _ = t.se._supplied
 
             supplied_fields.assert_called_once_with({'P': '5'}, TODAY)
 
@@ -235,7 +235,7 @@ class SuppliedEditTests(TestCase):
 
             t.assertIsNone(ret)
 
-    @patch.object(SuppliedEdit, 'supplied', new_callable=PropertyMock)
+    @patch.object(SuppliedEdit, '_supplied', new_callable=PropertyMock)
     def test_refuse_root_fields(t, supplied: PropertyMock) -> None:
         supplied.return_value = MagicMock(spec=['refuse_root_fields'])
         t.se.refuse_root_fields()
@@ -701,7 +701,7 @@ class SuppliedAttributesTests(TestCase):
     def setUp(t) -> None:
         t.sa = SuppliedAttributes('a_key=a value', 'a note')
 
-    @patch.object(SuppliedAttributes, 'pairs', new_callable=PropertyMock)
+    @patch.object(SuppliedAttributes, '_pairs', new_callable=PropertyMock)
     def test_checked(t, pairs: PropertyMock) -> None:
         with t.subTest('each key against its value, in the order given'):
             pairs.return_value = [('cost', '45.00'), ('note', 'a note')]
@@ -771,22 +771,22 @@ class SuppliedAttributesTests(TestCase):
         segment_pairs.return_value = [('a_key', 'a value')]
 
         with t.subTest('each segment pair, then the note'):
-            ret = t.sa.pairs
+            ret = t.sa._pairs
             t.assertEqual(ret, [('a_key', 'a value'), ('note', 'a note')])
 
         with t.subTest('the note enters whole, never split'):
             t.sa.note = 'a note, cost=45.00'
-            ret = t.sa.pairs
+            ret = t.sa._pairs
             t.assertEqual(
                 ret, [('a_key', 'a value'), ('note', 'a note, cost=45.00')]
             )
 
         with t.subTest('no note: the segment pairs alone'):
             t.sa.note = None
-            ret = t.sa.pairs
+            ret = t.sa._pairs
             t.assertEqual(ret, [('a_key', 'a value')])
 
-    @patch.object(SuppliedAttributes, 'segments', new_callable=PropertyMock)
+    @patch.object(SuppliedAttributes, '_segments', new_callable=PropertyMock)
     def test_segment_pairs(t, segments: PropertyMock) -> None:
         with t.subTest('each segment split at its first ='):
             segments.return_value = ['a_key=a value', 'sum=1+1=2']
@@ -814,12 +814,12 @@ class SuppliedAttributesTests(TestCase):
 
     def test_segments(t) -> None:
         with t.subTest('the text the write was given'):
-            ret = t.sa.segments
+            ret = t.sa._segments
             t.assertEqual(ret, ['a_key=a value'])
 
         with t.subTest('no text: no segment'):
             t.sa.text = None
-            ret = t.sa.segments
+            ret = t.sa._segments
             t.assertEqual(ret, [])
 
         split = {
@@ -857,7 +857,7 @@ class SuppliedAttributesTests(TestCase):
         for name, (text, expected) in split.items():
             with t.subTest(name):
                 t.sa.text = text
-                ret = t.sa.segments
+                ret = t.sa._segments
                 t.assertEqual(ret, expected)
 
 

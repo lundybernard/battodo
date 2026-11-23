@@ -69,13 +69,13 @@ class SuppliedEdit:
         ValueError
             A supplied value does not read.
         """
-        changed: dict[str, str | None] = {**self.supplied.checked}
-        for name in self.cleared:
+        changed: dict[str, str | None] = {**self._supplied.checked}
+        for name in self._cleared:
             changed[name] = None
         return changed
 
     @property
-    def cleared(self) -> list[str]:
+    def _cleared(self) -> list[str]:
         """The named fields that the clear token clears, in order."""
         return [
             name
@@ -84,12 +84,12 @@ class SuppliedEdit:
         ]  # fmt: skip
 
     @property
-    def supplied(self) -> 'SuppliedFields':
+    def _supplied(self) -> 'SuppliedFields':
         """The named fields to read against `today`.
 
         A cleared field is not read, so it is left out.
         """
-        cleared = self.cleared
+        cleared = self._cleared
         read = {
             name: value
             for name, value in self.fields.items()
@@ -165,7 +165,7 @@ class SuppliedEdit:
         ValueError
             The fields name one.
         """
-        self.supplied.refuse_root_fields()
+        self._supplied.refuse_root_fields()
 
     def delta(
         self,
@@ -451,7 +451,7 @@ class SuppliedAttributes:
             line break, or a key is given twice.
         """
         checked: dict[str, str] = {}
-        for pair in self.pairs:
+        for pair in self._pairs:
             key, value = AttributePair(*pair).checked
             if key in checked:
                 raise ValueError(f'attribute {key!r} is given twice')
@@ -459,7 +459,7 @@ class SuppliedAttributes:
         return checked
 
     @property
-    def pairs(self) -> list[tuple[str, str]]:
+    def _pairs(self) -> list[tuple[str, str]]:
         """Each segment split at its first `=`, then the note.
 
         Raises
@@ -474,10 +474,10 @@ class SuppliedAttributes:
     @property
     def _segment_pairs(self) -> list[tuple[str, str]]:
         """Each segment split at its first `=`, in the order given."""
-        return [AttributeSegment(segment).pair for segment in self.segments]
+        return [AttributeSegment(segment).pair for segment in self._segments]
 
     @property
-    def segments(self) -> list[str]:
+    def _segments(self) -> list[str]:
         """The `key=value` segments of `text`, or none without it."""
         if self.text is None:
             return []

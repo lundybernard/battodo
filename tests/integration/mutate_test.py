@@ -2272,26 +2272,6 @@ class SuppliedEditTests(TestCase):
                 t.se.fields = fields
                 _ = t.se.changed
 
-    def test_cleared(t) -> None:
-        with t.subTest('none, where no field names the clear token'):
-            ret = t.se.cleared
-            t.assertEqual(ret, [])
-
-        with t.subTest('each due date, repeat and tags it names'):
-            t.se.fields = {'DUE': 'None', 'REPEAT': 'None', 'TAGS': 'None'}
-            ret = t.se.cleared
-            t.assertEqual(ret, ['DUE', 'REPEAT', 'TAGS'])
-
-    def test_supplied(t) -> None:
-        with t.subTest('the named fields, read'):
-            ret = t.se.supplied
-            t.assertEqual(ret.ordered, {'P': '5', 'DUE': '2026-09-01'})
-
-        with t.subTest('a cleared field is left out'):
-            t.se.fields = {'P': '5', 'DUE': 'None', 'TAGS': 'None'}
-            ret = t.se.supplied
-            t.assertEqual(ret.ordered, {'P': '5'})
-
     def test_checked_title(t) -> None:
         with t.subTest('the named title'):
             ret = t.se.checked_title
