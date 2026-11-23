@@ -6,8 +6,7 @@ description: Operate the btodo todo-list CLI — read ranked views, add, update,
 # BatTodo
 
 `btodo` owns the todo lists. Read them and change them through the CLI.
-This file ships with the project; link it into an agent's skills
-directory to load it.
+`btodo skill` prints this manual, as the installed `btodo` holds it.
 
 ## Rules
 

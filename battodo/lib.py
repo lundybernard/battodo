@@ -566,4 +566,5 @@ def get_manual() -> str:
         The manual from its title on: without its YAML frontmatter, and
         without a trailing newline.
     """
-    raise NotImplementedError
+    manual = files(__package__).joinpath(_MANUAL).read_text(encoding='utf-8')
+    return manual.partition(_FRONTMATTER_END)[2].strip()

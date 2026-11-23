@@ -132,4 +132,8 @@ MESSAGES = {
     ' default week',
     'completed.format.help': 'output format: text for a terminal, json for'
     ' agents',
+    # skill
+    'skill.description': 'print the manual for an agent that operates btodo,'
+    ' as this install holds it, without its frontmatter',
+    'skill.help': 'for details use skill --help',
 }

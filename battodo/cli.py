@@ -340,6 +340,13 @@ def argparser():
         help=MESSAGES['completed.format.help'],
     )
 
+    skill = commands.add_parser(
+        'skill',
+        description=MESSAGES['skill.description'],
+        help=MESSAGES['skill.help'],
+    )
+    skill.set_defaults(func=Commands.skill)
+
     return p
 
 
@@ -465,7 +472,7 @@ class Commands:
 
     @staticmethod
     def skill(conf, args):
-        raise NotImplementedError
+        print(get_manual())
 
     @staticmethod
     def set_log_level(conf):

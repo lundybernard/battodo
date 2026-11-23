@@ -46,6 +46,7 @@ btodo update 3usdig --due 2026-11-01  # reopen a closed task by its id
 btodo history permit    # closes, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
+btodo skill             # the agent manual, as this install holds it
 ```
 
 `None` is the clear token of `update`: `--due None`, `--repeat None` and
