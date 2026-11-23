@@ -51,8 +51,12 @@ backend = { name = "pixi-build-python", version = "0.*" }
 [tool.pixi.package.host-dependencies]
 hatchling = "*"
 
-[tool.pixi.package.run-dependencies]
-batconf = { path = "../batconf" }
+# A pixi package takes only conda run dependencies, and batconf is not
+# on conda-forge, so the backend passes the batconf wheel to its
+# installer through extra-args. A run dependency replaces this table
+# when conda-forge packages batconf.
+[tool.pixi.package.build.config]
+extra-args = ["https://files.pythonhosted.org/packages/55/ce/98da5012f154494a27c053ea6e9a25163abb04585eb4659b8a422bb76a16/batconf-0.4.0-py3-none-any.whl#sha256=2dd38a0a8bb4742620897b71d0b03506b333a375726856641bd165efe0c4bee6"]
 
 # Default feature: interpreter + project only. Tools live on their own
 # features so each env is the minimum install for its job. The python
