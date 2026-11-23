@@ -1,9 +1,9 @@
 """The functions a UI calls to do one whole job.
 
-Each takes the resolved configuration, then the command inputs as
-keyword arguments, and returns finished output, so a UI holds only its
-own input and display. A keyword of None means that the input was not
-given. A script imports the same functions.
+Each takes the resolved configuration when it reads one, then the
+command inputs as keyword arguments, and returns finished output, so a
+UI holds only its own input and display. A keyword of None means that
+the input was not given. A script imports the same functions.
 
 Every code path a UI executes runs through this module. The names its
 own input handling needs are re-exported here: the periods, the
@@ -12,6 +12,7 @@ logging configuration from `logconf`.
 """
 
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 
 from batconf import Configuration
@@ -50,6 +51,7 @@ __all__ = [
     'get_completed',
     'get_history',
     'get_item',
+    'get_manual',
     'get_view',
     'item_count',
     'update_item',
@@ -57,6 +59,11 @@ __all__ = [
 
 # The output forms a command that prints can take.
 FORMATS = ('text', 'json')
+# The manual for an agent that operates btodo: a resource of this package.
+_MANUAL = 'SKILL.md'
+# The line that closes the YAML frontmatter at the head of the manual.
+# No newline precedes the opening line, so the first match is the close.
+_FRONTMATTER_END = '\n---\n'
 
 
 def _source(conf: Configuration) -> Path:
@@ -548,3 +555,16 @@ def backfill_items(conf: Configuration, now: datetime) -> str:
         f'{listed.path.name}: stamped {len(listed.tasks)}'
         for listed in stamped
     )
+
+
+def get_manual() -> str:
+    """The manual for an agent that operates btodo, as the package holds it.
+
+    Returns
+    -------
+    str
+        The manual from its title on: without its YAML frontmatter, and
+        without a trailing newline.
+    """
+    manual = files(__package__).joinpath(_MANUAL).read_text(encoding='utf-8')
+    return manual.partition(_FRONTMATTER_END)[2].strip()

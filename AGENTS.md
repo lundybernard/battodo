@@ -9,7 +9,7 @@ project template, so its design rules are stricter than its size suggests.
 ## Where things are
 
 - `README.md`: the human guide.
-- `SKILL.md`: the manual for an agent that operates `btodo`. It ships
+- `battodo/SKILL.md`: the manual for an agent that operates `btodo`. It ships
   with the project.
 - `docs/decisions/`: the ADRs.
 - `docs/lessons/`: the informal findings log.

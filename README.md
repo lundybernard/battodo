@@ -46,6 +46,7 @@ btodo update 3usdig --due 2026-11-01  # reopen a closed task by its id
 btodo history permit    # closes, reopens and attributes, newest first
 btodo completed month   # the DONE records since the first of the month
 btodo backfill          # one-time migration: stamp [ADDED:today] where missing
+btodo skill             # the agent manual, as this install holds it
 ```
 
 `None` is the clear token of `update`: `--due None`, `--repeat None` and
@@ -63,7 +64,7 @@ exits 1 and names the repeating subtask until its repeat is cleared
 ([ADR 0029](docs/decisions/0029-subtask-repeat.md)).
 
 `btodo <command> --help` lists the options of each command.
-[SKILL.md](SKILL.md) states the rules and the refusals of each command
+[SKILL.md](battodo/SKILL.md) states the rules and the refusals of each command
 for an agent.
 
 Items are ordered by a rank computed from the file and the clock —
@@ -100,7 +101,7 @@ btodo done permit --note 'Renewed online'
 `--attrs` takes `key=value` segments, and a value may hold commas and
 `=`: the first example records `place` as `Main St, Suite 4`.
 `--note TEXT` records the attribute `note`.
-[SKILL.md](SKILL.md#attributes-and-notes) states the grammar and the
+[SKILL.md](battodo/SKILL.md#attributes-and-notes) states the grammar and the
 inputs that btodo refuses before it writes anything.
 
 `done` also writes the attributes on the record it adds to
@@ -129,7 +130,7 @@ btodo note permit --attrs 'quote=45.00'
 and btodo never splits it. The note goes on a `TaskAnnotated` event on the
 stream of the task, and the task does not change. btodo first stamps
 an `[ID:]` on a task that has none, and the echoed line shows it.
-[SKILL.md](SKILL.md#attributes-and-notes) lists the calls that `note`
+[SKILL.md](battodo/SKILL.md#attributes-and-notes) lists the calls that `note`
 refuses.
 
 ### Reopen a task

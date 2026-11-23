@@ -6,8 +6,7 @@ description: Operate the btodo todo-list CLI — read ranked views, add, update,
 # BatTodo
 
 `btodo` owns the todo lists. Read them and change them through the CLI.
-This file ships with the project; link it into an agent's skills
-directory to load it.
+`btodo skill` prints this manual, as the installed `btodo` holds it.
 
 ## Rules
 
@@ -59,9 +58,10 @@ attributes. Its JSON holds `id`, `title` and `entries`. Each entry
 holds `kind` (the event type: `TaskCompleted`, `TaskScratched`,
 `TaskAnnotated`, or `TaskUpdated` for a reopen and an update with
 attributes), `checklist_item` (true for the close of a checklist item
-under the task), `day` and `attrs`.
-[README.md](README.md#history-of-a-task) states how each entry takes
-its day and its place in the order.
+under the task), `day` and `attrs`. `day` is the day that a close is
+for, as `done --date` sets it, or the local day of the record for any
+other event. Within one day, the later event in the journal comes
+first.
 
 `completed` reads the completed log for one period, DONE records only.
 `today` is the local day, `week` is seven days ending today, and
@@ -71,13 +71,28 @@ as `key=value` pairs joined by a comma and a space. A value may hold
 that separator, so read attributes from the JSON: each entry carries
 `attrs`, an object of text values, `{}` when the record carries none.
 
-The `view` JSON schema is documented in
-[README.md](README.md#machine-readable-output). It grows by addition:
-new keys appear, existing keys keep their meaning. Read each task array
-in the order given rather than re-sorting by `rank`, and read `hidden`
-to learn how many open items the selection left out. Each task of
-`view --format json`, and the item of `show --format json`, carries
-`list`: the filename stem of the list that holds it.
+`view --format json` holds `date` (the day of the view), `active` (the
+categories that show now) and `categories`. Each category holds `name`,
+`tasks` and `hidden`; `hidden` is `0` when `tasks` holds every open
+item of the category. Each task holds `id`, `title`, `rank`,
+`priority`, `loe`, `due`, `added`, `repeat`, `tags`, `subtasks` and
+`list`:
+
+- `rank` has two decimal places.
+- `priority` is the multiplier on a 0-5 scale. A stored `P` above 5
+  maps into that scale, and a task with no `P` reads 1.
+- `subtasks` is the number of open children: subtasks and checklist
+  items.
+- `due` holds the stored date, with no `OVERDUE` or `TODAY` label.
+- `id`, `loe`, `due`, `added` and `repeat` are `null` when the task
+  does not carry them. `tags` is then `[]`.
+
+The `view` JSON grows by addition: new keys appear, existing keys keep
+their meaning. Read each task array in the order given rather than
+re-sorting by `rank`, and read `hidden` to learn how many open items
+the selection left out. Each task of `view --format json`, and the
+item of `show --format json`, carries `list`: the filename stem of the
+list that holds it.
 
 ## Write
 
@@ -262,12 +277,14 @@ the command line carry strings only, so a quoted value gives an option
 one type from every source; the command that reads a value decodes it.
 
 ```toml
+[batconf]
+default_env = "personal"
+
 [personal.battodo.view]
 top = "3"
 ```
 
-The table sits under the environment the file names.
-[README.md](README.md#configuration) holds the full file skeleton.
+The table sits under the environment that `default_env` names.
 
 `view.all`, or `BATTODO_VIEW_ALL`, set to `true` makes every `view`
 call show every open item and every category. The default `false`

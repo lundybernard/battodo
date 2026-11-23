@@ -11,6 +11,7 @@ from ..lib import (
     get_completed,
     get_history,
     get_item,
+    get_manual,
     get_view,
     update_item,
 )
@@ -18,6 +19,20 @@ from ..lib import (
 SRC = 'battodo.lib'
 # The configured `~/a-source-dir` as every function resolves it.
 SOURCE = Path.home() / 'a-source-dir'
+# A manual file: its frontmatter, a blank line, then a body that holds a
+# rule line of the same form as the frontmatter fence.
+MANUAL_FILE = (
+    '---\n'
+    'name: a-manual\n'
+    'description: what the manual covers\n'
+    '---\n'
+    '\n'
+    '# A manual\n'
+    '\n'
+    '---\n'
+    '\n'
+    'The last line.\n'
+)
 
 
 class GetViewTests(TestCase):
@@ -726,3 +741,29 @@ def stamped(name: str, count: int) -> Mock:
     backfill.path = Path(name)
     backfill.tasks = [sentinel.task] * count
     return backfill
+
+
+class GetManualTests(TestCase):
+    """Unit tests for battodo.lib.get_manual."""
+
+    def setUp(t):
+        patcher = patch(f'{SRC}.files', autospec=True)
+        t.files = patcher.start()
+        t.addCleanup(patcher.stop)
+        t.package = Mock(spec=['joinpath'])
+        t.resource = Mock(spec=['read_text'])
+        t.files.return_value = t.package
+        t.package.joinpath.return_value = t.resource
+        t.resource.read_text.return_value = MANUAL_FILE
+
+    def test_result(t):
+        ret = get_manual()
+        # The body keeps its own rule line.
+        t.assertEqual(ret, '# A manual\n\n---\n\nThe last line.')
+
+    def test_read(t):
+        get_manual()
+
+        t.files.assert_called_once_with('battodo')
+        t.package.joinpath.assert_called_once_with('SKILL.md')
+        t.resource.read_text.assert_called_once_with(encoding='utf-8')
