@@ -92,6 +92,11 @@ interface.
   branch before merge.
 - Run every task as `pixi run <task>`. A PR passes `tests`, `lint`,
   `typecheck`, `fuz`, `mutate`, and `unit-py311` through `unit-py315`.
+- A PR also passes `scripts/check-install.sh`, the install check. It
+  installs a commit as a non-editable `pixi global` tool and runs the
+  unit, integration, and cli tests against that install. It runs outside
+  `pixi run`, because a task activates the project environment, and a
+  user's install does not have one.
 - Lint before you push. `pixi run lint` runs `ruff check` and
   `ruff format --check` with the repo settings: single quotes, 79-column
   lines. The CI lint job runs the same task.

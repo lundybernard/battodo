@@ -1,0 +1,33 @@
+name: Install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The install takes any `0.*` release of the build backend, and the
+  # batconf pin depends on a backend option. A backend release can
+  # break the install without a commit here.
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          # The script installs its own global environment, so the job
+          # does not need a project environment.
+          run-install: false
+      - run: scripts/check-install.sh
