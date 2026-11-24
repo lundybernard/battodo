@@ -169,6 +169,9 @@ class ViewCommandTests(TestCase):
         t.addCleanup(tmp.cleanup)
         source = Path(tmp.name)
         copy(LONGER_HEADING_FILE, source)
+        # The temp directory can sit behind a symlink, and the message
+        # names the resolved path.
+        resolved = source.resolve()
 
         out, err, code = t.cli(env={SOURCE_VAR: str(source)})
 
@@ -176,7 +179,7 @@ class ViewCommandTests(TestCase):
             t.assertEqual(
                 err,
                 'no todo lists (no file with a "## Open" heading) '
-                f'in: {source}\n',
+                f'in: {resolved}\n',
             )
             t.assertEqual(code, 1)
 
