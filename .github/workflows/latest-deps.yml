@@ -1,0 +1,95 @@
+name: Latest dependencies
+
+# This workflow runs the gates of ci.yml on a fresh lock, which holds the
+# newest release of each dependency that pyproject.toml allows after its
+# exclude-newer cooldown. The committed pixi.lock does not change.
+on:
+  schedule:
+    # The run starts at minute 17, because GitHub delays scheduled runs at
+    # the start of each hour.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+  # GitHub runs a schedule from the default branch only, so a change to
+  # this file runs the workflow on its own PR.
+  pull_request:
+    paths: [.github/workflows/latest-deps.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  # The lock job makes the one fresh lock that every job below tests. Each
+  # of those jobs runs with --locked, so it fails instead of making a second
+  # lock, and the version changes in this job's log hold for each failure.
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # No job needs the token after the checkout, so no checkout stores it.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          run-install: false
+      # pixi update prints each package whose version differs from the
+      # committed lock.
+      - run: pixi update
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: pixi-lock
+          path: pixi.lock
+
+  test:
+    needs: lock
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        py: [py311, py312, py313, py314, py315]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      # The download writes the fresh lock over the committed one.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: pixi-lock
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          run-install: false
+      - run: pixi run --locked unit-${{ matrix.py }}
+
+  gate:
+    needs: lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # cli runs the unit, integration and CLI suites. Only the
+        # integration and CLI suites exercise the real dependencies.
+        task: [cli, typecheck, lint, fuz, mutate]
+    env:
+      # Only the property suite (fuz) reads this variable.
+      HYPOTHESIS_PROFILE: ci
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      # The download writes the fresh lock over the committed one.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: pixi-lock
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          run-install: false
+      - run: pixi run --locked ${{ matrix.task }}
