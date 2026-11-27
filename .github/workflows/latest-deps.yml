@@ -65,7 +65,7 @@ jobs:
         with:
           pixi-version: v0.81.0
           run-install: false
-      - run: pixi run --locked unit-${{ matrix.py }}
+      - run: pixi run --locked tests-${{ matrix.py }}
 
   gate:
     needs: lock
@@ -74,9 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # cli runs the unit, integration and CLI suites. Only the
-        # integration and CLI suites exercise the real batconf.
-        task: [cli, typecheck, lint, fuz, mutate]
+        task: [typecheck, lint, fuz, mutate]
     env:
       # Only the property suite (fuz) reads this variable.
       HYPOTHESIS_PROFILE: ci

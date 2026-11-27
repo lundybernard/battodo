@@ -91,7 +91,13 @@ interface.
 - Work on a feature branch, never on `main`. A maintainer reviews each
   branch before merge.
 - Run every task as `pixi run <task>`. A PR passes `tests`, `lint`,
-  `typecheck`, `fuz`, `mutate`, and `unit-py311` through `unit-py315`.
+  `typecheck`, `fuz`, `mutate`, and `matrix`.
+- `unit`, `integration`, and `cli` each run one suite, so that a
+  developer runs one suite alone in the fast loop. `tests` runs lint,
+  then typecheck, then the unit, integration, and CLI suites.
+  `tests-py311` through `tests-py315` run the same three suites on one
+  interpreter each, and `matrix` runs the five `tests-pyNNN` tasks in
+  turn, oldest first.
 - A PR also passes `scripts/check-install.sh`, the install check. It
   installs a commit as a non-editable `pixi global` tool and runs the
   unit, integration, and cli tests against that install. It runs outside

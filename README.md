@@ -368,14 +368,17 @@ that mutates.
 A config file sets the same value; see
 [Configuration](#configuration).
 
-Tasks run through pixi; each one uses its own isolated environment.
+Tasks run through pixi, in isolated environments.
 
 ```bash
-pixi run tests      # the full gate: unit + typecheck + lint
-pixi run unit       # unit suite under coverage, gated at 100%
-pixi run test       # unit suite only, no coverage, no gate
-pixi run typecheck  # mypy
-pixi run lint       # ruff check + ruff format --check
+pixi run tests        # the full gate: lint, typecheck, unit, integration, cli
+pixi run matrix       # unit, integration, cli on each supported Python
+pixi run unit         # unit suite under coverage, gated at 100%
+pixi run integration  # integration suite only
+pixi run cli          # CLI suite only
+pixi run test         # unit suite only, no coverage, no gate
+pixi run typecheck    # mypy
+pixi run lint         # ruff check + ruff format --check
 ```
 
 Tests are stdlib `unittest`. Unit tests live beside the code they cover,
