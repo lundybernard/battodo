@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
       - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
-          pixi-version: v0.81.0
+          pixi-version: v0.85.0
           run-install: false
       # pixi update prints each package whose version differs from the
       # committed lock.
@@ -63,7 +63,7 @@ jobs:
           name: pixi-lock
       - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
-          pixi-version: v0.81.0
+          pixi-version: v0.85.0
           run-install: false
       - run: pixi run --locked tests-${{ matrix.py }}
 
@@ -88,6 +88,6 @@ jobs:
           name: pixi-lock
       - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94  # v0.11.2
         with:
-          pixi-version: v0.81.0
+          pixi-version: v0.85.0
           run-install: false
       - run: pixi run --locked ${{ matrix.task }}
