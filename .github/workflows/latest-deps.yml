@@ -26,7 +26,8 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      # No job needs the token after the checkout, so no checkout stores it.
+      # A job does not need the token after the checkout, so the checkout
+      # does not store it.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
@@ -74,7 +75,7 @@ jobs:
       fail-fast: false
       matrix:
         # cli runs the unit, integration and CLI suites. Only the
-        # integration and CLI suites exercise the real dependencies.
+        # integration and CLI suites exercise the real batconf.
         task: [cli, typecheck, lint, fuz, mutate]
     env:
       # Only the property suite (fuz) reads this variable.
@@ -84,7 +85,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
-      # The download writes the fresh lock over the committed one.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: pixi-lock
