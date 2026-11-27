@@ -32,7 +32,7 @@ jobs:
           # Install only this leg's env; the default env is unused here
           # and would be an extra download on every other leg.
           environments: test-${{ matrix.py }}
-      - run: pixi run --locked unit-${{ matrix.py }}
+      - run: pixi run --locked tests-${{ matrix.py }}
 
   typecheck:
     runs-on: ubuntu-latest

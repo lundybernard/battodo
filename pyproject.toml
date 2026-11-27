@@ -77,32 +77,59 @@ batconf = "0d"
 # depends-on resolves globally (ambiguous), not in the caller's env.
 [tool.pixi.tasks]
 tests = { depends-on = [
+    { task = "_lint", environment = "lint" },
+    { task = "_typecheck", environment = "typecheck" },
     { task = "_unit", environment = "test" },
     { task = "_integration", environment = "test" },
     { task = "_cli", environment = "test" },
-    { task = "_typecheck", environment = "typecheck" },
-    { task = "_lint", environment = "lint" },
 ] }
 test = { depends-on = [{ task = "_test", environment = "test" }] }
 unit = { depends-on = [{ task = "_unit", environment = "test" }] }
-# Each layer runs the layers under it first, so a failure reports at
-# the lowest level that shows it.
 integration = { depends-on = [
-    { task = "_unit", environment = "test" },
     { task = "_integration", environment = "test" },
 ] }
-cli = { depends-on = [
-    { task = "_unit", environment = "test" },
-    { task = "_integration", environment = "test" },
-    { task = "_cli", environment = "test" },
-] }
-# Same suite, one entry point per supported interpreter. CI fans these
-# out; locally they are the way to check a requires-python claim.
+cli = { depends-on = [{ task = "_cli", environment = "test" }] }
+# Per supported interpreter: unit-pyNNN runs the unit suite, and
+# tests-pyNNN runs the unit, integration, and CLI suites in that order.
+# matrix runs each tests-pyNNN in turn, oldest first. CI runs
+# tests-pyNNN; locally these tasks check a requires-python claim.
 unit-py311 = { depends-on = [{ task = "_unit", environment = "test-py311" }] }
 unit-py312 = { depends-on = [{ task = "_unit", environment = "test-py312" }] }
 unit-py313 = { depends-on = [{ task = "_unit", environment = "test-py313" }] }
 unit-py314 = { depends-on = [{ task = "_unit", environment = "test-py314" }] }
 unit-py315 = { depends-on = [{ task = "_unit", environment = "test-py315" }] }
+tests-py311 = { depends-on = [
+    { task = "_unit", environment = "test-py311" },
+    { task = "_integration", environment = "test-py311" },
+    { task = "_cli", environment = "test-py311" },
+] }
+tests-py312 = { depends-on = [
+    { task = "_unit", environment = "test-py312" },
+    { task = "_integration", environment = "test-py312" },
+    { task = "_cli", environment = "test-py312" },
+] }
+tests-py313 = { depends-on = [
+    { task = "_unit", environment = "test-py313" },
+    { task = "_integration", environment = "test-py313" },
+    { task = "_cli", environment = "test-py313" },
+] }
+tests-py314 = { depends-on = [
+    { task = "_unit", environment = "test-py314" },
+    { task = "_integration", environment = "test-py314" },
+    { task = "_cli", environment = "test-py314" },
+] }
+tests-py315 = { depends-on = [
+    { task = "_unit", environment = "test-py315" },
+    { task = "_integration", environment = "test-py315" },
+    { task = "_cli", environment = "test-py315" },
+] }
+matrix = { depends-on = [
+    "tests-py311",
+    "tests-py312",
+    "tests-py313",
+    "tests-py314",
+    "tests-py315",
+] }
 typecheck = { depends-on = [
     { task = "_typecheck", environment = "typecheck" },
 ] }
